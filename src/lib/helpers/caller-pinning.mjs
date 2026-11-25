@@ -35,7 +35,7 @@
  * pinner; the async manager leaves it unset and its boundaries pass callbacks through untouched.
  */
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
-import { ArrayMethods, FunctionMethods, mapList } from "#helpers/intrinsics";
+import { ArrayMethods, FunctionMethods, mapList, Objects, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
 
 /**
  * Binds a callback to the caller active at registration, or `null` when the runtime does not need it.
@@ -193,9 +193,79 @@ export function releaseAfterCall(callback, release) {
  * @returns {object} The bindings.
  * @internal
  */
+/**
+ * Functions the framework itself pinned to a caller: a `pin` / `pin.caller` wrapper, a hook
+ * handler the hook manager pinned to its module, and the handler {@link runtime_selfHookHandler} built over
+ * one. Recognised by membership only, never by a property such as `____slothletOriginal`: module code can put
+ * any property on its own function, and a handler that passed for pinned would run unpinned, as whichever
+ * caller triggered it (#625).
+ * @type {WeakSet<Function>}
+ * @private
+ */
+const CALLER_LOCKED = new WeakSet();
+
+/**
+ * Record a function the framework pinned to a caller (see {@link isCallerLocked}).
+ *
+ * @param {Function} fn - The pinned function.
+ * @returns {Function} `fn`.
+ * @internal
+ *
+ * @example
+ * return markCallerLocked(locked);
+ */
+function markCallerLocked(fn) {
+	WeakSetMethods.add(CALLER_LOCKED, fn);
+	// The framework reads the original back (async detection for a pinned hook), so it is fixed once pinned (#625).
+	if (Objects.hasOwn(fn, "____slothletOriginal")) {
+		Objects.defineProperty(fn, "____slothletOriginal", {
+			__proto__: null,
+			value: fn.____slothletOriginal,
+			writable: false,
+			enumerable: true,
+			configurable: false
+		});
+	}
+	return fn;
+}
+
+/**
+ * Whether the framework pinned `fn` to a caller ({@link markCallerLocked}).
+ *
+ * @param {*} fn - Candidate.
+ * @returns {boolean} True for a function the framework pinned.
+ * @internal
+ *
+ * @example
+ * if (isCallerLocked(handler)) return handler;
+ */
+function isCallerLocked(fn) {
+	return typeof fn === "function" && WeakSetMethods.has(CALLER_LOCKED, fn);
+}
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`). Each file is given
+ * what it uses.
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
 export function internals(consumer) {
-	if (!mayTakeInternals(consumer, ["lib/handlers/context-live"])) throw ownBindingsRefusal("lib/helpers/caller-pinning", import.meta.url);
-	return { setApiCallerPinner };
+	if (
+		!mayTakeInternals(consumer, [
+			"lib/builders/api_builder",
+			"lib/handlers/context-live",
+			"lib/handlers/hook-manager",
+			"lib/handlers/unified-wrapper/run",
+			"lib/handlers/unified-wrapper/views"
+		])
+	)
+		throw ownBindingsRefusal("lib/helpers/caller-pinning", import.meta.url);
+	if (consumer === "lib/handlers/context-live") return { setApiCallerPinner };
+	if (consumer === "lib/builders/api_builder") return { markCallerLocked };
+	if (consumer === "lib/handlers/unified-wrapper/run") return { isCallerLocked };
+	return { markCallerLocked, isCallerLocked };
 }
 
 /**

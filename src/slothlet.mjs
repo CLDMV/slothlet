@@ -199,10 +199,7 @@ const {
 	runtime_rootPrototypeFor,
 	runtime_rootInheritedRead,
 	runtime_behindGivenView,
-	runtime_unwrapSelfView,
-	runtime_assertCapability,
-	runtime_markInstanceEnded,
-	runtime_instanceEnded
+	runtime_unwrapSelfView
 } = unifiedWrapperInternals("slothlet");
 const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
 const trustedRootOwn = trustedRootInternals("slothlet");
@@ -219,7 +216,7 @@ const { enableAsyncResourcePatching, disableAsyncResourcePatching } = asyncResou
 const { enableNodeCallbackPatching, disableNodeCallbackPatching, enableAsyncCallbackServing, disableAsyncCallbackServing } =
 	nodeCallbackContextInternals("slothlet");
 const { enableFunctionSourcePatching, disableFunctionSourcePatching } = functionSourceContextInternals("slothlet");
-const { registerCapabilityCheck, releaseCapabilityCheck } = capabilityContextInternals("slothlet");
+const { registerCapabilityCheck, releaseCapabilityCheck, assertCapability } = capabilityContextInternals("slothlet");
 const { claimInstanceScope, setInstanceSelfKind, closeInstanceSelf } = instanceImportsInternals("slothlet");
 const { forgetInstanceScripts, recordInstanceOwner, runAsHostWork } = framePlacementInternals("slothlet");
 const { getContextManager } = contextInternals("slothlet");
@@ -654,6 +651,13 @@ class Slothlet {
 	#rootPrototypes = new WeakMap();
 
 	/**
+	 * Whether the instance has shut down and is not running again yet: set by `shutdown()` and cleared when it loads or
+	 * restarts. The wrapper reads it ({@link Slothlet#____ended}) to refuse module code's access through views it kept.
+	 * @type {boolean}
+	 */
+	#ended = false;
+
+	/**
 	 * The token of the copy the instance has, once a `run()` / `scope()` recorded it (see {@link CURRENT_COPY}); null
 	 * until one does.
 	 * @type {{values: object|null}|null}
@@ -831,6 +835,16 @@ class Slothlet {
 	 */
 	get clock() {
 		return this.#clock;
+	}
+
+	/**
+	 * Whether the instance has shut down and is not running again yet. Answers false for any receiver that is not the
+	 * instance itself.
+	 * @returns {boolean} True once `shutdown()` has run, until the instance loads or restarts.
+	 * @internal
+	 */
+	get ____ended() {
+		return #ended in this && this.#ended;
 	}
 
 	/**
@@ -1905,7 +1919,7 @@ class Slothlet {
 		if (this.config?.permissions && this.config.permissions.mode !== "disabled") {
 			const instanceID = this.instanceID;
 			registerCapabilityCheck(instanceID, (name, route, importer, filename, runnerCompile) =>
-				runtime_assertCapability(this, name, route, this.#importsAsOwnFile(importer) ? importer : null, filename, runnerCompile)
+				assertCapability(this, name, route, this.#importsAsOwnFile(importer) ? importer : null, filename, runnerCompile)
 			);
 			this.#capabilityHolder = instanceID;
 		}
@@ -2253,7 +2267,7 @@ class Slothlet {
 		}
 
 		this.isLoaded = true;
-		runtime_markInstanceEnded(this, false);
+		this.#ended = false;
 
 		// `loader.materialize` given a function: call it now when everything is already materialized (eager mode, or a lazy
 		// tree that finished during load); otherwise _checkMaterializationComplete() calls it when the last wrapper loads.
@@ -2346,7 +2360,7 @@ class Slothlet {
 		const kept = window === null ? this.#keepForFailedReload() : null;
 		// A reload of an instance that has shut down loads a new copy before it knows whether the rest of the rebuild works;
 		// one that fails leaves the instance shut down, and what its modules kept refuses them again.
-		const endedBefore = runtime_instanceEnded(this);
+		const endedBefore = this.#ended;
 		this.#pendingScope = nextScope;
 		try {
 			// The build is framework work, run as the host even when a module's call asked for the reload (as restart()'s is,
@@ -2371,7 +2385,7 @@ class Slothlet {
 			this.#pendingScope = null;
 			if (window !== null) this.#closeReloadWindow(window, false);
 			this.#restoreFailedReload(kept);
-			runtime_markInstanceEnded(this, endedBefore);
+			this.#ended = endedBefore;
 			// The fresh scope was claimed but never taken: let the ID go again.
 			if (nextScope !== null && this.#importScope !== nextScope) nextScope.release();
 			if (nextScope !== null) this.#settleFailedReload(oldInstanceID);
@@ -3671,7 +3685,7 @@ class Slothlet {
 			if (kind !== "copy") await handlers.routineManager.runStartupModeRoutines();
 		}
 		this.isLoaded = kind === "copy" ? view.isLoaded : true;
-		if (this.isLoaded) runtime_markInstanceEnded(this, false);
+		if (this.isLoaded) this.#ended = false;
 		if (kind === "restart") await handlers.lifecycle.emit("init", { instance: this.instanceID, restart: true });
 	}
 
@@ -4786,7 +4800,7 @@ class Slothlet {
 
 		// From here on, an api node a module was handed reads nothing for it (see runtime_refuseEndedAccess): the context
 		// and the permission rules its accesses were decided against go now. A restart brings the instance back.
-		runtime_markInstanceEnded(this, true);
+		this.#ended = true;
 
 		// Cleanup context
 		if (this.instanceID && this.contextManager) {

@@ -57,7 +57,7 @@ import {
 	shallowCopy,
 	versionAt
 } from "#helpers/run-snapshot";
-import { pinScopeToCurrentCaller } from "#helpers/caller-pinning";
+import { pinScopeToCurrentCaller, internals as callerPinningInternals } from "#helpers/caller-pinning";
 import {
 	ArrayMethods,
 	Arrays,
@@ -101,6 +101,7 @@ import {
 	WeakSet,
 	WeakSetMethods
 } from "#helpers/intrinsics";
+import { codeLabel, inheritsBuiltin, isLanguageNameDescriptor } from "#helpers/builtin-forms";
 const {
 	resolveWrapper,
 	runtime_metadataNodeOf,
@@ -109,7 +110,6 @@ const {
 	runtime_selfModuleReader,
 	runtime_selfRootView,
 	runtime_selfView,
-	runtime_markCallerLocked,
 	runtime_registerFrameworkMember,
 	runtime_registerFrameworkMemberCopy,
 	runtime_selfFrameworkView,
@@ -132,9 +132,6 @@ const {
 	runtime_enforceReadGate,
 	runtime_registerRunView,
 	runtime_frameworkViewCaller,
-	runtime_codeLabel,
-	runtime_inheritsBuiltin,
-	runtime_isLanguageNameDescriptor,
 	runtime_nodeBehind,
 	runtime_nodeReport,
 	runtime_unwrapSelfView,
@@ -143,6 +140,7 @@ const {
 	runtime_runViewAccessor,
 	runtime_protoAssignSetsPrototype
 } = unifiedWrapperInternals("lib/builders/api_builder");
+const { markCallerLocked } = callerPinningInternals("lib/builders/api_builder");
 const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
 // A run's views of raw objects are slothlet's own, as its views of nodes are: handed on as they are wherever they go.
@@ -2820,11 +2818,11 @@ export class ApiBuilder extends ComponentBase {
 					const own = Reflect.getOwnPropertyDescriptor(target, prop);
 					if (!own) {
 						if (!Reflect.has(target, prop)) return undefined;
-						if (runtime_inheritsBuiltin(target, prop)) return Reflect.get(target, prop, receiver);
+						if (inheritsBuiltin(target, prop)) return Reflect.get(target, prop, receiver);
 					}
 					// A function's own `name` and `length` are read as plain JS reads them, whatever the rules say of the
 					// function: consoles and formatters read them of every function they show.
-					if (typeof target === "function" && runtime_isLanguageNameDescriptor(prop, own)) return own.value;
+					if (typeof target === "function" && isLanguageNameDescriptor(prop, own)) return own.value;
 
 					const childRoutePath = `${routePath}.${prop}`;
 					let deniedError = null;
@@ -2874,7 +2872,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// A function's own `name` and `length` are described without a check, as they are read (see get).
-					if (typeof target === "function" && runtime_isLanguageNameDescriptor(prop, descriptor)) return descriptor;
+					if (typeof target === "function" && isLanguageNameDescriptor(prop, descriptor)) return descriptor;
 
 					const childRoutePath = `${routePath}.${prop}`;
 
@@ -3133,7 +3131,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 					const value = view[key];
 					const held = descriptor.value;
-					if (typeof held === "function") shown[key] = inspectLabel(runtime_codeLabel(held));
+					if (typeof held === "function") shown[key] = inspectLabel(codeLabel(held));
 					else if (held === null || typeof held !== "object") shown[key] = value;
 					else if (MapMethods.has(made, held)) shown[key] = MapMethods.get(made, held);
 					else if (depth === null || depth > 0)
@@ -4150,7 +4148,7 @@ export class ApiBuilder extends ComponentBase {
 				};
 				// Parity with the EventEmitter patch metadata.
 				locked.____slothletOriginal = fn;
-				return runtime_markCallerLocked(locked);
+				return markCallerLocked(locked);
 			},
 
 			/**
@@ -6282,7 +6280,7 @@ export class ApiBuilder extends ComponentBase {
 			};
 			// Parity with pin / the EventEmitter patch metadata.
 			locked.____slothletOriginal = fn;
-			return runtime_markCallerLocked(locked);
+			return markCallerLocked(locked);
 		};
 		// `pin.caller` is its own api path (`slothlet.pin.caller`), so the permission
 		// system gates it independently of `pin`, whose call behaviour is unchanged.

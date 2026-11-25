@@ -126,35 +126,6 @@ let trustedRootOwn,
 let realClass;
 
 /**
- * The instances that have shut down ({@link runtime_markInstanceEnded}).
- * @type {WeakSet<object>}
- * @private
- */
-const ENDED_INSTANCES = new WeakSet();
-
-/**
- * Note that an instance has shut down, or is running again (a load, a reload or a restart after the shutdown).
- * @param {object} slothlet - The instance.
- * @param {boolean} ended - Whether it has shut down.
- * @returns {void}
- * @internal
- */
-function runtime_markInstanceEnded(slothlet, ended) {
-	if (ended) WeakSetMethods.add(ENDED_INSTANCES, slothlet);
-	else WeakSetMethods.delete(ENDED_INSTANCES, slothlet);
-}
-
-/**
- * Whether an instance has shut down and is not running again yet ({@link runtime_markInstanceEnded}).
- * @param {object} slothlet - The instance.
- * @returns {boolean} True once it has shut down.
- * @internal
- */
-function runtime_instanceEnded(slothlet) {
-	return WeakSetMethods.has(ENDED_INSTANCES, slothlet);
-}
-
-/**
  * The `valueOf` a callable node answers (#630): `Object.prototype.valueOf` on whatever it is called on, as a function's
  * own `valueOf()` answers the function, and the node when it is called detached.
  * @param {Function} node - The node's proxy.
@@ -2297,9 +2268,6 @@ export function NodesLayer(Base) {
 		class Nodes extends Base {
 			static {
 				Base.define("nodes", {
-					ENDED_INSTANCES,
-					runtime_markInstanceEnded,
-					runtime_instanceEnded,
 					runtime_valueOfFor,
 					runtime_viewAccessor,
 					runtime_protoAssignSetsPrototype,

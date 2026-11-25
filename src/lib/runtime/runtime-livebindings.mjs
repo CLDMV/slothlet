@@ -50,6 +50,7 @@ import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper"
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { FunctionMethods, NativeProxy, Objects, Reflect, setFrom, SetMethods, String, SymbolMethods } from "#helpers/intrinsics";
+import { resolvedAccess } from "#helpers/access-record";
 const { registerOwnModule, registerSelfForms, bindInstanceSelf, SELF_BIND_KEY } =
 	instanceImportsInternals("lib/runtime/runtime-livebindings");
 const {
@@ -57,7 +58,6 @@ const {
 	runtime_selfChangeTarget,
 	runtime_selfFrameworkView,
 	runtime_selfView,
-	runtime_resolvedAccess,
 	runtime_unwrapSelfView,
 	runtime_selfReadAsDefiner,
 	runtime_selfToJSON,
@@ -200,7 +200,7 @@ function runtime_selfMember(prop, value, resolved = null) {
 	if (typeof prop !== "string") return value;
 	if (SetMethods.has(FRAMEWORK_SELF_ROOTS, prop)) return runtime_selfFrameworkView(value);
 	// The reader of the view is the code whose identity this same read just resolved.
-	const access = resolved?.identity ? runtime_resolvedAccess(liveRuntime, resolved.store, resolved.identity) : null;
+	const access = resolved?.identity ? resolvedAccess(liveRuntime, resolved.store, resolved.identity) : null;
 	return runtime_selfView(value, undefined, null, access);
 }
 

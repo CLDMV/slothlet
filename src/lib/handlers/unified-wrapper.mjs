@@ -742,15 +742,6 @@ let runtime_isPrototypeHandle,
 	runtime_followPosition;
 
 /**
- * Forwards to the Rules layer's `runtime_assertCapability`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_assertCapability(slothlet, name, route, moduleFile, filename, runnerCompile) {
-	return M.rules.runtime_assertCapability(slothlet, name, route, moduleFile, filename, runnerCompile);
-}
-
-/**
  * Forwards to the Values layer's `runtime_hasInternalSlots`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
@@ -784,15 +775,6 @@ function runtime_metadataNodeOf(value) {
  */
 function runtime_assertFrameworkRootChange(slothlet, prop) {
 	return M.rules.runtime_assertFrameworkRootChange(slothlet, prop);
-}
-
-/**
- * Forwards to the Values layer's `runtime_codeLabel`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_codeLabel(fn) {
-	return M.values.runtime_codeLabel(fn);
 }
 
 /**
@@ -868,60 +850,6 @@ function runtime_frameworkWrite(node, write) {
 }
 
 /**
- * Forwards to the Values layer's `runtime_inheritsBuiltin`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_inheritsBuiltin(target, prop) {
-	return M.values.runtime_inheritsBuiltin(target, prop);
-}
-
-/**
- * Forwards to the Values layer's `runtime_isCallerLocked`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_isCallerLocked(fn) {
-	return M.values.runtime_isCallerLocked(fn);
-}
-
-/**
- * Forwards to the Values layer's `runtime_isLanguageNameDescriptor`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_isLanguageNameDescriptor(prop, descriptor) {
-	return M.values.runtime_isLanguageNameDescriptor(prop, descriptor);
-}
-
-/**
- * Forwards to the Views layer's `runtime_markCallerLocked`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_markCallerLocked(fn) {
-	return M.views.runtime_markCallerLocked(fn);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_instanceEnded`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_instanceEnded(slothlet) {
-	return M.nodes.runtime_instanceEnded(slothlet);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_markInstanceEnded`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_markInstanceEnded(slothlet, ended) {
-	return M.nodes.runtime_markInstanceEnded(slothlet, ended);
-}
-
-/**
  * Forwards to the Nodes layer's `runtime_nodeBehind`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
@@ -946,15 +874,6 @@ function runtime_registerFrameworkMember(member, slothlet, name) {
  */
 function runtime_registerFrameworkMemberCopy(copy, member) {
 	return M.rules.runtime_registerFrameworkMemberCopy(copy, member);
-}
-
-/**
- * Forwards to the Rules layer's `runtime_resolvedAccess`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_resolvedAccess(contextManager, store, identity) {
-	return M.rules.runtime_resolvedAccess(contextManager, store, identity);
 }
 
 /**
@@ -2153,12 +2072,10 @@ export function internals(consumer) {
 		releaseModuleMakers,
 		releaseStandInChanges,
 		resolveWrapper,
-		runtime_assertCapability,
 		runtime_hasInternalSlots,
 		runtime_nodeReport,
 		runtime_metadataNodeOf,
 		runtime_assertFrameworkRootChange,
-		runtime_codeLabel,
 		runtime_contextRead,
 		runtime_contextReadAsDefiner,
 		runtime_contextWritten,
@@ -2167,16 +2084,9 @@ export function internals(consumer) {
 		runtime_eventPayloadFor,
 		runtime_frameworkViewCaller,
 		runtime_frameworkWrite,
-		runtime_inheritsBuiltin,
-		runtime_isCallerLocked,
-		runtime_isLanguageNameDescriptor,
-		runtime_markCallerLocked,
-		runtime_instanceEnded,
-		runtime_markInstanceEnded,
 		runtime_nodeBehind,
 		runtime_registerFrameworkMember,
 		runtime_registerFrameworkMemberCopy,
-		runtime_resolvedAccess,
 		runtime_runWrite,
 		runtime_takeRunWrite,
 		runtime_viewAccessor,
@@ -2309,12 +2219,6 @@ const guarded_runtime_frameworkViewCaller = guardInternal(runtime_frameworkViewC
 /** @type {typeof runtime_selfRootView} */
 const guarded_runtime_selfRootView = guardInternal(runtime_selfRootView, "runtime_selfRootView", import.meta.url);
 
-/** @type {typeof runtime_markCallerLocked} */
-const guarded_runtime_markCallerLocked = guardInternal(runtime_markCallerLocked, "runtime_markCallerLocked", import.meta.url);
-
-/** @type {typeof runtime_isCallerLocked} */
-const guarded_runtime_isCallerLocked = guardInternal(runtime_isCallerLocked, "runtime_isCallerLocked", import.meta.url);
-
 /** @type {typeof runtime_selfHookHandler} */
 const guarded_runtime_selfHookHandler = guardInternal(runtime_selfHookHandler, "runtime_selfHookHandler", import.meta.url);
 
@@ -2326,9 +2230,6 @@ const guarded_releaseStandInChanges = guardInternal(releaseStandInChanges, "rele
 
 /** @type {typeof refusedChangeCount} */
 const guarded_refusedChangeCount = guardInternal(refusedChangeCount, "refusedChangeCount", import.meta.url);
-
-/** @type {typeof runtime_resolvedAccess} */
-const guarded_runtime_resolvedAccess = guardInternal(runtime_resolvedAccess, "runtime_resolvedAccess", import.meta.url);
 
 /** @type {typeof releaseModuleMakers} */
 const guarded_releaseModuleMakers = guardInternal(releaseModuleMakers, "releaseModuleMakers", import.meta.url);
@@ -2379,13 +2280,10 @@ export {
 	guarded_runtime_selfChangeTarget as runtime_selfChangeTarget,
 	guarded_runtime_frameworkViewCaller as runtime_frameworkViewCaller,
 	guarded_runtime_selfRootView as runtime_selfRootView,
-	guarded_runtime_markCallerLocked as runtime_markCallerLocked,
-	guarded_runtime_isCallerLocked as runtime_isCallerLocked,
 	guarded_runtime_selfHookHandler as runtime_selfHookHandler,
 	guarded_settleStandInChanges as settleStandInChanges,
 	guarded_releaseStandInChanges as releaseStandInChanges,
 	guarded_refusedChangeCount as refusedChangeCount,
-	guarded_runtime_resolvedAccess as runtime_resolvedAccess,
 	guarded_releaseModuleMakers as releaseModuleMakers,
 	guarded_moduleMakerCount as moduleMakerCount,
 	guarded_registerRuntimeSelf as registerRuntimeSelf,

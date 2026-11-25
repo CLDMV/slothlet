@@ -68,6 +68,10 @@ import {
 import { builtinKind } from "#helpers/run-snapshot";
 
 import { ownBindingsRefusal } from "#helpers/instance-imports";
+import { internals as callerPinningInternals } from "#helpers/caller-pinning";
+import { internals as capabilityContextInternals } from "#helpers/capability-context";
+const { UNATTRIBUTED_READER } = capabilityContextInternals("lib/handlers/unified-wrapper/views");
+const { markCallerLocked, isCallerLocked } = callerPinningInternals("lib/handlers/unified-wrapper/views");
 
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
@@ -84,7 +88,6 @@ let runtime_unwrapClassInstance,
 	runtime_isUnchangingDefinition,
 	INSPECT_CUSTOM,
 	runtime_refuseEndedAccess,
-	UNATTRIBUTED_READER,
 	SEALED_SHELL_READER,
 	runtime_isPrototypeHandle,
 	runtime_refuseWriteWithoutStanding,
@@ -100,7 +103,6 @@ let runtime_unwrapClassInstance,
 	runtime_holdsMember,
 	FRAMEWORK_MEMBER_NAMES,
 	runtime_frameworkViewOf,
-	runtime_isCallerLocked,
 	runtime_nodeWrapperOf,
 	runtime_accessAsKept,
 	runtime_beginAccess,
@@ -1387,7 +1389,7 @@ function runtime_selfHasInstance(prototype, instance) {
  * @param {object} [reader] - Who read it; the code executing now when omitted.
  * @param {object|null} [from=null] - The module handing the value on, when one is.
  * @param {object|null} [access=null] - The read of `self` this is part of, when who is making it was resolved already
- *   (see {@link runtime_resolvedAccess}); used only to tell the reader, within this call.
+ *   (see `resolvedAccess` in `helpers/access-record`); used only to tell the reader, within this call.
  * @returns {*} A view of an api node, or `node` unchanged.
  * @internal
  *
@@ -1969,42 +1971,6 @@ function runtime_selfRootView(slothlet, reader) {
 }
 
 /**
- * Functions the framework itself pinned to a caller: a `pin` / `pin.caller` wrapper, a hook
- * handler the hook manager pinned to its module, and the handler {@link runtime_selfHookHandler} built over
- * one. Recognised by membership only, never by a property such as `____slothletOriginal`: module code can put
- * any property on its own function, and a handler that passed for pinned would run unpinned, as whichever
- * caller triggered it (#625).
- * @type {WeakSet<Function>}
- * @private
- */
-const CALLER_LOCKED = new WeakSet();
-
-/**
- * Record a function the framework pinned to a caller (see {@link runtime_isCallerLocked}).
- *
- * @param {Function} fn - The pinned function.
- * @returns {Function} `fn`.
- * @internal
- *
- * @example
- * return runtime_markCallerLocked(locked);
- */
-function runtime_markCallerLocked(fn) {
-	WeakSetMethods.add(CALLER_LOCKED, fn);
-	// The framework reads the original back (async detection for a pinned hook), so it is fixed once pinned (#625).
-	if (hasOwn(fn, "____slothletOriginal")) {
-		Objects.defineProperty(fn, "____slothletOriginal", {
-			__proto__: null,
-			value: fn.____slothletOriginal,
-			writable: false,
-			enumerable: true,
-			configurable: false
-		});
-	}
-	return fn;
-}
-
-/**
  * Hook handlers {@link runtime_selfHookHandler} built.
  * @type {WeakSet<Function>}
  * @private
@@ -2106,9 +2072,9 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 	};
 	WeakSetMethods.add(SELF_HOOK_VIEWED, viewed);
 	// A pinned handler stays recognised as pinned (the around pipeline, reload replay), and keeps its original visible.
-	if (runtime_isCallerLocked(handler)) {
+	if (isCallerLocked(handler)) {
 		viewed.____slothletOriginal = handler.____slothletOriginal;
-		runtime_markCallerLocked(viewed);
+		markCallerLocked(viewed);
 	}
 	return viewed;
 }
@@ -3249,8 +3215,6 @@ export function ViewsLayer(Base) {
 					runtime_selfChangeTarget,
 					SELF_FRAMEWORK_ROOTS,
 					runtime_selfRootView,
-					CALLER_LOCKED,
-					runtime_markCallerLocked,
 					runtime_selfHookHandler,
 					runtime_builtinBehind,
 					STAND_INS,
@@ -3293,7 +3257,6 @@ export function ViewsLayer(Base) {
 					runtime_holdsMember = methods.values.runtime_holdsMember;
 					runtime_inherits = methods.values.runtime_inherits;
 					runtime_isArrayMember = methods.values.runtime_isArrayMember;
-					runtime_isCallerLocked = methods.values.runtime_isCallerLocked;
 					runtime_isConstructor = methods.values.runtime_isConstructor;
 					runtime_isDataReader = methods.values.runtime_isDataReader;
 					runtime_isEngineMember = methods.values.runtime_isEngineMember;
@@ -3349,7 +3312,6 @@ export function ViewsLayer(Base) {
 					runtime_refuseEndedAccess = methods.rules.runtime_refuseEndedAccess;
 					runtime_refuseWriteWithoutStanding = methods.rules.runtime_refuseWriteWithoutStanding;
 					runtime_takeAccess = methods.rules.runtime_takeAccess;
-					UNATTRIBUTED_READER = methods.rules.UNATTRIBUTED_READER;
 					runtime_runAfterPrincipalGate = methods.run.runtime_runAfterPrincipalGate;
 					CROSSING_ORIGINS = methods.membrane.CROSSING_ORIGINS;
 					CROSSINGS = methods.membrane.CROSSINGS;

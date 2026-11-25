@@ -115,6 +115,7 @@ import { internals as sharedValuesInternals } from "#handlers/shared-values";
 const { recordSharedExports } = sharedValuesInternals("lib/handlers/unified-wrapper/values");
 
 import { ownBindingsRefusal } from "#helpers/instance-imports";
+import { codeLabel, isLanguageNameDescriptor } from "#helpers/builtin-forms";
 
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
@@ -133,7 +134,6 @@ let trustedRootOwn,
 	NODE_MEMBER,
 	FRAMEWORK_MEMBERS,
 	FRAMEWORK_VIEW_TARGETS,
-	CALLER_LOCKED,
 	runtime_nodeWrapperOf,
 	runtime_startPrototypes,
 	runtime_sameLookup,
@@ -810,46 +810,6 @@ function runtime_holdsMember(value, fn) {
 }
 
 /**
- * The language's own prototypes an object or function inherits from.
- * @type {Set<object>}
- */
-const BUILTIN_PROTOTYPES = setFrom([
-	Reflect.getPrototypeOf({}),
-	Reflect.getPrototypeOf(function () {}),
-	Reflect.getPrototypeOf(async function () {}),
-	Reflect.getPrototypeOf(function* () {}),
-	Reflect.getPrototypeOf(async function* () {})
-]);
-
-/**
- * Whether a name an object does not hold itself is one it inherits from the language's own prototypes, not from one
- * placed between them.
- * @param {object|Function} target - The object.
- * @param {string} prop - The name.
- * @returns {boolean} True when the nearest holder of `prop` is one of the language's own prototypes.
- * @internal
- */
-function runtime_inheritsBuiltin(target, prop) {
-	let holder = Reflect.getPrototypeOf(target);
-	while (holder !== null && !Reflect.getOwnPropertyDescriptor(holder, prop)) holder = Reflect.getPrototypeOf(holder);
-	return holder !== null && SetMethods.has(BUILTIN_PROTOTYPES, holder);
-}
-
-/**
- * Whether the framework pinned `fn` to a caller ({@link runtime_markCallerLocked}).
- *
- * @param {*} fn - Candidate.
- * @returns {boolean} True for a function the framework pinned.
- * @internal
- *
- * @example
- * if (runtime_isCallerLocked(handler)) return handler;
- */
-function runtime_isCallerLocked(fn) {
-	return typeof fn === "function" && WeakSetMethods.has(CALLER_LOCKED, fn);
-}
-
-/**
  * Whether a value read off the api is a node of it as a reader is handed one: a wrapper's proxy, a view `self` handed out
  * of one, or a lazy node's stand-in. A full-isolation run's `self` hands these out as its own views, so a change made
  * under them stays in the run; anything else (data, a built-in object, a function a node holds) is handed out as read.
@@ -1201,23 +1161,6 @@ function runtime_valueHoldsName(wrapper, prop) {
 }
 
 /**
- * Whether `descriptor` is the `name` or `length` the language gives every function: a string or number value, not
- * writable and not enumerable. A `name` getter, or an enumerable one the module assigned, is the module's own.
- * @param {PropertyKey} prop - The member's key.
- * @param {PropertyDescriptor|undefined} descriptor - The function's own descriptor for it.
- * @returns {boolean} True when the language gave it.
- * @internal
- *
- * @example
- * runtime_isLanguageNameDescriptor("length", Reflect.getOwnPropertyDescriptor(function add(a, b) {}, "length")); // true
- */
-function runtime_isLanguageNameDescriptor(prop, descriptor) {
-	if (prop !== "name" && prop !== "length") return false;
-	if (!descriptor || !("value" in descriptor) || descriptor.writable || descriptor.enumerable) return false;
-	return typeof descriptor.value === (prop === "name" ? "string" : "number");
-}
-
-/**
  * Whether a read of `prop` off a node is of its function's own `name` or `length`, which every function has and
  * which consoles and formatters read of every function they show: such a read is answered without a permission check,
  * as plain JS answers it. A member the module provides by that name (an export, a folder entry, a value that holds
@@ -1240,7 +1183,7 @@ function runtime_isBuiltinFunctionMember(wrapper, prop) {
 	// layer (a callable mount's function with the folder's members) is slothlet's, and answers as its function does.
 	if (fn !== null) {
 		if (util.types.isProxy(fn) && !isCompositionLayer(fn)) return false;
-		return runtime_isLanguageNameDescriptor(prop, Reflect.getOwnPropertyDescriptor(fn, prop));
+		return isLanguageNameDescriptor(prop, Reflect.getOwnPropertyDescriptor(fn, prop));
 	}
 	// A node holding no function that is still a function to the language (a lazy node's stand-in) answers the
 	// stand-in's `name` and `length`: its path's last segment, and 0.
@@ -3281,7 +3224,7 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
 		return internal.impl;
 	// The node's own members, read through it as the module reading them may.
 	if (typeof internal.impl !== "function") return runtime_inspectMembers(wrapper);
-	const label = runtime_codeLabel(layered ? layerUnderlying(internal.impl) : internal.impl);
+	const label = codeLabel(layered ? layerUnderlying(internal.impl) : internal.impl);
 	const members = runtime_inspectMembers(wrapper);
 	if (Objects.keys(members).length === 0) return label;
 	const options = args[1],
@@ -3301,7 +3244,7 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
  */
 function runtime_inspectSafe(value, args, forModule, slothlet) {
 	if (!forModule || !runtime_memberHoldsCode(value, searchDepth(slothlet) + 1, searchBudget(slothlet))) return value;
-	return typeof value === "function" ? runtime_codeLabel(value) : "[Object]";
+	return typeof value === "function" ? codeLabel(value) : "[Object]";
 }
 
 /**
@@ -3313,46 +3256,6 @@ function runtime_inspectSafe(value, args, forModule, slothlet) {
 function runtime_inspectReaderIsModule(wrapper) {
 	const identity = wrapper.slothlet?.contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID);
 	return Boolean(identity?.currentWrapper || identity?.unresolved);
-}
-
-/**
- * The form `util.inspect` gives a function (`[Function: name]`, `[class Name]`, `[AsyncFunction: name]`, …), made
- * without running any of it: its source is read by the language's own `toString`, and its name only from a data
- * descriptor of a function that is not a Proxy.
- * @param {Function} fn - The function.
- * @returns {string} Its form.
- * @private
- */
-function runtime_codeLabel(fn) {
-	const isProxy = util.types.isProxy(fn);
-	const name = isProxy ? "" : runtime_dataName(fn);
-	const named = name === "" ? " (anonymous)" : null;
-	if (!isProxy && RegExpMethods.exec(/^class[\s{]/, functionSource(fn)) !== null) {
-		// As util.inspect gives it: the class it extends, by that class's own name.
-		const parent = Reflect.getPrototypeOf(fn);
-		const parentName = typeof parent === "function" && !util.types.isProxy(parent) ? runtime_dataName(parent) : "";
-		return `[class${named ?? ` ${name}`}${parentName ? ` extends ${parentName}` : ""}]`;
-	}
-	const async = util.types.isAsyncFunction(fn);
-	const kind = util.types.isGeneratorFunction(fn)
-		? async
-			? "AsyncGeneratorFunction"
-			: "GeneratorFunction"
-		: async
-			? "AsyncFunction"
-			: "Function";
-	return `[${kind}${named ?? `: ${name}`}]`;
-}
-
-/**
- * A function's own `name` when it is a data property holding a string, read by its descriptor so no getter runs.
- * @param {Function} fn - A function that is not a Proxy.
- * @returns {string} The name, empty when there is none.
- * @private
- */
-function runtime_dataName(fn) {
-	const descriptor = Reflect.getOwnPropertyDescriptor(fn, "name");
-	return typeof descriptor?.value === "string" ? descriptor.value : "";
 }
 
 /**
@@ -3461,8 +3364,6 @@ export function ValuesLayer(Base) {
 					runtime_frontedDataMember,
 					runtime_inheritedPrivate,
 					runtime_holdsMember,
-					runtime_inheritsBuiltin,
-					runtime_isCallerLocked,
 					runtime_isApiNode,
 					runtime_inheritedAtStart,
 					runtime_holdsOwnMember,
@@ -3475,7 +3376,6 @@ export function ValuesLayer(Base) {
 					runtime_holdsAssignedData,
 					runtime_isDataMemberNode,
 					runtime_valueHoldsName,
-					runtime_isLanguageNameDescriptor,
 					runtime_isBuiltinFunctionMember,
 					runtime_isCodeMemberWithheld,
 					runtime_frontsLiveValue,
@@ -3538,7 +3438,6 @@ export function ValuesLayer(Base) {
 					runtime_inspectShown,
 					runtime_inspectSafe,
 					runtime_inspectReaderIsModule,
-					runtime_codeLabel,
 					runtime_defineProxyInspect,
 					runtime_defineRootInspect
 				});
@@ -3565,7 +3464,6 @@ export function ValuesLayer(Base) {
 					runtime_readsNothingBeneath = methods.rules.runtime_readsNothingBeneath;
 					runtime_recordedPrototype = methods.run.runtime_recordedPrototype;
 					runtime_startPrototypes = methods.run.runtime_startPrototypes;
-					CALLER_LOCKED = methods.views.CALLER_LOCKED;
 					capturedViewChildren = methods.views.capturedViewChildren;
 					FRAMEWORK_MEMBERS = methods.views.FRAMEWORK_MEMBERS;
 					hasOwn = methods.views.hasOwn;

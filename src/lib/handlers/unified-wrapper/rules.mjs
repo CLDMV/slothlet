@@ -25,7 +25,6 @@ import { isCompositionLayer, layerForwards, layerHeldKeys, layerUnderlying } fro
 import { SlothletError } from "#errors";
 import { isFrameworkReservedKey } from "#helpers/reserved-keys";
 import { combineCeilings, identityCeilings } from "#handlers/trusted-root";
-import { toComparablePath } from "#handlers/frame-placement";
 import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 import {
 	ArrayMethods,
@@ -43,7 +42,6 @@ import {
 	Objects,
 	PromiseMethods,
 	Reflect,
-	RegExpMethods,
 	SetMethods,
 	splitText,
 	String,
@@ -54,9 +52,11 @@ import {
 	WeakSet,
 	WeakSetMethods
 } from "#helpers/intrinsics";
-import { namesForeignFile, BINDING_NAME, hasCapabilityCheck } from "#helpers/capability-context";
 
 import { ownBindingsRefusal } from "#helpers/instance-imports";
+import { inheritsBuiltin } from "#helpers/builtin-forms";
+import { internals as capabilityContextInternals } from "#helpers/capability-context";
+const { UNATTRIBUTED_READER } = capabilityContextInternals("lib/handlers/unified-wrapper/rules");
 
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
@@ -68,22 +68,15 @@ let trustedRootOwn,
 	handedLeafFunctions,
 	frameDefiner,
 	runtime_codeWritersOnStack,
-	runtime_loadingFileRunning,
-	runtime_loadingHelper,
 	leafOfCopy,
 	hasOwn,
 	HOST_READER,
-	ENDED_INSTANCES,
 	PROTOTYPE_HANDLE_READER,
 	RUN_VIEWS,
-	runtime_runnerCompilesLoad,
-	runtime_namesHelperCopy,
-	runtime_runnerCompilesHelper,
 	runtime_selfModuleCeilings,
 	runtime_selfWriteHasStanding,
 	ACTING_FOR,
 	FRAMEWORK_MEMBERS,
-	runtime_inheritsBuiltin,
 	SELF_FRAMEWORK_ROOTS,
 	runtime_isTerminalData,
 	runtime_dataReadOptions,
@@ -202,7 +195,7 @@ function runtime_frameworkWrite(node, write) {
  * @private
  */
 function runtime_refuseEndedAccess(slothlet, reader) {
-	if (reader === HOST_READER || !WeakSetMethods.has(ENDED_INSTANCES, slothlet)) return;
+	if (reader === HOST_READER || slothlet?.____ended !== true) return;
 	// A prototype's handle is the same object to every reader, and no call runs once the instance has shut down: whose
 	// code makes the access is read from the stack, as for a capability (see runtime_assertCapability). The host's own
 	// code (and a package's it runs) goes on as before; a module's code, and code no one accounts for, is refused.
@@ -212,14 +205,6 @@ function runtime_refuseEndedAccess(slothlet, reader) {
 	}
 	throw new slothlet.SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 }
-
-/**
- * Reader of a node read through `self` by code the live runtime could not attribute to one call. It owns
- * nothing.
- * @type {object}
- * @private
- */
-const UNATTRIBUTED_READER = Objects.freeze({ reader: "unattributed" });
 
 /**
  * Record a full-isolation run's view of a node with what it reads through, so a view written into the api is stored as
@@ -232,128 +217,6 @@ const UNATTRIBUTED_READER = Objects.freeze({ reader: "unattributed" });
 function runtime_registerRunView(view, real) {
 	WeakMapMethods.set(RUN_VIEWS, view, real);
 	return view;
-}
-
-/**
- * Refuse code compiled under the name of a file this instance is loading now (every load of it) a capability that no
- * rule opens for that load's module path; a load whose paths are not known yet is refused it. Code compiled under the
- * name of a copy of one of the instance's helper files is placed as that helper's code: decided as the paths of the
- * api files importing it while one of them loads, and refused otherwise; under the name of a helper copy tagged with an
- * id no instance that is up holds, it is refused. A name tagged with another instance's id is
- * that instance's to judge while it is up with a check of its own registered (two instances load the same file under
- * their own tags, and the compile hooks are shared by the process); a name tagged with an id no registered check holds
- * (an unknown instance, or one that has shut down) is judged here as any other.
- * @param {object} slothlet - The instance.
- * @param {object} permissionManager - Its permission manager.
- * @param {string} name - The capability.
- * @param {string} route - What the code used.
- * @param {*} filename - The name the code is compiled under.
- * @returns {void}
- * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
- * @private
- */
-function runtime_assertNamedLoads(slothlet, permissionManager, name, route, filename) {
-	if (typeof filename !== "string") return;
-	const loader = slothlet?.processors?.loader;
-	if (typeof loader?.loadsOfFile !== "function") return;
-	const tag = RegExpMethods.exec(/[?&]slothlet_instance=([^&#]+)/, filename)?.[1] ?? null;
-	if (tag !== null && tag !== String(slothlet.instanceID) && hasCapabilityCheck(tag)) return;
-	const loads = loader.loadsOfFile(toComparablePath(filename));
-	for (let index = 0; index < loads.length; index++) {
-		const paths = loads[index].paths;
-		if (paths?.length) permissionManager.assertCapabilityForPaths(paths, name, route);
-		else permissionManager.assertCapability(UNATTRIBUTED_READER, name, route);
-	}
-	if (loads.length) return;
-	const copy = runtime_namesHelperCopy(slothlet, filename);
-	if (copy === null) return;
-	const helper = copy === "own" ? runtime_loadingHelper(slothlet, toComparablePath(filename)) : null;
-	if (helper?.paths?.length) permissionManager.assertCapabilityForPaths(helper.paths, name, route);
-	else permissionManager.assertCapability(UNATTRIBUTED_READER, name, route);
-}
-
-/**
- * Refuse module code of this instance a built-in capability no rule opens for it (see
- * `PermissionManager#assertCapability`), told as any other access is: the call running, read from the stack where
- * calls are in flight; while no call runs, the code's own frames (a function a module handed out, run by the host, is
- * its definer's). Code the live runtime cannot attribute is refused; the host's own code, a package's run by the host,
- * and another instance's code are left to their own checks.
- *
- * @param {object} slothlet - The instance.
- * @param {string} name - The capability.
- * @param {string} route - What the code used, for the error.
- * @param {string|null} [moduleFile=null] - A file of this instance's the code is known to belong to (an import it
- *   makes as it links), so that code is never taken for the host's.
- * @param {*} [filename=null] - The file name the code is compiled under, when one is given: a real file outside the
- *   caller's own folder is refused even where a rule opens the capability.
- * @param {boolean|null} [runnerCompile=false] - Whether the call is vitest's compile of exactly the code its server sent
- *   for `filename` (see `helpers/vitest-worker-setup`): allowed once for a file of this instance's that is loading now,
- *   as Node's own loader compiling the file would be. Null when no worker setup records what the server sent: the first
- *   such compile of a loading file is then decided by the code that makes it, as any other code is.
- * @returns {void}
- * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
- * @internal
- * @example
- * runtime_assertCapability(slothlet, "code", "new Function");
- */
-function runtime_assertCapability(slothlet, name, route, moduleFile = null, filename = null, runnerCompile = false) {
-	const permissionManager = slothlet?.handlers?.permissionManager;
-	if (!permissionManager?.isEnabled?.()) return;
-	// vitest's module runner compiling the code its server sent for a file of this instance's that is loading now: the
-	// loader's own compile of the file, as Node's loader compiling it would be. One such compile per load.
-	if (runnerCompile === true && runtime_runnerCompilesLoad(slothlet, filename)) return;
-	// With no worker setup recording what vitest's server sent (vitest without the vite plugin, `server.deps.inline`
-	// only), the runner's compile of a loading file cannot be told from other code by what it compiles. The first
-	// runner-shaped compile of each load is then decided by the code making it, as below: vitest's runner is no
-	// module's code, and a module's own code compiling under the name is still its own and refused. Every later compile
-	// under the name is placed as the file's code.
-	const unverifiedRunnerCompile = runnerCompile === null && runtime_runnerCompilesLoad(slothlet, filename);
-	// vitest's runner compiling a copy of one of the instance's helper files: decided by the code making it, as below
-	// (vitest's runner is no module's code). A helper is no load, so the verified compile is not answered above.
-	const runnerHelperCompile = runtime_runnerCompilesHelper(slothlet, filename, runnerCompile);
-	// Any other code compiled under the name of a file this instance is loading now, or of a copy of one of its helper
-	// files, is placed as that file's code, whoever compiles it: decided as the file's module path, as its own top-level
-	// code is.
-	if (!unverifiedRunnerCompile && !runnerHelperCompile) runtime_assertNamedLoads(slothlet, permissionManager, name, route, filename);
-	const contextManager = slothlet.contextManager;
-	let caller = null;
-	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
-	if (identity?.currentWrapper) caller = identity.currentWrapper;
-	// Calls the live runtime cannot tell apart are in flight: code that is no file of the instance's (the host's, a
-	// package's, Node's own) is still not a module's; anything else could be any of them, and is refused.
-	else if (identity?.unresolved && !identity.unaccounted) {
-		const writers = runtime_codeWritersOnStack(slothlet);
-		caller = writers === null || writers.length > 1 ? UNATTRIBUTED_READER : writers.length ? writers[0] : null;
-	} else {
-		const definer = frameDefiner(contextManager?.runningInstanceID?.() ?? null);
-		if (definer?.wrapper) caller = definer.wrapper.slothlet === slothlet ? definer.wrapper : null;
-		else if (definer?.unplaced || definer?.leaves) caller = UNATTRIBUTED_READER;
-		// Code of a file of the instance's no node stands for yet (a file's top level as it first loads) or no leaf
-		// accounts for is the instance's, never the host's.
-		else if (runtime_codeWritersOnStack(slothlet) === null) caller = UNATTRIBUTED_READER;
-	}
-	// A file of the instance's linking an import: its own code, whatever the stack says (nothing of the file's runs yet).
-	if (caller === null && moduleFile !== null) caller = UNATTRIBUTED_READER;
-	// A file's own top-level code as it first loads, or an import it links, before any node stands for it: decided as the
-	// file's module path (S4), as the loader reads it ahead of the build. Code that names no file loading (a helper's top
-	// level, code no load accounts for) stays refused.
-	if (caller === UNATTRIBUTED_READER) {
-		const load = runtime_loadingFileRunning(slothlet, moduleFile);
-		if (load?.paths?.length) {
-			permissionManager.assertCapabilityForPaths(load.paths, name, route);
-			if (filename !== null && namesForeignFile(filename, load.path)) {
-				permissionManager.assertCapabilityForPaths(load.paths, name, route, filename === BINDING_NAME ? "binding" : "foreign-filename");
-			}
-			return;
-		}
-	}
-	permissionManager.assertCapability(caller, name, route);
-	// Opened for the caller: compiling under the name of a real file outside its own folder is still refused, since the
-	// code would be placed as that file's (a package's, another module's, the host's).
-	if (filename === null || caller === null || caller === UNATTRIBUTED_READER) return;
-	if (namesForeignFile(filename, caller.____slothletInternal?.filePath ?? null)) {
-		permissionManager.assertCapability(caller, name, route, filename === BINDING_NAME ? "binding" : "foreign-filename");
-	}
 }
 
 /**
@@ -585,7 +448,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 				if (isFixed(Reflect.getOwnPropertyDescriptor(target, prop))) return value;
 				// What the language's own prototypes give every object or function (`constructor`, `toString`) is no member of
 				// the namespace: it reads as it is, as at an api node.
-				if (runtime_inheritsBuiltin(target, prop)) return value;
+				if (inheritsBuiltin(target, prop)) return value;
 				return runtime_frameworkViewOf(value, slothlet, reader, childPath(prop));
 			});
 		},
@@ -1004,21 +867,6 @@ function runtime_accessEntry(access, wrapper) {
 	if (access.manager !== contextManager || access.identity !== identity) return null;
 	const store = contextManager.tryGetContext(instanceID);
 	return access.store === store ? { store, identity } : null;
-}
-
-/**
- * An access whose identity its caller resolved already, on the store it read it from.
- * @param {object} contextManager - The context manager that resolved it.
- * @param {object|null|undefined} store - The store it was resolved on.
- * @param {object|undefined} identity - The identity.
- * @returns {object} The access.
- * @internal
- *
- * @example
- * runtime_selfView(value, undefined, null, runtime_resolvedAccess(liveRuntime, store, identity));
- */
-function runtime_resolvedAccess(contextManager, store, identity) {
-	return { filled: true, done: false, manager: contextManager, store, identity };
 }
 
 /**
@@ -2905,9 +2753,7 @@ export function RulesLayer(Base) {
 					ROOT_PROXIES,
 					runtime_frameworkWrite,
 					runtime_refuseEndedAccess,
-					UNATTRIBUTED_READER,
 					runtime_registerRunView,
-					runtime_assertCapability,
 					runtime_refuseWriteWithoutStanding,
 					runtime_assertReaderWrite,
 					FRAMEWORK_MEMBER_NAMES,
@@ -2928,7 +2774,6 @@ export function RulesLayer(Base) {
 					runtime_endAccess,
 					runtime_takeAccess,
 					runtime_accessIdentity,
-					runtime_resolvedAccess,
 					runtime_readWithAccess,
 					runtime_describeWithAccess,
 					resolveEnforcedCaller,
@@ -2988,7 +2833,6 @@ export function RulesLayer(Base) {
 					runtime_holdsAssignedData = methods.values.runtime_holdsAssignedData;
 					runtime_holdsCode = methods.values.runtime_holdsCode;
 					runtime_holdsValue = methods.values.runtime_holdsValue;
-					runtime_inheritsBuiltin = methods.values.runtime_inheritsBuiltin;
 					runtime_inheritsFrom = methods.values.runtime_inheritsFrom;
 					runtime_isArrayIndex = methods.values.runtime_isArrayIndex;
 					runtime_isArrayMember = methods.values.runtime_isArrayMember;
@@ -3004,7 +2848,6 @@ export function RulesLayer(Base) {
 					runtime_isTerminalData = methods.values.runtime_isTerminalData;
 					_proxyRegistry = methods.nodes._proxyRegistry;
 					ADOPTED_ACCESSORS = methods.nodes.ADOPTED_ACCESSORS;
-					ENDED_INSTANCES = methods.nodes.ENDED_INSTANCES;
 					NO_NODE_PRIMITIVE = methods.nodes.NO_NODE_PRIMITIVE;
 					runtime_makerInstanceID = methods.nodes.runtime_makerInstanceID;
 					runtime_makerOf = methods.nodes.runtime_makerOf;
@@ -3014,10 +2857,7 @@ export function RulesLayer(Base) {
 					runtime_nodeAtPath = methods.nodes.runtime_nodeAtPath;
 					runtime_nodePrimitive = methods.nodes.runtime_nodePrimitive;
 					runtime_prototypeGiven = methods.nodes.runtime_prototypeGiven;
-					runtime_namesHelperCopy = methods.run.runtime_namesHelperCopy;
 					runtime_runAsMaker = methods.run.runtime_runAsMaker;
-					runtime_runnerCompilesHelper = methods.run.runtime_runnerCompilesHelper;
-					runtime_runnerCompilesLoad = methods.run.runtime_runnerCompilesLoad;
 					capturedViewShadows = methods.views.capturedViewShadows;
 					FRAMEWORK_MEMBERS = methods.views.FRAMEWORK_MEMBERS;
 					hasOwn = methods.views.hasOwn;
@@ -3053,8 +2893,6 @@ export function RulesLayer(Base) {
 					leafOfCopy = methods.uw.leafOfCopy;
 					resolveWrapper = methods.uw.resolveWrapper;
 					runtime_codeWritersOnStack = methods.uw.runtime_codeWritersOnStack;
-					runtime_loadingFileRunning = methods.uw.runtime_loadingFileRunning;
-					runtime_loadingHelper = methods.uw.runtime_loadingHelper;
 					SlothletTypeError = methods.uw.SlothletTypeError;
 					trustedRootOwn = methods.uw.trustedRootOwn;
 				});

@@ -38,6 +38,7 @@ import {
 } from "#helpers/intrinsics";
 
 import { ownBindingsRefusal } from "#helpers/instance-imports";
+import { codeLabel, isLanguageNameDescriptor } from "#helpers/builtin-forms";
 
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
@@ -59,7 +60,6 @@ let trustedRootOwn,
 	runtime_takeRunWrite,
 	runtime_enforceReadGate,
 	runtime_isTerminalData,
-	runtime_isLanguageNameDescriptor,
 	runtime_enforceCodeMember,
 	runtime_isCodeMemberWithheld,
 	GIVEN_VIEWS,
@@ -84,7 +84,6 @@ let trustedRootOwn,
 	runtime_refuseFixedObjectDefinition,
 	runtime_inspectLabel,
 	runtime_inspectSafe,
-	runtime_codeLabel,
 	UnifiedWrapper,
 	resolveWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
@@ -478,7 +477,7 @@ function runtime_rootMemberDescriptor(slothlet, prop, descriptor) {
 		const decided = runtime_isHostRead(gate) && !slothlet.handlers.permissionManager.isPrivateTarget(String(prop));
 		// The root function's own `name` and `length` are described as they are read, without a check (see
 		// runtime_rootMemberRead); a member the root lists by that name is the module's and is decided as any other.
-		const builtin = typeof slothlet.api === "function" && runtime_isLanguageNameDescriptor(prop, descriptor);
+		const builtin = typeof slothlet.api === "function" && isLanguageNameDescriptor(prop, descriptor);
 		if (!decided && !builtin && runtime_isReadRedacted(gate, prop)) return undefined;
 	}
 	// The root function's own `prototype` and `toString`, described only to a reader that may call the root, as a function
@@ -734,7 +733,7 @@ function runtime_rootInspectShown(slothlet, args) {
 	}
 	const api = slothlet.api;
 	if (typeof api !== "function") return shown;
-	const label = runtime_codeLabel(isCompositionLayer(api) ? layerUnderlying(api) : api);
+	const label = codeLabel(isCompositionLayer(api) ? layerUnderlying(api) : api);
 	if (Objects.keys(shown).length === 0) return label;
 	const options = args[1],
 		inspect = args[2];
@@ -759,7 +758,7 @@ function runtime_rootMemberShown(value, args, slothlet) {
 	if (behind !== undefined && typeof value === "object") return value;
 	const safe = runtime_inspectSafe(value, args, true, slothlet);
 	if (typeof safe !== "string" || safe === value) return safe;
-	return runtime_inspectLabel(typeof behind === "function" ? runtime_codeLabel(behind) : safe);
+	return runtime_inspectLabel(typeof behind === "function" ? codeLabel(behind) : safe);
 }
 
 /** Whether {@link RootLayer} has built its class: it builds one, for the wrapper's chain. @type {boolean} */
@@ -804,14 +803,12 @@ export function RootLayer(Base) {
 					realClass = registered;
 					UnifiedWrapper = registered;
 					INTRINSICS = methods.values.INTRINSICS;
-					runtime_codeLabel = methods.values.runtime_codeLabel;
 					runtime_holdsValue = methods.values.runtime_holdsValue;
 					runtime_inspectLabel = methods.values.runtime_inspectLabel;
 					runtime_inspectSafe = methods.values.runtime_inspectSafe;
 					runtime_isCodeMemberWithheld = methods.values.runtime_isCodeMemberWithheld;
 					runtime_isHeldPrimitive = methods.values.runtime_isHeldPrimitive;
 					runtime_isHostRead = methods.values.runtime_isHostRead;
-					runtime_isLanguageNameDescriptor = methods.values.runtime_isLanguageNameDescriptor;
 					runtime_isReadRedacted = methods.values.runtime_isReadRedacted;
 					runtime_isRootFunctionAnswer = methods.values.runtime_isRootFunctionAnswer;
 					runtime_isTerminalData = methods.values.runtime_isTerminalData;

@@ -6257,6 +6257,7 @@ export function internals(consumer) {
 			"lib/handlers/context-async",
 			"lib/handlers/context-live",
 			"lib/handlers/unified-wrapper",
+			"lib/helpers/capability-context",
 			"lib/helpers/class-instance-wrapper",
 			"lib/processors/loader",
 			"slothlet"

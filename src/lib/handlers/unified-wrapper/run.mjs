@@ -23,7 +23,6 @@ import { segmentsOf } from "#helpers/segments";
 import { util } from "#helpers/platform";
 import { isCompositionLayer, layerUnderlying } from "#helpers/composition";
 import { isFrameworkReservedKey } from "#helpers/reserved-keys";
-import { toComparablePath } from "#handlers/frame-placement";
 import { isFrameworkInternal } from "#handlers/framework-internals";
 import {
 	settleThenable,
@@ -52,8 +51,6 @@ import {
 	RegExpMethods,
 	Set,
 	SetMethods,
-	String,
-	StringMethods,
 	Symbol,
 	WeakMap,
 	WeakMapMethods,
@@ -73,9 +70,10 @@ import {
 	savedThisWindow
 } from "#helpers/run-snapshot";
 import { RUN_COPY } from "#helpers/flow-stores";
-import { instanceIsUp } from "#helpers/capability-context";
 
 import { ownBindingsRefusal } from "#helpers/instance-imports";
+import { internals as callerPinningInternals } from "#helpers/caller-pinning";
+const { isCallerLocked } = callerPinningInternals("lib/handlers/unified-wrapper/run");
 
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
@@ -85,8 +83,6 @@ import { ownBindingsRefusal } from "#helpers/instance-imports";
  */
 let trustedRootOwn,
 	fileNodes,
-	runtime_loadingFileRunning,
-	runtime_loadingHelper,
 	outerCallerCeiling,
 	hasOwn,
 	FRAMEWORK_WRITES,
@@ -94,7 +90,6 @@ let trustedRootOwn,
 	runtime_isEnginePromise,
 	runtime_carriesHanded,
 	runtime_holdsDataKind,
-	runtime_isCallerLocked,
 	runtime_assertOwnedWrite,
 	runtime_nodeWrapperOf,
 	runtime_nodeOpen,
@@ -115,106 +110,6 @@ let trustedRootOwn,
 	resolveWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
-
-/**
- * The loads whose file vitest's module runner has compiled (see {@link runtime_runnerCompilesLoad}).
- * @type {WeakSet<object>}
- * @private
- */
-const RUNNER_COMPILED_LOADS = new WeakSet();
-
-/**
- * Whether a compile vitest's module runner makes of the code its server sent (see `helpers/vitest-worker-setup`) is
- * the loader's: the compile of a file this instance is loading now (the name it compiles under carries this instance's
- * tag and names a file the loader is loading, and that load's file has not been compiled yet; the load is then marked
- * compiled), or of this instance's own `self` module, which the vite plugin writes for a runtime import of one of the
- * instance's files (`slothlet-self:<instanceID>|…`), while the instance has a load running.
- * @param {object} slothlet - The instance.
- * @param {*} filename - The name the code is compiled under (the module's id).
- * @returns {boolean} True for such a compile.
- * @private
- */
-function runtime_runnerCompilesLoad(slothlet, filename) {
-	if (typeof filename !== "string") return false;
-	// vite names a virtual module with a leading NUL.
-	const selfName = StringMethods.startsWith(filename, "\0") ? StringMethods.slice(filename, 1) : filename;
-	if (StringMethods.startsWith(selfName, "slothlet-self:")) {
-		if (!StringMethods.startsWith(selfName, `slothlet-self:${String(slothlet.instanceID)}|`)) return false;
-		const loader = slothlet?.processors?.loader;
-		return typeof loader?.isLoading === "function" && loader.isLoading();
-	}
-	if (RegExpMethods.exec(/[?&]slothlet_instance=([^&#]+)/, filename)?.[1] !== String(slothlet.instanceID)) return false;
-	const load = runtime_loadingFileRunning(slothlet, filename);
-	if (load === null || WeakSetMethods.has(RUNNER_COMPILED_LOADS, load)) return false;
-	WeakSetMethods.add(RUNNER_COMPILED_LOADS, load);
-	return true;
-}
-
-/**
- * The helper files of this instance's whose first compile shaped as vitest's runner makes one, with no worker setup to
- * verify it, was left to the code making it (see {@link runtime_runnerCompilesHelper}): by instance, each file as its
- * instance id and comparable path.
- * @type {WeakMap<object, Set<string>>}
- * @private
- */
-const RUNNER_COMPILED_HELPERS = new WeakMap();
-
-/**
- * Whether a name code is compiled under is a copy of a helper file this instance judges: tagged with this instance's
- * id, or with an id no instance that is up holds (an unknown instance, or one that has shut down or taken a new id,
- * whose copies are no running instance's), and naming a file the loader is not loading as a leaf and, for the instance's
- * own tag, no file its leaves were built from. The loader imports only leaves; every other file under an instance's tag
- * is a file a leaf imports, directly or through other helpers (see `helpers/instance-imports`).
- * @param {object} slothlet - The instance.
- * @param {*} filename - The name the code is compiled under.
- * @returns {"own"|"orphan"|null} "own" for a copy of a helper file of the instance's, "orphan" for a copy under an id no
- *   instance that is up holds, null otherwise.
- * @private
- */
-function runtime_namesHelperCopy(slothlet, filename) {
-	if (typeof filename !== "string") return null;
-	const tag = RegExpMethods.exec(/[?&]slothlet_instance=([^&#]+)/, filename)?.[1] ?? null;
-	if (tag === null) return null;
-	const kind = tag === String(slothlet.instanceID) ? "own" : instanceIsUp(tag) ? null : "orphan";
-	if (kind === null) return null;
-	const loader = slothlet?.processors?.loader;
-	if (typeof loader?.loadsOfFile !== "function") return null;
-	if (loader.loadsOfFile(toComparablePath(filename)).length !== 0) return null;
-	// A file the instance built leaves from is a leaf file, not a helper, once its load is over: code compiled under its
-	// name is placed by the frames it runs in, as any code is (a supplier's code under a leaf's name runs as the supplier,
-	// with the leaf's call as its ceiling).
-	if (kind === "own" && fileNodes(slothlet, filename).length !== 0) return null;
-	return kind;
-}
-
-/**
- * Whether a compile vitest's module runner would make of a copy of a helper file of this instance's is left to the code
- * making it, as any other code's is, rather than placed as the helper's code. A verified compile (`runnerCompile` true:
- * exactly the code vitest's server sent for the name, one compile per reply) always is. An unverified one (no worker
- * setup records what the server sent) is so only for the name slothlet gives the instance's copy of a helper file (the
- * file's path with the instance's id as its only query parameter), while the helper is evaluated for the first time
- * inside a load of a file importing it, as the instance's import record has it (see `runtime_loadingHelper` in
- * `frame-placement`), and only for the first compile of the helper file: an instance has one copy of each helper file,
- * which vitest compiles once, and every other compile under a name of a copy of the file is placed as the helper's, as
- * every later compile of a loading file is.
- * @param {object} slothlet - The instance.
- * @param {*} filename - The name the code is compiled under (the module's id).
- * @param {boolean|null} runnerCompile - See {@link runtime_assertCapability}.
- * @returns {boolean} True for such a compile.
- * @private
- */
-function runtime_runnerCompilesHelper(slothlet, filename, runnerCompile) {
-	if (runnerCompile === false || runtime_namesHelperCopy(slothlet, filename) !== "own") return false;
-	if (runnerCompile === true) return true;
-	if (RegExpMethods.exec(/^[^?#]*\?slothlet_instance=[^&#]+$/, filename) === null) return false;
-	if (!runtime_loadingHelper(slothlet, toComparablePath(filename))?.paths?.length) return false;
-	let compiled = WeakMapMethods.get(RUNNER_COMPILED_HELPERS, slothlet);
-	if (compiled === undefined) WeakMapMethods.set(RUNNER_COMPILED_HELPERS, slothlet, (compiled = new Set()));
-	const key = `${String(slothlet.instanceID)}\u0000${toComparablePath(filename)}`;
-	if (SetMethods.has(compiled, key)) return false;
-	SetMethods.add(compiled, key);
-	return true;
-}
 
 /**
  * Whether a function runs none of a module's code of its own: the engine's (`Function.prototype.toString` reports
@@ -1083,7 +978,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 
 	// Only a pinned (module-registered) around hook runs under a different identity than the call, so
 	// only then is the call's own flow captured for its next() to restore.
-	const flow = ArrayMethods.some(arounds, (hook) => runtime_isCallerLocked(hook.handler)) ? contextManager.captureFlow(instanceID) : null;
+	const flow = ArrayMethods.some(arounds, (hook) => isCallerLocked(hook.handler)) ? contextManager.captureFlow(instanceID) : null;
 	const runInCallerFlow = flow ? (fn) => contextManager.runInFlow(flow, fn) : null;
 
 	// First record wins: an error rethrown by an around hook keeps the source it was first thrown
@@ -1285,9 +1180,6 @@ export function RunLayer(Base) {
 		class Run extends Base {
 			static {
 				Base.define("run", {
-					runtime_runnerCompilesLoad,
-					runtime_namesHelperCopy,
-					runtime_runnerCompilesHelper,
 					runtime_runsNoModuleCode,
 					runtime_runsForHander,
 					runtime_viewedForHander,
@@ -1329,7 +1221,6 @@ export function RunLayer(Base) {
 					runtime_holdsDataKind = methods.values.runtime_holdsDataKind;
 					runtime_holdsValue = methods.values.runtime_holdsValue;
 					runtime_inherits = methods.values.runtime_inherits;
-					runtime_isCallerLocked = methods.values.runtime_isCallerLocked;
 					runtime_isCarrier = methods.values.runtime_isCarrier;
 					runtime_isEnginePromise = methods.values.runtime_isEnginePromise;
 					runtime_isSlothletValue = methods.values.runtime_isSlothletValue;
@@ -1352,8 +1243,6 @@ export function RunLayer(Base) {
 					fileNodes = methods.uw.fileNodes;
 					outerCallerCeiling = methods.uw.outerCallerCeiling;
 					resolveWrapper = methods.uw.resolveWrapper;
-					runtime_loadingFileRunning = methods.uw.runtime_loadingFileRunning;
-					runtime_loadingHelper = methods.uw.runtime_loadingHelper;
 					trustedRootOwn = methods.uw.trustedRootOwn;
 				});
 			}
