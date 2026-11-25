@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T21:20:38-08:00 (1793596838)
+ *	@Last modified time: 2026-11-25T01:44:21-08:00 (1795599861)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { run, runMergeReports, printMergeOutput, printCoverageSummary, resolveBin, resolveVitestConfig } from "@cldmv/vitest-runner";
 import { cleanTmpArtifacts } from "../lib/clean-tmp-artifacts.mjs";
 import { stageI18nPack, STAGED_ENV } from "./setup/i18n-pack-fixture.mjs";
@@ -257,6 +257,58 @@ EXAMPLES:
 `);
 }
 
+/** Matches a vitest test file name in this repo. */
+const TEST_FILE_PATTERN = /\.test\.vitest\.[cm]?js$/i;
+
+/**
+ * List every test file under `tests/vitests`, as project-relative forward-slash paths.
+ * @returns {string[]} Test file paths.
+ * @example
+ * const files = listTestFiles();
+ */
+function listTestFiles() {
+	const base = path.join(projectRoot, DEFAULT_TEST_DIR);
+	if (!fs.existsSync(base)) return [];
+	return fs
+		.readdirSync(base, { recursive: true })
+		.map((entry) => String(entry).replace(/\\/g, "/"))
+		.filter((entry) => TEST_FILE_PATTERN.test(entry) && !entry.split("/").includes("node_modules"))
+		.map((entry) => `${DEFAULT_TEST_DIR}/${entry}`.replace(/\\/g, "/"));
+}
+
+/**
+ * Whether an argument names a test file, folder or path pattern, so it is a selector and never a flag's value.
+ * @param {string} arg - Raw CLI argument (not starting with "-").
+ * @returns {boolean} True when it should be treated as a test selector.
+ * @example
+ * isTestSelector("suites/config"); // true
+ * isTestSelector("verbose"); // false
+ */
+function isTestSelector(arg) {
+	if (TEST_FILE_PATTERN.test(arg)) return true;
+	const [normalized] = normalizePatterns([arg]);
+	if (fs.existsSync(path.resolve(projectRoot, arg)) || fs.existsSync(path.resolve(projectRoot, normalized))) return true;
+	if (!arg.includes("/")) return false;
+	return listTestFiles().some((file) => file.includes(normalized.replace(/\\/g, "/")));
+}
+
+/**
+ * Find selectors that match no test file: not an existing test file, not a folder holding one, and not a
+ * substring of any test file path.
+ * @param {string[]} patterns - Test selectors from the CLI.
+ * @returns {string[]} The selectors that matched nothing.
+ * @example
+ * findUnmatchedSelectors(["suites/config", "suites/nope"]); // ["suites/nope"]
+ */
+export function findUnmatchedSelectors(patterns) {
+	const files = listTestFiles();
+	return patterns.filter((pattern) => {
+		const [normalized] = normalizePatterns([pattern]);
+		const needle = normalized.replace(/\\/g, "/").replace(/\/+$/, "");
+		return !files.some((file) => file.includes(needle));
+	});
+}
+
 /**
  * Parse CLI arguments into runner options, vitest passthrough args, and test patterns.
  * @param {string[]} args - Raw process arguments excluding node and script path.
@@ -277,7 +329,7 @@ EXAMPLES:
  * @example
  * const parsed = parseArguments(["--baseline", "--workers", "2", "suites/config"]);
  */
-function parseArguments(args) {
+export function parseArguments(args) {
 	let help = false;
 	let baseline = false;
 	let showErrorDetails = true;
@@ -400,7 +452,9 @@ function parseArguments(args) {
 
 		if (arg.startsWith("-")) {
 			vitestArgs.push(arg);
-			if (i + 1 < args.length && !args[i + 1].startsWith("-")) {
+			// `--name=value` carries its own value; a bare flag takes the next argument as its value
+			// only when that argument isn't a test selector.
+			if (!arg.includes("=") && i + 1 < args.length && !args[i + 1].startsWith("-") && !isTestSelector(args[i + 1])) {
 				vitestArgs.push(args[i + 1]);
 				i++;
 			}
@@ -449,6 +503,26 @@ function normalizePatterns(patterns) {
 
 		return pattern;
 	});
+}
+
+/**
+ * Collect the values of every `--coverage.include` argument (`=value` or separate value form).
+ * @param {string[]} vitestArgs - Vitest passthrough arguments.
+ * @returns {string[]} The include globs, in order.
+ * @example
+ * coverageIncludeFromArgs(["--coverage.include=src/a.mjs"]); // ["src/a.mjs"]
+ */
+export function coverageIncludeFromArgs(vitestArgs) {
+	const includes = [];
+	for (let i = 0; i < vitestArgs.length; i++) {
+		const arg = vitestArgs[i];
+		if (arg.startsWith("--coverage.include=")) {
+			includes.push(arg.slice("--coverage.include=".length));
+		} else if (arg === "--coverage.include" && i + 1 < vitestArgs.length) {
+			includes.push(vitestArgs[++i]);
+		}
+	}
+	return includes;
 }
 
 /**
@@ -601,6 +675,22 @@ async function main() {
 	process.env[STAGED_ENV] = "1";
 	process.once("exit", restoreI18nPack);
 
+	// Selectors that match no test file must fail loudly, never fall back to the whole suite.
+	if (parsed.testPatterns.length > 0 && !parsed.testListFile && !parsed.baseline) {
+		const unmatched = findUnmatchedSelectors(parsed.testPatterns);
+		if (unmatched.length === parsed.testPatterns.length) {
+			console.error(`❌ No test files match: ${unmatched.join(", ")}`);
+			process.exit(1);
+		}
+	}
+
+	// The runner hands `--coverage.*` args only to the merge step, so the per-file runs would still
+	// collect all of src/. The vitest config reads this variable for `coverage.include` instead.
+	const coverageInclude = coverageIncludeFromArgs(parsed.vitestArgs);
+	if (coverageInclude.length > 0) {
+		process.env.SLOTHLET_COVERAGE_INCLUDE = JSON.stringify(coverageInclude);
+	}
+
 	const runOptions = buildRunOptions(parsed);
 	const code = await run(runOptions);
 	if (runOptions.mergeReports === false) {
@@ -610,7 +700,10 @@ async function main() {
 	process.exit(code);
 }
 
-main().catch((error) => {
-	console.error("Fatal error:", error);
-	process.exit(1);
-});
+// Run only as the entry script, so tests can import parseArguments without starting a run.
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+	main().catch((error) => {
+		console.error("Fatal error:", error);
+		process.exit(1);
+	});
+}
