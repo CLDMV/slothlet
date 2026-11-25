@@ -297,7 +297,6 @@
 		"DEBUG_MODE_WAITING_APPLY_WALK": "等待-应用-遍历",
 		"DEBUG_MODE_WAITING_APPLY": "等待-应用",
 		"DEBUG_MODE_GET_START": "获取-开始",
-		"DEBUG_MODE_INSPECT_LAZY_UNMATERIALIZED": "util.inspect.custom：延迟模式未实例化",
 		"DEBUG_MODE_GET_CACHED_REPLACE": "获取-缓存-替换",
 		"DEBUG_MODE_GET_CACHED": "获取-缓存",
 		"DEBUG_MODE_GET_PROXYGET_ACCESSING": "获取-代理获取：访问中",

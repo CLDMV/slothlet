@@ -296,7 +296,6 @@
 		"DEBUG_MODE_WAITING_APPLY_WALK": "ОЖИДАЕТ-ОБХОД-АНДЕР",
 		"DEBUG_MODE_WAITING_APPLY": "ОЖИДАЕТ-АНДЕР",
 		"DEBUG_MODE_GET_START": "[GET]: начало",
-		"DEBUG_MODE_INSPECT_LAZY_UNMATERIALIZED": "util.inspect.custom: lazy не материализовано",
 		"DEBUG_MODE_GET_CACHED_REPLACE": "ПОЛУЧИТЬ-ИЗ-КЭША-ЗАМЕНИТЬ",
 		"DEBUG_MODE_GET_CACHED": "ПОЛУЧЕНО-ИЗ-КЭША",
 		"DEBUG_MODE_ADOPT": "ПРИНЯТЬ",

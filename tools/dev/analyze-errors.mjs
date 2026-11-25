@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:31:20-08:00 (1794882680)
+ *	@Last modified time: 2026-11-24T19:24:01-08:00 (1795577041)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -693,8 +693,22 @@ function parseErrorThrows(content, filePath) {
 	// NOTE: the non-throw SlothletError alternative may produce duplicate allErrors entries
 	// for throw-sites already matched by the first alternative; this is harmless since
 	// usedErrorCodes is a Set (deduplicates) and Total Errors display uses a separate filter.
-	const throwPattern =
-		/(?:throw\s+(?:await\s+)?(?:new\s+)?(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletWarning|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|(?<!instanceof\s)(?:throw\s+new\s+)?slothlet\.SlothletError)(?:\.create)?/g;
+	// Any dotted receiver is accepted (`manager.SlothletError`, `this.slothlet.SlothletWarning`, ...). A warning class
+	// bound to a local alias in the same file (`Warning = SlothletWarning`, `overrides?.Warning ?? SlothletWarning`,
+	// `const W = this.SlothletWarning`) is resolved from its declaration and matched by that name only.
+	const aliasNames = new Set(
+		[...content.matchAll(/\b([A-Za-z_$][\w$]*)\s*(?:=|\?\?)\s*(?:[\w$]+\.)*Slothlet(?:Warning|Error)\b/g)].map((m) => m[1])
+	);
+	const aliasAlt = aliasNames.size > 0 ? `|new\\s+(?:${[...aliasNames].join("|")})(?![\\w$.])` : "";
+	const throwPattern = new RegExp(
+		"(?:throw\\s+(?:await\\s+)?(?:new\\s+)?(?:[\\w$]+\\.)*SlothletError" +
+			"|new\\s+(?:[\\w$]+\\.)*SlothletWarning" +
+			"|new\\s+(?:[\\w$]+\\.)*SlothletError" +
+			"|(?<!instanceof\\s)(?:throw\\s+new\\s+)?slothlet\\.SlothletError" +
+			aliasAlt +
+			")(?:\\.create)?",
+		"g"
+	);
 
 	const throwStarts = [];
 	let match;
@@ -772,7 +786,8 @@ function parseErrorThrows(content, filePath) {
 
 		// SlothletWarning takes its message from `context.key` when one is given (a message variant
 		// under the same warning code), so that key is the translation the context must match.
-		const isWarning = content.substring(startIndex, parenStart).includes("SlothletWarning");
+		const callee = content.substring(startIndex, parenStart);
+		const isWarning = callee.includes("SlothletWarning") || [...aliasNames].some((a) => new RegExp(`new\\s+${a}\\s*$`).test(callee));
 		const keyOverride = isWarning ? fullMatch.match(/\bkey:\s*"([A-Z][A-Z0-9_]*)"/) : null;
 		const messageKey = keyOverride ? keyOverride[1] : errorCode;
 
@@ -1157,6 +1172,11 @@ for (const filePath of files) {
 	// Match translate("KEY", ...) or translate('KEY', ...) - direct full-function calls
 	const translateCallPattern = /\btranslate\(\s*["']([A-Z0-9_]+)["']/g;
 	let match;
+	// A quoted literal that is exactly a translation key counts as a use: keys reach translate() through lookup tables
+	// (`translate(REASONS[code])`) and constants, so no call shape names them. Only literals that match a real key count.
+	for (const literal of content.matchAll(/["']([A-Z][A-Z0-9_]*_[A-Z0-9_]+)["']/g)) {
+		if (Object.prototype.hasOwnProperty.call(translations, literal[1])) directTranslationUsage.add(literal[1]);
+	}
 	while ((match = tCallPattern.exec(content)) !== null) {
 		directTranslationUsage.add(match[1]);
 	}
