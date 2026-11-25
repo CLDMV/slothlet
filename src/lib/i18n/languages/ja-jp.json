@@ -407,6 +407,7 @@
 		"API_PATH_REASON_RESERVED_NAME": "予約名 (slothlet, shutdown, destroy) と衝突しています",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "プロトタイプチェーンを汚染する安全でないセグメント (__proto__, constructor, prototype) が含まれています",
 		"API_PATH_REASON_THENABLE_SEGMENT": "'then' セグメントが含まれており、その名前空間が await 可能になってしまいます",
+		"API_PATH_REASON_FRAMEWORK_SEGMENT": "3 つのアンダースコアで始まるセグメントが含まれています。この名前はフレームワーク自身のメンバー用に予約されています",
 		"API_PATH_REASON_INVALID_TYPE": "文字列、文字列の配列、空の文字列 (ルート)、または null/undefined (ルート) である必要があります",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "空のパスセグメントが含まれています",
 		"API_PATH_REASON_COLLISION_ERROR": "パスが既に存在し、衝突モードが 'error' です",

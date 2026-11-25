@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:13:02-08:00 (1795486382)
+ *	@Last modified time: 2026-11-25T13:44:19-08:00 (1795643059)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -117,12 +117,13 @@ function freezeSet(set) {
 }
 
 /**
- * The complete set of framework-reserved export names — names a module export can never
- * meaningfully claim because the framework's own wrapper machinery already owns them.
+ * The framework-reserved names the framework's own code looks up by name — names a module export can never
+ * meaningfully claim because the framework's own wrapper machinery already owns them. Every other name that starts
+ * with three underscores is reserved too (`isFrameworkName()` in `#helpers/reserved-keys` checks the prefix):
+ * the wrapper's own `___` / `____` members carry it.
  *
  * Derived as the union of `ComponentBase.INTERNAL_KEYS` (wrapper state/control properties)
- * and `IMPL_METADATA_KEYS` (child-adoption metadata) — the same two Sets `isFrameworkReservedKey()`
- * (`#handlers/unified-wrapper`) checks against, combined here into one Set for convenient
+ * and `IMPL_METADATA_KEYS` (child-adoption metadata), combined here into one Set for convenient
  * introspection. Wrapped via {@link freezeSet} — `Object.freeze()` alone would leave `add`/
  * `delete`/`clear` callable, letting a consumer mutate this shared singleton (and corrupt what
  * every other consumer in the same process sees) despite it claiming to be frozen.

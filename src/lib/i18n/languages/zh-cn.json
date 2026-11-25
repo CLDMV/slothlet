@@ -407,6 +407,7 @@
 		"API_PATH_REASON_RESERVED_NAME": "与保留名称冲突（slothlet、shutdown、destroy）",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "包含会污染原型链的不安全段（__proto__、constructor、prototype）",
 		"API_PATH_REASON_THENABLE_SEGMENT": "包含 'then' 段，这会使该命名空间变为可 await",
+		"API_PATH_REASON_FRAMEWORK_SEGMENT": "包含以三个下划线开头的段，该名称保留给框架自身的成员",
 		"API_PATH_REASON_INVALID_TYPE": "必须是字符串、字符串数组、空字符串（根）或 null/undefined（根）",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "包含空的路径段",
 		"API_PATH_REASON_COLLISION_ERROR": "路径已存在且冲突模式为 'error'",

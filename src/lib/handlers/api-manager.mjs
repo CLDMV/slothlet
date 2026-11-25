@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:44-08:00 (1795419104)
+ *	@Last modified time: 2026-11-25T13:44:15-08:00 (1795643055)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,7 +48,7 @@ import {
 	internals as unifiedWrapperInternals
 } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, isFrameworkRoutineMarker, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
-import { dataMemberOf } from "#helpers/reserved-keys";
+import { dataMemberOf, isFrameworkName } from "#helpers/reserved-keys";
 import { MODULE_ID_SEPARATOR, MODULE_MANIFEST } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
@@ -406,7 +406,8 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Refuse a path segment no api path can hold: `__proto__` / `constructor` / `prototype`, the
-	 * prototype-pollution guard (#302). With `refuseThen`, also refuse `then`, which a new node must not be
+	 * prototype-pollution guard (#302), and any name with the framework's `___` / `____` prefix, which only the
+	 * framework's own members carry. With `refuseThen`, also refuse `then`, which a new node must not be
 	 * mounted under, since it would make its namespace thenable and so unreachable (#571). An existing
 	 * member may still be named `then` when it holds data, so a lookup or removal by path accepts it.
 	 * Checked in segment order, so the first offending segment is the one reported.
@@ -420,12 +421,18 @@ export class ApiManager extends ComponentBase {
 	#assertSafeSegments(apiPath, parts, refuseThen = false) {
 		const index = ArrayMethods.findIndex(
 			parts,
-			(segment) => (refuseThen && segment === "then") || SetMethods.has(UNSAFE_PATH_SEGMENTS, segment)
+			(segment) => (refuseThen && segment === "then") || SetMethods.has(UNSAFE_PATH_SEGMENTS, segment) || isFrameworkName(segment)
 		);
 		if (index === -1) return;
+		const segment = parts[index];
 		throw new this.SlothletError("API_PATH_INVALID", {
 			path: segmentsOf(apiPath),
-			reason: parts[index] === "then" ? translate("API_PATH_REASON_THENABLE_SEGMENT") : translate("API_PATH_REASON_UNSAFE_SEGMENT"),
+			reason:
+				segment === "then"
+					? translate("API_PATH_REASON_THENABLE_SEGMENT")
+					: isFrameworkName(segment)
+						? translate("API_PATH_REASON_FRAMEWORK_SEGMENT")
+						: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
 			index,
 			segment: parts[index]
 		});

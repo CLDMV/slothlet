@@ -31,7 +31,7 @@ import {
 	layerOnto,
 	holdMember
 } from "#helpers/composition";
-import { isFrameworkReservedKey } from "#helpers/reserved-keys";
+import { isFrameworkName, isFrameworkReservedKey } from "#helpers/reserved-keys";
 import {
 	ArrayMethods,
 	Arrays,
@@ -1815,6 +1815,16 @@ export function MaterializeLayer(Base) {
 				for (let ofIndex = 0, ofList = ownKeys; ofIndex < ofList.length; ofIndex++) {
 					const key = ofList[ofIndex];
 					if (SetMethods.has(internalKeys, key)) {
+						continue;
+					}
+					// A name with the framework's prefix (`___` / `____`) is never a member: the wrapper's own members carry it,
+					// and a child under such a name would stand in for one of them. An object's own member leaves it as an
+					// adopted one does, so no read or listing of the node reaches it through the impl either.
+					if (isFrameworkName(key)) {
+						if (typeof this.____slothletInternal.impl === "object" && !uw_isLayer) {
+							const reservedDescriptor = Objects.getOwnPropertyDescriptor(this.____slothletInternal.impl, key);
+							if (reservedDescriptor?.configurable) delete this.____slothletInternal.impl[key];
+						}
 						continue;
 					}
 					// Skip metadata/helper keys

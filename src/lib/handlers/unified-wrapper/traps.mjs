@@ -24,7 +24,7 @@
 import { segmentsOf } from "#helpers/segments";
 import { util, EventEmitter, scheduleMacrotask } from "#helpers/platform";
 import { isCompositionLayer, layerHeldKeys, layerMethodOriginal, layerUnderlying, holdMember } from "#helpers/composition";
-import { isFrameworkReservedKey } from "#helpers/reserved-keys";
+import { isFrameworkName, isFrameworkReservedKey } from "#helpers/reserved-keys";
 import { settleThenable, isHookProcessed, failureSource } from "#handlers/hook-manager";
 import { pinnedResultThen, pinnedThen } from "#helpers/promise-context";
 import {
@@ -3189,12 +3189,16 @@ export function TrapsLayer(Base) {
 					// A node of a run's tree changes values the instance's tree shares: what it writes stays on the node itself.
 					const runTreeNode = inRunTree(wrapper);
 					if (runTreeNode) ownRunTreeArray(wrapper);
-					// Keys that must not be settable from outside — they shadow private state or are
-					// read-only informational accessors whose values come from ____slothletInternal.
-					// Silently absorb the write so no TypeError leaks key existence.
+					// Keys that must not be settable from outside — every name with the framework's prefix, which would shadow
+					// the wrapper's own members and state, or read-only informational accessors whose values come from
+					// ____slothletInternal. Silently absorb the write so no TypeError leaks key existence.
 					// ___materialize is exempted: the framework writes it directly on the target.
 					// Module code meets the write rules first, so an assignment is refused as a definition is (#625).
-					if (SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) && prop !== "___materialize") {
+					if (
+						(SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) ||
+							(isFrameworkName(prop) && !SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, prop))) &&
+						prop !== "___materialize"
+					) {
 						assertOwnedWrite(wrapper, prop);
 						return true;
 					}
