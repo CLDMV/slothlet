@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:49-08:00 (1794882649)
+ *	@Last modified time: 2026-11-24T10:24:30-08:00 (1795544670)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,10 +19,11 @@
  *
  * @description
  * The reader may run the trusted modules' `run` and nothing of the vault's. It makes copies of the trusted modules'
- * exact sources under their own file names (`vm.compileFunction`, `Module#_compile`, a fresh `require` of the
- * CommonJS file, a raw `import` of the ES module, with or without the module's own tags, and a `vm.SourceTextModule`
- * where the engine has one). Each copy is a module of the reader's making: what it does is held to the reader's rules
- * inside the trusted module's call, inside the reader's own, and when the host runs it.
+ * exact sources under their own file names (`vm.compileFunction`, `Module#_compile`, and a `vm.SourceTextModule` where
+ * the engine has one): each compile is refused under `capability:code`. A fresh `require` of the CommonJS file and a raw
+ * `import` of the ES module, with or without the module's own tags, are module code importing a leaf file, refused with
+ * MODULE_LEAF_IMPORT_REFUSED. Whichever way, no copy runs, inside the trusted module's call, inside the reader's own, or
+ * when the host runs it.
  *
  * @module tests/vitests/suites/permissions/permissions-vm-recompiled
  */
@@ -49,16 +50,23 @@ const RULES = [
 
 const DENIED = { ok: false, code: "PERMISSION_DENIED" };
 
+/** Copies compiled from the trusted module's source under its real file name (`vm.SourceTextModule` where Node has it). */
+const COMPILED = ["compileFunction", "moduleCompile", ...(vm.SourceTextModule ? ["sourceTextModule"] : [])];
+
+/** Copies a real load of the trusted module's leaf file makes. */
+const COPIED = ["require", "import", "importPlain"];
+
+const PERMISSION_CAPABILITY_REFUSED = { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" };
+const LEAF_IMPORT_REFUSED = { ok: false, code: "MODULE_LEAF_IMPORT_REFUSED" };
+
 /**
- * What a copy compiled in module code under the trusted module's real file name answers: the compile itself is refused
- * even where `capability:code` is opened (D8 ruling). Copies a real load makes (`require`, `import`) are refused later,
- * as no module's code.
+ * What a copy made in module code answers. A compile under the trusted module's real file name is refused itself, even
+ * where `capability:code` is opened (D8 ruling). A load of the trusted module's file (`require`, `import`) is module
+ * code importing a leaf file, refused as it resolves, so no copy is made.
  * @param {string} kind - How the copy is made.
  * @returns {{ok: false, code: string}} The refusal.
  */
-const refusalFor = (kind) =>
-	["compileFunction", "moduleCompile", "sourceTextModule"].includes(kind) ? PERMISSION_CAPABILITY_REFUSED : DENIED;
-const PERMISSION_CAPABILITY_REFUSED = { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" };
+const refusalFor = (kind) => (COPIED.includes(kind) ? LEAF_IMPORT_REFUSED : PERMISSION_CAPABILITY_REFUSED);
 
 /**
  * Whether this engine gives a stack frame the hash of the script it runs in.
@@ -72,15 +80,8 @@ const HAS_SCRIPT_HASH = (() => {
 	return typeof sites?.[0]?.getScriptHash === "function";
 })();
 
-/** The ways a copy is made; `vm.SourceTextModule` only where Node has it (`--experimental-vm-modules`). */
-const KINDS = [
-	"compileFunction",
-	"moduleCompile",
-	"require",
-	"import",
-	"importPlain",
-	...(vm.SourceTextModule ? ["sourceTextModule"] : [])
-];
+/** The ways a copy is made. */
+const KINDS = [...COMPILED, ...COPIED];
 
 /**
  * Capture a call's outcome.

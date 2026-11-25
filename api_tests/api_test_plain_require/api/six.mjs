@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T09:00:00-08:00 (1794589200)
+ *	@Last modified time: 2026-11-24T08:06:12-08:00 (1795536372)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 
 /** A `require` made from this file's path, without the query slothlet loads it with. */
 const require = createRequire(fileURLToPath(import.meta.url));
-const plain = require("../helpers/plain.cjs");
+const plain = require("../lib/plain.cjs");
 
 /**
  * Count one up in the helper.
@@ -45,6 +45,6 @@ export const read = () => plain.read();
  * Where the `require` this file made finds the helper.
  * @returns {string} The helper's path.
  * @example
- * api.six.where(); // "/…/helpers/plain.cjs"
+ * api.six.where(); // "/…/lib/plain.cjs"
  */
-export const where = () => require.resolve("../helpers/plain.cjs");
+export const where = () => require.resolve("../lib/plain.cjs");

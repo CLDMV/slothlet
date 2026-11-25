@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:03-08:00 (1794882603)
+ *	@Last modified time: 2026-11-24T08:08:54-08:00 (1795536534)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,13 +25,12 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/` (also mounted as `mgr`).
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutput, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
-const GUEST = path.join(FIXTURE, "guest");
-const VICTIM = path.join(FIXTURE, "victim");
+const GUEST = apiPart(FIXTURE, "guest");
+const VICTIM = apiPart(FIXTURE, "victim");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -54,7 +53,7 @@ describe.each(CONFIGS)("versioned and array-path api.add from module code (#625)
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
 		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
 		await api.slothlet.api.add("guest", GUEST, { id: "guest" });
 		await api.slothlet.api.add("mgr", GUEST, { id: "mgr" });

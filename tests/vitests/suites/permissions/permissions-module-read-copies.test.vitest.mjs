@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T22:23:29-07:00 (1792819409)
+ *	@Last modified time: 2026-11-24T08:08:53-08:00 (1795536533)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,12 +24,11 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/` (also mounted as the versioned `svc`), `guest/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
-const VICTIM = path.join(FIXTURE, "victim");
+const VICTIM = apiPart(FIXTURE, "victim");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -50,10 +49,10 @@ describe.each(CONFIGS)("copies the metadata getters hand module code (#625) — 
 		["on", { permissions: {} }],
 		["off", {}]
 	])("leaves the store as it was when module code changes what it read (permissions %s)", async (_label, options) => {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
 		await api.slothlet.api.add("victim", VICTIM, { id: "victim", metadata: { tier: { level: 1 } } });
 		await api.slothlet.api.add("svc", VICTIM, { id: "svc1", version: { tag: "v1", default: true, metadata: { nested: { flag: "ok" } } } });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+		await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 
 		await api.guest.x.changeReadMetadata("victim", "svc", "v1");
 

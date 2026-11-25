@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:48-08:00 (1794882528)
+ *	@Last modified time: 2026-11-24T11:20:17-08:00 (1795548017)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -63,7 +63,7 @@ import {
 import { readStack, stackSites } from "#helpers/stack-read";
 import { isOwnTopLevelOf, ownBindingsRefusal, internals as instanceImportsInternals } from "#helpers/instance-imports";
 
-const { setCapabilityCheck } = instanceImportsInternals("lib/helpers/capability-context");
+const { setCapabilityCheck, instanceClaimed } = instanceImportsInternals("lib/helpers/capability-context");
 
 /**
  * The checks of the instances that are up with the permission system configured, by instance id: each throws
@@ -105,6 +105,20 @@ export function checkCapability(name, route, importer = null, filename = null, r
  */
 export function hasCapabilityCheck(instanceID) {
 	return typeof instanceID === "string" && MapMethods.has(CHECKS, instanceID);
+}
+
+/**
+ * Whether an instance id is held by an instance that is up, in any permission mode (one with the permission system off
+ * registers no capability check, see {@link hasCapabilityCheck}). An id no instance holds (an unknown one, or one
+ * released as its instance shut down or took a new id) answers false.
+ * @param {*} instanceID - The instance id a name is tagged with.
+ * @returns {boolean} True while an instance holds that id.
+ * @internal
+ * @example
+ * instanceIsUp("b"); // true while instance "b" is up
+ */
+export function instanceIsUp(instanceID) {
+	return instanceClaimed(instanceID) === true;
 }
 
 /**

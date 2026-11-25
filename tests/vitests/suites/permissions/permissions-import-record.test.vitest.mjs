@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:55-08:00 (1794882595)
+ *	@Last modified time: 2026-11-24T08:08:50-08:00 (1795536530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,9 +22,9 @@
  * ```
  * api/vault.mjs       get() → "SECRET"
  * api/trusted.mjs     may read the vault; imports no helper
- * api/guest.mjs       imports helpers/reader.mjs, loads helpers/tagged.mjs under a URL it wrote itself
- * helpers/reader.mjs  read() reads the vault and keeps the answer
- * helpers/tagged.mjs  the same
+ * api/guest.mjs       imports lib/reader.mjs, loads lib/tagged.mjs under a URL it wrote itself
+ * lib/reader.mjs      read() reads the vault and keeps the answer
+ * lib/tagged.mjs      the same
  * ```
  * With `guest` denied the vault, the helper's function is refused wherever it runs: run by the host, and from a timer
  * once the call is over. That holds after `guest` has changed every collection of importers it can reach through the

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T00:00:00-08:00 (1795334400)
+ *	@Last modified time: 2026-11-24T08:08:35-08:00 (1795536515)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@ import slothlet from "@cldmv/slothlet";
 import { CLASS_NAMES, listing, privacy } from "../../../../api_tests/api_test_closed_prototype_private_lib/probes.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_closed_prototype_private");
-const BASE = resolve("api_tests/api_test_self_write_reach/base");
+const BASE = resolve("api_tests/api_test_self_write_reach/api");
 
 const MODES = ["eager", "lazy"];
 const RUNTIMES = ["async", "live"];

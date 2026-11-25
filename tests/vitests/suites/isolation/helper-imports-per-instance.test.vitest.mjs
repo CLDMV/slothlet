@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T02:47:20-08:00 (1794826040)
+ *	@Last modified time: 2026-11-24T08:08:22-08:00 (1795536502)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,8 +37,8 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_HELPER_IMPORTS;
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-const NATIVE_PROBE = path.resolve(BASE, "../native-probe.mjs");
-const MOUNT = path.resolve(BASE, "../mount");
+const NATIVE_PROBE = path.resolve(BASE, "../lib/native-probe.mjs");
+const MOUNT = TEST_DIRS.API_TEST_HELPER_IMPORTS_MOUNT;
 
 const CONFIGS = [
 	{ name: "eager", config: { mode: "eager" } },

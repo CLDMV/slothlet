@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T22:14:44-08:00 (1794032084)
+ *	@Last modified time: 2026-11-24T08:09:01-08:00 (1795536541)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,11 +17,11 @@
  * @fileoverview Files vite evaluates after slothlet's runtime loaded, under vitest with the `slothletInstanceImports()`
  * plugin, are attributed as Node's own loader attributes them (#714).
  * @description
- * The fixture's host (`api_tests/api_test_vite_late_files/calls.mjs`) creates the instance and only then imports a
+ * The fixture's host (`api_tests/api_test_vite_late_files/lib/calls.mjs`) creates the instance and only then imports a
  * package's files and hands their context to a module, as rummage imports an extension's `main`; and one module hands
  * another a plain function of its own, which the other runs later from a call of its own. The same host runs twice, in
  * child processes: under Node's own loader (`probe.mjs`), and under vitest with slothlet in `server.deps.inline` and the
- * plugin configured (`vitest/`). Each answer is the one docs/PERMISSIONS.md gives, lazy equal to eager, in both
+ * plugin configured (`lib/vitest/`). Each answer is the one docs/PERMISSIONS.md gives, lazy equal to eager, in both
  * runtimes, and both runs give it:
  *
  * - a file only the host loaded is the host's own and runs as the module's call it is in ("Code passed by routes
@@ -40,7 +40,7 @@ import { stripVTControlCharacters } from "node:util";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const FIXTURE = path.join(ROOT, "api_tests", "api_test_vite_late_files");
-const CONFIG = path.join(FIXTURE, "vitest", "vitest.config.mjs");
+const CONFIG = path.join(FIXTURE, "lib", "vitest", "vitest.config.mjs");
 const VITEST = path.join(ROOT, "node_modules", "vitest", "vitest.mjs");
 const CONFIGS = ["eager/async", "eager/live", "lazy/async", "lazy/live"];
 
@@ -91,7 +91,7 @@ function run(args, prefix) {
 }
 
 const RUNS = {
-	"Node's own loader": run([path.join(FIXTURE, "probe.mjs")], ""),
+	"Node's own loader": run([path.join(FIXTURE, "lib", "probe.mjs")], ""),
 	"vitest with slothletInstanceImports()": run([VITEST, "run", "--config", CONFIG], "LATE-CALLS ")
 };
 

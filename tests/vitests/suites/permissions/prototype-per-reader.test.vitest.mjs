@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T05:16:36-08:00 (1795094196)
+ *	@Last modified time: 2026-11-24T08:09:03-08:00 (1795536543)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,7 @@ import { resolve, join } from "node:path";
 import slothlet from "@cldmv/slothlet";
 
 const FIXTURE = resolve("api_tests/api_test_prototype_holders");
-const BASE = resolve("api_tests/api_test_self_write_reach/base");
+const BASE = resolve("api_tests/api_test_self_write_reach/api");
 
 const MODES = ["eager", "lazy"];
 const RUNTIMES = ["async", "live"];

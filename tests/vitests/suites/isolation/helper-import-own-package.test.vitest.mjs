@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:58:45-08:00 (1794185925)
+ *	@Last modified time: 2026-11-24T08:08:22-08:00 (1795536502)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@ import { stripVTControlCharacters } from "node:util";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const FIXTURE = path.join(ROOT, "api_tests", "api_test_own_package_imports");
-const CONFIG = path.join(FIXTURE, "vitest", "vitest.config.mjs");
+const CONFIG = path.join(FIXTURE, "lib", "vitest", "vitest.config.mjs");
 const VITEST = path.join(ROOT, "node_modules", "vitest", "vitest.mjs");
 const CASES = ["eager/async", "eager/live", "lazy/async", "lazy/live"].flatMap((config) => [`${config}/1`, `${config}/2`]);
 
@@ -76,7 +76,7 @@ function run(args, prefix) {
 }
 
 const RUNS = {
-	"Node's own loader": run([path.join(FIXTURE, "probe.mjs")], ""),
+	"Node's own loader": run([path.join(FIXTURE, "lib", "probe.mjs")], ""),
 	"vitest with slothletInstanceImports()": run([VITEST, "run", "--config", CONFIG], "OWN-PACKAGE ")
 };
 

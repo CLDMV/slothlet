@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:25-08:00 (1794874645)
+ *	@Last modified time: 2026-11-24T08:09:01-08:00 (1795536541)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@ import { LOADED_BY_SPECIFIER, VITE_LOADED_BY, slothletInstanceImports } from "#h
 
 const KEY = Symbol.for(VITE_LOADED_BY);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-const FILE = path.join(ROOT, "api_tests", "api_test_vite_late_files", "late-pkg", "context.mjs").replaceAll("\\", "/");
+const FILE = path.join(ROOT, "api_tests", "api_test_vite_late_files", "lib", "late-pkg", "context.mjs").replaceAll("\\", "/");
 const VIRTUAL = `\0${LOADED_BY_SPECIFIER}${new URLSearchParams({ id: FILE })}`;
 const VITEST_EVALUATOR = path.join(ROOT, "node_modules", "vitest", "dist", "module-evaluator.js");
 

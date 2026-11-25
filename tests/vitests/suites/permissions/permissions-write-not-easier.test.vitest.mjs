@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T14:45:51-08:00 (1794955551)
+ *	@Last modified time: 2026-11-24T08:09:02-08:00 (1795536542)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  * one is held to the same answer. A member that does not exist yet takes over nothing: the default policy alone does
  * not refuse creating it, a rule that refuses the writer that path does.
  *
- * Fixture: `api_tests/api_test_write_not_easier` — `a/`, `b/`; the base module is `api_test_self_write_reach/base`.
+ * Fixture: `api_tests/api_test_write_not_easier` — `a/`, `b/`; the base module is `api_test_self_write_reach/api`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
@@ -31,7 +31,7 @@ import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_WRITE_NOT_EASIER;
-const BASE = path.join(TEST_DIRS.API_TEST_SELF_WRITE_REACH, "base");
+const BASE = path.join(TEST_DIRS.API_TEST_SELF_WRITE_REACH, "api");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },

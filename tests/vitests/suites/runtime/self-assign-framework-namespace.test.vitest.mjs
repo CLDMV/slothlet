@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
+ *	@Last modified time: 2026-11-24T08:09:10-08:00 (1795536550)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,12 +28,11 @@
  * built-in rules are off too: a module mounted with `api.add` owns none of the namespace and is refused by the
  * ownership rule, and the base module, which owns the whole tree, changes it as in the released 3.x line.
  *
- * Fixture: `api_tests/api_test_framework_namespace_guard` — `base/` and `guest/` both run `shared/attacks.mjs`.
+ * Fixture: `api_tests/api_test_framework_namespace_guard` — `api/` and `api_test_framework_namespace_guard_guest/` both run `lib/attacks.mjs`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutputSync, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_FRAMEWORK_NAMESPACE_GUARD;
 const REFUSED = "PERMISSION_DENIED";
@@ -85,8 +84,8 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function load() {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			return api;
 		}
 
@@ -231,13 +230,13 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			if (!options.permissions) return;
 			const grant = { caller: "**", target: "slothlet.hostGranted:write", effect: "allow" };
 			api = await slothlet({
-				base: path.join(FIXTURE, "base"),
+				base: apiPart(FIXTURE),
 				mode,
 				runtime,
 				silent: true,
 				permissions: { ...options.permissions, rules: [...(options.permissions.rules ?? []), grant] }
 			});
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			// The grant names every caller: the guest, which owns none of the namespace, writes too.
 			expect(await api.guest.attack.writeMember("hostGranted", 2)).toBe("done");
 			expect(api.slothlet.hostGranted).toBe(2);
@@ -252,13 +251,13 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			if (!options.permissions) return;
 			const grant = { caller: "attack.**", target: "slothlet.hostGranted:write", effect: "allow" };
 			api = await slothlet({
-				base: path.join(FIXTURE, "base"),
+				base: apiPart(FIXTURE),
 				mode,
 				runtime,
 				silent: true,
 				permissions: { ...options.permissions, rules: [...(options.permissions.rules ?? []), grant] }
 			});
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			expect(await api.attack.writeMember("hostGranted", 1)).toBe("done");
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.writeMember("hostGranted", 2))).toBe(REFUSED);
 			expect(api.slothlet.hostGranted).toBe(1);
@@ -302,8 +301,8 @@ describe.each(CONFIGS)("module writes to the framework namespace, permission sys
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+		await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}
 

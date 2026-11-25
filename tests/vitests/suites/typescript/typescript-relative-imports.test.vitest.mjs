@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:38-08:00 (1794874658)
+ *	@Last modified time: 2026-11-24T08:09:18-08:00 (1795536558)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -359,7 +359,7 @@ describe("writeTransformedToCache — no transform callback", () => {
 
 // ─── integration: relative imports through the loader ────────────────────────
 
-// The fixture's helper modules live in `external/`, a sibling of the slothlet
+// The fixture's helper modules live in `lib/`, a sibling of the slothlet
 // API directory (`api/`), so slothlet never loads them as API modules — they
 // are reached ONLY through the relative specifiers under test.
 const RELATIVE_DIR = "./api_tests/api_test_typescript_relative/api";

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:24-08:00 (1794874644)
+ *	@Last modified time: 2026-11-24T08:09:01-08:00 (1795536541)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,8 +31,8 @@ import { LOADED_BY_SPECIFIER, slothletInstanceImports } from "#helpers/instance-
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const FIXTURE = path.join(ROOT, "api_tests", "api_test_vite_late_files").replaceAll("\\", "/");
-const SHARED = `${FIXTURE}/late-pkg/context.mjs`;
-const HOST_ONLY = `${FIXTURE}/calls.mjs`;
+const SHARED = `${FIXTURE}/lib/late-pkg/context.mjs`;
+const HOST_ONLY = `${FIXTURE}/lib/calls.mjs`;
 const LEAF = `${FIXTURE}/api/caller/caller.mjs?slothlet_instance=i1&module=m1`;
 const OTHER = `${FIXTURE}/api/callee/callee.mjs?slothlet_instance=i1&module=m2`;
 

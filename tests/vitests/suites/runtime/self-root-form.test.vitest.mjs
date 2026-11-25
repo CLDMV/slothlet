@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:26-08:00 (1794882626)
+ *	@Last modified time: 2026-11-24T08:09:12-08:00 (1795536552)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  * For a function root (`root.mjs` exporting a function, an async arrow among them) `self` is callable as `api` is:
  * `typeof`, `Object.prototype.toString`, `instanceof`, the prototype, and a call or construction of it, by every route.
  * For an object root it stays an object. Each operation is run on `self` inside a module and on `api` in the host, and
- * the two answers are compared row by row (see `api_tests/api_test_self_parity/shape.mjs`).
+ * the two answers are compared row by row (see `api_tests/api_test_self_parity/lib/shape.mjs`).
  *
  * `JSON.stringify(self)` gives what `JSON.stringify(api)` gives the host, less the members the module is refused,
  * which are left out as a listing leaves them out and never thrown for; a read of such a member by name is still
@@ -35,9 +35,17 @@ import slothlet from "@cldmv/slothlet";
 import { readFileSync } from "node:fs";
 // The host's own copy: run by the host, a file an instance loaded is taken for that module's code while a call of the
 // instance is suspended (an async root's call, made by a row of the report).
-import { shape } from "../../../../api_tests/api_test_self_parity/host/shape.mjs";
+import { shape } from "../../../../api_tests/api_test_self_parity/lib/host/shape.mjs";
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_self_parity");
+
+/**
+ * The api folder of one of the fixture's roots: `fnroot` is the fixture's own `api/`, each other root a fixture of its
+ * own (`api_test_self_parity_<root>/api`). The report the modules and the host run is in the fixture's `lib/`.
+ * @param {string} folder - The root's name.
+ * @returns {string} The folder.
+ */
+const rootDir = (folder) => path.join(folder === "fnroot" ? FIXTURE : `${FIXTURE}_${folder}`, "api");
 const DENIED = "threw:PERMISSION_DENIED";
 
 /** The rows a call or construction of the root answers. */
@@ -139,7 +147,7 @@ const expectMirror = (rows, host, exact) => {
 
 it("the host's copy of the report is the modules' copy", () => {
 	const code = (file) => readFileSync(path.join(FIXTURE, file), "utf8").split("\nexport function shape")[1];
-	expect(code("host/shape.mjs")).toBe(code("shape.mjs"));
+	expect(code("lib/host/shape.mjs")).toBe(code("lib/shape.mjs"));
 });
 
 describe.each(CONFIGS)("a module's self takes the api root's form > $mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
@@ -149,7 +157,7 @@ describe.each(CONFIGS)("a module's self takes the api root's form > $mode / $run
 
 			beforeAll(async () => {
 				api = await slothlet({
-					base: path.join(FIXTURE, root.folder),
+					base: rootDir(root.folder),
 					mode,
 					runtime,
 					silent: true,
@@ -179,7 +187,7 @@ describe.each(CONFIGS)("a module's self takes the api root's form > $mode / $run
 
 			beforeAll(async () => {
 				api = await slothlet({
-					base: path.join(FIXTURE, root.folder),
+					base: rootDir(root.folder),
 					mode,
 					runtime,
 					silent: true,
@@ -220,7 +228,7 @@ describe.each(CONFIGS)("self is closed as the api root is > $mode / $runtime / $
 			"%s, %s: Object.isExtensible, isSealed and isFrozen of self answer as they do of api (#827)",
 			async (_label, how, policy) => {
 				const api = await slothlet({
-					base: path.join(FIXTURE, root.folder),
+					base: rootDir(root.folder),
 					mode,
 					runtime,
 					silent: true,
@@ -241,8 +249,8 @@ describe.each(CONFIGS)("self is closed as the api root is > $mode / $runtime / $
 
 describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 	it("instances of both kinds running at once each give their files the form of their own api", async () => {
-		const fn = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
-		const obj = await slothlet({ base: path.join(FIXTURE, "objroot"), runtime, silent: true });
+		const fn = await slothlet({ base: rootDir("fnroot"), runtime, silent: true });
+		const obj = await slothlet({ base: rootDir("objroot"), runtime, silent: true });
 		try {
 			expectMirror(await moduleShape(fn), hostShape(fn), false);
 			expectMirror(await moduleShape(obj), hostShape(obj), false);
@@ -255,7 +263,7 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 	});
 
 	it("a file of a folder beneath the root, taking self at its top level, takes the callable form", async () => {
-		const api = await slothlet({ base: path.join(FIXTURE, "subroot"), runtime, silent: true });
+		const api = await slothlet({ base: rootDir("subroot"), runtime, silent: true });
 		try {
 			const rows = await api.sub.capture.report();
 			expect(rows.typeof).toBe("function");
@@ -268,7 +276,7 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 	it.each(["eager", "lazy"])(
 		"%s: a file beside the root file, taking self at its top level, takes the callable form when the root plainly exports a function",
 		async (mode) => {
-			const api = await slothlet({ base: path.join(FIXTURE, "siblingroot"), mode, runtime, silent: true });
+			const api = await slothlet({ base: rootDir("siblingroot"), mode, runtime, silent: true });
 			try {
 				const rows = await api.capture.report();
 				expect(rows.typeof).toBe("function");
@@ -281,7 +289,7 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 	);
 
 	it("a CommonJS file reading self from the runtime's namespace takes the callable form", async () => {
-		const api = await slothlet({ base: path.join(FIXTURE, "cjsroot"), runtime, silent: true });
+		const api = await slothlet({ base: rootDir("cjsroot"), runtime, silent: true });
 		try {
 			expect(await api.cjsprobe.report()).toEqual({
 				typeof: "function",
@@ -297,14 +305,14 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 	});
 
 	it("a full reload keeps the form, from the reloaded files' first import", async () => {
-		const api = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
+		const api = await slothlet({ base: rootDir("fnroot"), runtime, silent: true });
 		try {
 			await api.slothlet.reload();
 			expectMirror(await moduleShape(api), hostShape(api), false);
 		} finally {
 			await api.shutdown();
 		}
-		const sub = await slothlet({ base: path.join(FIXTURE, "subroot"), runtime, silent: true });
+		const sub = await slothlet({ base: rootDir("subroot"), runtime, silent: true });
 		try {
 			await sub.slothlet.reload();
 			expect((await sub.sub.capture.report()).typeof).toBe("function");
@@ -314,7 +322,7 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 	});
 
 	it("a partial reload keeps the form", async () => {
-		const api = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
+		const api = await slothlet({ base: rootDir("fnroot"), runtime, silent: true });
 		try {
 			await api.slothlet.api.reload("probe");
 			expectMirror(await moduleShape(api), hostShape(api), false);
@@ -327,7 +335,7 @@ describe.each(["async", "live"])("self's form per instance > %s", (runtime) => {
 describe.each(["async", "live"])("self in a scope the host opens > %s", (runtime) => {
 	describe.each(["fnroot", "objroot"])("root %s", (folder) => {
 		it.each(["partial", "full"])("with %s isolation, self answers as the host's api does", async (isolation) => {
-			const api = await slothlet({ base: path.join(FIXTURE, folder), runtime, silent: true });
+			const api = await slothlet({ base: rootDir(folder), runtime, silent: true });
 			try {
 				const rows = await api.slothlet.context.scope({ context: {}, isolation, fn: () => moduleShape(api) });
 				expectMirror(rows, hostShape(api), false);
@@ -340,13 +348,13 @@ describe.each(["async", "live"])("self in a scope the host opens > %s", (runtime
 
 describe.each(["async", "live"])("a callable self on the global object > %s", (runtime) => {
 	it("a later instance's scan of the global object's interfaces passes over it", async () => {
-		const first = await slothlet({ base: path.join(FIXTURE, "fnroot"), runtime, silent: true });
+		const first = await slothlet({ base: rootDir("fnroot"), runtime, silent: true });
 		const key = "__slothletSelfParity803";
 		try {
 			globalThis[key] = (await first.probe.expose()).self;
 			expect(typeof globalThis[key]).toBe("function");
 			await first.shutdown();
-			const second = await slothlet({ base: path.join(FIXTURE, "objroot"), runtime, silent: true });
+			const second = await slothlet({ base: rootDir("objroot"), runtime, silent: true });
 			expect(await second.math.add(1, 2)).toBe(3);
 			await second.shutdown();
 		} finally {
@@ -388,7 +396,7 @@ describe.each(CONFIGS)("self() runs the root as the api root > $mode / $runtime 
 
 		beforeAll(async () => {
 			const permissions = policy.permissions === undefined ? undefined : { caller: { attribution }, ...policy.permissions };
-			api = await slothlet({ base: path.join(FIXTURE, "ownleaf"), mode, runtime, silent: true, permissions });
+			api = await slothlet({ base: rootDir("ownleaf"), mode, runtime, silent: true, permissions });
 		}, 60000);
 
 		afterAll(async () => {
@@ -482,7 +490,7 @@ describe.each(CONFIGS)("JSON.stringify(self) > $mode / $runtime / $attribution",
 
 		beforeAll(async () => {
 			api = await slothlet({
-				base: path.join(FIXTURE, "jsonroot"),
+				base: rootDir("jsonroot"),
 				mode,
 				runtime,
 				silent: true,

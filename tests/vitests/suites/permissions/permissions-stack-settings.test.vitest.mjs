@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:46-08:00 (1794882646)
+ *	@Last modified time: 2026-11-24T08:08:59-08:00 (1795536539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { ROUTES } from "../../../../api_tests/api_test_stack_settings/routes.mjs";
+import { ROUTES } from "../../../../api_tests/api_test_stack_settings/lib/routes.mjs";
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_stack_settings");
 const DENIED = "PERMISSION_DENIED";
@@ -135,7 +135,7 @@ describe.each(matrix)(
  * @returns {object} The answers.
  */
 function child(args, nodeFlags = []) {
-	const result = spawnSync(process.execPath, ["--conditions=slothlet-dev", ...nodeFlags, path.join(FIXTURE, "child.mjs"), ...args], {
+	const result = spawnSync(process.execPath, ["--conditions=slothlet-dev", ...nodeFlags, path.join(FIXTURE, "lib", "child.mjs"), ...args], {
 		encoding: "utf8",
 		timeout: 120_000
 	});

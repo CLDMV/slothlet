@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:03-08:00 (1794882603)
+ *	@Last modified time: 2026-11-24T08:08:53-08:00 (1795536533)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,13 +26,17 @@
  * `guest/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
-const GUEST = path.join(FIXTURE, "guest");
-const VICTIM = path.join(FIXTURE, "victim");
+const GUEST = apiPart(FIXTURE, "guest");
+const VICTIM = apiPart(FIXTURE, "victim");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -65,7 +69,7 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 	 */
 	async function boot(options = {}) {
 		api = await slothlet({
-			base: path.join(FIXTURE, "base"),
+			base: apiPart(FIXTURE),
 			mode,
 			runtime,
 			silent: true,

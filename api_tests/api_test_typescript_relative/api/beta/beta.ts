@@ -1,5 +1,5 @@
-import { pingCjs } from "../../external/helper-cjs.cjs";
-import { utilTs } from "../../external/ts-util.ts";
+import { pingCjs } from "../../lib/helper-cjs.cjs";
+import { utilTs } from "../../lib/ts-util.ts";
 
 /**
  * Combines a `.cjs` (CommonJS) helper with a `.ts` TypeScript helper that

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T17:47:01-08:00 (1794016021)
+ *	@Last modified time: 2026-11-24T08:08:49-08:00 (1795536529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@
  * another source.
  *
  * Files are told apart only under Node's own loader (vite transforms the files it loads), so the fixture runs in a
- * child process: `api_tests/api_test_host_owner_code/probe.mjs`.
+ * child process: `api_tests/api_test_host_owner_code/lib/probe.mjs`.
  */
 
 import { describe, it, expect } from "vitest";
@@ -39,7 +39,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const PROBE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_host_owner_code/probe.mjs");
+const PROBE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_host_owner_code/lib/probe.mjs");
 const CONFIGS = ["eager/async", "eager/live", "lazy/async", "lazy/live"];
 const CALLS = ["pin", "meta", "emit", "hostLeaf"];
 
@@ -100,7 +100,7 @@ describe("Permissions > the same host, with the built-ins slothlet reads replace
 	// docs/PERMISSIONS.md "Where the source cannot be checked": the built-ins slothlet compares a file's source through are
 	// the ones it captured when it loaded. The probe then replaces `process.getBuiltinModule`, the `fs` and `crypto`
 	// functions, `TextDecoder`, `URLSearchParams` and the `Map` and `Set` iterators with ones that report the compiled
-	// closures' source as the owner file's content (api_tests/api_test_host_owner_code/replace-builtins.mjs), and every
+	// closures' source as the owner file's content (api_tests/api_test_host_owner_code/lib/replace-builtins.mjs), and every
 	// answer is the one given without the replacements.
 	const result = spawnSync(process.execPath, [...probeConditions(), PROBE, "--replace-builtins"], { encoding: "utf8", timeout: 120000 });
 	const out = result.status === 0 ? JSON.parse(result.stdout) : {};

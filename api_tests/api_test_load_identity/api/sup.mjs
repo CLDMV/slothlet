@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:13:00-08:00 (1794431580)
+ *	@Last modified time: 2026-11-24T08:05:55-08:00 (1795536355)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  */
 import { self } from "@cldmv/slothlet/runtime";
 import { AsyncLocalStorage, AsyncResource } from "node:async_hooks";
-import { push } from "../helpers/queue.mjs";
+import { push } from "../lib/queue.mjs";
 
 const snapshot = AsyncLocalStorage.snapshot();
 const resource = new AsyncResource("api_test_load_identity");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:50:49-08:00 (1795420249)
+ *	@Last modified time: 2026-11-24T11:20:19-08:00 (1795548019)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -913,7 +913,10 @@ function sharedState() {
 		hooks: () => installInstanceImportHooks(NODE_MODULE),
 		redeem: redeemTicket,
 		requireCJS: requireCJSFromRunner,
-		checkImport: checkModuleImport
+		checkImport: checkModuleImport,
+		noteLeafFiles: noteLeafFilesHere,
+		forgetLeafFiles: forgetLeafFilesHere,
+		checkLeafImports
 	});
 	Objects.defineProperty(globalThis, STATE, { __proto__: null, value: OWN_STATE, enumerable: false, configurable: false, writable: false });
 	return (SHARED = OWN_STATE);
@@ -934,7 +937,7 @@ function isKeeper() {
  * `url.fileURLToPath` later does not run inside slothlet's loading. Read through `process.getBuiltinModule()`, so this
  * module has no static `node:` import (it is also loaded by browser bundles and by vite configs). Null where no Node
  * builtins are available (a browser bundle), where none of the code calling them runs.
- * @type {{module: {createRequire: Function, registerHooks: Function|undefined, Module: Function}, url: {fileURLToPath: Function, pathToFileURL: Function}, fs: {readFileSync: Function}, nodeModule: object}|null}
+ * @type {{module: {createRequire: Function, registerHooks: Function|undefined, Module: Function}, url: {fileURLToPath: Function, pathToFileURL: Function}, fs: {readFileSync: Function, realpathSync: Function}, nodeModule: object}|null}
  * @private
  */
 const NODE = (() => {
@@ -946,7 +949,7 @@ const NODE = (() => {
 	return Objects.freeze({
 		module: Objects.freeze({ createRequire: nodeModule.createRequire, registerHooks: nodeModule.registerHooks, Module: nodeModule.Module }),
 		url: Objects.freeze({ fileURLToPath: url.fileURLToPath, pathToFileURL: url.pathToFileURL }),
-		fs: Objects.freeze({ readFileSync: fs.readFileSync }),
+		fs: Objects.freeze({ readFileSync: fs.readFileSync, realpathSync: fs.realpathSync }),
 		nodeModule
 	});
 })();
@@ -1293,6 +1296,8 @@ function setInstanceSelfKind(instanceID, callable) {
 		MapMethods.delete(SELF_BINDINGS, instanceID);
 		if (isKeeper()) forgetSelfImportersHere(instanceID);
 		else sharedState().forgetSelfImporters(instanceID);
+		if (isKeeper()) forgetLeafFilesHere(instanceID);
+		else sharedState().forgetLeafFiles?.(instanceID);
 		MapMethods.delete(SELF_CLOSED, instanceID);
 		rebindSharedSelf();
 		return;
@@ -2047,6 +2052,168 @@ function noteModuleFile(ref) {
 const LEAF_URLS = new Set();
 
 /**
+ * The leaf files of every live instance's api trees, by {@link packageKey}, each with the instances whose tree holds
+ * it: the files slothlet's folder scan composes into a tree (a base folder's, an `api.add()` mount's), recorded as the
+ * scan lists them, before any of them is loaded. Module code may not import them (see {@link refuseLeafImport}).
+ * @type {Map<string, Set<string>>}
+ * @private
+ */
+const LEAF_FILES = new Map();
+
+/**
+ * Record the leaf files a folder scan of an instance's tree listed, under their paths as listed and as the filesystem
+ * resolves them (Node's loader names a file by its real path).
+ * @param {string} instanceID - The instance.
+ * @param {string[]} paths - The files' paths.
+ * @returns {void}
+ * @private
+ */
+function noteLeafFilesHere(instanceID, paths) {
+	if (typeof instanceID !== "string" || !Arrays.isArray(paths)) return;
+	const realpath = NODE?.fs.realpathSync ?? null;
+	for (let index = 0; index < paths.length; index++) {
+		const file = paths[index];
+		if (typeof file !== "string" || file === "") continue;
+		const keys = [packageKey(file)];
+		if (realpath !== null) {
+			try {
+				listPush(keys, packageKey(realpath(file)));
+			} catch {
+				// A file gone since the scan listed it is named by its listed path alone.
+			}
+		}
+		for (let at = 0; at < keys.length; at++) {
+			let holders = MapMethods.get(LEAF_FILES, keys[at]);
+			if (holders === undefined) MapMethods.set(LEAF_FILES, keys[at], (holders = new Set()));
+			SetMethods.add(holders, instanceID);
+		}
+	}
+}
+
+/**
+ * Forget an instance's leaf files (its shutdown, or a full reload's old ID): a file no live instance composes is a lib
+ * file again.
+ * @param {string} instanceID - The instance.
+ * @returns {void}
+ * @private
+ */
+function forgetLeafFilesHere(instanceID) {
+	for (const ofEntry of mapEntries(LEAF_FILES)) {
+		SetMethods.delete(ofEntry[1], instanceID);
+		if (SetMethods.size(ofEntry[1]) === 0) MapMethods.delete(LEAF_FILES, ofEntry[0]);
+	}
+}
+
+/**
+ * Record an instance's leaf files (see {@link noteLeafFilesHere}) in the copy of slothlet that keeps every instance's
+ * record.
+ * @param {string} instanceID - The instance.
+ * @param {string[]} paths - The files' paths.
+ * @returns {void}
+ * @internal
+ */
+function noteLeafFiles(instanceID, paths) {
+	if (isKeeper()) noteLeafFilesHere(instanceID, paths);
+	else sharedState().noteLeafFiles?.(instanceID, paths);
+}
+
+/**
+ * Whether a file is a leaf file of a live instance's api tree (see {@link LEAF_FILES}).
+ * @param {string} ref - The file's URL, path or vite id.
+ * @returns {boolean} True for a leaf file.
+ * @private
+ */
+function isLeafFile(ref) {
+	if (typeof ref !== "string" || MapMethods.size(LEAF_FILES) === 0) return false;
+	if (!StringMethods.startsWith(ref, "file:") && !StringMethods.startsWith(ref, "/") && RegExpMethods.exec(/^[A-Za-z]:[\\/]/, ref) === null)
+		return false;
+	return MapMethods.has(LEAF_FILES, packageKey(ref));
+}
+
+/**
+ * A file's {@link packageKey} by its real path, so a file reached through a symlinked folder and by its real path
+ * compare alike; its key as named when the filesystem cannot resolve it.
+ * @param {string} ref - The file's URL or path.
+ * @returns {string} The key.
+ * @private
+ */
+function realFileKey(ref) {
+	const key = packageKey(ref);
+	if (NODE === null) return key;
+	try {
+		return packageKey(NODE.fs.realpathSync(key));
+	} catch {
+		return key;
+	}
+}
+
+/**
+ * The refusal {@link leafRefusal} builds, as slothlet registers it once loaded (see {@link setLeafImportRefusal}).
+ * @type {?function(object): Error}
+ * @private
+ */
+let LEAF_REFUSAL = null;
+
+/**
+ * Register how a refused import of a leaf file is reported: a function given `{ importer, file }` that returns the
+ * error to throw. Taken once, by the copy that keeps the shared object.
+ * @param {function(object): Error} make - Builds the error.
+ * @returns {void}
+ * @internal
+ */
+function setLeafImportRefusal(make) {
+	if (isKeeper() && LEAF_REFUSAL === null && typeof make === "function") LEAF_REFUSAL = make;
+}
+
+/**
+ * The error for module code's import of a leaf file.
+ * @param {?string} importer - The importing file, when known.
+ * @param {string} file - The leaf file.
+ * @returns {Error} The error.
+ * @private
+ */
+function leafRefusal(importer, file) {
+	const details = { importer: typeof importer === "string" && importer !== "" ? toSlashPath(importer) : "?", file: toSlashPath(file) };
+	if (LEAF_REFUSAL !== null) return LEAF_REFUSAL(details);
+	// Slothlet registers its error before any module loads; a host using the hooks on their own gets the bare code.
+	const error = new PristineError(`MODULE_LEAF_IMPORT_REFUSED: ${details.importer} -> ${details.file}`);
+	error.code = "MODULE_LEAF_IMPORT_REFUSED";
+	return error;
+}
+
+/**
+ * Refuse a file of module code reaching a leaf file by an edge slothlet follows itself (a TypeScript leaf's relative
+ * imports, compiled together with it), as the resolve hook refuses the same edge elsewhere.
+ * @param {string} from - The importing file.
+ * @param {string} to - The file it imports.
+ * @returns {void}
+ * @throws {Error} MODULE_LEAF_IMPORT_REFUSED when `to` is a leaf file.
+ * @internal
+ */
+function refuseLeafEdge(from, to) {
+	if (!isKeeper()) {
+		sharedState().checkLeafImports?.(from, [to]);
+		return;
+	}
+	if (isLeafFile(to)) throw leafRefusal(from, to);
+}
+
+/**
+ * Refuse the static imports a module evaluated by vite's module runner makes of leaf files (see the vite plugin's
+ * transform): asked by a module the plugin imports first in each instance module, so it runs before any of the
+ * module's other imports is evaluated.
+ * @param {string} importer - The importing module's id.
+ * @param {string[]} targets - The files its static imports resolved to.
+ * @returns {void}
+ * @throws {Error} MODULE_LEAF_IMPORT_REFUSED for the first leaf file among them.
+ * @private
+ */
+function checkLeafImports(importer, targets) {
+	if (!Arrays.isArray(targets)) return;
+	for (let index = 0; index < targets.length; index++) if (isLeafFile(targets[index])) throw leafRefusal(importer, targets[index]);
+}
+
+/**
  * The folders a browser loaded api files from (see {@link noteModuleRoot}), each as a URL path ending in `/`.
  * @type {Set<string>}
  * @private
@@ -2153,14 +2320,24 @@ function frameLocation(line) {
  * @private
  */
 function isModuleRequire() {
+	return moduleRequireCaller() !== null;
+}
+
+/**
+ * The module file whose code made the `require()` or `require.resolve()` the resolve hook is answering (see
+ * {@link isModuleRequire}), or null when no module's code made it.
+ * @returns {?string} The caller's location.
+ * @private
+ */
+function moduleRequireCaller() {
 	const lines = copyList(splitText(ownStackText(64), "\n"), 1);
 	let i = 0;
 	// The resolve hook's own frames, then Node's loader.
 	while (i < lines.length && slothletCodePath(frameLocation(lines[i]) ?? "") !== null) i++;
 	while (i < lines.length && StringMethods.startsWith(frameLocation(lines[i]) ?? "node:", "node:")) i++;
 	const caller = i < lines.length ? frameLocation(lines[i]) : null;
-	if (caller === null || slothletCodePath(caller) !== null) return false;
-	return RegExpMethods.exec(INSTANCE_FRAME, caller) !== null || isUntaggedModuleFile(caller);
+	if (caller === null || slothletCodePath(caller) !== null) return null;
+	return RegExpMethods.exec(INSTANCE_FRAME, caller) !== null || isUntaggedModuleFile(caller) ? caller : null;
 }
 
 /**
@@ -2236,12 +2413,15 @@ function importRefusal(specifier, file) {
  * held where vite resolves it.
  * @param {*} specifier - The specifier, or what `import.meta.resolve()` answered.
  * @param {string} importer - The module's `import.meta.url`.
+ * @param {string} [resolved] - The file vite resolved a literal `import()` specifier to as it transformed the module
+ *   (vite rewrites such a specifier to a path from its root), held to the leaf-file rule.
  * @returns {*} `specifier`, when it may be imported.
  * @throws {Error} MODULE_INTERNAL_NOT_IMPORTABLE for one of slothlet's own files.
  * @private
  */
-function checkModuleImport(specifier, importer) {
+function checkModuleImport(specifier, importer, resolved) {
 	const text = typeof specifier === "string" ? specifier : String(specifier);
+	if (typeof resolved === "string" && isLeafFile(resolved)) throw leafRefusal(importer, resolved);
 	// A module the instance module imports by a URL that is no file's (`data:`): what it imports is held as the
 	// module's own imports are, where Node's loader resolves them.
 	// A `data:` or `blob:` URL is code the module wrote: refused unless a rule opens `capability:imports` for it.
@@ -2260,6 +2440,7 @@ function checkModuleImport(specifier, importer) {
 		)
 			file = URLMethods.href(new URL(text, importer));
 		if (isSlothletInternal(file)) throw importRefusal(text, file);
+		if (isLeafFile(file)) throw leafRefusal(importer, file);
 		// A URL the module wrote out naming an instance, under vite, which does not name the module importing by it: it
 		// loses the tags only slothlet gives and is an edge of that instance's import graph from this module, as Node's
 		// resolve hook has it (#691).
@@ -2350,6 +2531,37 @@ function refuseInternalImport(specifier, context, result) {
 	}
 	if (!isSlothletInternal(url)) return;
 	if (isModuleImport(context?.parentURL, context?.conditions)) throw importRefusal(specifier, url);
+}
+
+/**
+ * Keep leaf files to slothlet: an import, re-export or require module code makes (a leaf file's code, or a lib file's
+ * that module code loaded) that resolves to a leaf file of a live instance's api tree is refused as it resolves, so
+ * the module's own copy of the file is never evaluated. A leaf is reached through `self`; shared code lives in lib
+ * files outside the tree. Slothlet's own loads of leaf files, and the host's imports of them, resolve as before.
+ * @param {object} context - Node's resolve context.
+ * @param {ResolveResult} result - The resolution.
+ * @returns {void}
+ * @throws {Error} MODULE_LEAF_IMPORT_REFUSED for module code's import of a leaf file.
+ * @private
+ */
+function refuseLeafImport(context, result) {
+	const url = result?.url;
+	if (typeof url !== "string" || !StringMethods.startsWith(url, "file:") || !isLeafFile(url)) return;
+	const parentURL = context?.parentURL;
+	const isRequire = hasCondition(context?.conditions, "require");
+	// A `require()` naming the requiring file itself (slothlet's loader requiring a CommonJS leaf from the leaf's own
+	// path, or a file requiring itself) is that file's one CommonJS module: no copy of a leaf is made. An ES module
+	// importing its own file under another URL is a copy, and is refused below.
+	if (isRequire && typeof parentURL === "string" && realFileKey(parentURL) === realFileKey(url)) return;
+	if (typeof parentURL === "string" && slothletCodePath(parentURL) === null) {
+		if (StringMethods.includes(parentURL, MARKER) || (StringMethods.startsWith(parentURL, "file:") && isUntaggedModuleFile(parentURL)))
+			throw leafRefusal(parentURL, url);
+		if (!StringMethods.startsWith(parentURL, "file:") && SetMethods.has(MODULE_URLS, parentURL)) throw leafRefusal(parentURL, url);
+	}
+	if (isRequire) {
+		const caller = moduleRequireCaller();
+		if (caller !== null) throw leafRefusal(caller, url);
+	}
 }
 
 /**
@@ -3269,6 +3481,21 @@ function calledBySlothlet(callee) {
  */
 function claimForCopy(instanceID) {
 	return calledBySlothlet(claimForCopy) ? claimHere(instanceID) : null;
+}
+
+/**
+ * Whether an instance ID is held by an instance that is up, whatever its permission mode: claimed in this copy's state
+ * (see {@link claimInstanceScope}) and not released. With another copy of slothlet keeping the record, this copy cannot
+ * read the claims, and every ID counts as held.
+ * @param {*} instanceID - The instance ID.
+ * @returns {boolean} False only for an ID no instance holds (an unknown one, or one released at shutdown or reload).
+ * @internal
+ * @example
+ * instanceClaimed("slothlet_1795547077450_1jzr3p2ht5tet"); // true while that instance is up
+ */
+function instanceClaimed(instanceID) {
+	if (!isKeeper()) return true;
+	return typeof instanceID === "string" && MapMethods.has(CLAIMS, instanceID);
 }
 
 /**
@@ -4263,6 +4490,10 @@ function holdRequireResolve(nodeModule) {
 			const parentURL = typeof parent?.filename === "string" ? pathToFileURL(parent.filename).href : undefined;
 			if (isModuleImport(parentURL, ["require"])) throw importRefusal(request, filename);
 		}
+		if (typeof filename === "string" && isLeafFile(filename)) {
+			const parentURL = typeof parent?.filename === "string" ? pathToFileURL(parent.filename).href : undefined;
+			refuseLeafImport({ parentURL, conditions: ["require"] }, { url: pathToFileURL(filename).href });
+		}
 		return filename;
 	};
 	/* v8 ignore stop */
@@ -4288,6 +4519,7 @@ const HOOKS = Objects.freeze({
 		refuseCodeImport(specifier, context?.parentURL ?? null, context?.conditions);
 		const next = nextResolve(specifier, context);
 		refuseInternalImport(specifier, context, next);
+		refuseLeafImport(context, next);
 		const resolved = applyToResult(specifier, context, next);
 		// Who imports a package's file, so its code can be told whose it is (#597); an instance's require() of it is
 		// answered so that every later one is recorded too.
@@ -4429,6 +4661,15 @@ const NO_RECORD_ID = "\0virtual:slothlet-loaded-by-none";
  * @private
  */
 const IMPORT_CHECK_SPECIFIER = "virtual:slothlet-import-check";
+
+/**
+ * The specifier of the virtual module the vite plugin imports first in each instance ES module, before its `?`
+ * parameters (`importer`, `targets`): it asks whether any file the module's static imports resolved to is a leaf file
+ * (see {@link checkLeafImports}) where the module runs, before those imports are evaluated.
+ * @type {string}
+ * @private
+ */
+const LEAF_CHECK_SPECIFIER = "virtual:slothlet-leaf-check?";
 
 /**
  * The files of slothlet's own a host-file registration is never appended to: its source or build tree and the package's
@@ -4671,6 +4912,7 @@ export function slothletInstanceImports() {
 			if (typeof source === "string" && StringMethods.startsWith(source, LOADED_BY_SPECIFIER))
 				return isOwnRecord(source, importer) ? `\0${source}` : NO_RECORD_ID;
 			if (source === IMPORT_CHECK_SPECIFIER) return `\0${IMPORT_CHECK_SPECIFIER}`;
+			if (typeof source === "string" && StringMethods.startsWith(source, LEAF_CHECK_SPECIFIER)) return `\0${source}`;
 			if (typeof importer !== "string") return null;
 			const tagged = StringMethods.includes(importer, MARKER);
 			// Slothlet's own files are slothlet's: a module's code cannot import them, by any spelling that can reach them.
@@ -4745,6 +4987,8 @@ export function slothletInstanceImports() {
 				// Static imports and re-exports, and dynamic import() calls with a literal specifier anywhere in the module.
 				const specifiers = new Set();
 				const bare = new Set();
+				// The specifiers of its static imports and re-exports, held to the leaf-file rule before they are evaluated.
+				const staticSources = new Set();
 				// Each import() and import.meta.resolve() of the module, held as it runs (see checkModuleImport).
 				const checked = [];
 				const visit = (node) => {
@@ -4771,6 +5015,7 @@ export function slothletInstanceImports() {
 					const source = isImport ? node.source?.value : undefined;
 					if (typeof source === "string" && isFileSpecifier(source)) SetMethods.add(specifiers, source);
 					else if (typeof source === "string") SetMethods.add(bare, source);
+					if (typeof source === "string" && node.type !== "ImportExpression") SetMethods.add(staticSources, source);
 					for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
 						const key = ofList[ofIndex];
 						if (key !== "type") visit(node[key]);
@@ -4809,9 +5054,16 @@ export function slothletInstanceImports() {
 					const url = ofList[ofIndex];
 					if (StringMethods.includes(code, `${SELF_PREFIX}${instanceID}|${NODE.url.fileURLToPath(url)}`)) listPush(selfEntries, url);
 				}
+				const leafTargets = [];
+				// The file each specifier resolved to, by the specifier.
+				const resolvedFiles = new Map();
 				for (let ofIndex = 0, ofList = concatLists(setToArray(bare), setToArray(specifiers)); ofIndex < ofList.length; ofIndex++) {
 					const specifier = ofList[ofIndex];
 					const resolved = await this.resolve(specifier, id);
+					if (resolved && !resolved.external && typeof resolved.id === "string")
+						MapMethods.set(resolvedFiles, specifier, splitQuery(resolved.id)[0]);
+					if (SetMethods.has(staticSources, specifier) && resolved && !resolved.external && typeof resolved.id === "string")
+						listPush(leafTargets, splitQuery(resolved.id)[0]);
 					if (resolved && !resolved.external && StringMethods.includes(resolved.id, MARKER)) listPush(children, resolved.id);
 					else noteShared(resolved);
 				}
@@ -4827,15 +5079,29 @@ export function slothletInstanceImports() {
 					? `\n;globalThis[Symbol.for(${JSON.stringify(SymbolMethods.description(STATE))})]?.recordImports?.(${JSON.stringify(instanceID)}, ${JSON.stringify(id)}, ${JSON.stringify(children)});`
 					: "";
 				// The check is imported under a name the module cannot know, at the end so no line moves (imports are hoisted).
+				// The leaf-file check of its static imports is the module's first import, on its first line, so it is
+				// evaluated before any of them and no line moves.
 				let body = code;
 				let check = "";
 				if (checked.length) {
 					const name = `__slothlet_import_check_${checkName}`;
 					for (let ofIndex = 0, ofList = ArrayMethods.sort(checked, (a, b) => b.start - a.start); ofIndex < ofList.length; ofIndex++) {
 						const node = ofList[ofIndex];
-						body = `${StringMethods.slice(body, 0, node.start)}${name}(${StringMethods.slice(body, node.start, node.end)}, import.meta.url)${StringMethods.slice(body, node.end)}`;
+						// A literal `import()` specifier also names the file vite resolved it to (see checkModuleImport).
+						const file = node.type === "Literal" && typeof node.value === "string" ? MapMethods.get(resolvedFiles, node.value) : undefined;
+						const named = file === undefined ? "" : `, ${JSON.stringify(file)}`;
+						body = `${StringMethods.slice(body, 0, node.start)}${name}(${StringMethods.slice(body, node.start, node.end)}, import.meta.url${named})${StringMethods.slice(body, node.end)}`;
 					}
 					check = `\nimport { checkImport as ${name} } from ${JSON.stringify(IMPORT_CHECK_SPECIFIER)};`;
+				}
+				if (leafTargets.length) {
+					const leafCheck = `import ${JSON.stringify(
+						LEAF_CHECK_SPECIFIER +
+							URLSearchParamsMethods.toString(new URLSearchParams({ importer: id, targets: JSON.stringify(leafTargets) }))
+					)};`;
+					const shebang = RegExpMethods.exec(/^#![^\n]*\n/, body);
+					const at = shebang ? shebang[0].length : 0;
+					body = `${StringMethods.slice(body, 0, at)}${leafCheck}${StringMethods.slice(body, at)}`;
 				}
 				const selfNotes = ArrayMethods.join(
 					mapList(
@@ -4866,6 +5132,21 @@ export function slothletInstanceImports() {
 			}
 			// Read once, as the module importing it loads, from the shared object that module's own code cannot replace.
 			if (id === `\0${IMPORT_CHECK_SPECIFIER}`) return { code: `export const checkImport = ${STATE_REF}.checkImport;\n`, map: null };
+			if (typeof id === "string" && StringMethods.startsWith(id, `\0${LEAF_CHECK_SPECIFIER}`)) {
+				const params = new URLSearchParams(StringMethods.slice(id, 1 + LEAF_CHECK_SPECIFIER.length));
+				const importer = URLSearchParamsMethods.get(params, "importer") ?? "";
+				let targets = [];
+				try {
+					const parsed = JSON.parse(URLSearchParamsMethods.get(params, "targets") ?? "[]");
+					if (Arrays.isArray(parsed)) targets = filterList(parsed, (target) => typeof target === "string");
+				} catch {
+					// A malformed list names no file.
+				}
+				return {
+					code: `${STATE_REF}.checkLeafImports?.(${JSON.stringify(importer)}, ${JSON.stringify(targets)});\nexport {};\n`,
+					map: null
+				};
+			}
 			if (typeof id === "string" && StringMethods.startsWith(id, `\0${LOADED_BY_SPECIFIER}`)) {
 				const query = StringMethods.slice(id, 1 + LOADED_BY_SPECIFIER.length);
 				// A record the plugin did not resolve a module's import of the file for records nothing (#715).
@@ -4930,6 +5211,7 @@ export function internals(consumer) {
 	return {
 		claimInstanceScope,
 		installInstanceImportHooks,
+		instanceClaimed,
 		instanceCommonJSFiles,
 		instanceCommonJSVersion,
 		instanceCopyCount,
@@ -4937,9 +5219,11 @@ export function internals(consumer) {
 		instanceImporters,
 		loadedScriptLookup,
 		loadedScriptText,
+		noteLeafFiles,
 		noteModuleFile,
 		noteModuleRoot,
 		packageImporters,
+		refuseLeafEdge,
 		registerOwnModule,
 		registerSelfForms,
 		callableSelfOf,
@@ -4954,6 +5238,7 @@ export function internals(consumer) {
 		setCallerCheck,
 		setCapabilityCheck,
 		setImportRefusal,
+		setLeafImportRefusal,
 		setScriptKey
 	};
 }

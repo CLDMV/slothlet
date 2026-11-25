@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
+ *	@Last modified time: 2026-11-24T08:08:56-08:00 (1795536536)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview Every api file that requires a CommonJS helper is recorded as loading it, whichever required it first.
  *
  * @description
- * Fixture `api_test_helper_copies`. `helpers/tally.cjs` is imported by `one.mjs` and `two.mjs` and required by the
+ * Fixture `api_test_helper_copies`. `lib/tally.cjs` is imported by `one.mjs` and `two.mjs` and required by the
  * CommonJS api files `three.cjs` and `four.cjs`, both from the same folder and by the same specifier. Its `read()`
  * reads the vault and is the helper's own function.
  *
@@ -27,7 +27,7 @@
  * denied it reads the vault.
  *
  * Fixture `api_test_plain_require`: the api files `five.mjs` and `six.mjs`, of one folder, each require
- * `helpers/plain.cjs` through a `require` made from their own plain path (`createRequire(fileURLToPath(import.meta.url))`),
+ * `lib/plain.cjs` through a `require` made from their own plain path (`createRequire(fileURLToPath(import.meta.url))`),
  * which loads the helper once per process; Node answers the second file's require, and every later instance's, from
  * its own caches. Each file's `read()` runs the helper's `read()` inside its own call. A helper both files load is
  * each one's own code inside its own call (docs/PERMISSIONS.md: a module calling a helper it shares with another is
@@ -45,7 +45,7 @@ import slothlet from "@cldmv/slothlet";
 
 const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_helper_copies/api");
 const PLAIN_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_plain_require/api");
-const PLAIN_HELPER = path.resolve(PLAIN_DIR, "../helpers/plain.cjs");
+const PLAIN_HELPER = path.resolve(PLAIN_DIR, "../lib/plain.cjs");
 const DENIED = "PERMISSION_DENIED";
 const SECRET = "SECRET";
 

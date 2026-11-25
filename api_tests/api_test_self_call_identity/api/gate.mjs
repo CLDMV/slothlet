@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:13:27-08:00 (1794431607)
+ *	@Last modified time: 2026-11-24T08:06:35-08:00 (1795536395)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  * @module api_test_self_call_identity.gate
  */
 import { self } from "@cldmv/slothlet/runtime";
-import { board, attempt } from "../helpers/board.mjs";
+import { board, attempt } from "../lib/board.mjs";
 
 /**
  * Leave this module's functions on the board.

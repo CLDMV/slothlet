@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:55-08:00 (1794882595)
+ *	@Last modified time: 2026-11-24T08:08:49-08:00 (1795536529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,12 +38,12 @@ import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import { slothletInstanceImports } from "#helpers/instance-imports";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
-import { makeContext } from "../../../../api_tests/api_test_host_owner_code/host/context.mjs";
-import { makeContext as importingContext } from "../../../../api_tests/api_test_host_owner_code/host/imported.mjs";
-import { makeContext as otherPackageContext } from "../../../../api_tests/api_test_host_owner_code/other-pkg/context.mjs";
+import { makeContext } from "../../../../api_tests/api_test_host_owner_code/lib/host/context.mjs";
+import { makeContext as importingContext } from "../../../../api_tests/api_test_host_owner_code/lib/host/imported.mjs";
+import { makeContext as otherPackageContext } from "../../../../api_tests/api_test_host_owner_code/lib/other-pkg/context.mjs";
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_host_owner_code");
-const CONTEXT_FILE = path.join(FIXTURE, "host", "context.mjs");
+const CONTEXT_FILE = path.join(FIXTURE, "lib", "host", "context.mjs");
 const PERMISSIONS = { policy: "deny", rules: [{ caller: "ext.**", target: "host.**", effect: "allow" }] };
 const CALLS = ["pin", "meta", "emit", "hostLeaf"];
 
@@ -172,9 +172,9 @@ describe("slothletInstanceImports() > the host-file registration it appends (#71
 		["a package under node_modules", `${FIXTURE.replaceAll("\\", "/")}/node_modules/owner-host/context.mjs`],
 		["slothlet's own source", `${ROOT}/src/lib/handlers/frame-placement.mjs`],
 		["slothlet's package entry", `${ROOT}/index.mjs`],
-		["a file that is not JavaScript", `${FIXTURE.replaceAll("\\", "/")}/host/style.css`],
+		["a file that is not JavaScript", `${FIXTURE.replaceAll("\\", "/")}/lib/host/style.css`],
 		["a virtual module", "\0virtual:thing"],
-		["a CommonJS file", `${FIXTURE.replaceAll("\\", "/")}/host/legacy.cjs`],
+		["a CommonJS file", `${FIXTURE.replaceAll("\\", "/")}/lib/host/legacy.cjs`],
 		["a .js file of a CommonJS package", `${ROOT}/api_tests/api_test_cjs_js/commonjs/counter/counter.js`]
 	])("leaves %s as it is", async (_kind, id) => {
 		expect(await transform("export const x = 1;", id)).toBeNull();

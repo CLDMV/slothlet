@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:01-08:00 (1794882601)
+ *	@Last modified time: 2026-11-24T08:08:52-08:00 (1795536532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,9 +35,9 @@
  *
  * A file's own top-level `await` has the same effect, and slothlet cannot load a module's files ahead of the module:
  * ```
- * helpers/slow.mjs   waits at its top level
+ * lib/slow.mjs       waits at its top level
  * api/early.mjs      loaded before late.mjs; starts loading slow.mjs with an import() it does not wait for
- * helpers/queue.mjs  imports slow.mjs; starts a job queue at its top level
+ * lib/queue.mjs      imports slow.mjs; starts a job queue at its top level
  * api/late.mjs       the only importer of queue.mjs; viaHelper() reads the vault from the helper's queue
  * ```
  * `queue.mjs` waits on `slow.mjs`, so it is evaluated when `slow.mjs` is ready, in the flow that started loading it:
@@ -128,7 +128,7 @@ const HELPER_RULE_SETS = [
 
 /**
  * Build the fixture once per config and rule set, in one Node process of its own, and read the vault from the queue
- * `helpers/queue.mjs` started when it loaded. Node's own loader evaluates a file waiting on a top-level `await` in the
+ * `lib/queue.mjs` started when it loaded. Node's own loader evaluates a file waiting on a top-level `await` in the
  * flow that started the awaited module; vitest's module runner evaluates each file in its importer's.
  * @returns {Record<string, string>} What `late.viaHelper()` gave, by config name and rule set.
  */

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T12:10:38-08:00 (1794946238)
+ *	@Last modified time: 2026-11-24T08:09:02-08:00 (1795536542)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  *   `policy: "deny"` with the owner grant, another module may not, removing the module removes it, and a full reload
  *   does not keep it.
  *
- * Fixture: `api_tests/api_test_write_created` — `a/`, `b/`; the base module is `api_test_self_write_reach/base`.
+ * Fixture: `api_tests/api_test_write_created` — `a/`, `b/`; the base module is `api_test_self_write_reach/api`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
@@ -33,7 +33,7 @@ import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_WRITE_CREATED;
-const BASE = path.join(TEST_DIRS.API_TEST_SELF_WRITE_REACH, "base");
+const BASE = path.join(TEST_DIRS.API_TEST_SELF_WRITE_REACH, "api");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },

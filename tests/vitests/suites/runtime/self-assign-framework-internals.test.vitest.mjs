@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
+ *	@Last modified time: 2026-11-24T08:09:10-08:00 (1795536550)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,13 +26,12 @@
  * mode / runtime configurations. With the permission system off (no `permissions` config) nothing decides writes:
  * the built-in rules and the ownership rule are off, and a module changes these keys as it changes any member.
  *
- * Fixture: `api_tests/api_test_framework_namespace_guard` — `victim/` and `intruder/` both run `shared/internals.mjs`.
+ * Fixture: `api_tests/api_test_framework_namespace_guard` — `api_test_framework_namespace_guard_victim/` and `_intruder/` both run `lib/internals.mjs`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { resolveWrapper } from "#handlers/unified-wrapper";
-import { TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutputSync, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_FRAMEWORK_NAMESPACE_GUARD;
 
@@ -102,9 +101,9 @@ describe.each(CONFIGS)("module writes to a node's framework-internal keys (#625)
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function load() {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
-			await api.slothlet.api.add("intruder", path.join(FIXTURE, "intruder"), { id: "intruder" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+			await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("intruder", apiPart(FIXTURE, "intruder"), { id: "intruder" });
 			// A lazy node is read once so there is a materialized wrapper to compare against.
 			await api.victim.v.hello();
 			return api;
@@ -170,9 +169,9 @@ describe.each(CONFIGS)(
 			["keeps a module off them: the built-in write rules stay with the system off", {}, "PERMISSION_DENIED"],
 			["lets a module change them with the system disabled", { permissions: { mode: "disabled" } }, "done"]
 		])("%s", async (_label, options, outcome) => {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
-			await api.slothlet.api.add("intruder", path.join(FIXTURE, "intruder"), { id: "intruder" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+			await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("intruder", apiPart(FIXTURE, "intruder"), { id: "intruder" });
 			await api.victim.v.hello();
 			const nodeAt = (apiPath) => apiPath.split(".").reduce((value, key) => value[key], api);
 			for (const apiPath of ["victim", "victim.v", "victim.v.hello", "victim.v.data"]) {

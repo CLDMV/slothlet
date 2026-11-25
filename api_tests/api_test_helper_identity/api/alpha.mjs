@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T23:53:11-08:00 (1794469991)
+ *	@Last modified time: 2026-11-24T08:05:26-08:00 (1795536326)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,8 +19,8 @@
  * @module api_test_helper_identity.alpha
  */
 import { self } from "@cldmv/slothlet/runtime";
-import { read, readLater, queued, push } from "../helpers/shared.mjs";
-import { read as soloRead, readLater as soloReadLater, queued as soloQueued, push as soloPush } from "../helpers/solo.mjs";
+import { read, readLater, queued, push } from "../lib/shared.mjs";
+import { read as soloRead, readLater as soloReadLater, queued as soloQueued, push as soloPush } from "../lib/solo.mjs";
 
 const settle = (resolve, fn) => () => {
 	try {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T08:00:00-08:00 (1794585600)
+ *	@Last modified time: 2026-11-24T08:05:49-08:00 (1795536349)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  * @module api_test_live_detached_flow.alpha
  * @memberof module:api_test_live_detached_flow
  */
-import { readLater } from "../helpers/shared.mjs";
+import { readLater } from "../lib/shared.mjs";
 
 /**
  * Hand out the helper's function.

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
+ *	@Last modified time: 2026-11-24T08:08:44-08:00 (1795536524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,6 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothletInstance from "@cldmv/slothlet";
 
 /**
@@ -37,7 +36,7 @@ import slothletInstance from "@cldmv/slothlet";
  */
 const slothlet = (config) =>
 	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
-import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutput, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 const BRIDGE_KEY = "slothlet.test.i625.bridge";
@@ -64,10 +63,10 @@ describe.each(CONFIGS)("another instance's module code (#625) — $mode / $runti
 		["on", { permissions: {} }],
 		["off", {}]
 	])("calls into the other instance, and hooks there, where its rules allow (permissions %s)", async (_label, options) => {
-		a = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		b = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: { enabled: true }, ...options });
-		await a.slothlet.api.add("bridge", path.join(FIXTURE, "guest"), { id: "bridge" });
-		await b.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		a = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+		b = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, hook: { enabled: true }, ...options });
+		await a.slothlet.api.add("bridge", apiPart(FIXTURE, "guest"), { id: "bridge" });
+		await b.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
 
 		globalThis[Symbol.for(BRIDGE_KEY)] = () => b.victim.v.secret();
 		expect(await a.bridge.x.callGlobal(BRIDGE_KEY)).toBe("SECRET");
@@ -81,16 +80,16 @@ describe.each(CONFIGS)("another instance's module code (#625) — $mode / $runti
 	});
 
 	it("holds another instance's module code to this instance's rules", async () => {
-		a = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: {} });
+		a = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, permissions: {} });
 		b = await slothlet({
-			base: path.join(FIXTURE, "base"),
+			base: apiPart(FIXTURE),
 			mode,
 			runtime,
 			silent: true,
 			permissions: { rules: [{ caller: "**", target: "victim.**", effect: "deny" }] }
 		});
-		await a.slothlet.api.add("bridge", path.join(FIXTURE, "guest"), { id: "bridge" });
-		await b.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		await a.slothlet.api.add("bridge", apiPart(FIXTURE, "guest"), { id: "bridge" });
+		await b.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
 		globalThis[Symbol.for(BRIDGE_KEY)] = () => b.victim.v.secret();
 		expect(await withSuppressedSlothletErrorOutput(() => a.bridge.x.callGlobal(BRIDGE_KEY))).toBe("PERMISSION_DENIED");
 	});

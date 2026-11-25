@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:38-08:00 (1794882638)
+ *	@Last modified time: 2026-11-24T08:08:53-08:00 (1795536533)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,12 @@
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 /** Honors a per-call `collisionMode` / `mutateExisting`, which `api.add` otherwise ignores. */
 const OVERRIDE = { api: { collision: { override: true } } };
@@ -40,9 +45,9 @@ const OVERRIDE = { api: { collision: { override: true } } };
 const PERMISSIONS_ON = { permissions: { policy: "allow" } };
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
-const GUEST = path.join(FIXTURE, "guest");
-const VICTIM = path.join(FIXTURE, "victim");
-const HOLDER = path.join(FIXTURE, "holder");
+const GUEST = apiPart(FIXTURE, "guest");
+const VICTIM = apiPart(FIXTURE, "victim");
+const HOLDER = apiPart(FIXTURE, "holder");
 const EVIL = path.join(FIXTURE, "modules", "evilgrant");
 const GOOD = path.join(FIXTURE, "modules", "goodgrant");
 const GOOD_VERSIONS = path.join(FIXTURE, "modules", "goodversions");
@@ -77,7 +82,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...PERMISSIONS_ON, ...options });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...PERMISSIONS_ON, ...options });
 		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
 		for (const name of ["guest", "atk", "other"]) await api.slothlet.api.add(name, GUEST, { id: name });
 		return api;

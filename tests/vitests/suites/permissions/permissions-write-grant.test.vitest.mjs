@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:14-08:00 (1794882614)
+ *	@Last modified time: 2026-11-24T08:09:02-08:00 (1795536542)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,9 +26,8 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/` (also mounted as `other`).
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutputSync, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 
@@ -66,10 +65,10 @@ describe.each(CONFIGS)("host write grants (#625) — $mode / $runtime", ({ mode,
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
-		await api.slothlet.api.add("other", path.join(FIXTURE, "guest"), { id: "other" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+		await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
+		await api.slothlet.api.add("other", apiPart(FIXTURE, "guest"), { id: "other" });
 		return api;
 	}
 

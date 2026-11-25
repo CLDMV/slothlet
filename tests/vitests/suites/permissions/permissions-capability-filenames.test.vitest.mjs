@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
+ *	@Last modified time: 2026-11-24T08:08:43-08:00 (1795536523)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,8 +39,8 @@ import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 const HERE = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(HERE), "../../../../api_tests/api_test_code_strings");
-const OWN = path.join(ROOT, "coder", "probe.mjs");
-const SIBLING = path.join(ROOT, "other", "probe.mjs");
+const OWN = path.join(`${ROOT}_coder`, "api", "probe.mjs");
+const SIBLING = path.join(`${ROOT}_other`, "api", "probe.mjs");
 const PACKAGE = createRequire(import.meta.url).resolve("vitest/package.json");
 const SCRATCH = path.resolve(path.dirname(HERE), "../../../../tmp/capability-filenames");
 const LINK = path.join(SCRATCH, `link-${process.pid}.mjs`);
@@ -56,10 +56,14 @@ const NAMES = [
 	["its own file", () => OWN, ALLOWED],
 	["its own file as a file: URL", () => pathToFileURL(OWN).href, ALLOWED],
 	["a name no file holds", () => "made-up-name.js", ALLOWED],
-	["a missing file in its own folder", () => path.join(ROOT, "coder", "nothere.mjs"), ALLOWED],
+	["a missing file in its own folder", () => path.join(`${ROOT}_coder`, "api", "nothere.mjs"), ALLOWED],
 	["another module's file", () => SIBLING, FOREIGN],
 	["another module's file as a file: URL", () => pathToFileURL(SIBLING).href, FOREIGN],
-	["another module's file through ..", () => path.join(ROOT, "coder", "..", "other", "probe.mjs"), FOREIGN],
+	[
+		"another module's file through ..",
+		() => path.join(`${ROOT}_coder`, "api", "..", "..", "api_test_code_strings_other", "api", "probe.mjs"),
+		FOREIGN
+	],
 	["a symbolic link to another module's file", () => LINK, FOREIGN],
 	["a package's file", () => PACKAGE, FOREIGN],
 	["a file of the host's", () => HERE, FOREIGN]
@@ -110,9 +114,9 @@ describe.each(getMatrixConfigs())("Permissions > capability:code and the file na
 		 * @returns {Promise<object>} The api.
 		 */
 		const build = async (permissions = { policy: "deny", rules: RULES, caller: { attribution } }) => {
-			api = await slothlet({ ...config, silent: true, base: path.join(ROOT, "base"), permissions });
-			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
-			await api.slothlet.api.add("other", path.join(ROOT, "other"), { id: "other" });
+			api = await slothlet({ ...config, silent: true, base: path.join(ROOT, "api"), permissions });
+			await api.slothlet.api.add("coder", path.join(`${ROOT}_coder`, "api"), { id: "coder" });
+			await api.slothlet.api.add("other", path.join(`${ROOT}_other`, "api"), { id: "other" });
 			return api;
 		};
 

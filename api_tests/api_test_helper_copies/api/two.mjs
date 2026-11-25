@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T00:24:01-08:00 (1794471841)
+ *	@Last modified time: 2026-11-24T08:05:25-08:00 (1795536325)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,8 +17,8 @@
  * @fileoverview An api file importing the helper files `tally.mjs` and `tally.cjs`, which other api files load too.
  * @module api_test_helper_copies.two
  */
-import { bump as tallyBump, read, queued } from "../helpers/tally.mjs";
-import tallyCjs from "../helpers/tally.cjs";
+import { bump as tallyBump, read, queued } from "../lib/tally.mjs";
+import tallyCjs from "../lib/tally.cjs";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -78,7 +78,7 @@ export const viaQueue = () => queued();
  */
 export const mislabelled = async () => {
 	const own = new URL(import.meta.url);
-	const target = new URL("../helpers/private.mjs", own);
+	const target = new URL("../lib/private.mjs", own);
 	target.searchParams.set("slothlet_instance", own.searchParams.get("slothlet_instance"));
 	target.searchParams.set("slothlet_helpers", "module");
 	target.searchParams.set("slothlet_for", fileURLToPath(new URL("./one.mjs", own)).replace(/\\/g, "/"));

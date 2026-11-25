@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T19:30:38-08:00 (1795059038)
+ *	@Last modified time: 2026-11-24T08:09:11-08:00 (1795536551)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,11 +35,10 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { self } from "@cldmv/slothlet/runtime";
 import { self as liveSelf } from "@cldmv/slothlet/runtime/live";
-import { TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutputSync, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 const REFUSALS = ["LOOSE_SET_NOT_OWNED", "PERMISSION_DENIED"];
@@ -125,10 +124,10 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function load() {
-			const api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+			const api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+			await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			return api;
 		}
 
@@ -224,15 +223,15 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 
 		it("refuses a later write through members another module holds frozen with captured references off", async () => {
 			const api = await slothlet({
-				base: path.join(FIXTURE, "base"),
+				base: apiPart(FIXTURE),
 				mode,
 				runtime,
 				silent: true,
 				permissions: { ...options.permissions, caller: { capture: false } }
 			});
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+			await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			const later = await api.guest.x.keepVictimFrozenMembers();
 			const report = withSuppressedSlothletErrorOutputSync(() => later());
 			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "LOOSE_SET_NOT_OWNED"])));
@@ -371,7 +370,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 
 		it("keeps a change base-module code makes to self inside a fully isolated scope in that scope", async () => {
 			const isolated = await slothlet({
-				base: path.join(FIXTURE, "base"),
+				base: apiPart(FIXTURE),
 				mode,
 				runtime,
 				silent: true,
@@ -401,10 +400,10 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 		});
 
 		it.runIf(off)("leaves the framework namespace stored on another module's class to a module with the system disabled", async () => {
-			const api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { mode: "disabled" } });
+			const api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, permissions: { mode: "disabled" } });
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+			await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			api.victim.v.Account.prototype.namespace = api.slothlet;
 			expect(api.guest.x.changeStoredNamespace()).toBe("done");
 			expect(api.slothlet.planted).toBe(1);
@@ -459,7 +458,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
  * back is decided as any read of data is: by the rules for the reading leaf at the member's path. Having made the
  * member gives a leaf no read of it. The mount `zz` is the same folder mounted again, and answers as the root does.
  */
-const MADE = path.join(FIXTURE, "made");
+const MADE = apiPart(FIXTURE, "made");
 // Under `defaultPolicy: "deny"` these keep the leaves callable from each other; they say nothing about the made members.
 const MADE_BASE_RULES = [
 	{ caller: "**", target: "maker.**", effect: "allow" },

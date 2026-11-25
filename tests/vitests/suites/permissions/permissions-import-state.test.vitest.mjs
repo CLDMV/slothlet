@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:56-08:00 (1794882596)
+ *	@Last modified time: 2026-11-24T08:08:50-08:00 (1795536530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,9 +23,9 @@
  * ```
  * api/vault.mjs       get() → "SECRET"
  * api/trusted.mjs     may read the vault; imports no helper
- * api/guest.mjs       imports helpers/reader.mjs and helpers/reader.cjs; reach() and relabel() try to change the record
- * helpers/reader.mjs  read() reads the vault and keeps the answer
- * helpers/reader.cjs  the same, as a CommonJS file
+ * api/guest.mjs       imports lib/reader.mjs and lib/reader.cjs; reach() and relabel() try to change the record
+ * lib/reader.mjs      read() reads the vault and keeps the answer
+ * lib/reader.cjs      the same, as a CommonJS file
  * ```
  * The rule the expected values come from: a helper's own function is held to the module of the api file importing it,
  * here `guest`. With `guest` denied the vault it is refused wherever it runs (run by the host from data the module

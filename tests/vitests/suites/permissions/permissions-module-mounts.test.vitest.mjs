@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:03-08:00 (1794882603)
+ *	@Last modified time: 2026-11-24T08:08:53-08:00 (1795536533)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,13 +27,17 @@
  * `guest/` (also mounted as `mgr`, `other`, `third`, `mp`).
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
-const GUEST = path.join(FIXTURE, "guest");
-const VICTIM = path.join(FIXTURE, "victim");
+const GUEST = apiPart(FIXTURE, "guest");
+const VICTIM = apiPart(FIXTURE, "victim");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -66,7 +70,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = { permissions: {} }) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
 		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
 		for (const name of ["guest", "mgr", "other"]) await api.slothlet.api.add(name, GUEST, { id: name });
 		return api;
@@ -190,7 +194,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 		])(
 			"leaves a removed module's kept function owning nothing once another module takes its id (permissions %s)",
 			async (_label, options, expected) => {
-				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+				api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
 				await api.slothlet.api.add("g", GUEST, { id: "gA" });
 				const kept = api.g.x.keepWriter("z.v", true);
 				await api.slothlet.api.remove("gA");
@@ -209,7 +213,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 				[{ permissions: {} }, "LOOSE_SET_NOT_OWNED"],
 				[{}, "done"]
 			]) {
-				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+				api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
 				await api.slothlet.api.add("g", GUEST, { id: "gA" });
 				const kept = api.g.x.keepWriter(target, true);
 				await api.slothlet.api.remove("gA");
@@ -222,7 +226,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 		});
 
 		it("keeps a module's kept function its standing across a full reload", async () => {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true });
 			await api.slothlet.api.add("g", GUEST, { id: "gA" });
 			const kept = api.g.x.keepWriter("g.x", true);
 			await api.slothlet.reload();
@@ -231,7 +235,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 
 		it("gives a removed module's kept code none of the rules naming its old path", async () => {
 			api = await slothlet({
-				base: path.join(FIXTURE, "base"),
+				base: apiPart(FIXTURE),
 				mode,
 				runtime,
 				silent: true,
@@ -308,7 +312,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function nest(options = { permissions: {} }) {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
 			await api.slothlet.api.add("parent", VICTIM, { id: "parent" });
 			await api.slothlet.api.add("parent.child", VICTIM, { id: "child" });
 			await api.slothlet.api.add("third", GUEST, { id: "third" });
