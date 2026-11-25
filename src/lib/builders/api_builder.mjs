@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:50:44-08:00 (1795420244)
+ *	@Last modified time: 2026-11-25T08:49:37-08:00 (1795625377)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -469,6 +469,34 @@ const LOCKED_ADD_OPTIONS = Objects.freeze([
 ]);
 
 /**
+ * The collision modes `api.add` takes, the same ones the instance's `api.collision.mode` config takes.
+ * @type {ReadonlyArray<string>}
+ * @private
+ */
+const ADD_COLLISION_MODES = Objects.freeze(["skip", "warn", "replace", "merge", "merge-replace", "error"]);
+
+/**
+ * Read a per-call `collision.mode` the way the instance config reads its own: any case, one of the known modes. An
+ * unknown mode would match none of the build's collision branches and replace the existing node, so it is refused.
+ * @param {object} slothlet - The instance.
+ * @param {*} mode - The mode as given.
+ * @returns {string} The mode, lowercased.
+ * @throws {SlothletError} INVALID_ARGUMENT when the mode is not a string naming a known mode.
+ * @private
+ */
+function runtime_addCollisionMode(slothlet, mode) {
+	const normalized = typeof mode === "string" ? StringMethods.toLowerCase(mode) : null;
+	if (normalized === null || !ArrayMethods.includes(ADD_COLLISION_MODES, normalized)) {
+		throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+			argument: "options.collision.mode",
+			expected: ArrayMethods.join(ADD_COLLISION_MODES, " | "),
+			received: typeof mode === "string" ? `"${mode}"` : mode === null ? "null" : typeof mode
+		});
+	}
+	return normalized;
+}
+
+/**
  * Read `api.add`'s options into the shape the build takes. The `{ exports, ...options }` inline form gives its sibling
  * keys as options (an explicit options key wins); every key is checked against the method's schema first, so a key
  * `api.add` does not take is refused rather than ignored. `collision` (or a bare mode string), `id`, `replay` and
@@ -480,7 +508,7 @@ const LOCKED_ADD_OPTIONS = Objects.freeze([
  * @returns {{ source: *, options: object, versionConfig: object|null }} The content to mount, the build's options and
  *   the version config (`null` when no `version` is given).
  * @throws {SlothletError} INVALID_CONFIG_UNKNOWN_KEY for a key `api.add` does not take; INVALID_ARGUMENT for an options,
- *   `collision` or `version` value that is not an object.
+ *   `collision` or `version` value that is not an object, or a `collision.mode` that is not a known mode.
  * @private
  */
 function runtime_readAddOptions(slothlet, source, options) {
@@ -510,7 +538,7 @@ function runtime_readAddOptions(slothlet, source, options) {
 	if (collision !== undefined) {
 		const group = typeof collision === "string" ? { mode: collision } : collision;
 		objectArgument(group, "options.collision");
-		if (group.mode !== undefined) read.collisionMode = group.mode;
+		if (group.mode !== undefined) read.collisionMode = runtime_addCollisionMode(slothlet, group.mode);
 		if (group.force !== undefined) read.forceOverwrite = group.force;
 		if (group.mutate !== undefined) read.mutateExisting = group.mutate;
 	}
