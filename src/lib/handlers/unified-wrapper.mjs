@@ -7705,6 +7705,25 @@ function runtime_onImpl(wrapper, operation) {
 }
 
 /**
+ * Whether a node holds a class instance as it is, whose members a write or a definition through the node lands on, as
+ * one made on the instance itself does (#589, #971): not an emitter or a live grafted object, which keep their own rules.
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True for such a node.
+ * @private
+ */
+function runtime_definesOnInstance(wrapper) {
+	const impl = wrapper.____slothletInternal.impl;
+	return (
+		impl !== null &&
+		typeof impl === "object" &&
+		!util.types.isProxy(impl) &&
+		isClassInstance(impl) &&
+		!wrapper.____slothletInternal.deferChildAdopt &&
+		!(EventEmitter && runtime_inherits(impl, EventEmitter))
+	);
+}
+
+/**
  * An impl's own accessor descriptor as the node describes it (#597): each half the node did not adopt is adopted
  * (see {@link runtime_adoptAccessor}), so a getter or setter taken from the description and run anywhere runs as the
  * module the node belongs to. A data descriptor is returned as it is.
@@ -23041,19 +23060,21 @@ class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
-			// CRITICAL: When proxy target is a callable function (not the wrapper itself),
-			// children are defined on wrapper, not target. Include wrapper's enumerable keys.
-			if (target !== wrapper) {
+			// The members the node holds itself are on the wrapper, the shell being the target. A member defined
+			// non-enumerable on the node is listed too, as an object lists every key of its own (#971); the wrapper holds
+			// no key of the framework's but its reserved names.
+			const addWrapperKeys = () => {
+				if (target === wrapper) return;
 				for (let ofIndex = 0, ofList = Reflect.ownKeys(wrapper); ofIndex < ofList.length; ofIndex++) {
 					const key = ofList[ofIndex];
-					const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
-					// Wrapper-owned sibling props are always enumerable in tests; non-enumerable path never taken.
-					/* v8 ignore next */
-					if (descriptor && descriptor.enumerable) {
-						SetMethods.add(keys, key);
-					}
+					if (!isFrameworkReservedKey(key)) SetMethods.add(keys, key);
 				}
-			}
+			};
+			// A class instance the node holds as it is keeps its members in the order they were made, the ones written
+			// or defined through the node included (they land on it): it is listed first, as the instance lists itself
+			// (#971). The wrapper holds no member of its own there but what was written through the node.
+			const instanceFirst = runtime_definesOnInstance(wrapper);
+			if (!instanceFirst) addWrapperKeys();
 
 			// Add impl keys
 			const implKeys =
@@ -23073,6 +23094,7 @@ class UnifiedWrapper extends ComponentBase {
 					SetMethods.add(keys, key);
 				}
 			}
+			if (instanceFirst) addWrapperKeys();
 
 			// Withhold keys whose terminal value this caller may not read, so enumeration cannot
 			// disclose the shape of a namespace the caller has no access to. Non-configurable own
@@ -24088,14 +24110,27 @@ class UnifiedWrapper extends ComponentBase {
 					// definition of the object does (#746).
 					const moduleObject =
 						MapMethods.has(FRAMEWORK_WRITES, wrapper) || runtime_inRunTree(wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+					// A class instance the node holds as it is takes the definition too, as a write through the node lands on it
+					// (#589): it then lists and serializes the member where it was made, as the instance defined on does (#971).
+					// An accessor is held as the node adopted it, so whoever reads it off the instance runs it as the node's module.
+					const instance =
+						moduleObject === null &&
+						!MapMethods.has(FRAMEWORK_WRITES, wrapper) &&
+						!runtime_inRunTree(wrapper) &&
+						runtime_definesOnInstance(wrapper)
+							? internal.impl
+							: null;
+					const instanceDescriptor = "value" in raw ? raw : descriptor;
 					// All are checked before any changes, so a refusal by one leaves the others as they were.
 					if (
 						(bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) ||
 						!runtime_canDefine(wrapper, prop, descriptor) ||
-						(moduleObject !== null && !runtime_canDefine(moduleObject, prop, raw))
+						(moduleObject !== null && !runtime_canDefine(moduleObject, prop, raw)) ||
+						(instance !== null && !runtime_canDefine(instance, prop, instanceDescriptor))
 					)
 						return false;
 					if (moduleObject !== null && !Reflect.defineProperty(moduleObject, prop, raw)) return false;
+					if (instance !== null && !Reflect.defineProperty(instance, prop, instanceDescriptor)) return false;
 					if (moduleObject !== null && typeof prop === "string") SetMethods.add(runtime_moduleObjectKeys(moduleObject), prop);
 					// Whether the member takes a write once defined, as the same definition leaves it on an object (#749): the
 					// node's own store keeps every member read-only, so what was asked for is remembered beside it.
