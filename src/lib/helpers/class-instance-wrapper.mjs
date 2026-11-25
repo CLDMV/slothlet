@@ -110,6 +110,9 @@ const WRAPPED_CREATORS = new WeakMap();
  */
 let isModuleInstance = () => true;
 
+/** Whether {@link setModuleInstanceCheck} has run. @type {boolean} */
+let moduleInstanceCheckSet = false;
+
 /**
  * Set how an instance of a module's own class is told from one of the language's or Node's own (a `URL`, a
  * `Response`, an `Intl.NumberFormat`), which needs no context and whose methods work only on the object itself.
@@ -120,6 +123,9 @@ let isModuleInstance = () => true;
  * setModuleInstanceCheck((value) => hasModuleWrittenPrototype(value));
  */
 function setModuleInstanceCheck(check) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (moduleInstanceCheckSet) throw ownBindingsRefusal("lib/helpers/class-instance-wrapper", import.meta.url);
+	moduleInstanceCheckSet = true;
 	isModuleInstance = check;
 }
 

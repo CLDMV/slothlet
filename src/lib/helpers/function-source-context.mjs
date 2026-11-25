@@ -60,6 +60,9 @@ const FunctionPrototype = Functions.prototype;
  */
 let standsFor = () => undefined;
 
+/** Whether {@link setFunctionSourceReader} has run. @type {boolean} */
+let functionSourceReaderSet = false;
+
 /**
  * Set how the function behind one of slothlet's stand-ins is told.
  * @param {function(*): (Function|undefined)} behind - Answers the function a value stands for, or `undefined` for a
@@ -70,6 +73,9 @@ let standsFor = () => undefined;
  * setFunctionSourceReader((value) => (isNode(value) ? functionBehind(value) : undefined));
  */
 function setFunctionSourceReader(behind) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (functionSourceReaderSet) throw ownBindingsRefusal("lib/helpers/function-source-context", import.meta.url);
+	functionSourceReaderSet = true;
 	standsFor = behind;
 }
 

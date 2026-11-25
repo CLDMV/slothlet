@@ -1901,6 +1901,9 @@ function stackHoldsInstanceCode(sources) {
  */
 let isApiValue = () => false;
 
+/** Whether {@link setApiValueCheck} has run. @type {boolean} */
+let apiValueCheckSet = false;
+
 /**
  * Register the test that recognises slothlet's own api values (node proxies, per-reader views), which carry
  * no code of a caller's.
@@ -1909,6 +1912,9 @@ let isApiValue = () => false;
  * @internal
  */
 function setApiValueCheck(check, harborsCode = null) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (apiValueCheckSet) throw ownBindingsRefusal("lib/handlers/frame-placement", import.meta.url);
+	apiValueCheckSet = true;
 	isApiValue = check;
 	if (harborsCode) apiValueHarborsCode = harborsCode;
 }
@@ -1921,6 +1927,9 @@ function setApiValueCheck(check, harborsCode = null) {
  */
 let resultAttributor = (_wrapper, value) => value;
 
+/** Whether {@link setResultAttributor} has run. @type {boolean} */
+let resultAttributorSet = false;
+
 /**
  * Register how a module call's result is attributed to the module (see {@link attributeResult}).
  * @param {function(object, *, boolean): *} attributor - Takes the call's wrapper, its result, and whether the host made
@@ -1929,6 +1938,9 @@ let resultAttributor = (_wrapper, value) => value;
  * @internal
  */
 function setResultAttributor(attributor) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (resultAttributorSet) throw ownBindingsRefusal("lib/handlers/frame-placement", import.meta.url);
+	resultAttributorSet = true;
 	resultAttributor = attributor;
 }
 
@@ -1977,6 +1989,9 @@ function ownReceiver(parent, identity) {
  */
 let hostPrototypeCheck = () => false;
 
+/** Whether {@link setHostPrototypeCheck} has run. @type {boolean} */
+let hostPrototypeCheckSet = false;
+
 /**
  * Register how a prototype of a module's class handed to the host is recognised (see {@link isHostPrototype}).
  * @param {function(object, *): boolean} check - Takes the call's wrapper and its result; true for such a prototype.
@@ -1984,6 +1999,9 @@ let hostPrototypeCheck = () => false;
  * @internal
  */
 function setHostPrototypeCheck(check) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (hostPrototypeCheckSet) throw ownBindingsRefusal("lib/handlers/frame-placement", import.meta.url);
+	hostPrototypeCheckSet = true;
 	hostPrototypeCheck = check;
 }
 
@@ -2006,6 +2024,9 @@ export function isHostPrototype(wrapper, value) {
  */
 let handedOutCheck = () => false;
 
+/** Whether {@link setHandedOutCheck} has run. @type {boolean} */
+let handedOutCheckSet = false;
+
 /**
  * Register how a stand-in is recognised (see {@link isHandedOut}).
  * @param {function(*): boolean} check - True for a stand-in.
@@ -2013,6 +2034,9 @@ let handedOutCheck = () => false;
  * @internal
  */
 function setHandedOutCheck(check) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (handedOutCheckSet) throw ownBindingsRefusal("lib/handlers/frame-placement", import.meta.url);
+	handedOutCheckSet = true;
 	handedOutCheck = check;
 }
 
@@ -2033,6 +2057,9 @@ export function isHandedOut(value) {
  */
 let inboundOriginal = (value) => value;
 
+/** Whether {@link setInboundOriginal} has run. @type {boolean} */
+let inboundOriginalSet = false;
+
 /**
  * Register how the caller's value behind a module's view of it is found (see {@link handedLeafFunctions}).
  * @param {function(*): *} unwrap - The value behind a view, or the value itself.
@@ -2040,6 +2067,9 @@ let inboundOriginal = (value) => value;
  * @internal
  */
 function setInboundOriginal(unwrap) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (inboundOriginalSet) throw ownBindingsRefusal("lib/handlers/frame-placement", import.meta.url);
+	inboundOriginalSet = true;
 	inboundOriginal = unwrap;
 }
 
@@ -3949,6 +3979,9 @@ function runtime_leafRange(leaf, source) {
  */
 let moduleNodeResolver = () => null;
 
+/** Whether {@link setModuleNodeResolver} has run. @type {boolean} */
+let moduleNodeResolverSet = false;
+
 /**
  * Register how the node at an api path is found: the file's module node of a lazy tree, built with no file of its own,
  * is looked up by its path (#726).
@@ -3958,6 +3991,9 @@ let moduleNodeResolver = () => null;
  * @internal
  */
 function setModuleNodeResolver(resolver) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (moduleNodeResolverSet) throw ownBindingsRefusal("lib/handlers/frame-placement", import.meta.url);
+	moduleNodeResolverSet = true;
 	moduleNodeResolver = resolver;
 }
 

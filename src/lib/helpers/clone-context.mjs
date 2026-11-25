@@ -313,6 +313,9 @@ const CLONE_SITES = runtime_cloneSites();
  */
 let viewed = () => undefined;
 
+/** Whether {@link setCloneViewReader} has run. @type {boolean} */
+let cloneViewReaderSet = false;
+
 /**
  * Set how the value behind one of slothlet's views is told.
  * @param {function(*): *} behind - Answers the value a view stands over, or
@@ -323,6 +326,9 @@ let viewed = () => undefined;
  * setCloneViewReader((value) => (isView(value) ? valueBehind(value) : undefined));
  */
 function setCloneViewReader(behind) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (cloneViewReaderSet) throw ownBindingsRefusal("lib/helpers/clone-context", import.meta.url);
+	cloneViewReaderSet = true;
 	viewed = behind;
 }
 
@@ -332,6 +338,9 @@ function setCloneViewReader(behind) {
  * @private
  */
 let nodeData = () => undefined;
+
+/** Whether {@link setCloneNodeReader} has run. @type {boolean} */
+let cloneNodeReaderSet = false;
 
 /**
  * Set how the data of one of slothlet's api nodes is told.
@@ -347,6 +356,9 @@ let nodeData = () => undefined;
  * setCloneNodeReader((value) => (isLoadedNode(value) ? { list: Array.isArray(valueOf(value)) } : undefined));
  */
 function setCloneNodeReader(shape) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (cloneNodeReaderSet) throw ownBindingsRefusal("lib/helpers/clone-context", import.meta.url);
+	cloneNodeReaderSet = true;
 	nodeData = shape;
 }
 

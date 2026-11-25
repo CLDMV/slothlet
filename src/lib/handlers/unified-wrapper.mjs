@@ -105,8 +105,6 @@ const {
 	setHostPrototypeCheck,
 	frameDefiner,
 	runtime_codeWritersOnStack,
-	runtime_loadingFileRunning,
-	runtime_loadingHelper,
 	isLeafFileFunction,
 	leafOfCopy,
 	outerCallerCeiling,
@@ -711,15 +709,6 @@ let runtime_isPrototypeHandle,
 	runtime_followPosition;
 
 /**
- * Forwards to the Values layer's `runtime_hasInternalSlots`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_hasInternalSlots(value) {
-	return M.values.runtime_hasInternalSlots(value);
-}
-
-/**
  * Forwards to the Nodes layer's `runtime_nodeReport`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
@@ -738,57 +727,12 @@ function runtime_metadataNodeOf(value) {
 }
 
 /**
- * Forwards to the Rules layer's `runtime_assertFrameworkRootChange`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_assertFrameworkRootChange(slothlet, prop) {
-	return M.rules.runtime_assertFrameworkRootChange(slothlet, prop);
-}
-
-/**
- * Forwards to the Rules layer's `runtime_contextRead`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_contextRead(ctx, value) {
-	return M.rules.runtime_contextRead(ctx, value);
-}
-
-/**
- * Forwards to the Rules layer's `runtime_contextReadAsDefiner`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_contextReadAsDefiner(contextProxy, prop) {
-	return M.rules.runtime_contextReadAsDefiner(contextProxy, prop);
-}
-
-/**
- * Forwards to the Rules layer's `runtime_contextWritten`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_contextWritten(ctx, value) {
-	return M.rules.runtime_contextWritten(ctx, value);
-}
-
-/**
  * Forwards to the Values layer's `runtime_dataReadOptions`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
 function runtime_dataReadOptions(slothlet) {
 	return M.values.runtime_dataReadOptions(slothlet);
-}
-
-/**
- * Forwards to the Values layer's `runtime_defineRootInspect`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_defineRootInspect(slothlet, target) {
-	return M.values.runtime_defineRootInspect(slothlet, target);
 }
 
 /**
@@ -837,228 +781,12 @@ function runtime_registerFrameworkMember(member, slothlet, name) {
 }
 
 /**
- * Forwards to the Rules layer's `runtime_registerFrameworkMemberCopy`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_registerFrameworkMemberCopy(copy, member) {
-	return M.rules.runtime_registerFrameworkMemberCopy(copy, member);
-}
-
-/**
- * Forwards to the Run layer's `runtime_runWrite`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_runWrite(node, prop, sink, change) {
-	return M.run.runtime_runWrite(node, prop, sink, change);
-}
-
-/**
  * Forwards to the Run layer's `runtime_takeRunWrite`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
 function runtime_takeRunWrite(node, prop) {
 	return M.run.runtime_takeRunWrite(node, prop);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_viewAccessor`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_viewAccessor(node, prop) {
-	return M.nodes.runtime_viewAccessor(node, prop);
-}
-
-/**
- * Forwards to the Run layer's `runtime_runViewAccessor`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_runViewAccessor(accessor, half, receiver, args) {
-	return M.run.runtime_runViewAccessor(accessor, half, receiver, args);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_protoAssignSetsPrototype`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_protoAssignSetsPrototype(node) {
-	return M.nodes.runtime_protoAssignSetsPrototype(node);
-}
-
-/**
- * Forwards to the Values layer's `runtime_isApiNode`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_isApiNode(value) {
-	return M.values.runtime_isApiNode(value);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_nodeWrapperOf`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_nodeWrapperOf(value) {
-	return M.nodes.runtime_nodeWrapperOf(value);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_nodeVersion`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_nodeVersion(node, snap) {
-	return M.nodes.runtime_nodeVersion(node, snap);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_prototypeAtStart`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_prototypeAtStart(node, version, snap) {
-	return M.nodes.runtime_prototypeAtStart(node, version, snap);
-}
-
-/**
- * Forwards to the Values layer's `runtime_inheritedAtStart`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_inheritedAtStart(node, version, snap, prop, inherited) {
-	return M.values.runtime_inheritedAtStart(node, version, snap, prop, inherited);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_classPrototypeOf`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_classPrototypeOf(node) {
-	return M.nodes.runtime_classPrototypeOf(node);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_privateCallReceiver`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_privateCallReceiver(node) {
-	return M.nodes.runtime_privateCallReceiver(node);
-}
-
-/**
- * Forwards to the Waiting layer's `runtime_loadStandIn`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_loadStandIn(standIn) {
-	return M.waiting.runtime_loadStandIn(standIn);
-}
-
-/**
- * Forwards to the Run layer's `runtime_runWriteSinceClosed`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_runWriteSinceClosed(node, prop, op, payload, sink) {
-	return M.run.runtime_runWriteSinceClosed(node, prop, op, payload, sink);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_nodeOpen`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_nodeOpen(node) {
-	return M.nodes.runtime_nodeOpen(node);
-}
-
-/**
- * Forwards to the Run layer's `runtime_throughRunView`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_throughRunView(access) {
-	return M.run.runtime_throughRunView(access);
-}
-
-/**
- * Forwards to the Views layer's `runtime_builtinBehind`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_builtinBehind(value) {
-	return M.views.runtime_builtinBehind(value);
-}
-
-/**
- * Forwards to the Nodes layer's `runtime_sameSnapshotMember`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_sameSnapshotMember(live, held) {
-	return M.nodes.runtime_sameSnapshotMember(live, held);
-}
-
-/**
- * Forwards to the Values layer's `runtime_holdsOwnMember`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_holdsOwnMember(node, prop) {
-	return M.values.runtime_holdsOwnMember(node, prop);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootGate`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootGate(slothlet) {
-	return M.root.runtime_rootGate(slothlet);
-}
-
-/**
- * Forwards to the Rules layer's `runtime_registerRunView`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_registerRunView(view, real) {
-	return M.rules.runtime_registerRunView(view, real);
-}
-
-/**
- * Forwards to the Rules layer's `runtime_enforceReadGate`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, kept, access) {
-	return M.rules.runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, kept, access);
-}
-
-/**
- * Forwards to the Rules layer's `runtime_assertRootChange`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_assertRootChange(slothlet, prop) {
-	return M.rules.runtime_assertRootChange(slothlet, prop);
-}
-
-/**
- * Forwards to the Root layer's `runtime_registerRoot`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_registerRoot(root) {
-	return M.root.runtime_registerRoot(root);
 }
 
 /**
@@ -1080,138 +808,12 @@ function runtime_rootFileOf(slothlet) {
 }
 
 /**
- * Forwards to the Root layer's `runtime_rootCall`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootCall(slothlet, thisArg, args, construct) {
-	return M.root.runtime_rootCall(slothlet, thisArg, args, construct);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootCallCheck`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootCallCheck(slothlet, args) {
-	return M.root.runtime_rootCallCheck(slothlet, args);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootClose`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootClose(slothlet, target, isCallable, prototype) {
-	return M.root.runtime_rootClose(slothlet, target, isCallable, prototype);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootDefine`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootDefine(slothlet, target, prop, descriptor) {
-	return M.root.runtime_rootDefine(slothlet, target, prop, descriptor);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootAssign`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootAssign(slothlet, target, prop, value) {
-	return M.root.runtime_rootAssign(slothlet, target, prop, value);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootFixedMember`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootFixedMember(slothlet, prop, fixed, described) {
-	return M.root.runtime_rootFixedMember(slothlet, prop, fixed, described);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootListing`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootListing(slothlet, target, keys) {
-	return M.root.runtime_rootListing(slothlet, target, keys);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootMemberDescriptor`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootMemberDescriptor(slothlet, prop, descriptor) {
-	return M.root.runtime_rootMemberDescriptor(slothlet, prop, descriptor);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootMemberRead`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootMemberRead(slothlet, prop, value) {
-	return M.root.runtime_rootMemberRead(slothlet, prop, value);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootWithheld`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootWithheld(slothlet, prop) {
-	return M.root.runtime_rootWithheld(slothlet, prop);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootPrototypeFor`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootPrototypeFor(slothlet, holder, prototype, closed) {
-	return M.root.runtime_rootPrototypeFor(slothlet, holder, prototype, closed);
-}
-
-/**
- * Forwards to the Root layer's `runtime_rootInheritedRead`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootInheritedRead(slothlet, holder, prototype, prop, value) {
-	return M.root.runtime_rootInheritedRead(slothlet, holder, prototype, prop, value);
-}
-
-/**
- * Forwards to the Membrane layer's `runtime_behindGivenView`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_behindGivenView(value) {
-	return M.membrane.runtime_behindGivenView(value);
-}
-
-/**
  * Forwards to the Views layer's `runtime_sameValue`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
 function runtime_sameValue(a, b) {
 	return M.views.runtime_sameValue(a, b);
-}
-
-/**
- * Forwards to the Views layer's `runtime_selfChangeTarget`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_selfChangeTarget(ctx, prop) {
-	return M.views.runtime_selfChangeTarget(ctx, prop);
 }
 
 /**
@@ -1248,24 +850,6 @@ function runtime_selfModuleCeilings(slothlet, writer) {
  */
 function runtime_selfModuleReader(slothlet) {
 	return M.views.runtime_selfModuleReader(slothlet);
-}
-
-/**
- * Forwards to the Views layer's `runtime_selfReadAsDefiner`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID, hostFlowInstanceID, use) {
-	return M.views.runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID, hostFlowInstanceID, use);
-}
-
-/**
- * Forwards to the Views layer's `runtime_selfToJSON`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_selfToJSON(key) {
-	return M.views.runtime_selfToJSON(key);
 }
 
 /**
@@ -1349,14 +933,11 @@ class UnifiedWrapper extends TrapsLayer(
 			registerLeafFile,
 			frameDefiner,
 			runtime_codeWritersOnStack,
-			runtime_loadingFileRunning,
-			runtime_loadingHelper,
 			isLeafFileFunction,
 			leafOfCopy,
 			outerCallerCeiling,
 			markFrameworkInternal,
 			versionDispatcherRecord,
-			recordSharedExports,
 			ACTING_FOR,
 			WRAPPER_ANSWERED_PROPS,
 			GET_TRAP_ALLOWED_INTERNALS,
@@ -1373,7 +954,6 @@ class UnifiedWrapper extends TrapsLayer(
 			isThenableModuleValue,
 			SlothletTypeError,
 			STAND_IN_OWN_READS,
-			UnifiedWrapper,
 			isClassInstance,
 			resolveWrapper,
 			isLazyStandIn
@@ -2023,7 +1603,8 @@ export async function isCallableValue(value) {
 
 /**
  * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
- * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * it loads, and is given only the bindings it uses; anyone else is refused (see `ownBindingsRefusal` in
+ * `helpers/instance-imports`).
  * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
  * @returns {object} The bindings.
  * @internal
@@ -2050,83 +1631,116 @@ export function internals(consumer) {
 		])
 	)
 		throw ownBindingsRefusal("lib/handlers/unified-wrapper", import.meta.url);
-	return {
-		makeRunSelf,
-		get UnifiedWrapper() {
-			return UnifiedWrapper;
-		},
-		releaseModuleMakers,
-		releaseStandInChanges,
-		resolveWrapper,
-		runtime_hasInternalSlots,
-		runtime_nodeReport,
-		runtime_metadataNodeOf,
-		runtime_assertFrameworkRootChange,
-		runtime_contextRead,
-		runtime_contextReadAsDefiner,
-		runtime_contextWritten,
-		runtime_dataReadOptions,
-		runtime_defineRootInspect,
-		runtime_eventPayloadFor,
-		runtime_frameworkViewCaller,
-		runtime_frameworkWrite,
-		runtime_nodeBehind,
-		runtime_registerFrameworkMember,
-		runtime_registerFrameworkMemberCopy,
-		runtime_runWrite,
-		runtime_takeRunWrite,
-		runtime_viewAccessor,
-		runtime_runViewAccessor,
-		runtime_protoAssignSetsPrototype,
-		runtime_isApiNode,
-		runtime_nodeWrapperOf,
-		runtime_nodeVersion,
-		runtime_prototypeAtStart,
-		runtime_inheritedAtStart,
-		runtime_classPrototypeOf,
-		runtime_privateCallReceiver,
-		runtime_loadStandIn,
-		runtime_runWriteSinceClosed,
-		runtime_nodeOpen,
-		runtime_throughRunView,
-		runtime_builtinBehind,
-		runtime_sameSnapshotMember,
-		runtime_holdsOwnMember,
-		runtime_rootGate,
-		runtime_registerRunView,
-		runtime_enforceReadGate,
-		runtime_assertRootChange,
-		runtime_registerRoot,
-		runtime_noteRootFile,
-		runtime_rootFileOf,
-		runtime_rootCall,
-		runtime_rootCallCheck,
-		runtime_rootClose,
-		runtime_rootDefine,
-		runtime_rootAssign,
-		runtime_rootFixedMember,
-		runtime_rootListing,
-		runtime_rootMemberDescriptor,
-		runtime_rootMemberRead,
-		runtime_rootWithheld,
-		runtime_rootPrototypeFor,
-		runtime_rootInheritedRead,
-		runtime_behindGivenView,
-		runtime_sameValue,
-		runtime_selfChangeTarget,
-		runtime_selfFrameworkView,
-		runtime_selfHookHandler,
-		runtime_selfModuleCeilings,
-		runtime_selfModuleReader,
-		runtime_selfReadAsDefiner,
-		runtime_selfToJSON,
-		runtime_selfRootView,
-		runtime_selfView,
-		runtime_unwrapSelfView,
-		settleStandInChanges,
-		runtime_rootProxy,
-		runtime_runtimeTraps
-	};
+	// Each file is given what it uses, and nothing else.
+	switch (consumer) {
+		case "lib/builders/api-assignment":
+			return {
+				get UnifiedWrapper() {
+					return UnifiedWrapper;
+				},
+				resolveWrapper,
+				runtime_frameworkWrite
+			};
+		case "lib/builders/api_builder":
+			return {
+				resolveWrapper,
+				makeRunSelf,
+				runtime_frameworkViewCaller,
+				runtime_metadataNodeOf,
+				runtime_nodeBehind,
+				runtime_nodeReport,
+				runtime_registerFrameworkMember,
+				runtime_sameValue,
+				runtime_selfFrameworkView,
+				runtime_selfModuleCeilings,
+				runtime_selfModuleReader,
+				runtime_selfRootView,
+				runtime_selfView,
+				runtime_unwrapSelfView
+			};
+		case "lib/builders/modes-processor":
+			return {
+				get UnifiedWrapper() {
+					return UnifiedWrapper;
+				},
+				resolveWrapper,
+				runtime_noteRootFile
+			};
+		case "lib/handlers/api-manager":
+			return {
+				get UnifiedWrapper() {
+					return UnifiedWrapper;
+				},
+				resolveWrapper,
+				releaseModuleMakers,
+				runtime_dataReadOptions,
+				runtime_frameworkWrite,
+				runtime_nodeBehind,
+				runtime_selfModuleCeilings,
+				runtime_selfModuleReader,
+				runtime_takeRunWrite,
+				runtime_unwrapSelfView,
+				settleStandInChanges
+			};
+		case "lib/handlers/event-manager":
+			return {
+				runtime_eventPayloadFor
+			};
+		case "lib/handlers/hook-manager":
+			return {
+				runtime_selfHookHandler
+			};
+		case "lib/handlers/lifecycle":
+			return {
+				runtime_selfModuleReader,
+				runtime_selfView
+			};
+		case "lib/handlers/metadata":
+			return {
+				resolveWrapper,
+				runtime_metadataNodeOf
+			};
+		case "lib/handlers/module-manager":
+			return {
+				runtime_selfModuleReader
+			};
+		case "lib/handlers/ownership":
+			return {
+				resolveWrapper
+			};
+		case "lib/handlers/permission-manager":
+			return {
+				runtime_selfModuleCeilings,
+				runtime_selfModuleReader
+			};
+		case "lib/handlers/routine-manager":
+			return {
+				resolveWrapper,
+				runtime_frameworkWrite
+			};
+		case "lib/processors/type-generator":
+			return {
+				resolveWrapper,
+				runtime_rootFileOf
+			};
+		case "lib/runtime/runtime-asynclocalstorage":
+			return {
+				runtime_runtimeTraps
+			};
+		case "lib/runtime/runtime-livebindings":
+			return {
+				runtime_runtimeTraps
+			};
+		// "slothlet", the last listed
+		default:
+			return {
+				resolveWrapper,
+				releaseModuleMakers,
+				releaseStandInChanges,
+				runtime_frameworkWrite,
+				runtime_rootProxy
+			};
+	}
 }
 
 /**
