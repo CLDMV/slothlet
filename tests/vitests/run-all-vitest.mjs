@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T21:20:38-08:00 (1793596838)
+ *	@Last modified time: 2026-11-25T13:18:11-08:00 (1795641491)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { run, runMergeReports, printMergeOutput, printCoverageSummary, resolveBin, resolveVitestConfig } from "@cldmv/vitest-runner";
+import { run } from "@cldmv/vitest-runner";
 import { cleanTmpArtifacts } from "../lib/clean-tmp-artifacts.mjs";
 import { stageI18nPack, STAGED_ENV } from "./setup/i18n-pack-fixture.mjs";
 
@@ -130,24 +130,13 @@ const BASELINE_PATH = "tests/vitests/baseline-tests.json";
 const DEFAULT_VITEST_CONFIG = ".configs/vitest.config.mjs";
 
 /**
- * Heap ceiling for the coverage merge step, in MB (`VITEST_MERGE_HEAP_MB` overrides).
- * The merge reads every per-file blob into one process; with 500+ files it outgrows
- * Node's default ~4 GB heap and dies with "heap out of memory" after every test passed.
- * It runs once, after all test workers have exited, so it can take a larger heap than
- * the workers without raising the run's peak memory. At ~800 files the merge outgrew 8 GB
- * too, so the default is 12 GB (4 GB free on a 16 GB CI runner); on a machine with less
- * than 14 GB it drops to total memory minus 2 GB, never below 4 GB.
+ * Heap ceiling for the runner's coverage merge step, in MB (`VITEST_MERGE_HEAP_MB` overrides).
+ * The merge reads every per-file blob into one process; at ~800 files it outgrew 8 GB, so it
+ * gets 12 GB. It runs once, after all test workers have exited, so the larger heap does not
+ * raise the run's peak memory. The runner applies it to the merge only, never to the workers.
  * @type {number}
  */
-const MERGE_HEAP_MB = process.env.VITEST_MERGE_HEAP_MB
-	? parseInt(process.env.VITEST_MERGE_HEAP_MB, 10)
-	: Math.max(4096, Math.min(12288, Math.floor(os.totalmem() / 1024 ** 2) - 2048));
-
-/**
- * Directory the coverage run writes its per-file blobs to before the merge.
- * @type {string}
- */
-const COVERAGE_BLOBS_DIR = path.join(projectRoot, ".vitest-coverage-blobs");
+const MERGE_HEAP_MB = 12288;
 
 /**
  * Escape all regex metacharacters in a string so it can be safely used
@@ -209,6 +198,23 @@ const PER_FILE_HEAP_OVERRIDES = [
 	// its LAZY_LIVE config (passes 176/176 in isolation). Headroom is the remaining lever.
 	{ pattern: "metadata/metadata-edge-cases", heapMb: 6144 }
 ];
+
+/**
+ * Time limit per test file, in ms, for @cldmv/vitest-runner's watchdog (`VITEST_FILE_TIMEOUT`, in
+ * seconds, overrides). The runner's own default of 30 minutes is too close for the slowest suites on a
+ * 4-core CI runner: in a plain (no coverage) Node 22 run on next, all-api-structures took 23.5 minutes and
+ * api-root-integrity, reload-held-code and permissions-sync-leaf-thenable 12–15, and coverage runs are
+ * slower. The idle limit stays at the runner's 10 minutes: every file prints as its tests finish, and the
+ * longest silence inside one file in that run was under 3 minutes.
+ * @type {number}
+ */
+const FILE_TIMEOUT_MS = 60 * 60 * 1000;
+
+/**
+ * Per-file watchdog limits for files that outgrow {@link FILE_TIMEOUT_MS}.
+ * @type {Array<{ pattern: string, timeoutMs?: number, idleTimeoutMs?: number }>}
+ */
+const PER_FILE_TIMEOUT_OVERRIDES = [{ pattern: "api-structures/all-api-structures.test.vitest.mjs", timeoutMs: 120 * 60 * 1000 }];
 
 // Scratch dirs (gitignored, same pair the repo's own eslint/prettier ignores use) that test
 // discovery must never enter. `tmp/` holds per-agent git worktrees (tmp/agents/*/wt) and staged
@@ -477,9 +483,15 @@ function buildRunOptions(parsed) {
 		earlyRunPatterns: parsed.earlyRunPatterns,
 		exclude: parsed.excludePatterns,
 		perFileHeapOverrides: PER_FILE_HEAP_OVERRIDES,
+		perFileTimeoutOverrides: PER_FILE_TIMEOUT_OVERRIDES,
 		conditions: ["slothlet-dev"],
 		nodeEnv: process.env.NODE_ENV || "development"
 	};
+
+	// An explicit option would shadow VITEST_FILE_TIMEOUT, so only set it when the env var is absent.
+	if (!process.env.VITEST_FILE_TIMEOUT) {
+		runOptions.fileTimeoutMs = FILE_TIMEOUT_MS;
+	}
 
 	if (maxOldSpaceMb && Number.isFinite(maxOldSpaceMb)) {
 		runOptions.maxOldSpaceMb = maxOldSpaceMb;
@@ -505,49 +517,14 @@ function buildRunOptions(parsed) {
 		runOptions.vitestArgs.unshift("--coverage");
 	}
 
-	// Coverage runs merge their blobs here (mergeCoverage) rather than in the runner, so the
-	// merge can have its own heap ceiling.
-	if (hasCoverage || parsed.coverageQuiet) {
-		runOptions.blobsDir = COVERAGE_BLOBS_DIR;
-		runOptions.mergeReports = false;
+	// The runner merges the blobs itself, with its own heap ceiling, and writes
+	// coverage/coverage-index.json. An explicit option would shadow VITEST_MERGE_HEAP_MB, so only set
+	// it when the env var is absent.
+	if (!process.env.VITEST_MERGE_HEAP_MB) {
+		runOptions.mergeMaxOldSpaceMb = MERGE_HEAP_MB;
 	}
 
 	return runOptions;
-}
-
-/**
- * Merge the coverage blobs a run left in `COVERAGE_BLOBS_DIR` into the final report, with
- * `MERGE_HEAP_MB` of heap, and print the summary as the runner would.
- * @param {import("@cldmv/vitest-runner").RunOptions} runOptions - Options the run used.
- * @returns {Promise<number>} The merge's exit code (1 when there are no blobs to merge).
- * @example
- * const code = await mergeCoverage(buildRunOptions(parsed));
- */
-async function mergeCoverage(runOptions) {
-	const blobs = fs.existsSync(COVERAGE_BLOBS_DIR) ? fs.readdirSync(COVERAGE_BLOBS_DIR).filter((f) => f.endsWith(".blob")) : [];
-	if (blobs.length === 0) return 1;
-
-	const extraCoverageArgs = runOptions.vitestArgs.filter((arg) => arg.startsWith("--coverage."));
-	if (!runOptions.coverageQuiet) {
-		console.log(`\n${"=".repeat(80)}`);
-		console.log(`📊 Merging ${blobs.length} coverage blobs into final report (heap ${MERGE_HEAP_MB} MB)...`);
-		console.log("=".repeat(80));
-	}
-
-	const { exitCode, output } = await runMergeReports(COVERAGE_BLOBS_DIR, {
-		cwd: projectRoot,
-		vitestBin: resolveBin(projectRoot, "vitest", "vitest"),
-		vitestConfig: await resolveVitestConfig(projectRoot, runOptions.vitestConfig),
-		conditions: runOptions.conditions,
-		nodeEnv: runOptions.nodeEnv,
-		maxOldSpaceMb: Math.max(MERGE_HEAP_MB, runOptions.maxOldSpaceMb ?? 0),
-		extraCoverageArgs,
-		quietOutput: runOptions.coverageQuiet
-	});
-	if (runOptions.coverageQuiet) printMergeOutput(exitCode, output);
-	await printCoverageSummary(projectRoot, extraCoverageArgs, runOptions.worstCoverageCount);
-	fs.rmSync(COVERAGE_BLOBS_DIR, { recursive: true, force: true });
-	return exitCode;
 }
 
 /**
@@ -603,10 +580,6 @@ async function main() {
 
 	const runOptions = buildRunOptions(parsed);
 	const code = await run(runOptions);
-	if (runOptions.mergeReports === false) {
-		const mergeCode = await mergeCoverage(runOptions);
-		process.exit(code || mergeCode);
-	}
 	process.exit(code);
 }
 
