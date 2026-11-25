@@ -80,19 +80,15 @@ let trustedRootOwn,
 	rulesShared,
 	viewsShared,
 	takeCapturedAccess,
-	accessAsKept,
 	enforceRead,
 	isTerminalData,
-	markAssignedData,
 	readOnBehalf,
 	enforceCodeMember,
 	PINNED_CODE_MEMBERS,
-	readImplMember,
 	onImpl,
 	makerOf,
 	hostRunDefiner,
 	nodeInCycle,
-	enforceCapturedPair,
 	capturedView,
 	createNamedProxyTarget,
 	isAwaitableThen,
@@ -106,10 +102,10 @@ let trustedRootOwn,
 	STAND_IN_OWN_READS,
 	withRestartForwarding,
 	inspectSafe,
-	inspectReaderIsModule,
 	resolveWrapper,
 	nodeBehind,
-	registerProxy;
+	registerProxy,
+	isWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -143,119 +139,6 @@ function standInPath(wrapper, chain) {
 }
 
 /**
- * Make a change through a stand-in on the node it stands for, through the node's own traps, as the same change made on
- * the node itself would be (#653). The chain is read from the wrapper the stand-in waits for, so a node further down
- * that has not loaded either hands out its own stand-in, which queues the change in turn.
- *
- * Made as it is asked for, the change answers as a trap does (`false` when the node refuses it). Replayed once the node
- * has loaded, nothing is left to answer to, so a refusal throws, as the same change does in strict-mode code.
- * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
- * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
- * @param {boolean} replayed - Whether the change is replayed after the node loaded.
- * @returns {boolean} Whether the node took the change.
- * @throws {TypeError} When the chain does not reach an object (as in eager mode), or a replayed change is refused.
- * @private
- */
-function applyStandInChange(wrapper, change, replayed, holders = null) {
-	/**
-	 * Close a node the way a stand-in for it was closed (#653): frozen when the stand-in's target reads as frozen, sealed
-	 * when it reads as sealed, and closed to extension otherwise. The target's own members are fixed so that only a
-	 * freeze reads as one (see ___createWaitingProxy). The node closes through its own traps, as a node closed directly.
-	 * @param {object} node - The node.
-	 * @param {Function} target - The stand-in's target, closed.
-	 * @returns {void}
-	 * @throws {TypeError} When the node refuses to close.
-	 * @private
-	 */
-	function lockAsStandIn(node, target) {
-		if (Objects.isFrozen(target)) Objects.freeze(node);
-		else if (Objects.isSealed(target)) Objects.seal(node);
-		else Objects.preventExtensions(node);
-	}
-
-	/**
-	 * Make a change through a stand-in on the node it stands for (see {@link applyStandInChange}).
-	 * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
-	 * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
-	 * @param {boolean} replayed - Whether the change is replayed after the node loaded.
-	 * @param {Array<{owner: object, generation: number}>|null} holders - The nodes a replayed change was queued on.
-	 * @returns {boolean} Whether the node took the change.
-	 * @throws {TypeError} When the chain does not reach an object (as in eager mode), or a replayed change is refused.
-	 * @private
-	 */
-	function makeStandInChange(wrapper, change, replayed, holders) {
-		let node = wrapper.createProxy();
-		for (let ofIndex = 0, ofList = change.chain; ofIndex < ofList.length; ofIndex++) {
-			const key = ofList[ofIndex];
-			node = node[key];
-		}
-		// The node itself, as a module's change through `self` reaches it, rather than the view the walk hands the module
-		// reading: the node's own traps judge the change as the module making it (#625).
-		node = nodeBehind(node);
-		const { op, prop, payload } = change;
-		// A node further down that has not loaded either takes the change once it has: made on it now, the module's own
-		// members it adopts as it loads would replace what was written (#653).
-		const standIn = WeakSetMethods.has(STAND_INS, node);
-		const nodeWrapper = standIn ? null : resolveWrapper(node);
-		if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
-			replayHolders = holders;
-			try {
-				queueStandInChange(nodeWrapper, { chain: [], op, prop, payload });
-			} finally {
-				replayHolders = null;
-			}
-			if (!nodeWrapper.____slothletInternal.state.inFlight) PromiseMethods.catch(nodeWrapper.___materialize(), () => {});
-			return true;
-		}
-		// Handed to a stand-in, the change is queued, or made at once through applyStandInChange if its node loaded
-		// since: either keeps the holders. Made on the node, it runs the node's code, which hands nothing on.
-		if (standIn) replayHolders = holders;
-		if (op === "lock") {
-			lockAsStandIn(node, payload);
-			return true;
-		}
-		if (replayed) {
-			if (op === "set") node[prop] = payload;
-			else if (op === "defineProperty") Objects.defineProperty(node, prop, payload);
-			else if (op === "deleteProperty") delete node[prop];
-			else Objects.setPrototypeOf(node, payload);
-			return true;
-		}
-		if (op === "set") return Reflect.set(node, prop, payload);
-		if (op === "defineProperty") return Reflect.defineProperty(node, prop, payload);
-		if (op === "deleteProperty") return Reflect.deleteProperty(node, prop);
-		return Reflect.setPrototypeOf(node, payload);
-	}
-
-	// No code the walk or the change runs (a getter, a setter, a trap of the module's) hands a change on as this one.
-	const outer = replayHolders;
-	replayHolders = null;
-	try {
-		return makeStandInChange(wrapper, change, replayed, holders);
-	} finally {
-		replayHolders = outer;
-	}
-}
-
-/**
- * A change made through a stand-in, with who made it: it is made as them later, whoever's access leads to it (#653).
- * Code no call accounts for is made as the host, which hands it no module's standing: what it writes counts as handed
- * to the node's module (#597).
- * @param {object} wrapper - The wrapper the stand-in waits for.
- * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
- * @returns {object} The change, with its writer and the writer's ceiling.
- * @private
- */
-function captureChange(wrapper, change) {
-	const { contextManager, instanceID } = wrapper.slothlet;
-	const identity = contextManager.getCallerIdentity(instanceID);
-	const writer = identity?.unresolved ? null : (identity?.currentWrapper ?? null);
-	// The flow it was made in goes with it, so a setter it runs reads that flow's context, not the loader's.
-	const flow = contextManager.snapshotFlow(instanceID);
-	return { ...change, writer, ceiling: writer ? (identity.ceiling ?? null) : null, flow, by: changeAuthor(identity) };
-}
-
-/**
  * Who made a change through a stand-in, as {@link captureChange} records it and a stand-in's `in` compares it
  * (#653): the module, for module code (any of its functions); the host; or, for code no call accounts for, a value of
  * its own that matches nothing, so such code and the host never see each other's queued members.
@@ -276,47 +159,6 @@ function changeAuthor(identity) {
  * @private
  */
 let replayHolders = null;
-
-/**
- * Make a change captured through a stand-in, on its node, as the code that made it (#653). One the node refuses is
- * reported twice, so that it is never lost: a warning names it at once (unless the instance is silent), and the next
- * await or call through that node rejects with `LAZY_WRITE_REFUSED` (see {@link takeRefusedChange}).
- * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
- * @param {object} change - The change, as {@link captureChange} returned it.
- * @param {number} generation - The node's change generation when the load making the change started.
- * @returns {void}
- * @private
- */
-function makeQueuedChange(wrapper, change, generation) {
-	const { contextManager, instanceID } = wrapper.slothlet;
-	// A change moved down from a node above keeps the nodes it was queued on before: one replaced while it loaded
-	// makes the refusal no longer anyone's.
-	const holders = concatLists(change.holders ?? [], [{ owner: wrapper, generation }]);
-	const make = () =>
-		contextManager.runInContext(
-			instanceID,
-			() => applyStandInChange(wrapper, change, true, holders),
-			null,
-			[],
-			change.writer,
-			true,
-			change.writer === null,
-			change.ceiling
-		);
-	try {
-		if (change.flow) contextManager.runInSnapshotFlowSync(instanceID, change.flow, make);
-		else make();
-	} catch (error) {
-		const apiPath = standInPath(wrapper, change.chain);
-		const operation = change.op === "lock" ? "preventExtensions" : change.op;
-		new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { path: segmentsOf(apiPath), operation }, { cause: error });
-		const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { path: segmentsOf(apiPath), operation }, { cause: error });
-		if (!WeakMapMethods.has(REFUSED_CHANGES, wrapper.slothlet)) WeakMapMethods.set(REFUSED_CHANGES, wrapper.slothlet, []);
-		// Recorded for the nodes the loads were for: one replaced while it loaded (reloaded, or rebuilt away) does not
-		// hand the refusal to the node that took its place.
-		listPush(WeakMapMethods.get(REFUSED_CHANGES, wrapper.slothlet), { path: apiPath, error: refused, holders });
-	}
-}
 
 /**
  * Keep only the refusals whose nodes are all still the nodes the change was queued on (#653).
@@ -349,45 +191,6 @@ function dropRefusedChanges(wrapper) {
 	const refused = WeakMapMethods.get(REFUSED_CHANGES, wrapper.slothlet);
 	if (!refused?.length) return;
 	pruneRefusedChanges(refused, wrapper);
-}
-
-/**
- * Queue a change made through a stand-in whose node has not loaded, with who made it: it is made as them once the node
- * loads (see {@link replayStandInChanges}), whoever loads it (#653). Code no call accounts for is made as the
- * host, which hands it no module's standing: what it writes counts as handed to the node's module (#597).
- * @param {object} wrapper - The wrapper the stand-in waits for.
- * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
- * @returns {void}
- * @private
- */
-function queueStandInChange(wrapper, change) {
-	if (!wrapper.____slothletInternal.pendingChanges) wrapper.____slothletInternal.pendingChanges = [];
-	const captured = captureChange(wrapper, change);
-	// A replayed change that moves down to a node further down keeps the nodes it was queued on before.
-	if (replayHolders) captured.holders = replayHolders;
-	listPush(wrapper.____slothletInternal.pendingChanges, captured);
-	if (!WeakMapMethods.has(PENDING_CHANGES, wrapper.slothlet)) WeakMapMethods.set(PENDING_CHANGES, wrapper.slothlet, new Set());
-	SetMethods.add(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
-}
-
-/**
- * Retire the refusals of a node a reload rebuilt away, and of the loaded nodes below it (#653): the node built in
- * its place is another, so a refusal a load of the old one records later is not its own.
- * @param {object} wrapper - The replaced node's wrapper.
- * @param {Set<object>} [seen] - Wrappers already retired.
- * @returns {void}
- * @private
- */
-function retireChanges(wrapper, seen = new Set()) {
-	if (SetMethods.has(seen, wrapper)) return;
-	SetMethods.add(seen, wrapper);
-	wrapper.____slothletInternal.changeGeneration++;
-	dropRefusedChanges(wrapper);
-	for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
-		const key = ofList[ofIndex];
-		const child = resolveWrapper(wrapper[key]);
-		if (child) retireChanges(child, seen);
-	}
 }
 
 /**
@@ -573,22 +376,18 @@ export function WaitingLayer(Base) {
 					REFUSED_CHANGES,
 					PENDING_CHANGES,
 					dropRefusedChanges,
-					retireChanges,
 					checkedStandIn,
 					RESTART_FORWARD_TRAPS,
-					makeQueuedChange,
 					takeRefusedChange
 				});
 				Base.define("stand", { inPath: standInPath, inNode: standInNode, inMember: standInMember });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
 					definitionBindsTarget = methods.values.definitionBindsTarget;
-					inspectReaderIsModule = methods.inspect.readerIsModule;
 					inspectSafe = methods.inspect.safe;
 					isFixedOnTarget = methods.is.fixedOnTarget;
 					isFixedReadOnly = methods.is.fixedReadOnly;
 					isTerminalData = methods.is.terminalData;
-					markAssignedData = methods.values.markAssignedData;
 					nodeInCycle = methods.node.inCycle;
 					liveThis = methods.nodes.liveThis;
 					makerOf = methods.nodes.makerOf;
@@ -596,15 +395,12 @@ export function WaitingLayer(Base) {
 					STAND_IN_UNLOADED = methods.nodes.STAND_IN_UNLOADED;
 					WAITING_CHAINS = methods.nodes.WAITING_CHAINS;
 					rulesShared = methods.rules.rulesShared;
-					accessAsKept = methods.access.asKept;
 					assertOwnedWriteAt = methods.rules.assertOwnedWriteAt;
 					canDefine = methods.rules.canDefine;
-					enforceCapturedPair = methods.rules.enforceCapturedPair;
 					enforceCodeMember = methods.rules.enforceCodeMember;
 					enforceRead = methods.rules.enforceRead;
 					hostRunDefiner = methods.rules.hostRunDefiner;
 					onImpl = methods.rules.onImpl;
-					readImplMember = methods.read.implMember;
 					readOnBehalf = methods.read.onBehalf;
 					takeCapturedAccess = methods.rules.takeCapturedAccess;
 					withRestartForwarding = methods.rules.withRestartForwarding;
@@ -623,6 +419,7 @@ export function WaitingLayer(Base) {
 					STAND_IN_OWN_READS = methods.uw.STAND_IN_OWN_READS;
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					registerProxy = methods.values.registerProxy;
+					isWrapper = methods.brand.isWrapper;
 				});
 			}
 
@@ -799,11 +596,11 @@ export function WaitingLayer(Base) {
 						return runSink({ op: "prototype", prototype: payload });
 					}
 					// An object written through the stand-in is data, as one written to the loaded node is (#826).
-					if (op === "set") markAssignedData(wrapper, unwrapSelfView(payload));
-					else if (op === "defineProperty" && "value" in payload) markAssignedData(wrapper, unwrapSelfView(payload.value));
+					if (op === "set") wrapper.___markAssignedData(unwrapSelfView(payload));
+					else if (op === "defineProperty" && "value" in payload) wrapper.___markAssignedData(unwrapSelfView(payload.value));
 					const change = { chain: copyList(propChain), op, prop, payload };
-					if (wrapper.____slothletInternal.state.materialized) return applyStandInChange(wrapper, change, false, replayHolders);
-					queueStandInChange(wrapper, change);
+					if (wrapper.____slothletInternal.state.materialized) return wrapper.___applyStandInChange(change, false, replayHolders);
+					wrapper.___queueStandInChange(change);
 					return true;
 				};
 				const waitingHandler = {
@@ -862,11 +659,11 @@ export function WaitingLayer(Base) {
 						if (Reflect.isExtensible(target)) {
 							const change = { chain: copyList(propChain), op: "lock", prop: null, payload: target };
 							if (wrapper.____slothletInternal.state.materialized) {
-								const queued = captureChange(wrapper, change);
+								const queued = wrapper.___captureChange(change);
 								const generation = wrapper.____slothletInternal.changeGeneration;
 								// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
-								queueMicrotask(pinToCurrentCaller(() => makeQueuedChange(wrapper, queued, generation)));
-							} else queueStandInChange(wrapper, change);
+								queueMicrotask(pinToCurrentCaller(() => wrapper.___makeQueuedChange(queued, generation)));
+							} else wrapper.___queueStandInChange(change);
 						}
 						// The stand-in reports no prototype; closed, its target must hold the one it reports (proxy invariant).
 						Reflect.setPrototypeOf(target, null);
@@ -952,7 +749,7 @@ export function WaitingLayer(Base) {
 											// Delegate this chainProp and all remaining to custom proxy. The first read runs the module's
 											// trap, read for the reader the chain was read by as a call of the node, as getTrap reads it (#632).
 											let result = readOnBehalf(__readGateCaller ?? null, () => {
-												const read = readImplMember(current, chainProp);
+												const read = current.___readImplMember(chainProp);
 												enforceCodeMember(current, layerMethodOriginal(read) ?? read);
 												return read;
 											});
@@ -1130,7 +927,7 @@ export function WaitingLayer(Base) {
 								if (!end) return standInMember(node, prop);
 								// A kept stand-in reads for the module that kept it: the read of the node says so to the node's own
 								// check, as a kept node's read does, so code the read runs (a getter) cannot make it anyone else's (#661).
-								return accessAsKept(end, kept.reader, () => standInMember(node, prop));
+								return end.___accessAsKept(kept.reader, () => standInMember(node, prop));
 							}
 						}
 
@@ -1174,7 +971,7 @@ export function WaitingLayer(Base) {
 									if (current === null || current === undefined) return undefined;
 									current = current[chainProp];
 								}
-								return inspectSafe(current, [], inspectReaderIsModule(wrapper), wrapper.slothlet);
+								return inspectSafe(current, [], wrapper.___inspectReaderIsModule(), wrapper.slothlet);
 							}
 							// `impl` is always non-null when `state.materialized` is true; `materialized=true && !impl` is a structurally impossible state.
 							/* v8 ignore next */
@@ -1295,7 +1092,7 @@ export function WaitingLayer(Base) {
 								util.types.isProxy(current.____slothletInternal.impl)
 							) {
 								// A module's own Proxy answers as that module (#597).
-								return readImplMember(current, prop);
+								return current.___readImplMember(prop);
 							}
 
 							// Now check if the final prop exists in the resolved wrapper.
@@ -1614,7 +1411,7 @@ export function WaitingLayer(Base) {
 									if (anyRunOpen() && typeof lastObject === "object" && builtinKind(lastObject) !== null)
 										checkpointHandout(wrapper.slothlet, lastObject);
 									// An accessor or a Proxy of the module's runs as that module (#597).
-									current = readImplMember(currentWrapper, prop);
+									current = currentWrapper.___readImplMember(prop);
 									// A built-in handed out as itself is saved first for the runs open (see helpers/run-snapshot).
 									if (anyRunOpen() && current !== null && typeof current === "object" && builtinKind(current) !== null)
 										checkpointHandout(wrapper.slothlet, current);
@@ -1680,8 +1477,7 @@ export function WaitingLayer(Base) {
 									ArrayMethods.join(filterList(concatLists([wrapper.____slothletInternal.apiPath], propChain), Boolean), ".");
 								// Lazy captured chain: thread the resolved leaf's call args for resource-scoped conditions (#455).
 								// This apply is already async, so a stale principal (#459) is simply awaited here.
-								const ___principalGate = enforceCapturedPair(
-									wrapper,
+								const ___principalGate = wrapper.___enforceCapturedPair(
 									___creationCallerWrapper,
 									___creationCeiling,
 									___targetPath,
@@ -1822,6 +1618,209 @@ export function WaitingLayer(Base) {
 				MapMethods.set(cache, cacheKey, waitingProxy);
 
 				return waitingProxy;
+			}
+
+			/**
+			 * Make a change through a stand-in on the node it stands for, through the node's own traps, as the same change made on
+			 * the node itself would be (#653). The chain is read from the wrapper the stand-in waits for, so a node further down
+			 * that has not loaded either hands out its own stand-in, which queues the change in turn.
+			 *
+			 * Made as it is asked for, the change answers as a trap does (`false` when the node refuses it). Replayed once the node
+			 * has loaded, nothing is left to answer to, so a refusal throws, as the same change does in strict-mode code.
+			 * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
+			 * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
+			 * @param {boolean} replayed - Whether the change is replayed after the node loaded.
+			 * @returns {boolean} Whether the node took the change.
+			 * @throws {TypeError} When the chain does not reach an object (as in eager mode), or a replayed change is refused.
+			 * @private
+			 */
+			___applyStandInChange(change, replayed, holders = null) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/waiting", import.meta.url);
+				const wrapper = this;
+				/**
+				 * Close a node the way a stand-in for it was closed (#653): frozen when the stand-in's target reads as frozen, sealed
+				 * when it reads as sealed, and closed to extension otherwise. The target's own members are fixed so that only a
+				 * freeze reads as one (see ___createWaitingProxy). The node closes through its own traps, as a node closed directly.
+				 * @param {object} node - The node.
+				 * @param {Function} target - The stand-in's target, closed.
+				 * @returns {void}
+				 * @throws {TypeError} When the node refuses to close.
+				 * @private
+				 */
+				function lockAsStandIn(node, target) {
+					if (Objects.isFrozen(target)) Objects.freeze(node);
+					else if (Objects.isSealed(target)) Objects.seal(node);
+					else Objects.preventExtensions(node);
+				}
+
+				/**
+				 * Make a change through a stand-in on the node it stands for (see {@link applyStandInChange}).
+				 * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
+				 * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
+				 * @param {boolean} replayed - Whether the change is replayed after the node loaded.
+				 * @param {Array<{owner: object, generation: number}>|null} holders - The nodes a replayed change was queued on.
+				 * @returns {boolean} Whether the node took the change.
+				 * @throws {TypeError} When the chain does not reach an object (as in eager mode), or a replayed change is refused.
+				 * @private
+				 */
+				function makeStandInChange(wrapper, change, replayed, holders) {
+					let node = wrapper.createProxy();
+					for (let ofIndex = 0, ofList = change.chain; ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
+						node = node[key];
+					}
+					// The node itself, as a module's change through `self` reaches it, rather than the view the walk hands the module
+					// reading: the node's own traps judge the change as the module making it (#625).
+					node = nodeBehind(node);
+					const { op, prop, payload } = change;
+					// A node further down that has not loaded either takes the change once it has: made on it now, the module's own
+					// members it adopts as it loads would replace what was written (#653).
+					const standIn = WeakSetMethods.has(STAND_INS, node);
+					const nodeWrapper = standIn ? null : resolveWrapper(node);
+					if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
+						replayHolders = holders;
+						try {
+							nodeWrapper.___queueStandInChange({ chain: [], op, prop, payload });
+						} finally {
+							replayHolders = null;
+						}
+						if (!nodeWrapper.____slothletInternal.state.inFlight) PromiseMethods.catch(nodeWrapper.___materialize(), () => {});
+						return true;
+					}
+					// Handed to a stand-in, the change is queued, or made at once through applyStandInChange if its node loaded
+					// since: either keeps the holders. Made on the node, it runs the node's code, which hands nothing on.
+					if (standIn) replayHolders = holders;
+					if (op === "lock") {
+						lockAsStandIn(node, payload);
+						return true;
+					}
+					if (replayed) {
+						if (op === "set") node[prop] = payload;
+						else if (op === "defineProperty") Objects.defineProperty(node, prop, payload);
+						else if (op === "deleteProperty") delete node[prop];
+						else Objects.setPrototypeOf(node, payload);
+						return true;
+					}
+					if (op === "set") return Reflect.set(node, prop, payload);
+					if (op === "defineProperty") return Reflect.defineProperty(node, prop, payload);
+					if (op === "deleteProperty") return Reflect.deleteProperty(node, prop);
+					return Reflect.setPrototypeOf(node, payload);
+				}
+
+				// No code the walk or the change runs (a getter, a setter, a trap of the module's) hands a change on as this one.
+				const outer = replayHolders;
+				replayHolders = null;
+				try {
+					return makeStandInChange(wrapper, change, replayed, holders);
+				} finally {
+					replayHolders = outer;
+				}
+			}
+
+			/**
+			 * A change made through a stand-in, with who made it: it is made as them later, whoever's access leads to it (#653).
+			 * Code no call accounts for is made as the host, which hands it no module's standing: what it writes counts as handed
+			 * to the node's module (#597).
+			 * @param {object} wrapper - The wrapper the stand-in waits for.
+			 * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
+			 * @returns {object} The change, with its writer and the writer's ceiling.
+			 * @private
+			 */
+			___captureChange(change) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/waiting", import.meta.url);
+				const wrapper = this;
+				const { contextManager, instanceID } = wrapper.slothlet;
+				const identity = contextManager.getCallerIdentity(instanceID);
+				const writer = identity?.unresolved ? null : (identity?.currentWrapper ?? null);
+				// The flow it was made in goes with it, so a setter it runs reads that flow's context, not the loader's.
+				const flow = contextManager.snapshotFlow(instanceID);
+				return { ...change, writer, ceiling: writer ? (identity.ceiling ?? null) : null, flow, by: changeAuthor(identity) };
+			}
+
+			/**
+			 * Make a change captured through a stand-in, on its node, as the code that made it (#653). One the node refuses is
+			 * reported twice, so that it is never lost: a warning names it at once (unless the instance is silent), and the next
+			 * await or call through that node rejects with `LAZY_WRITE_REFUSED` (see {@link takeRefusedChange}).
+			 * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
+			 * @param {object} change - The change, as {@link captureChange} returned it.
+			 * @param {number} generation - The node's change generation when the load making the change started.
+			 * @returns {void}
+			 * @private
+			 */
+			___makeQueuedChange(change, generation) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/waiting", import.meta.url);
+				const wrapper = this;
+				const { contextManager, instanceID } = wrapper.slothlet;
+				// A change moved down from a node above keeps the nodes it was queued on before: one replaced while it loaded
+				// makes the refusal no longer anyone's.
+				const holders = concatLists(change.holders ?? [], [{ owner: wrapper, generation }]);
+				const make = () =>
+					contextManager.runInContext(
+						instanceID,
+						() => wrapper.___applyStandInChange(change, true, holders),
+						null,
+						[],
+						change.writer,
+						true,
+						change.writer === null,
+						change.ceiling
+					);
+				try {
+					if (change.flow) contextManager.runInSnapshotFlowSync(instanceID, change.flow, make);
+					else make();
+				} catch (error) {
+					const apiPath = standInPath(wrapper, change.chain);
+					const operation = change.op === "lock" ? "preventExtensions" : change.op;
+					new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { path: segmentsOf(apiPath), operation }, { cause: error });
+					const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { path: segmentsOf(apiPath), operation }, { cause: error });
+					if (!WeakMapMethods.has(REFUSED_CHANGES, wrapper.slothlet)) WeakMapMethods.set(REFUSED_CHANGES, wrapper.slothlet, []);
+					// Recorded for the nodes the loads were for: one replaced while it loaded (reloaded, or rebuilt away) does not
+					// hand the refusal to the node that took its place.
+					listPush(WeakMapMethods.get(REFUSED_CHANGES, wrapper.slothlet), { path: apiPath, error: refused, holders });
+				}
+			}
+
+			/**
+			 * Queue a change made through a stand-in whose node has not loaded, with who made it: it is made as them once the node
+			 * loads (see {@link replayStandInChanges}), whoever loads it (#653). Code no call accounts for is made as the
+			 * host, which hands it no module's standing: what it writes counts as handed to the node's module (#597).
+			 * @param {object} wrapper - The wrapper the stand-in waits for.
+			 * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
+			 * @returns {void}
+			 * @private
+			 */
+			___queueStandInChange(change) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/waiting", import.meta.url);
+				const wrapper = this;
+				if (!wrapper.____slothletInternal.pendingChanges) wrapper.____slothletInternal.pendingChanges = [];
+				const captured = wrapper.___captureChange(change);
+				// A replayed change that moves down to a node further down keeps the nodes it was queued on before.
+				if (replayHolders) captured.holders = replayHolders;
+				listPush(wrapper.____slothletInternal.pendingChanges, captured);
+				if (!WeakMapMethods.has(PENDING_CHANGES, wrapper.slothlet)) WeakMapMethods.set(PENDING_CHANGES, wrapper.slothlet, new Set());
+				SetMethods.add(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
+			}
+
+			/**
+			 * Retire the refusals of a node a reload rebuilt away, and of the loaded nodes below it (#653): the node built in
+			 * its place is another, so a refusal a load of the old one records later is not its own.
+			 * @param {object} wrapper - The replaced node's wrapper.
+			 * @param {Set<object>} [seen] - Wrappers already retired.
+			 * @returns {void}
+			 * @private
+			 */
+			___retireChanges(seen = new Set()) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/waiting", import.meta.url);
+				const wrapper = this;
+				if (SetMethods.has(seen, wrapper)) return;
+				SetMethods.add(seen, wrapper);
+				wrapper.____slothletInternal.changeGeneration++;
+				dropRefusedChanges(wrapper);
+				for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					const child = resolveWrapper(wrapper[key]);
+					if (child) child.___retireChanges(seen);
+				}
 			}
 		}
 	);

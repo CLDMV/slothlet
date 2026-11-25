@@ -72,11 +72,9 @@ let trustedRootOwn,
 	snapshotBarrier,
 	PENDING_CHANGES,
 	dropRefusedChanges,
-	retireChanges,
 	ASSIGNED_DATA,
 	holdsAssignedData,
 	ADOPTED_ACCESSORS,
-	runAccessor,
 	fillPrototype,
 	RECONSTRUCTED_FROM,
 	moduleObjectFor,
@@ -105,7 +103,7 @@ let trustedRootOwn,
 	captureNode,
 	checkpointNodeBuiltins,
 	checkpointNodePrototypes,
-	makeQueuedChange;
+	isWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -159,8 +157,8 @@ function adoptAccessor(wrapper, { get, set }) {
 		return adopted;
 	};
 	return {
-		get: adopt(get, "get", (original) => () => runAccessor(wrapper, original, node(), [])),
-		set: adopt(set, "set", (original) => (value) => runAccessor(wrapper, original, node(), [value]))
+		get: adopt(get, "get", (original) => () => wrapper.___runAccessor(original, node(), [])),
+		set: adopt(set, "set", (original) => (value) => wrapper.___runAccessor(original, node(), [value]))
 	};
 }
 
@@ -234,31 +232,6 @@ function adoptArrayIntegrity(wrapper) {
 }
 
 /**
- * Whether a definition on a node leaves the member fixed: read-only and non-configurable once applied, taking what the
- * definition leaves out from the member as the node holds it.
- * @param {object} wrapper - The node's wrapper.
- * @param {object} target - The node's proxy target.
- * @param {string|symbol} prop - The member.
- * @param {PropertyDescriptor} descriptor - The definition.
- * @returns {boolean} True when the member ends up fixed.
- * @private
- */
-function definitionFixes(wrapper, target, prop, descriptor) {
-	const current = Reflect.getOwnPropertyDescriptor(wrapper, prop);
-	const shell = target === wrapper ? undefined : Reflect.getOwnPropertyDescriptor(target, prop);
-	const known = shell ?? current;
-	const configurable = "configurable" in descriptor ? descriptor.configurable : known ? known.configurable : false;
-	const writable =
-		"writable" in descriptor
-			? descriptor.writable
-			: known && "value" in known
-				? !(wrapper.____slothletInternal.readOnlyKeys ? SetMethods.has(wrapper.____slothletInternal.readOnlyKeys, prop) : false) &&
-					(shell ? shell.writable : true)
-				: false;
-	return !configurable && !writable;
-}
-
-/**
  * Bring an array member's shell in step with its array when the module changed the array's integrity itself
  * (froze or sealed its own export after the node was read): the node then reports what the array is.
  *
@@ -302,7 +275,7 @@ export function MaterializeLayer(Base) {
 	return Base.layer(
 		class Materialize extends Base {
 			static {
-				Base.define("materialize", { defineAdoptedAccessor, adoptAccessor, adoptArrayIntegrity, definitionFixes, syncArrayIntegrity });
+				Base.define("materialize", { defineAdoptedAccessor, adoptAccessor, adoptArrayIntegrity, syncArrayIntegrity });
 				Base.define("impl", { toAdopt: implToAdopt });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
@@ -324,7 +297,6 @@ export function MaterializeLayer(Base) {
 					forwardHandlerTo = methods.rules.forwardHandlerTo;
 					frameworkWrite = methods.framework.write;
 					registerLeafFunction = methods.rules.registerLeafFunction;
-					runAccessor = methods.run.accessor;
 					withRestartForwarding = methods.rules.withRestartForwarding;
 					fillPrototype = methods.run.fillPrototype;
 					snapshotBarrier = methods.run.snapshotBarrier;
@@ -333,7 +305,6 @@ export function MaterializeLayer(Base) {
 					membrane = methods.membrane.membrane;
 					PENDING_CHANGES = methods.waiting.PENDING_CHANGES;
 					dropRefusedChanges = methods.waiting.dropRefusedChanges;
-					retireChanges = methods.waiting.retireChanges;
 					createNamedProxyTarget = methods.uw.createNamedProxyTarget;
 					hasThenMember = methods.has.thenMember;
 					isAwaitableThen = methods.is.awaitableThen;
@@ -349,7 +320,7 @@ export function MaterializeLayer(Base) {
 					captureNode = methods.run.captureNode;
 					checkpointNodeBuiltins = methods.checkpoint.nodeBuiltins;
 					checkpointNodePrototypes = methods.checkpoint.nodePrototypes;
-					makeQueuedChange = methods.waiting.makeQueuedChange;
+					isWrapper = methods.brand.isWrapper;
 				});
 			}
 
@@ -1216,7 +1187,7 @@ export function MaterializeLayer(Base) {
 					WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet) == null
 						? undefined
 						: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
-					for (let i = 0; i < pending.length; i++) makeQueuedChange(wrapper, pending[i], generation);
+					for (let i = 0; i < pending.length; i++) wrapper.___makeQueuedChange(pending[i], generation);
 				}
 
 				/**
@@ -2124,7 +2095,7 @@ export function MaterializeLayer(Base) {
 						// would never fire (#340).
 						// A child wrapper this one replaces (a lazy reload builds fresh nodes) is another node from now on (#653).
 						const displaced = existingChild ? resolveWrapper(existingChild) : null;
-						if (displaced) retireChanges(displaced);
+						if (displaced) displaced.___retireChanges();
 						wrapped = this.___createChildWrapper(key, value, adoptVisited, this.____slothletInternal.deferChildAdopt);
 						// Symbol keys are not used as API module names in practice.
 						/* v8 ignore next */
@@ -2627,6 +2598,33 @@ export function MaterializeLayer(Base) {
 				// Return proxy to maintain consistency with external assignments
 				// Children are stored as proxies on wrapper, getTrap returns them as-is
 				return nestedWrapper.createProxy();
+			}
+
+			/**
+			 * Whether a definition on a node leaves the member fixed: read-only and non-configurable once applied, taking what the
+			 * definition leaves out from the member as the node holds it.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {object} target - The node's proxy target.
+			 * @param {string|symbol} prop - The member.
+			 * @param {PropertyDescriptor} descriptor - The definition.
+			 * @returns {boolean} True when the member ends up fixed.
+			 * @private
+			 */
+			___definitionFixes(target, prop, descriptor) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/materialize", import.meta.url);
+				const wrapper = this;
+				const current = Reflect.getOwnPropertyDescriptor(wrapper, prop);
+				const shell = target === wrapper ? undefined : Reflect.getOwnPropertyDescriptor(target, prop);
+				const known = shell ?? current;
+				const configurable = "configurable" in descriptor ? descriptor.configurable : known ? known.configurable : false;
+				const writable =
+					"writable" in descriptor
+						? descriptor.writable
+						: known && "value" in known
+							? !(wrapper.____slothletInternal.readOnlyKeys ? SetMethods.has(wrapper.____slothletInternal.readOnlyKeys, prop) : false) &&
+								(shell ? shell.writable : true)
+							: false;
+				return !configurable && !writable;
 			}
 		}
 	);

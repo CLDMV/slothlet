@@ -91,12 +91,10 @@ let trustedRootOwn,
 	isDataMemberNode,
 	isBuiltinFunctionMember,
 	ADOPTED_ACCESSORS,
-	moduleInheritance,
 	PINNED_CODE_MEMBERS,
 	checkedStandIn,
 	behindPinnedCode,
 	prototypeGiven,
-	nodeInherits,
 	INTRINSICS,
 	isSharedValue,
 	isSlothletValue,
@@ -119,8 +117,6 @@ let trustedRootOwn,
 	ANY_MEMBER_SEGMENT,
 	memberPathOf,
 	rootGate,
-	holdsValue,
-	heldValue,
 	capturedViewShadows,
 	capturedView,
 	isRestartStale,
@@ -130,9 +126,7 @@ let trustedRootOwn,
 	UnifiedWrapper,
 	resolveWrapper,
 	registeredWrapper,
-	ownInstances,
-	ownArguments,
-	crossArgumentsFrom;
+	isWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -676,28 +670,6 @@ function takeCapturedAccess(wrapper) {
 }
 
 /**
- * Make an access into `wrapper` for `reader`, a module that kept a node standing for it: where the stack cannot
- * say who is accessing, the check of `wrapper` takes it as `reader`'s (#661).
- * @param {object} wrapper - The node being accessed.
- * @param {object} reader - The module the kept node reads for.
- * @param {function(): *} access - The access.
- * @returns {*} What the access gave.
- * @private
- *
- * @example
- * accessAsKept(inner, capturedCaller, () => Reflect.get(child, "n"));
- */
-function accessAsKept(wrapper, reader, access) {
-	const previous = rulesShared.capturedAccess;
-	rulesShared.capturedAccess = { wrapper, reader };
-	try {
-		return access();
-	} finally {
-		rulesShared.capturedAccess = previous;
-	}
-}
-
-/**
  * The node or view the next trap is entered on with an access handed to it (see {@link readWithAccess}).
  * @type {object|null}
  * @private
@@ -1159,63 +1131,6 @@ function readOnBehalf(reader, read) {
 }
 
 /**
- * Run a module's getter or setter as the module it belongs to, the way a call to one of its functions through `self`
- * runs (#597): the reader has to be allowed to call the node holding it, and the node is who runs, with no ceiling
- * from whoever reads or writes (see {@link runAsMaker}).
- *
- * @param {object} wrapper - The wrapper holding the accessor.
- * @param {Function} accessor - The getter or setter.
- * @param {*} thisArg - Its receiver.
- * @param {Array<*>} args - Its arguments.
- * @param {boolean} [attribute=true] - Hand what it returns back as the module's (see {@link attributeResult}).
- * @returns {*} What it returned.
- * @throws {SlothletError} PERMISSION_DENIED when who is reading cannot be told.
- * @private
- */
-function runAccessor(wrapper, accessor, thisArg, args, attribute = true) {
-	const contextManager = wrapper.slothlet.contextManager;
-	if (!contextManager?.runInContext || !wrapper.slothlet.instanceID) return Reflect.apply(accessor, thisArg, args);
-	const reader = accessorReader !== undefined ? accessorReader : contextManager.getCallerIdentity?.(wrapper.slothlet.instanceID);
-	// Code no call accounts for reads only through a node a module kept, as that module (#661).
-	let kept = null;
-	if (accessorReader === undefined && reader?.unresolved && reader.unaccounted) {
-		if (rulesShared.keptAccessorRead?.wrapper === wrapper) {
-			kept = rulesShared.keptAccessorRead;
-			rulesShared.keptAccessorRead = null;
-		} else kept = takeCapturedAccess(wrapper);
-	}
-	if (reader?.unresolved && !kept) {
-		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(wrapper.____slothletInternal.apiPath) });
-	}
-	// Running it is calling the module's code, so the reader has to be allowed to call the node, as a call through
-	// `self` is checked (a reader completed on behalf of is checked as that reader).
-	if (accessorReader === undefined) enforcePermission(wrapper, args, false, kept);
-	else if (accessorReader?.currentWrapper) enforceAccessorReader(wrapper, accessorReader, args);
-	return runAsMaker(wrapper, accessor, thisArg, args, attribute, true);
-}
-
-/**
- * Check a reader whose read is completed on its behalf (see {@link accessorReader}) may call the node whose accessor
- * the read runs, and every call of the ceiling it read under (#597).
- * @param {object} wrapper - The node's wrapper.
- * @param {object} reader - The reader's identity snapshot.
- * @param {Array<*>} args - The accessor's arguments.
- * @returns {void}
- * @throws {SlothletError} PERMISSION_DENIED when it may not.
- * @private
- */
-function enforceAccessorReader(wrapper, reader, args) {
-	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
-	if (!permissionManager?.isEnabled()) return;
-	const targetPath = wrapper.____slothletInternal.apiPath;
-	const runtimeContext = reader.context ?? null;
-	for (let ofIndex = 0, ofList = concatLists([reader.currentWrapper], identityCeilings(reader)); ofIndex < ofList.length; ofIndex++) {
-		const caller = ofList[ofIndex];
-		enforceCallAs(wrapper, permissionManager, caller, targetPath, runtimeContext, { args, target: targetPath }, false);
-	}
-}
-
-/**
  * Check that whoever reads a member of a node holding the module's code — a static method, a function's own
  * `prototype` and the methods on it, a member the module defined on its function — may call the node (#632). The
  * member is handed out as it is, not as a node of its own, so it carries no gate when it is called: reading it is
@@ -1234,53 +1149,7 @@ function enforceCodeMember(wrapper, value, kept = null) {
 	if (!permissionManager?.isEnabled()) return;
 	if (!memberHoldsCode(value, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet))) return;
 	if (accessorReader === undefined) enforcePermission(wrapper, [], false, kept);
-	else if (accessorReader?.currentWrapper) enforceAccessorReader(wrapper, accessorReader, []);
-}
-
-/**
- * The accessor a wrapper's impl holds or inherits for a key, found by descriptors alone so nothing of the impl's
- * runs to find it (#597): `{ descriptor }` for an accessor adoption did not put there, `{ proxy: true }` when the
- * walk reaches a module's own Proxy before any descriptor (its traps answer the key), and null otherwise —
- * a data member, no member, or `Object.prototype`'s own accessors (`__proto__`), which are left as they are.
- * @param {object} wrapper - The node's wrapper.
- * @param {PropertyKey} prop - The member's key.
- * @returns {{descriptor?: PropertyDescriptor, receiver?: object, proxy?: boolean}|null} What answers the key, with the
- *   receiver an accessor runs on.
- * @private
- */
-function implAccessor(wrapper, prop) {
-	// What the accessor runs on: the impl, or the value under a composition layer that answers the key (see
-	// layerForwards), as plain JS would read the key there.
-	let receiver = wrapper.____slothletInternal.impl;
-	try {
-		for (
-			let holder = wrapper.____slothletInternal.impl, depth = 0;
-			holder !== null && holder !== undefined && holder !== Objects.prototype && depth < 64;
-			depth++
-		) {
-			// A module's own Proxy, or the stand-in slothlet hands it out as (#597), behind a composition layer or not, answers
-			// with the module's traps: reading through it is a run of the module's code (#632).
-			if (util.types.isProxy(holder)) {
-				if (isModuleProxy(holder) || isModuleStandIn(holder)) return { proxy: true };
-				// A composition layer over a plain value (named exports put onto a module's instance) answers a key it
-				// neither holds nor hides from that value, which its getters and setters then run on, as on the value
-				// itself (#632).
-				if (!layerForwards(holder, prop)) return null;
-				holder = layerUnderlying(holder);
-				receiver = holder;
-				continue;
-			}
-			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
-			if (descriptor) {
-				const adopted = WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.get) || WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.set);
-				return !adopted && (typeof descriptor.get === "function" || typeof descriptor.set === "function") ? { descriptor, receiver } : null;
-			}
-			holder = Reflect.getPrototypeOf(holder);
-		}
-	} catch {
-		// An exotic holder that refuses to be described is used as it is.
-	}
-	return null;
+	else if (accessorReader?.currentWrapper) wrapper.___enforceAccessorReader(accessorReader, []);
 }
 
 /**
@@ -1306,69 +1175,6 @@ function pinnedCodeMember(gate, value) {
 }
 
 /**
- * Read a member of a wrapper's impl, running an accessor it holds or inherits as the module the node belongs to (see
- * {@link runAccessor}) rather than as whoever reads it (#597), and a module's Proxy among them likewise.
- * @param {object} wrapper - The node's wrapper.
- * @param {PropertyKey} prop - The member's key.
- * @returns {*} The member's value.
- * @private
- */
-function readImplMember(wrapper, prop) {
-	const impl = wrapper.____slothletInternal.impl;
-	// A member the module's object inherits from a prototype set on it is read as the object reads it (#757).
-	const inherited = moduleInheritance(wrapper, prop);
-	if (inherited !== null) return Reflect.get(inherited, prop, wrapper.____slothletInternal.proxy ?? wrapper);
-	// A member the node inherits from a prototype given to it is read from there, on the node, as plain JS reads it.
-	// While the node's prototype is its value's own, the value answers for what it inherits, below.
-	const prototype = prototypeGiven(wrapper) ? nodeInherits(wrapper, prop) : undefined;
-	if (prototype !== undefined) {
-		return prototype === null ? undefined : Reflect.get(prototype, prop, wrapper.____slothletInternal.proxy ?? wrapper);
-	}
-	const accessor = implAccessor(wrapper, prop);
-	if (accessor?.proxy) return runAccessor(wrapper, () => impl[prop], undefined, [], true);
-	if (accessor)
-		return typeof accessor.descriptor.get === "function" ? runAccessor(wrapper, accessor.descriptor.get, accessor.receiver, []) : undefined;
-	return impl[prop];
-}
-
-/**
- * Write a member of a wrapper's impl, running a setter it holds or inherits as the module the node belongs to (see
- * {@link runAccessor}) rather than as whoever writes (#597), and a module's Proxy among them likewise. An
- * accessor with no setter refuses the write, as on the object.
- * @param {object} wrapper - The node's wrapper.
- * @param {PropertyKey} prop - The member's key.
- * @param {*} value - What to write.
- * @returns {boolean} Whether the write succeeded.
- * @private
- */
-function writeImplMember(wrapper, prop, value) {
-	const impl = wrapper.____slothletInternal.impl;
-	const accessor = implAccessor(wrapper, prop);
-	if (accessor?.proxy) return runAccessor(wrapper, () => Reflect.set(impl, prop, value), undefined, []);
-	if (!accessor) return Reflect.set(impl, prop, value);
-	if (typeof accessor.descriptor.set !== "function") return false;
-	runAccessor(wrapper, accessor.descriptor.set, accessor.receiver, [value]);
-	return true;
-}
-
-/**
- * Gate a read of the value a node stands for as a read of the node's own path.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
- * @param {object|null} access - The access the read is part of.
- * @param {object|null} [pinned] - The reader resolved earlier (see {@link pinReader}).
- * @returns {void}
- * @throws {SlothletError} PERMISSION_DENIED when the rules deny the reader the node.
- * @private
- */
-function gateNodeValue(wrapper, kept, access, pinned = null) {
-	const targetPath = wrapper.____slothletInternal.apiPath;
-	const decision = readGateDecision(wrapper, targetPath, undefined, kept, access, pinned);
-	if (decision.allowed) return;
-	throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: segmentsOf(targetPath) });
-}
-
-/**
  * Whether each value a node holds is built-in data or an error ({@link gateDataNodeMember}), decided once per
  * value: what a value is does not change.
  * @type {WeakMap<object, boolean>}
@@ -1387,7 +1193,7 @@ const DATA_NODE_IMPLS = new WeakMap();
  */
 function onImpl(wrapper, operation) {
 	const impl = wrapper.____slothletInternal.impl;
-	return isModuleProxy(impl) ? runAccessor(wrapper, () => operation(impl), undefined, [], true) : operation(impl);
+	return isModuleProxy(impl) ? wrapper.___runAccessor(() => operation(impl), undefined, [], true) : operation(impl);
 }
 
 /**
@@ -1546,7 +1352,7 @@ function eventPayloadFor(payload, listener, emitter, slothlet) {
 	 * @private
 	 */
 	function handedAsArgument(wrapper, value, caller) {
-		return ownInstances(wrapper, ownArguments(wrapper, crossArgumentsFrom(wrapper, [value], caller)))[0];
+		return wrapper.___ownInstances(wrapper.___ownArguments(wrapper.___crossArgumentsFrom([value], caller)))[0];
 	}
 
 	if (payload === null || (typeof payload !== "object" && typeof payload !== "function") || !listener?.____slothletInternal) return payload;
@@ -1670,29 +1476,6 @@ function assertRootChange(slothlet, prop) {
 }
 
 /**
- * Refuse a member's value that the proxy must report as its target holds it — a non-configurable, read-only
- * data property — to a caller the rules deny. The invariants fix what such a read returns, not whether it
- * succeeds, so the read throws instead of handing the value over (#603 review).
- *
- * @param {object} wrapper - The node's wrapper.
- * @param {string|symbol} prop - The key.
- * @param {*} value - The value the target holds.
- * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
- *   {@link resolveEnforcedCaller}).
- * @returns {void}
- * @throws {SlothletError} PERMISSION_DENIED when the caller may not read the member.
- * @private
- */
-function gateFixedValue(wrapper, prop, value, kept = null) {
-	const impl = wrapper.____slothletInternal.impl;
-	const isMember = Arrays.isArray(impl) ? isArrayMember(impl, prop) : hasOwnMember(wrapper, prop);
-	if (isMember) enforceRead(wrapper, prop, value, undefined, kept);
-	// A frozen function node holds its function's own members on its shell — a static method, its `prototype` — and
-	// hands them out from there: the module's code among them is checked as a call of the node, as when unfrozen (#632).
-	if (functionOf(impl) !== null) enforceCodeMember(wrapper, behindPinnedCode(value), kept);
-}
-
-/**
  * A fixed descriptor of the node's target, as the invariants require it, once the caller may read its value.
  *
  * @param {object} wrapper - The node's wrapper.
@@ -1717,7 +1500,7 @@ function fixedDescriptor(wrapper, prop, descriptor, asHeld = false, kept = null)
 		!descriptor.writable &&
 		!WeakMapMethods.has(PINNED_CODE_MEMBERS, descriptor.value)
 	)
-		gateFixedValue(wrapper, prop, descriptor.value, kept);
+		wrapper.___gateFixedValue(prop, descriptor.value, kept);
 	return descriptor;
 }
 
@@ -1727,30 +1510,6 @@ function fixedDescriptor(wrapper, prop, descriptor, asHeld = false, kept = null)
  * @type {{wrapper: object, prop: string|symbol}|null}
  * @private
  */
-
-/**
- * A node's descriptor of a member as the node holds it, for a view mirroring the member onto its shadow: a fixed
- * member is described as it is fixed, whoever is reading. The view still gates every read it hands out; what its
- * shadow holds only has to agree with what the node holds (#655).
- * @param {object} wrapper - The node's wrapper.
- * @param {object} node - The node.
- * @param {string|symbol} prop - The member.
- * @param {object|null} [access=null] - The access the description is part of (see {@link beginAccess}).
- * @returns {PropertyDescriptor|undefined} The descriptor.
- * @private
- *
- * @example
- * describeAsHeld(inner, child, "secret"); // { value: "…", writable: false, configurable: false, … }
- */
-function describeAsHeld(wrapper, node, prop, access = null) {
-	const previous = rulesShared.describingAsHeld;
-	rulesShared.describingAsHeld = { wrapper, prop };
-	try {
-		return describeWithAccess(access, wrapper, node, prop);
-	} finally {
-		rulesShared.describingAsHeld = previous;
-	}
-}
 
 /**
  * Where a key of an array node is held: the composition layer for a member it holds (a named export), and
@@ -1902,8 +1661,7 @@ function enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, ru
 	// cannot flip the verdict (the epoch must still match; only the age check is waived).
 	let enforceOptions = null;
 	if (promote) {
-		const pending = deferForPrincipals(
-			wrapper,
+		const pending = wrapper.___deferForPrincipals(
 			permissionManager,
 			callerPath,
 			targetPath,
@@ -1925,39 +1683,6 @@ function enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, ru
 }
 
 /**
- * Defer a call gate until the principals its rules require are current (#459).
- *
- * Every input to the gate — caller identity, context, call metadata — is captured here, before the
- * resolve's first `await`. Enforcing against those captured values afterwards (rather than
- * re-resolving the caller) keeps the decision attributed to the original caller in every runtime,
- * including ones where an `await` loses the ambient caller.
- *
- * @param {object} wrapper - Target UnifiedWrapper (for its error type).
- * @param {object} permissionManager - The instance's PermissionManager.
- * @param {string} callerPath - Caller api path.
- * @param {string} targetPath - Target api path.
- * @param {string|null} callerFilePath - Caller source file.
- * @param {string|null} targetFilePath - Target source file.
- * @param {object|null} runtimeContext - Per-request context.
- * @param {PermissionCallMeta} callMeta - `{ args, target }` of the gated call.
- * @returns {Promise<void>|null} `null` when nothing is stale (enforce synchronously as usual);
- *   otherwise a Promise that resolves when the call is allowed and rejects with PERMISSION_DENIED.
- * @private
- */
-function deferForPrincipals(wrapper, permissionManager, callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta) {
-	// Optional call: a partial permission manager (a stub, or one from an older build) has no principals.
-	const stale = permissionManager.stalePrincipals?.(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext);
-	if (!stale || stale.length === 0) return null;
-	return permissionManager.resolvePrincipals(stale).then(() => {
-		if (
-			!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, PRINCIPAL_GRACE)
-		) {
-			throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
-		}
-	});
-}
-
-/**
  * Enforcement options for a gate that has just established its required principals are current (#459).
  * @type {Readonly<{ principalGrace: true }>}
  * @private
@@ -1969,26 +1694,6 @@ const PRINCIPAL_GRACE = Objects.freeze({ principalGrace: true });
  * @type {{wrapper: object, entry: {store: object|null, identity: object}}|null}
  * @private
  */
-
-/**
- * Call a wrapper with a caller identity resolved before an await, so its gate and its entry take that
- * identity instead of reading one off a stack that no longer holds the caller. The identity is consumed by
- * the wrapper's own apply trap as it starts, synchronously within `apply`.
- * @param {object} wrapper - The wrapper `apply` calls.
- * @param {{store: object|null, identity: object}|null} entry - The identity.
- * @param {function(): *} apply - The call.
- * @returns {*} The call's result.
- * @private
- */
-function applyWithEntry(wrapper, entry, apply) {
-	const previous = rulesShared.handedEntry;
-	rulesShared.handedEntry = entry ? { wrapper, entry } : null;
-	try {
-		return apply();
-	} finally {
-		rulesShared.handedEntry = previous;
-	}
-}
 
 /**
  * Record a wrapper's function as its leaf function (#597; see {@link implWrappers}): the function itself (and the
@@ -2025,95 +1730,6 @@ function implDefault(impl) {
 	} catch {
 		// A module namespace whose `default` binding is not initialised yet holds none.
 		return undefined;
-	}
-}
-
-/**
- * Enforce a captured reader's access, and its ceiling's when it read as code supplied to another call (#597):
- * both have to pass.
- *
- * @param {object} wrapper - Target UnifiedWrapper being invoked.
- * @param {object} capturedCaller - Module that read the reference out of the api.
- * @param {object|ReadonlyArray<object>|null} ceiling - The calls the reading code ran inside, when it was not the reader's own.
- * @param {string|undefined} targetPathOverride - Resolved target path (see enforceCapturedCaller).
- * @param {Array<*>} callArgs - Arguments of the invocation being gated.
- * @param {boolean} [promote=false] - Whether the gate may defer to an async principal resolve (#459).
- * @returns {Promise<void>|undefined} `undefined` when decided synchronously; a Promise when deferred.
- * @throws {SlothletError} PERMISSION_DENIED when either may not reach the target.
- * @private
- */
-function enforceCapturedPair(wrapper, capturedCaller, ceiling, targetPathOverride, callArgs, promote = false) {
-	let gate = enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote);
-	for (let i = 0, calls = identityCeilings({ currentWrapper: capturedCaller, ceiling }); i < calls.length; i++) {
-		const call = calls[i];
-		gate = gate
-			? PromiseMethods.then(gate, () => enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, true))
-			: enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, promote);
-	}
-	return gate;
-}
-
-/**
- * Enforce a captured reader's access to a wrapper it is about to invoke.
- *
- * Runs in addition to the live-caller check in {@link enforcePermission}, never instead of it. If a
- * captured identity replaced the live caller, a permitted module could take a reference and hand it to
- * an unprivileged one, which would then call it with borrowed authority — a wider hole than the one
- * captured identities exist to close. Both have to pass.
- *
- * @param {object} wrapper - Target UnifiedWrapper being invoked.
- * @param {object} capturedCaller - Module that read the reference out of the api.
- * @param {string} [targetPathOverride] - Resolved target path, for a lazy chain whose leaf is not known
- *   until invocation. Defaults to the wrapper's own path.
- * @param {Array<*>} callArgs - Arguments of the invocation being gated, threaded into function
- *   conditions as `{ args, target }` (#455) so a captured reference gets the same resource-scoped
- *   gating as a direct call.
- * @param {boolean} [promote=false] - Whether the gate may defer to an async principal resolve (#459);
- *   false where the invocation must be answered synchronously (construct).
- * @returns {Promise<void>|undefined} `undefined` when decided synchronously; a Promise when `promote`
- *   is set and a required principal is stale (resolves when allowed, rejects with PERMISSION_DENIED).
- * @throws {SlothletError} PERMISSION_DENIED when the capturing module may not reach the target.
- * @private
- */
-function enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote = false) {
-	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
-	/* v8 ignore next -- a view is only ever built while permissions are enabled, so this cannot be hit
-	   unless enforcement is torn down between the read and the call; harmless either way. */
-	if (!permissionManager || !permissionManager.isEnabled()) return;
-
-	// Lazy composition resolves a chained path only at invocation, so the caller supplies the resolved
-	// target rather than it being readable off the wrapper the chain started from.
-	const targetPath = targetPathOverride ?? wrapper.____slothletInternal.apiPath;
-	refuseRemovedCaller(wrapper, capturedCaller, targetPath);
-	// The ?? fallbacks mirror enforcePermission: apiPath/filePath are always set on live wrappers.
-	/* v8 ignore start */
-	const callerPath = capturedCaller.____slothletInternal?.apiPath ?? "";
-	const callerFilePath = capturedCaller.____slothletInternal?.filePath ?? null;
-	const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
-	/* v8 ignore stop */
-	const runtimeContext = wrapper.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-	// #455: same resource-scoped gate metadata as the direct-call path.
-	const callMeta = { args: callArgs, target: targetPath };
-
-	// Same scan-then-enforce grace as enforcePermission (#459).
-	let enforceOptions = null;
-	if (promote) {
-		const pending = deferForPrincipals(
-			wrapper,
-			permissionManager,
-			callerPath,
-			targetPath,
-			callerFilePath,
-			targetFilePath,
-			runtimeContext,
-			callMeta
-		);
-		if (pending) return pending;
-		enforceOptions = PRINCIPAL_GRACE;
-	}
-
-	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, enforceOptions)) {
-		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
 	}
 }
 
@@ -2203,47 +1819,6 @@ function bindCapturedIdentity(wrapper, prop, value, access = null) {
 }
 
 /**
- * Resolve the node at a stale wrapper's path (plus an optional property chain below it, for a
- * waiting proxy) in the LIVE api tree after a restart() (#504).
- *
- * @description
- * The walk is ordinary property access from the live root, so it behaves exactly as re-reading
- * `api.<path>` would — the same lazy materialization and the same read-level permission gate for
- * whoever holds the reference. The path is re-resolved on every use, so a held reference follows any
- * number of restarts. A path that no longer exists throws `RESTART_REFERENCE_UNRESOLVED`.
- *
- * @param {UnifiedWrapper} wrapper - The stale wrapper.
- * @param {string[]} [propChain=[]] - Property chain below the wrapper (waiting proxies).
- * @returns {unknown} The live node.
- * @throws {SlothletError} RESTART_REFERENCE_UNRESOLVED when the path is gone after the restart.
- * @private
- *
- * @example
- * const live = resolveRestartTarget(wrapper, ["handlers"]);
- */
-function resolveRestartTarget(wrapper, propChain = []) {
-	const apiPath = wrapper.____slothletInternal.apiPath;
-	const segments = concatLists(apiPath ? splitText(String(apiPath), ".") : [], mapList(propChain, String));
-	const fail = () => {
-		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { path: segmentsOf(ArrayMethods.join(segments, ".")) });
-	};
-	// The tree of the code reading the node: the instance's, or the run's own (#876).
-	const slothlet = wrapper.____slothlet;
-	let node = slothlet.api;
-	for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
-		const segment = ofList[ofIndex];
-		if (node === null || node === undefined) fail();
-		node = node[segment];
-	}
-	if (node === null || node === undefined) fail();
-	// What the reader's tree holds at the path is a node of yet another tree (an alias stored across trees): it has no
-	// node of its own there to forward to.
-	const found = registeredWrapper(node);
-	if (found !== undefined && isRestartStale(found)) fail();
-	return node;
-}
-
-/**
  * Whether `Object.defineProperty(object, prop, descriptor)` would succeed, decided without defining it
  * (ValidateAndApplyPropertyDescriptor's checks). A definition that must land on two objects is checked
  * against both first, so one refusing it leaves the other unchanged. An array's `length` is also
@@ -2308,8 +1883,8 @@ function shellValue(wrapper, prop) {
 		// A member's node is unwrapped only to the primitive it holds; a lazy node not loaded yet holds nothing
 		// yet and is kept as the node it is.
 		const node = resolveWrapper(held().value);
-		raw = node && holdsValue(node) ? heldValue(node) : held().value;
-	} else if (impl !== null && (typeof impl === "object" || typeof impl === "function")) raw = readImplMember(wrapper, prop);
+		raw = node && node.___holdsValue() ? node.___heldValue() : held().value;
+	} else if (impl !== null && (typeof impl === "object" || typeof impl === "function")) raw = wrapper.___readImplMember(prop);
 	if (isTerminalData(raw) || raw === undefined) return raw;
 	// An array's element or member gets its node from a read, which leaves it cached on the wrapper; the cache is
 	// the node itself, where the read hands a module a view bound to it.
@@ -2379,7 +1954,7 @@ function withRestartForwarding(handler, wrapper, propChain = []) {
 				handedAccessKey = null;
 				handedAccess = null;
 				rulesShared.handedEntry = null;
-				return forward(resolveRestartTarget(wrapper, propChain), a, b, c, d);
+				return forward(wrapper.___resolveRestartTarget(propChain), a, b, c, d);
 			}
 			return FunctionMethods.call(original, handler, a, b, c, d);
 		};
@@ -2464,8 +2039,6 @@ export function RulesLayer(Base) {
 					enforceRead,
 					enforceCodeMember,
 					pinnedCodeMember,
-					writeImplMember,
-					gateNodeValue,
 					onImpl,
 					hostRunDefiner,
 					memberHoldsCode,
@@ -2475,16 +2048,11 @@ export function RulesLayer(Base) {
 					eventPayloadFor,
 					readsNothingBeneath,
 					assertRootChange,
-					gateFixedValue,
 					fixedDescriptor,
-					describeAsHeld,
 					arrayKeyHolder,
 					enforcePermission,
-					applyWithEntry,
 					registerLeafFunction,
-					enforceCapturedPair,
 					bindCapturedIdentity,
-					resolveRestartTarget,
 					canDefine,
 					shellValue,
 					refuseFixedObjectDefinition,
@@ -2495,17 +2063,15 @@ export function RulesLayer(Base) {
 					CONTEXT_WRITERS
 				});
 				Base.define("framework", { write: frameworkWrite, viewOf: frameworkViewOf, viewCaller: frameworkViewCaller });
-				Base.define("access", { asKept: accessAsKept, identity: accessIdentity, entry: accessEntry });
+				Base.define("access", { identity: accessIdentity, entry: accessEntry });
 				Base.define("read", {
 					withAccess: readWithAccess,
 					gateDecision: readGateDecision,
 					gateFor: readGateFor,
 					onBehalf: readOnBehalf,
-					implMember: readImplMember,
 					asReader: readAsReader
 				});
-				Base.define("run", { accessor: runAccessor });
-				Base.define("impl", { accessor: implAccessor, default: implDefault });
+				Base.define("impl", { default: implDefault });
 				Base.define("has", { ownMember: hasOwnMember });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
@@ -2514,8 +2080,6 @@ export function RulesLayer(Base) {
 					dataReadOptions = methods.values.dataReadOptions;
 					holdsAssignedData = methods.holds.assignedData;
 					holdsCode = methods.holds.code;
-					holdsValue = methods.holds.value;
-					nodeInherits = methods.node.inherits;
 					isArrayIndex = methods.is.arrayIndex;
 					isArrayMember = methods.is.arrayMember;
 					isBuiltinFunction = methods.is.builtinFunction;
@@ -2529,7 +2093,6 @@ export function RulesLayer(Base) {
 					isTerminalData = methods.is.terminalData;
 					ADOPTED_ACCESSORS = methods.nodes.ADOPTED_ACCESSORS;
 					makerOf = methods.nodes.makerOf;
-					moduleInheritance = methods.module.inheritance;
 					nodeAtPath = methods.node.atPath;
 					prototypeGiven = methods.prototype.given;
 					runAsMaker = methods.run.asMaker;
@@ -2555,7 +2118,6 @@ export function RulesLayer(Base) {
 					searchBudget = methods.membrane.searchBudget;
 					searchDepth = methods.membrane.searchDepth;
 					behindPinnedCode = methods.root.behindPinnedCode;
-					heldValue = methods.root.heldValue;
 					rootGate = methods.root.gate;
 					RESTART_FORWARD_TRAPS = methods.waiting.RESTART_FORWARD_TRAPS;
 					checkedStandIn = methods.waiting.checkedStandIn;
@@ -2568,9 +2130,7 @@ export function RulesLayer(Base) {
 					SlothletTypeError = methods.uw.SlothletTypeError;
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					registeredWrapper = methods.values.registeredWrapper;
-					ownInstances = methods.views.ownInstances;
-					ownArguments = methods.membrane.ownArguments;
-					crossArgumentsFrom = methods.membrane.crossArgumentsFrom;
+					isWrapper = methods.brand.isWrapper;
 				});
 			}
 
@@ -2580,6 +2140,466 @@ export function RulesLayer(Base) {
 			constructor(slothlet) {
 				if (new.target !== realClass) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
 				super(slothlet);
+			}
+
+			/**
+			 * Make an access into `wrapper` for `reader`, a module that kept a node standing for it: where the stack cannot
+			 * say who is accessing, the check of `wrapper` takes it as `reader`'s (#661).
+			 * @param {object} wrapper - The node being accessed.
+			 * @param {object} reader - The module the kept node reads for.
+			 * @param {function(): *} access - The access.
+			 * @returns {*} What the access gave.
+			 * @private
+			 *
+			 * @example
+			 * accessAsKept(inner, capturedCaller, () => Reflect.get(child, "n"));
+			 */
+			___accessAsKept(reader, access) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const previous = rulesShared.capturedAccess;
+				rulesShared.capturedAccess = { wrapper, reader };
+				try {
+					return access();
+				} finally {
+					rulesShared.capturedAccess = previous;
+				}
+			}
+
+			/**
+			 * Run a module's getter or setter as the module it belongs to, the way a call to one of its functions through `self`
+			 * runs (#597): the reader has to be allowed to call the node holding it, and the node is who runs, with no ceiling
+			 * from whoever reads or writes (see {@link runAsMaker}).
+			 *
+			 * @param {object} wrapper - The wrapper holding the accessor.
+			 * @param {Function} accessor - The getter or setter.
+			 * @param {*} thisArg - Its receiver.
+			 * @param {Array<*>} args - Its arguments.
+			 * @param {boolean} [attribute=true] - Hand what it returns back as the module's (see {@link attributeResult}).
+			 * @returns {*} What it returned.
+			 * @throws {SlothletError} PERMISSION_DENIED when who is reading cannot be told.
+			 * @private
+			 */
+			___runAccessor(accessor, thisArg, args, attribute = true) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const contextManager = wrapper.slothlet.contextManager;
+				if (!contextManager?.runInContext || !wrapper.slothlet.instanceID) return Reflect.apply(accessor, thisArg, args);
+				const reader = accessorReader !== undefined ? accessorReader : contextManager.getCallerIdentity?.(wrapper.slothlet.instanceID);
+				// Code no call accounts for reads only through a node a module kept, as that module (#661).
+				let kept = null;
+				if (accessorReader === undefined && reader?.unresolved && reader.unaccounted) {
+					if (rulesShared.keptAccessorRead?.wrapper === wrapper) {
+						kept = rulesShared.keptAccessorRead;
+						rulesShared.keptAccessorRead = null;
+					} else kept = takeCapturedAccess(wrapper);
+				}
+				if (reader?.unresolved && !kept) {
+					throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(wrapper.____slothletInternal.apiPath) });
+				}
+				// Running it is calling the module's code, so the reader has to be allowed to call the node, as a call through
+				// `self` is checked (a reader completed on behalf of is checked as that reader).
+				if (accessorReader === undefined) enforcePermission(wrapper, args, false, kept);
+				else if (accessorReader?.currentWrapper) wrapper.___enforceAccessorReader(accessorReader, args);
+				return runAsMaker(wrapper, accessor, thisArg, args, attribute, true);
+			}
+
+			/**
+			 * Check a reader whose read is completed on its behalf (see {@link accessorReader}) may call the node whose accessor
+			 * the read runs, and every call of the ceiling it read under (#597).
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {object} reader - The reader's identity snapshot.
+			 * @param {Array<*>} args - The accessor's arguments.
+			 * @returns {void}
+			 * @throws {SlothletError} PERMISSION_DENIED when it may not.
+			 * @private
+			 */
+			___enforceAccessorReader(reader, args) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+				if (!permissionManager?.isEnabled()) return;
+				const targetPath = wrapper.____slothletInternal.apiPath;
+				const runtimeContext = reader.context ?? null;
+				for (let ofIndex = 0, ofList = concatLists([reader.currentWrapper], identityCeilings(reader)); ofIndex < ofList.length; ofIndex++) {
+					const caller = ofList[ofIndex];
+					enforceCallAs(wrapper, permissionManager, caller, targetPath, runtimeContext, { args, target: targetPath }, false);
+				}
+			}
+
+			/**
+			 * The accessor a wrapper's impl holds or inherits for a key, found by descriptors alone so nothing of the impl's
+			 * runs to find it (#597): `{ descriptor }` for an accessor adoption did not put there, `{ proxy: true }` when the
+			 * walk reaches a module's own Proxy before any descriptor (its traps answer the key), and null otherwise —
+			 * a data member, no member, or `Object.prototype`'s own accessors (`__proto__`), which are left as they are.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {PropertyKey} prop - The member's key.
+			 * @returns {{descriptor?: PropertyDescriptor, receiver?: object, proxy?: boolean}|null} What answers the key, with the
+			 *   receiver an accessor runs on.
+			 * @private
+			 */
+			___implAccessor(prop) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				// What the accessor runs on: the impl, or the value under a composition layer that answers the key (see
+				// layerForwards), as plain JS would read the key there.
+				let receiver = wrapper.____slothletInternal.impl;
+				try {
+					for (
+						let holder = wrapper.____slothletInternal.impl, depth = 0;
+						holder !== null && holder !== undefined && holder !== Objects.prototype && depth < 64;
+						depth++
+					) {
+						// A module's own Proxy, or the stand-in slothlet hands it out as (#597), behind a composition layer or not, answers
+						// with the module's traps: reading through it is a run of the module's code (#632).
+						if (util.types.isProxy(holder)) {
+							if (isModuleProxy(holder) || isModuleStandIn(holder)) return { proxy: true };
+							// A composition layer over a plain value (named exports put onto a module's instance) answers a key it
+							// neither holds nor hides from that value, which its getters and setters then run on, as on the value
+							// itself (#632).
+							if (!layerForwards(holder, prop)) return null;
+							holder = layerUnderlying(holder);
+							receiver = holder;
+							continue;
+						}
+						const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
+						if (descriptor) {
+							const adopted =
+								WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.get) || WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.set);
+							return !adopted && (typeof descriptor.get === "function" || typeof descriptor.set === "function")
+								? { descriptor, receiver }
+								: null;
+						}
+						holder = Reflect.getPrototypeOf(holder);
+					}
+				} catch {
+					// An exotic holder that refuses to be described is used as it is.
+				}
+				return null;
+			}
+
+			/**
+			 * Read a member of a wrapper's impl, running an accessor it holds or inherits as the module the node belongs to (see
+			 * {@link runAccessor}) rather than as whoever reads it (#597), and a module's Proxy among them likewise.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {PropertyKey} prop - The member's key.
+			 * @returns {*} The member's value.
+			 * @private
+			 */
+			___readImplMember(prop) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const impl = wrapper.____slothletInternal.impl;
+				// A member the module's object inherits from a prototype set on it is read as the object reads it (#757).
+				const inherited = wrapper.___moduleInheritance(prop);
+				if (inherited !== null) return Reflect.get(inherited, prop, wrapper.____slothletInternal.proxy ?? wrapper);
+				// A member the node inherits from a prototype given to it is read from there, on the node, as plain JS reads it.
+				// While the node's prototype is its value's own, the value answers for what it inherits, below.
+				const prototype = prototypeGiven(wrapper) ? wrapper.___nodeInherits(prop) : undefined;
+				if (prototype !== undefined) {
+					return prototype === null ? undefined : Reflect.get(prototype, prop, wrapper.____slothletInternal.proxy ?? wrapper);
+				}
+				const accessor = wrapper.___implAccessor(prop);
+				if (accessor?.proxy) return wrapper.___runAccessor(() => impl[prop], undefined, [], true);
+				if (accessor)
+					return typeof accessor.descriptor.get === "function"
+						? wrapper.___runAccessor(accessor.descriptor.get, accessor.receiver, [])
+						: undefined;
+				return impl[prop];
+			}
+
+			/**
+			 * Write a member of a wrapper's impl, running a setter it holds or inherits as the module the node belongs to (see
+			 * {@link runAccessor}) rather than as whoever writes (#597), and a module's Proxy among them likewise. An
+			 * accessor with no setter refuses the write, as on the object.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {PropertyKey} prop - The member's key.
+			 * @param {*} value - What to write.
+			 * @returns {boolean} Whether the write succeeded.
+			 * @private
+			 */
+			___writeImplMember(prop, value) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const impl = wrapper.____slothletInternal.impl;
+				const accessor = wrapper.___implAccessor(prop);
+				if (accessor?.proxy) return wrapper.___runAccessor(() => Reflect.set(impl, prop, value), undefined, []);
+				if (!accessor) return Reflect.set(impl, prop, value);
+				if (typeof accessor.descriptor.set !== "function") return false;
+				wrapper.___runAccessor(accessor.descriptor.set, accessor.receiver, [value]);
+				return true;
+			}
+
+			/**
+			 * Gate a read of the value a node stands for as a read of the node's own path.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+			 * @param {object|null} access - The access the read is part of.
+			 * @param {object|null} [pinned] - The reader resolved earlier (see {@link pinReader}).
+			 * @returns {void}
+			 * @throws {SlothletError} PERMISSION_DENIED when the rules deny the reader the node.
+			 * @private
+			 */
+			___gateNodeValue(kept, access, pinned = null) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const targetPath = wrapper.____slothletInternal.apiPath;
+				const decision = readGateDecision(wrapper, targetPath, undefined, kept, access, pinned);
+				if (decision.allowed) return;
+				throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: segmentsOf(targetPath) });
+			}
+
+			/**
+			 * Refuse a member's value that the proxy must report as its target holds it — a non-configurable, read-only
+			 * data property — to a caller the rules deny. The invariants fix what such a read returns, not whether it
+			 * succeeds, so the read throws instead of handing the value over (#603 review).
+			 *
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {string|symbol} prop - The key.
+			 * @param {*} value - The value the target holds.
+			 * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+			 *   {@link resolveEnforcedCaller}).
+			 * @returns {void}
+			 * @throws {SlothletError} PERMISSION_DENIED when the caller may not read the member.
+			 * @private
+			 */
+			___gateFixedValue(prop, value, kept = null) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const impl = wrapper.____slothletInternal.impl;
+				const isMember = Arrays.isArray(impl) ? isArrayMember(impl, prop) : hasOwnMember(wrapper, prop);
+				if (isMember) enforceRead(wrapper, prop, value, undefined, kept);
+				// A frozen function node holds its function's own members on its shell — a static method, its `prototype` — and
+				// hands them out from there: the module's code among them is checked as a call of the node, as when unfrozen (#632).
+				if (functionOf(impl) !== null) enforceCodeMember(wrapper, behindPinnedCode(value), kept);
+			}
+
+			/**
+			 * A node's descriptor of a member as the node holds it, for a view mirroring the member onto its shadow: a fixed
+			 * member is described as it is fixed, whoever is reading. The view still gates every read it hands out; what its
+			 * shadow holds only has to agree with what the node holds (#655).
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {object} node - The node.
+			 * @param {string|symbol} prop - The member.
+			 * @param {object|null} [access=null] - The access the description is part of (see {@link beginAccess}).
+			 * @returns {PropertyDescriptor|undefined} The descriptor.
+			 * @private
+			 *
+			 * @example
+			 * describeAsHeld(inner, child, "secret"); // { value: "…", writable: false, configurable: false, … }
+			 */
+			___describeAsHeld(node, prop, access = null) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const previous = rulesShared.describingAsHeld;
+				rulesShared.describingAsHeld = { wrapper, prop };
+				try {
+					return describeWithAccess(access, wrapper, node, prop);
+				} finally {
+					rulesShared.describingAsHeld = previous;
+				}
+			}
+
+			/**
+			 * Defer a call gate until the principals its rules require are current (#459).
+			 *
+			 * Every input to the gate — caller identity, context, call metadata — is captured here, before the
+			 * resolve's first `await`. Enforcing against those captured values afterwards (rather than
+			 * re-resolving the caller) keeps the decision attributed to the original caller in every runtime,
+			 * including ones where an `await` loses the ambient caller.
+			 *
+			 * @param {object} wrapper - Target UnifiedWrapper (for its error type).
+			 * @param {object} permissionManager - The instance's PermissionManager.
+			 * @param {string} callerPath - Caller api path.
+			 * @param {string} targetPath - Target api path.
+			 * @param {string|null} callerFilePath - Caller source file.
+			 * @param {string|null} targetFilePath - Target source file.
+			 * @param {object|null} runtimeContext - Per-request context.
+			 * @param {PermissionCallMeta} callMeta - `{ args, target }` of the gated call.
+			 * @returns {Promise<void>|null} `null` when nothing is stale (enforce synchronously as usual);
+			 *   otherwise a Promise that resolves when the call is allowed and rejects with PERMISSION_DENIED.
+			 * @private
+			 */
+			___deferForPrincipals(permissionManager, callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				// Optional call: a partial permission manager (a stub, or one from an older build) has no principals.
+				const stale = permissionManager.stalePrincipals?.(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext);
+				if (!stale || stale.length === 0) return null;
+				return permissionManager.resolvePrincipals(stale).then(() => {
+					if (
+						!permissionManager.enforceAccess(
+							callerPath,
+							targetPath,
+							callerFilePath,
+							targetFilePath,
+							runtimeContext,
+							callMeta,
+							PRINCIPAL_GRACE
+						)
+					) {
+						throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
+					}
+				});
+			}
+
+			/**
+			 * Call a wrapper with a caller identity resolved before an await, so its gate and its entry take that
+			 * identity instead of reading one off a stack that no longer holds the caller. The identity is consumed by
+			 * the wrapper's own apply trap as it starts, synchronously within `apply`.
+			 * @param {object} wrapper - The wrapper `apply` calls.
+			 * @param {{store: object|null, identity: object}|null} entry - The identity.
+			 * @param {function(): *} apply - The call.
+			 * @returns {*} The call's result.
+			 * @private
+			 */
+			___applyWithEntry(entry, apply) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const previous = rulesShared.handedEntry;
+				rulesShared.handedEntry = entry ? { wrapper, entry } : null;
+				try {
+					return apply();
+				} finally {
+					rulesShared.handedEntry = previous;
+				}
+			}
+
+			/**
+			 * Enforce a captured reader's access, and its ceiling's when it read as code supplied to another call (#597):
+			 * both have to pass.
+			 *
+			 * @param {object} wrapper - Target UnifiedWrapper being invoked.
+			 * @param {object} capturedCaller - Module that read the reference out of the api.
+			 * @param {object|ReadonlyArray<object>|null} ceiling - The calls the reading code ran inside, when it was not the reader's own.
+			 * @param {string|undefined} targetPathOverride - Resolved target path (see enforceCapturedCaller).
+			 * @param {Array<*>} callArgs - Arguments of the invocation being gated.
+			 * @param {boolean} [promote=false] - Whether the gate may defer to an async principal resolve (#459).
+			 * @returns {Promise<void>|undefined} `undefined` when decided synchronously; a Promise when deferred.
+			 * @throws {SlothletError} PERMISSION_DENIED when either may not reach the target.
+			 * @private
+			 */
+			___enforceCapturedPair(capturedCaller, ceiling, targetPathOverride, callArgs, promote = false) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				let gate = wrapper.___enforceCapturedCaller(capturedCaller, targetPathOverride, callArgs, promote);
+				for (let i = 0, calls = identityCeilings({ currentWrapper: capturedCaller, ceiling }); i < calls.length; i++) {
+					const call = calls[i];
+					gate = gate
+						? PromiseMethods.then(gate, () => wrapper.___enforceCapturedCaller(call, targetPathOverride, callArgs, true))
+						: wrapper.___enforceCapturedCaller(call, targetPathOverride, callArgs, promote);
+				}
+				return gate;
+			}
+
+			/**
+			 * Enforce a captured reader's access to a wrapper it is about to invoke.
+			 *
+			 * Runs in addition to the live-caller check in {@link enforcePermission}, never instead of it. If a
+			 * captured identity replaced the live caller, a permitted module could take a reference and hand it to
+			 * an unprivileged one, which would then call it with borrowed authority — a wider hole than the one
+			 * captured identities exist to close. Both have to pass.
+			 *
+			 * @param {object} wrapper - Target UnifiedWrapper being invoked.
+			 * @param {object} capturedCaller - Module that read the reference out of the api.
+			 * @param {string} [targetPathOverride] - Resolved target path, for a lazy chain whose leaf is not known
+			 *   until invocation. Defaults to the wrapper's own path.
+			 * @param {Array<*>} callArgs - Arguments of the invocation being gated, threaded into function
+			 *   conditions as `{ args, target }` (#455) so a captured reference gets the same resource-scoped
+			 *   gating as a direct call.
+			 * @param {boolean} [promote=false] - Whether the gate may defer to an async principal resolve (#459);
+			 *   false where the invocation must be answered synchronously (construct).
+			 * @returns {Promise<void>|undefined} `undefined` when decided synchronously; a Promise when `promote`
+			 *   is set and a required principal is stale (resolves when allowed, rejects with PERMISSION_DENIED).
+			 * @throws {SlothletError} PERMISSION_DENIED when the capturing module may not reach the target.
+			 * @private
+			 */
+			___enforceCapturedCaller(capturedCaller, targetPathOverride, callArgs, promote = false) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+				/* v8 ignore next -- a view is only ever built while permissions are enabled, so this cannot be hit
+				   unless enforcement is torn down between the read and the call; harmless either way. */
+				if (!permissionManager || !permissionManager.isEnabled()) return;
+
+				// Lazy composition resolves a chained path only at invocation, so the caller supplies the resolved
+				// target rather than it being readable off the wrapper the chain started from.
+				const targetPath = targetPathOverride ?? wrapper.____slothletInternal.apiPath;
+				refuseRemovedCaller(wrapper, capturedCaller, targetPath);
+				// The ?? fallbacks mirror enforcePermission: apiPath/filePath are always set on live wrappers.
+				/* v8 ignore start */
+				const callerPath = capturedCaller.____slothletInternal?.apiPath ?? "";
+				const callerFilePath = capturedCaller.____slothletInternal?.filePath ?? null;
+				const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
+				/* v8 ignore stop */
+				const runtimeContext = wrapper.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+				// #455: same resource-scoped gate metadata as the direct-call path.
+				const callMeta = { args: callArgs, target: targetPath };
+
+				// Same scan-then-enforce grace as enforcePermission (#459).
+				let enforceOptions = null;
+				if (promote) {
+					const pending = wrapper.___deferForPrincipals(
+						permissionManager,
+						callerPath,
+						targetPath,
+						callerFilePath,
+						targetFilePath,
+						runtimeContext,
+						callMeta
+					);
+					if (pending) return pending;
+					enforceOptions = PRINCIPAL_GRACE;
+				}
+
+				if (
+					!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, enforceOptions)
+				) {
+					throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
+				}
+			}
+
+			/**
+			 * Resolve the node at a stale wrapper's path (plus an optional property chain below it, for a
+			 * waiting proxy) in the LIVE api tree after a restart() (#504).
+			 *
+			 * @description
+			 * The walk is ordinary property access from the live root, so it behaves exactly as re-reading
+			 * `api.<path>` would — the same lazy materialization and the same read-level permission gate for
+			 * whoever holds the reference. The path is re-resolved on every use, so a held reference follows any
+			 * number of restarts. A path that no longer exists throws `RESTART_REFERENCE_UNRESOLVED`.
+			 *
+			 * @param {UnifiedWrapper} wrapper - The stale wrapper.
+			 * @param {string[]} [propChain=[]] - Property chain below the wrapper (waiting proxies).
+			 * @returns {unknown} The live node.
+			 * @throws {SlothletError} RESTART_REFERENCE_UNRESOLVED when the path is gone after the restart.
+			 * @private
+			 *
+			 * @example
+			 * const live = resolveRestartTarget(wrapper, ["handlers"]);
+			 */
+			___resolveRestartTarget(propChain = []) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
+				const wrapper = this;
+				const apiPath = wrapper.____slothletInternal.apiPath;
+				const segments = concatLists(apiPath ? splitText(String(apiPath), ".") : [], mapList(propChain, String));
+				const fail = () => {
+					throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { path: segmentsOf(ArrayMethods.join(segments, ".")) });
+				};
+				// The tree of the code reading the node: the instance's, or the run's own (#876).
+				const slothlet = wrapper.____slothlet;
+				let node = slothlet.api;
+				for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
+					const segment = ofList[ofIndex];
+					if (node === null || node === undefined) fail();
+					node = node[segment];
+				}
+				if (node === null || node === undefined) fail();
+				// What the reader's tree holds at the path is a node of yet another tree (an alias stored across trees): it has no
+				// node of its own there to forward to.
+				const found = registeredWrapper(node);
+				if (found !== undefined && isRestartStale(found)) fail();
+				return node;
 			}
 		}
 	);

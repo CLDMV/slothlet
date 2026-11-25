@@ -85,13 +85,9 @@ let trustedRootOwn,
 	holderFilePath,
 	selfView,
 	STAND_INS,
-	retireChanges,
 	enforceNodeReportRead,
-	wrapperReport,
 	defineAdoptedAccessor,
-	recordedPrototype,
 	ownsPrototype,
-	nodeInherits,
 	INTRINSICS,
 	isSharedValue,
 	isModuleProxy,
@@ -108,11 +104,11 @@ let trustedRootOwn,
 	capturedViewChildren,
 	capturedViewTargets,
 	isRestartStale,
-	resolveRestartTarget,
 	standInNode,
 	isClassInstance,
 	resolveWrapper,
-	registeredWrapper;
+	registeredWrapper,
+	isWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -205,20 +201,6 @@ function sameLookup(a, b) {
 	const x = a.described;
 	const y = b.described;
 	return Objects.is(x.value, y.value) && x.get === y.get && x.set === y.set && "value" in x === "value" in y;
-}
-
-/**
- * {@link classPrototypeOf}, by the node's wrapper.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @returns {object|null} The prototype.
- * @private
- */
-function wrapperClassPrototype(wrapper) {
-	const impl = wrapper.____slothletInternal.impl;
-	if (typeof impl !== "function") return null;
-	const described = Reflect.getOwnPropertyDescriptor(layerUnderlying(impl), "prototype");
-	const value = described !== undefined && "value" in described ? described.value : null;
-	return value !== null && typeof value === "object" ? value : null;
 }
 
 /**
@@ -334,7 +316,7 @@ function nodeReport(slothlet, target) {
 		if (holder === null && !slothlet.handlers?.versionManager?.dispatcherOf?.(reportedNode(current))) {
 			const parentWrapper = resolveWrapper(reportedNode(parent));
 			if (parentWrapper === null) return undefined;
-			return Objects.freeze(wrapperReport(parentWrapper, mapList(segments, String), { value: current }));
+			return Objects.freeze(parentWrapper.___wrapperReport(mapList(segments, String), { value: current }));
 		}
 		target = current;
 	}
@@ -349,7 +331,7 @@ function nodeReport(slothlet, target) {
 		const resolvedWrapper = resolved ? resolveWrapper(reportedNode(resolved)) : null;
 		if (!resolvedWrapper) return undefined;
 		enforceNodeReportRead(resolvedWrapper, String(resolvedWrapper.____slothletInternal.apiPath ?? ""), undefined);
-		const report = wrapperReport(resolvedWrapper);
+		const report = resolvedWrapper.___wrapperReport();
 		report.logical = Objects.freeze(splitText(dispatcher.logicalPath, "."));
 		return Objects.freeze(report);
 	}
@@ -365,10 +347,10 @@ function nodeReport(slothlet, target) {
 			const reachedNode = reportedNode(reached);
 			if (resolveWrapper(reachedNode) !== null && !WeakSetMethods.has(STAND_INS, reachedNode)) return nodeReport(slothlet, reachedNode);
 			const base = slothlet.handlers?.versionManager?.pathSegments?.(String(wrapper.____slothletInternal.apiPath ?? "")) ?? [];
-			return Objects.freeze(wrapperReport(wrapper, concatLists(base, mapList(chain, String)), { value: reached }));
+			return Objects.freeze(wrapper.___wrapperReport(concatLists(base, mapList(chain, String)), { value: reached }));
 		}
 		const base = slothlet.handlers?.versionManager?.pathSegments?.(String(wrapper.____slothletInternal.apiPath ?? "")) ?? [];
-		return Objects.freeze(wrapperReport(wrapper, concatLists(base, mapList(chain, String))));
+		return Objects.freeze(wrapper.___wrapperReport(concatLists(base, mapList(chain, String))));
 	}
 
 	enforceNodeReportRead(wrapper, String(wrapper.____slothletInternal.apiPath ?? ""), undefined);
@@ -380,11 +362,11 @@ function nodeReport(slothlet, target) {
 		const resolved = dispatcher.resolve();
 		const resolvedWrapper = resolved ? resolveWrapper(reportedNode(resolved)) : null;
 		if (resolvedWrapper) enforceNodeReportRead(resolvedWrapper, String(resolvedWrapper.____slothletInternal.apiPath ?? ""), undefined);
-		const report = resolvedWrapper ? wrapperReport(resolvedWrapper) : wrapperReport(wrapper);
+		const report = resolvedWrapper ? resolvedWrapper.___wrapperReport() : wrapper.___wrapperReport();
 		report.logical = logical;
 		return Objects.freeze(report);
 	}
-	return Objects.freeze(wrapperReport(wrapper));
+	return Objects.freeze(wrapper.___wrapperReport());
 }
 
 /**
@@ -395,26 +377,6 @@ function nodeReport(slothlet, target) {
 const ADOPTED_ACCESSORS = new WeakMap();
 
 /**
- * The prototype a member reaches a node fronting a module's own object from, when the object inherits it from a
- * prototype set on it (#757) and the node's own copy of the object holds no member by that key: null otherwise, and
- * for a member of `Object.prototype`, which the node's copy inherits too.
- * @param {object} wrapper - The node's wrapper.
- * @param {PropertyKey} prop - The member's key.
- * @returns {object|null} The prototype to read it from, or null.
- * @private
- */
-function moduleInheritance(wrapper, prop) {
-	const internal = wrapper.____slothletInternal;
-	if (internal.moduleObject === null || internal.moduleObject === undefined) return null;
-	const impl = internal.impl;
-	if (impl === null || typeof impl !== "object" || Reflect.has(impl, prop)) return null;
-	const object = moduleObjectOf(wrapper);
-	if (object === null) return null;
-	const prototype = Reflect.getPrototypeOf(object);
-	return prototype !== null && prototype !== Objects.prototype && Reflect.has(prototype, prop) ? prototype : null;
-}
-
-/**
  * Whether a node has the prototype it was given through the node (`Object.setPrototypeOf(node, …)`), rather than the
  * one its value came with (see {@link ownsPrototype}).
  * @param {object} wrapper - The node's wrapper.
@@ -423,25 +385,8 @@ function moduleInheritance(wrapper, prop) {
  */
 function prototypeGiven(wrapper) {
 	if (!ownsPrototype(wrapper)) return false;
-	recordedPrototype(wrapper);
+	wrapper.___recordedPrototype();
 	return wrapper.____slothletInternal.prototypeGiven;
-}
-
-/**
- * A member of a function node's function, as the node reads it: one the function does not hold itself comes from the
- * prototype on the node's record (see {@link ownsPrototype}), read on the function.
- * @param {object} wrapper - The node's wrapper.
- * @param {Function} fn - The function.
- * @param {PropertyKey} prop - The member's key.
- * @returns {*} The member.
- * @private
- */
-function functionMember(wrapper, fn, prop) {
-	// While the node's prototype is its function's own, the function answers for what it inherits.
-	if (fn !== wrapper.____slothletInternal.impl || !prototypeGiven(wrapper)) return fn[prop];
-	const prototype = nodeInherits(wrapper, prop);
-	if (prototype === undefined) return fn[prop];
-	return prototype === null ? undefined : Reflect.get(prototype, prop, fn);
 }
 
 /**
@@ -565,128 +510,6 @@ function moduleObjectMembers(object) {
 }
 
 /**
- * Bring one member a node fronts in step with the module's own object (#757): the module may change its object
- * itself after the node was built (`config.port = 90` in its own code), and a read through the node gives what the
- * object holds, as a read of the object does. A member the module replaced is adopted again, as the build adopts
- * one; one it added is adopted; one it deleted is taken off the node. Only the node is changed, as the framework's
- * own write: the module made the change.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @param {object} object - The module's object.
- * @param {Set<string>} seen - The members the object has held (see {@link moduleObjectKeys}).
- * @param {string} key - The member's key.
- * @returns {void}
- * @private
- */
-function followModuleMember(wrapper, object, seen, key) {
-	/**
-	 * Whether what a node holds under a key is what the module's object holds there now (#757): the same primitive or
-	 * built-in value, a child node built from the same object, or an adoption of the same accessor.
-	 * @param {PropertyDescriptor} mine - The node's own member.
-	 * @param {PropertyDescriptor} held - The module's object's member.
-	 * @returns {boolean} True when the node is in step with the object for this member.
-	 * @private
-	 */
-	function holdsModuleMember(mine, held) {
-		if (!("value" in held)) {
-			if ("value" in mine) return false;
-			const original = originalAccessor(mine);
-			return original.get === held.get && original.set === held.set;
-		}
-		if (!("value" in mine)) return false;
-		if (Objects.is(mine.value, held.value)) return true;
-		const child = resolveWrapper(mine.value);
-		if (child === null) return false;
-		// A child node that keeps no record of what it was built from is not one this follows.
-		const internal = child.____slothletInternal;
-		if (!hasOwn(internal, "sourceValue")) return true;
-		// A child a reload reused fronts the reloaded value through its impl or its module object, not what it was built from.
-		return (
-			internal.sourceValue === held.value ||
-			internal.moduleObject === held.value ||
-			internal.impl === held.value ||
-			(internal.impl !== null && typeof internal.impl === "object" && layerUnderlying(internal.impl) === held.value)
-		);
-	}
-
-	/**
-	 * Whether the module has changed a member of its object since the node last saw it (see {@link MODULE_OBJECT_SEEN}),
-	 * recording what the object holds now.
-	 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-	 * @param {object} object - The module's object.
-	 * @param {string} key - The member's key.
-	 * @param {PropertyDescriptor|undefined} held - The object's member now.
-	 * @returns {boolean} True when the member was added, replaced, redefined or deleted.
-	 * @private
-	 */
-	function moduleMemberChanged(wrapper, object, key, held) {
-		let seen = WeakMapMethods.get(MODULE_OBJECT_SEEN, wrapper);
-		if (seen === undefined || seen.object !== object) {
-			// A node handed another node's object (a reload reusing it) was just built from that object as it is.
-			seen = { object, members: moduleObjectMembers(object) };
-			WeakMapMethods.set(MODULE_OBJECT_SEEN, wrapper, seen);
-			return false;
-		}
-		const before = MapMethods.get(seen.members, key);
-		if (held === undefined) {
-			if (before === undefined) return false;
-			MapMethods.delete(seen.members, key);
-			return true;
-		}
-		if (
-			before !== undefined &&
-			before.enumerable === held.enumerable &&
-			"value" in before === "value" in held &&
-			("value" in held ? Objects.is(before.value, held.value) : before.get === held.get && before.set === held.set)
-		) {
-			return false;
-		}
-		MapMethods.set(seen.members, key, held);
-		return true;
-	}
-
-	if (isFrameworkReservedKey(key)) return;
-	const internal = wrapper.____slothletInternal;
-	// A member the other side of a collision won, and a named export beside an object default's members, is the node's.
-	if ((internal.collisionMergedKeys ? SetMethods.has(internal.collisionMergedKeys, key) : false) || moduleObjectOf(wrapper, key) === null)
-		return;
-	const held = Reflect.getOwnPropertyDescriptor(object, key);
-	if (!moduleMemberChanged(wrapper, object, key, held)) return;
-	const mine = Reflect.getOwnPropertyDescriptor(wrapper, key);
-	if (mine !== undefined && !mine.configurable) return;
-	if (held === undefined) {
-		if (mine === undefined || !SetMethods.has(seen, key)) return;
-		SetMethods.delete(seen, key);
-		const displaced = "value" in mine ? resolveWrapper(mine.value) : null;
-		if (displaced) retireChanges(displaced);
-		Reflect.deleteProperty(wrapper, key);
-		if (internal.readOnlyKeys) SetMethods.delete(internal.readOnlyKeys, key);
-		return;
-	}
-	// The build adopts an object's enumerable members only.
-	if (!held.enumerable) return;
-	SetMethods.add(seen, key);
-	if (mine !== undefined && holdsModuleMember(mine, held)) return;
-	if (!("value" in held)) {
-		defineAdoptedAccessor(wrapper, key, held);
-		return;
-	}
-	const value = held.value;
-	let stored = value;
-	if (
-		value !== null &&
-		(typeof value === "object" || typeof value === "function") &&
-		!util.types.isProxy(value) &&
-		resolveWrapper(value) === null
-	) {
-		const displaced = mine !== undefined && "value" in mine ? resolveWrapper(mine.value) : null;
-		if (displaced) retireChanges(displaced);
-		const wrapped = wrapper.___createChildWrapper(key, value, null, internal.deferChildAdopt);
-		if (wrapped !== null && wrapped !== undefined) stored = wrapped;
-	}
-	Objects.defineProperty(wrapper, key, { __proto__: null, value: stored, writable: false, enumerable: true, configurable: true });
-}
-
-/**
  * What {@link nodePrimitive} answers for a node holding no primitive.
  * @type {symbol}
  * @private
@@ -738,57 +561,21 @@ function followModuleObject(wrapper, target, prop, integrity = true) {
 	try {
 		const seen = moduleObjectKeys(object);
 		if (prop !== undefined) {
-			followModuleMember(wrapper, object, seen, prop);
+			wrapper.___followModuleMember(object, seen, prop);
 			return;
 		}
 		for (let ofIndex = 0, ofList = Objects.keys(object); ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
-			followModuleMember(wrapper, object, seen, key);
+			wrapper.___followModuleMember(object, seen, key);
 		}
 		for (let ofIndex = 0, ofList = setToArray(seen); ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
-			if (!hasOwn(object, key)) followModuleMember(wrapper, object, seen, key);
+			if (!hasOwn(object, key)) wrapper.___followModuleMember(object, seen, key);
 		}
 	} finally {
 		internal.followingModule = false;
 	}
-	if (prop === undefined && integrity) followModuleIntegrity(wrapper, target);
-}
-
-/**
- * Close a node when the module closed its own object itself (#757), as the build closes a node over a closed object:
- * its members are brought in step first, then it is frozen, sealed or made non-extensible as the object is.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @param {object} target - The proxy's target.
- * @returns {void}
- * @private
- */
-function followModuleIntegrity(wrapper, target) {
-	const internal = wrapper.____slothletInternal;
-	if (internal.moduleObject === null || internal.moduleObject === undefined) return;
-	if (
-		internal.followingModule ||
-		internal.integritySyncing ||
-		wrapper.slothlet.____buildDepth > 0 ||
-		MapMethods.has(FRAMEWORK_WRITES, wrapper)
-	)
-		return;
-	if (!Reflect.isExtensible(target)) return;
-	const object = moduleObjectOf(wrapper);
-	if (object === null || Reflect.isExtensible(object)) return;
-	followModuleObject(wrapper, target, undefined, false);
-	const { proxy } = internal;
-	const syncing = internal.integritySyncing;
-	internal.integritySyncing = true;
-	try {
-		frameworkWrite(wrapper, () => {
-			if (Objects.isFrozen(object)) Objects.freeze(proxy);
-			else if (Objects.isSealed(object)) Objects.seal(proxy);
-			else Objects.preventExtensions(proxy);
-		});
-	} finally {
-		internal.integritySyncing = syncing;
-	}
+	if (prop === undefined && integrity) wrapper.___followModuleIntegrity(target);
 }
 
 /**
@@ -925,22 +712,6 @@ function nodeAtPath(slothlet, apiPath) {
 	return node;
 }
 
-/**
- * Record a prototype of a class a module exports as one handed out as it is (#597): `api.x.Class.prototype` reads
- * the class's own, so an instance of the class reports that very object as its prototype. Its members are still the
- * module's when read through an instance.
- * @param {object} wrapper - The class's node.
- * @param {*} prototype - The prototype.
- * @returns {*} The prototype.
- * @private
- */
-function exposePrototype(wrapper, prototype) {
-	if (prototype === null || typeof prototype !== "object") return prototype;
-	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext) return prototype;
-	WeakSetMethods.add(makerOf(wrapper).exposed, prototype);
-	return prototype;
-}
-
 const FUNCTION_NODES = new WeakMap();
 
 /**
@@ -1003,29 +774,6 @@ function classPrototypeSites(slothlet, prototype) {
 		if (!ArrayMethods.some(sites, (known) => known.key === site.key)) listPush(sites, site);
 	}
 	return sites;
-}
-
-/**
- * The class a node's instance was made by (#667): the node holds an object built by a class (not a plain object, not
- * an array) as the module holds it, so it is the value itself rather than a copy the framework built from it, and the
- * class's own `prototype` is the instance's prototype. Found by descriptors alone, so none of the module's code runs to
- * find it: an instance with a `constructor` of its own, one whose prototype holds `constructor` as an accessor, and a
- * Proxy anywhere on the way answer null, as does any other node.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @returns {Function|null} The class, or null.
- * @private
- */
-function heldInstanceClass(wrapper) {
-	const internal = wrapper.____slothletInternal;
-	const impl = internal.impl;
-	if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return null;
-	if (!isClassInstance(impl) || !hasOwn(internal, "sourceValue") || internal.sourceValue !== impl || hasOwn(impl, "constructor"))
-		return null;
-	const prototype = Reflect.getPrototypeOf(impl);
-	if (util.types.isProxy(prototype)) return null;
-	const instanceClass = Reflect.getOwnPropertyDescriptor(prototype, "constructor")?.value;
-	if (typeof instanceClass !== "function" || util.types.isProxy(instanceClass)) return null;
-	return Reflect.getOwnPropertyDescriptor(instanceClass, "prototype")?.value === prototype ? instanceClass : null;
 }
 
 /**
@@ -1335,55 +1083,6 @@ function constructorReadMayRefuse(slothlet, readerPath, prototype) {
 }
 
 /**
- * An emitter's own prototype as a node hands it to whoever may call the node (#667): its handle at the node's path, or
- * at its class's `prototype` when a node exports the class, the same to every reader, which reads and calls as the
- * prototype does and decides each change made through it for whoever makes it. A prototype made by no module is no
- * one's to hold back, and is handed out as it is.
- * @param {UnifiedWrapper} wrapper - The emitter's node's wrapper.
- * @param {object} prototype - The emitter's own prototype.
- * @returns {object} What the reader is handed.
- * @private
- */
-function emitterPrototypeHandle(wrapper, prototype) {
-	const slothlet = wrapper.slothlet;
-	const site = prototypeSiteOf(wrapper, null);
-	recordPrototypePath(slothlet, prototype, site);
-	return prototypeHandleOf(slothlet, prototype);
-}
-
-/**
- * Where a node holding an instance of a class of the module's finds the instance's prototype (#725): its class's
- * `prototype`, at the path of the node standing for the class, or for an instance whose class cannot be told from
- * descriptors its own prototype at the instance's path. `undefined` for any other node, an emitter among them. Kept per
- * node for as long as it holds the same instance with the same prototype.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @returns {{prototype: object, checked: UnifiedWrapper, site: {parts: string[], key: string, prop: string|null}}|undefined}
- *   The prototype, the node reaching it is checked against, and the site it is read at.
- * @private
- */
-function instancePrototypeSite(wrapper) {
-	const impl = wrapper.____slothletInternal.impl;
-	if (impl === null || typeof impl !== "object") return undefined;
-	const held = WeakMapMethods.get(INSTANCE_PROTOTYPE_SITES, wrapper);
-	const current = util.types.isProxy(impl) ? undefined : Reflect.getPrototypeOf(impl);
-	if (held !== undefined && held.impl === impl && held.current === current && held.apiPath === wrapper.____slothletInternal.apiPath)
-		return held.found;
-	let found;
-	if (emitterOwnPrototype(wrapper) === undefined) {
-		const classNode = instanceClassFront(wrapper);
-		if (classNode) {
-			const checked = resolveWrapper(classNode);
-			found = { prototype: Reflect.getPrototypeOf(impl), checked, site: prototypeSiteOf(checked, "prototype") };
-		} else {
-			const unclassed = unclassedInstancePrototype(wrapper);
-			if (unclassed !== undefined) found = { prototype: unclassed, checked: wrapper, site: prototypeSiteOf(wrapper, null) };
-		}
-	}
-	WeakMapMethods.set(INSTANCE_PROTOTYPE_SITES, wrapper, { impl, current, apiPath: wrapper.____slothletInternal.apiPath, found });
-	return found;
-}
-
-/**
  * The prototype site each node holding a class instance found, with what it was found for (see
  * {@link instancePrototypeSite}).
  * @type {WeakMap<UnifiedWrapper, {impl: object, current: object|null|undefined, apiPath: string, found: object|undefined}>}
@@ -1392,60 +1091,11 @@ function instancePrototypeSite(wrapper) {
 const INSTANCE_PROTOTYPE_SITES = new WeakMap();
 
 /**
- * The node reaching a closed node's prototype is checked against (#725): a class instance's prototype is checked as a
- * call of its class's node, as on an open node, and any other as a call of the node itself.
- * @param {UnifiedWrapper} wrapper - The closed node's wrapper.
- * @param {*} prototype - The prototype it reports, as the module holds it.
- * @returns {UnifiedWrapper} The node to check.
- * @private
- */
-function prototypeCheckedBy(wrapper, prototype) {
-	const site = instancePrototypeSite(wrapper);
-	return site !== undefined && site.prototype === prototype ? site.checked : wrapper;
-}
-
-/**
- * The prototype of an instance a node holds as its module holds it, when the class that made it cannot be told from
- * descriptors (see {@link heldInstanceClass}): its prototype's `constructor` is an accessor, the instance has a
- * `constructor` of its own, the prototype has none, or the prototype is a Proxy. The node reports it as the instance
- * does, by `Object.getPrototypeOf` and through `__proto__` alike (#667); no class node stands for it, so reaching it is
- * checked as a call of the instance's own node. Read from the instance's own `[[Prototype]]`, so none of the module's
- * code runs to find it. `undefined` for any other node, an emitter or a live grafted object among them, which answer
- * their own prototype.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @returns {object|undefined} The prototype, or `undefined`.
- * @private
- */
-function unclassedInstancePrototype(wrapper) {
-	const internal = wrapper.____slothletInternal;
-	const impl = internal.impl;
-	if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return undefined;
-	if (!isClassInstance(impl) || !hasOwn(internal, "sourceValue") || internal.sourceValue !== impl) return undefined;
-	if (internal.deferChildAdopt || (EventEmitter && inherits(impl, EventEmitter))) return undefined;
-	if (heldInstanceClass(wrapper) !== null) return undefined;
-	return Reflect.getPrototypeOf(impl);
-}
-
-/**
  * The stand-in for a prototype withheld from a reader, per node: see {@link withheldPrototype}.
  * @type {WeakMap<UnifiedWrapper, {nearest: object, standIn: object}>}
  * @private
  */
 const WITHHELD_PROTOTYPES = new WeakMap();
-
-/**
- * The class of the instance a node fronts, when a node of the instance fronts that class too (#667). Such a node
- * answers its class and prototype as the instance does, through the class's node. An instance of a class no node
- * fronts answers null here: the class would reach the reader with no node around it.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @returns {Function|null} The class, or null.
- * @private
- */
-function exportedInstanceClass(wrapper) {
-	const instanceClass = heldInstanceClass(wrapper);
-	if (instanceClass === null) return null;
-	return nodeRefOf(FUNCTION_NODES, wrapper.slothlet, instanceClass) !== undefined ? instanceClass : null;
-}
 
 /**
  * The member nodes an instance's node built for the class its instance was made by, keyed by that node's wrapper
@@ -1466,7 +1116,7 @@ const INSTANCE_CLASS_NODES = new WeakMap();
  * @returns {Function|null} The class's member node, or null.
  * @private
  */
-function instanceClassNode(wrapper, instanceClass = heldInstanceClass(wrapper)) {
+function instanceClassNode(wrapper, instanceClass = wrapper.___heldInstanceClass()) {
 	if (instanceClass === null) return null;
 	if (isIntrinsic(instanceClass) || isBuiltinFunction(instanceClass) || isSharedValue(instanceClass)) return null;
 	const held = WeakMapMethods.get(INSTANCE_CLASS_NODES, wrapper);
@@ -1479,23 +1129,6 @@ function instanceClassNode(wrapper, instanceClass = heldInstanceClass(wrapper)) 
 	if (name && "value" in name && typeof name.value === "string") resolveWrapper(node).____slothletInternal.className = name.value;
 	WeakMapMethods.set(INSTANCE_CLASS_NODES, wrapper, { fn: instanceClass, node });
 	return node;
-}
-
-/**
- * The node standing for the class of the instance a node fronts (#667): the node fronting the class when its module
- * exports it, or else the class's member node at the instance's `constructor` (see instanceClassNode), so an
- * instance of a class its module keeps to itself answers its prototype as one of an exported class does. Null for a
- * node fronting no such instance, and for an emitter or a live grafted object, which answer their own prototype.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @returns {Function|null} The class's node, or null.
- * @private
- */
-function instanceClassFront(wrapper) {
-	const internal = wrapper.____slothletInternal;
-	const exported = exportedInstanceClass(wrapper);
-	if (exported !== null) return WeakRefMethods.deref(WeakMapMethods.get(WeakMapMethods.get(FUNCTION_NODES, wrapper.slothlet), exported));
-	if (internal.deferChildAdopt || (EventEmitter && inherits(internal.impl, EventEmitter))) return null;
-	return instanceClassNode(wrapper);
 }
 
 /**
@@ -1519,22 +1152,6 @@ function* prototypeChain(start) {
 		SetMethods.add(seen, holder);
 		yield holder;
 	}
-}
-
-/**
- * Whether a lazy node loaded as a namespace: its impl is a plain object, not a function, an array or a callable. Its
- * proxy's function target stood in while it loaded, and its own `length` and `name` are no members of the node.
- * @param {object} wrapper - The node's wrapper.
- * @returns {boolean} True for such a node.
- * @private
- */
-function loadedAsNamespace(wrapper) {
-	const internal = wrapper.____slothletInternal;
-	if (internal.mode !== "lazy" || !internal.state.materialized) return false;
-	const impl = internal.impl;
-	return (
-		impl !== null && typeof impl === "object" && !Arrays.isArray(impl) && resolveWrapper(impl)?.____slothletInternal.isCallable !== true
-	);
 }
 
 /**
@@ -1657,7 +1274,7 @@ function liveThis(value) {
 	const wrapper = registeredWrapper(value);
 	// A stand-in for a chain below the wrapper resolves to the chain's live end (`new.target` of a construction
 	// through one, #685).
-	if (wrapper && isRestartStale(wrapper)) return resolveRestartTarget(wrapper, WeakMapMethods.get(WAITING_CHAINS, value));
+	if (wrapper && isRestartStale(wrapper)) return wrapper.___resolveRestartTarget(WeakMapMethods.get(WAITING_CHAINS, value));
 	return value;
 }
 
@@ -1749,24 +1366,18 @@ export function NodesLayer(Base) {
 					RECONSTRUCTED_FROM,
 					NO_NODE_PRIMITIVE,
 					followModuleObject,
-					followModuleIntegrity,
 					reportsWritable,
 					originalAccessor,
 					MAKERS,
 					nodesShared,
 					makerOf,
 					makerInstanceID,
-					exposePrototype,
 					FUNCTION_NODES,
 					LAYER_FRONTS,
 					classPrototypeSites,
 					readerHoldsPrototype,
 					classSiteOf,
 					viewedNodeWrapper,
-					emitterPrototypeHandle,
-					unclassedInstancePrototype,
-					exportedInstanceClass,
-					loadedAsNamespace,
 					liveThis,
 					WAITING_CHAINS,
 					STAND_IN_UNLOADED,
@@ -1789,14 +1400,7 @@ export function NodesLayer(Base) {
 					harborsCode: nodeHarborsCode,
 					behind: nodeBehind
 				});
-				Base.define("wrapper", { classPrototype: wrapperClassPrototype });
-				Base.define("module", {
-					inheritance: moduleInheritance,
-					objectOf: moduleObjectOf,
-					objectFor: moduleObjectFor,
-					objectKeys: moduleObjectKeys,
-					key: moduleKey
-				});
+				Base.define("module", { objectOf: moduleObjectOf, objectFor: moduleObjectFor, objectKeys: moduleObjectKeys, key: moduleKey });
 				Base.define("prototype", {
 					given: prototypeGiven,
 					classNode: prototypeClassNode,
@@ -1806,18 +1410,15 @@ export function NodesLayer(Base) {
 					siteOf: prototypeSiteOf,
 					handleOf: prototypeHandleOf,
 					handedTo: prototypeHandedTo,
-					checkedBy: prototypeCheckedBy,
 					chain: prototypeChain
 				});
-				Base.define("function", { member: functionMember });
-				Base.define("instance", { prototypeSite: instancePrototypeSite, classNode: instanceClassNode, classFront: instanceClassFront });
+				Base.define("instance", { classNode: instanceClassNode });
 				Base.define("captured", { viewNodes: capturedViewNodes });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
 					INTRINSICS = methods.values.INTRINSICS;
 					NODE_VALUE_OFS = methods.values.NODE_VALUE_OFS;
 					inherits = methods.values.inherits;
-					nodeInherits = methods.node.inherits;
 					isBuiltinFunction = methods.is.builtinFunction;
 					isHeldPrimitive = methods.is.heldPrimitive;
 					isIntrinsic = methods.is.intrinsic;
@@ -1825,14 +1426,11 @@ export function NodesLayer(Base) {
 					isRestartStale = methods.is.restartStale;
 					isSharedValue = methods.is.sharedValue;
 					ownsPrototype = methods.values.ownsPrototype;
-					wrapperReport = methods.wrapper.report;
 					FRAMEWORK_WRITES = methods.rules.FRAMEWORK_WRITES;
 					enforceNodeReportRead = methods.rules.enforceNodeReportRead;
 					frameworkWrite = methods.framework.write;
 					implDefault = methods.impl.default;
 					memberHoldsCode = methods.rules.memberHoldsCode;
-					resolveRestartTarget = methods.rules.resolveRestartTarget;
-					recordedPrototype = methods.run.recordedPrototype;
 					capturedViewChildren = methods.captured.viewChildren;
 					capturedViewTargets = methods.captured.viewTargets;
 					hasOwn = methods.has.own;
@@ -1852,13 +1450,13 @@ export function NodesLayer(Base) {
 					knownPrototype = methods.membrane.knownPrototype;
 					searchBudget = methods.membrane.searchBudget;
 					searchDepth = methods.membrane.searchDepth;
-					retireChanges = methods.waiting.retireChanges;
 					standInNode = methods.stand.inNode;
 					defineAdoptedAccessor = methods.materialize.defineAdoptedAccessor;
 					isClassInstance = methods.is.classInstance;
 					resolveWrapper = methods.uw.resolveWrapper;
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					registeredWrapper = methods.values.registeredWrapper;
+					isWrapper = methods.brand.isWrapper;
 				});
 			}
 
@@ -1868,6 +1466,420 @@ export function NodesLayer(Base) {
 			constructor(slothlet) {
 				if (new.target !== realClass) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
 				super(slothlet);
+			}
+
+			/**
+			 * {@link classPrototypeOf}, by the node's wrapper.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @returns {object|null} The prototype.
+			 * @private
+			 */
+			___wrapperClassPrototype() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const impl = wrapper.____slothletInternal.impl;
+				if (typeof impl !== "function") return null;
+				const described = Reflect.getOwnPropertyDescriptor(layerUnderlying(impl), "prototype");
+				const value = described !== undefined && "value" in described ? described.value : null;
+				return value !== null && typeof value === "object" ? value : null;
+			}
+
+			/**
+			 * The prototype a member reaches a node fronting a module's own object from, when the object inherits it from a
+			 * prototype set on it (#757) and the node's own copy of the object holds no member by that key: null otherwise, and
+			 * for a member of `Object.prototype`, which the node's copy inherits too.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {PropertyKey} prop - The member's key.
+			 * @returns {object|null} The prototype to read it from, or null.
+			 * @private
+			 */
+			___moduleInheritance(prop) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const internal = wrapper.____slothletInternal;
+				if (internal.moduleObject === null || internal.moduleObject === undefined) return null;
+				const impl = internal.impl;
+				if (impl === null || typeof impl !== "object" || Reflect.has(impl, prop)) return null;
+				const object = moduleObjectOf(wrapper);
+				if (object === null) return null;
+				const prototype = Reflect.getPrototypeOf(object);
+				return prototype !== null && prototype !== Objects.prototype && Reflect.has(prototype, prop) ? prototype : null;
+			}
+
+			/**
+			 * A member of a function node's function, as the node reads it: one the function does not hold itself comes from the
+			 * prototype on the node's record (see {@link ownsPrototype}), read on the function.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {Function} fn - The function.
+			 * @param {PropertyKey} prop - The member's key.
+			 * @returns {*} The member.
+			 * @private
+			 */
+			___functionMember(fn, prop) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				// While the node's prototype is its function's own, the function answers for what it inherits.
+				if (fn !== wrapper.____slothletInternal.impl || !prototypeGiven(wrapper)) return fn[prop];
+				const prototype = wrapper.___nodeInherits(prop);
+				if (prototype === undefined) return fn[prop];
+				return prototype === null ? undefined : Reflect.get(prototype, prop, fn);
+			}
+
+			/**
+			 * Bring one member a node fronts in step with the module's own object (#757): the module may change its object
+			 * itself after the node was built (`config.port = 90` in its own code), and a read through the node gives what the
+			 * object holds, as a read of the object does. A member the module replaced is adopted again, as the build adopts
+			 * one; one it added is adopted; one it deleted is taken off the node. Only the node is changed, as the framework's
+			 * own write: the module made the change.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @param {object} object - The module's object.
+			 * @param {Set<string>} seen - The members the object has held (see {@link moduleObjectKeys}).
+			 * @param {string} key - The member's key.
+			 * @returns {void}
+			 * @private
+			 */
+			___followModuleMember(object, seen, key) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				/**
+				 * Whether what a node holds under a key is what the module's object holds there now (#757): the same primitive or
+				 * built-in value, a child node built from the same object, or an adoption of the same accessor.
+				 * @param {PropertyDescriptor} mine - The node's own member.
+				 * @param {PropertyDescriptor} held - The module's object's member.
+				 * @returns {boolean} True when the node is in step with the object for this member.
+				 * @private
+				 */
+				function holdsModuleMember(mine, held) {
+					if (!("value" in held)) {
+						if ("value" in mine) return false;
+						const original = originalAccessor(mine);
+						return original.get === held.get && original.set === held.set;
+					}
+					if (!("value" in mine)) return false;
+					if (Objects.is(mine.value, held.value)) return true;
+					const child = resolveWrapper(mine.value);
+					if (child === null) return false;
+					// A child node that keeps no record of what it was built from is not one this follows.
+					const internal = child.____slothletInternal;
+					if (!hasOwn(internal, "sourceValue")) return true;
+					// A child a reload reused fronts the reloaded value through its impl or its module object, not what it was built from.
+					return (
+						internal.sourceValue === held.value ||
+						internal.moduleObject === held.value ||
+						internal.impl === held.value ||
+						(internal.impl !== null && typeof internal.impl === "object" && layerUnderlying(internal.impl) === held.value)
+					);
+				}
+
+				/**
+				 * Whether the module has changed a member of its object since the node last saw it (see {@link MODULE_OBJECT_SEEN}),
+				 * recording what the object holds now.
+				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+				 * @param {object} object - The module's object.
+				 * @param {string} key - The member's key.
+				 * @param {PropertyDescriptor|undefined} held - The object's member now.
+				 * @returns {boolean} True when the member was added, replaced, redefined or deleted.
+				 * @private
+				 */
+				function moduleMemberChanged(wrapper, object, key, held) {
+					let seen = WeakMapMethods.get(MODULE_OBJECT_SEEN, wrapper);
+					if (seen === undefined || seen.object !== object) {
+						// A node handed another node's object (a reload reusing it) was just built from that object as it is.
+						seen = { object, members: moduleObjectMembers(object) };
+						WeakMapMethods.set(MODULE_OBJECT_SEEN, wrapper, seen);
+						return false;
+					}
+					const before = MapMethods.get(seen.members, key);
+					if (held === undefined) {
+						if (before === undefined) return false;
+						MapMethods.delete(seen.members, key);
+						return true;
+					}
+					if (
+						before !== undefined &&
+						before.enumerable === held.enumerable &&
+						"value" in before === "value" in held &&
+						("value" in held ? Objects.is(before.value, held.value) : before.get === held.get && before.set === held.set)
+					) {
+						return false;
+					}
+					MapMethods.set(seen.members, key, held);
+					return true;
+				}
+
+				if (isFrameworkReservedKey(key)) return;
+				const internal = wrapper.____slothletInternal;
+				// A member the other side of a collision won, and a named export beside an object default's members, is the node's.
+				if (
+					(internal.collisionMergedKeys ? SetMethods.has(internal.collisionMergedKeys, key) : false) ||
+					moduleObjectOf(wrapper, key) === null
+				)
+					return;
+				const held = Reflect.getOwnPropertyDescriptor(object, key);
+				if (!moduleMemberChanged(wrapper, object, key, held)) return;
+				const mine = Reflect.getOwnPropertyDescriptor(wrapper, key);
+				if (mine !== undefined && !mine.configurable) return;
+				if (held === undefined) {
+					if (mine === undefined || !SetMethods.has(seen, key)) return;
+					SetMethods.delete(seen, key);
+					const displaced = "value" in mine ? resolveWrapper(mine.value) : null;
+					if (displaced) displaced.___retireChanges();
+					Reflect.deleteProperty(wrapper, key);
+					if (internal.readOnlyKeys) SetMethods.delete(internal.readOnlyKeys, key);
+					return;
+				}
+				// The build adopts an object's enumerable members only.
+				if (!held.enumerable) return;
+				SetMethods.add(seen, key);
+				if (mine !== undefined && holdsModuleMember(mine, held)) return;
+				if (!("value" in held)) {
+					defineAdoptedAccessor(wrapper, key, held);
+					return;
+				}
+				const value = held.value;
+				let stored = value;
+				if (
+					value !== null &&
+					(typeof value === "object" || typeof value === "function") &&
+					!util.types.isProxy(value) &&
+					resolveWrapper(value) === null
+				) {
+					const displaced = mine !== undefined && "value" in mine ? resolveWrapper(mine.value) : null;
+					if (displaced) displaced.___retireChanges();
+					const wrapped = wrapper.___createChildWrapper(key, value, null, internal.deferChildAdopt);
+					if (wrapped !== null && wrapped !== undefined) stored = wrapped;
+				}
+				Objects.defineProperty(wrapper, key, { __proto__: null, value: stored, writable: false, enumerable: true, configurable: true });
+			}
+
+			/**
+			 * Close a node when the module closed its own object itself (#757), as the build closes a node over a closed object:
+			 * its members are brought in step first, then it is frozen, sealed or made non-extensible as the object is.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @param {object} target - The proxy's target.
+			 * @returns {void}
+			 * @private
+			 */
+			___followModuleIntegrity(target) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const internal = wrapper.____slothletInternal;
+				if (internal.moduleObject === null || internal.moduleObject === undefined) return;
+				if (
+					internal.followingModule ||
+					internal.integritySyncing ||
+					wrapper.slothlet.____buildDepth > 0 ||
+					MapMethods.has(FRAMEWORK_WRITES, wrapper)
+				)
+					return;
+				if (!Reflect.isExtensible(target)) return;
+				const object = moduleObjectOf(wrapper);
+				if (object === null || Reflect.isExtensible(object)) return;
+				followModuleObject(wrapper, target, undefined, false);
+				const { proxy } = internal;
+				const syncing = internal.integritySyncing;
+				internal.integritySyncing = true;
+				try {
+					frameworkWrite(wrapper, () => {
+						if (Objects.isFrozen(object)) Objects.freeze(proxy);
+						else if (Objects.isSealed(object)) Objects.seal(proxy);
+						else Objects.preventExtensions(proxy);
+					});
+				} finally {
+					internal.integritySyncing = syncing;
+				}
+			}
+
+			/**
+			 * Record a prototype of a class a module exports as one handed out as it is (#597): `api.x.Class.prototype` reads
+			 * the class's own, so an instance of the class reports that very object as its prototype. Its members are still the
+			 * module's when read through an instance.
+			 * @param {object} wrapper - The class's node.
+			 * @param {*} prototype - The prototype.
+			 * @returns {*} The prototype.
+			 * @private
+			 */
+			___exposePrototype(prototype) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				if (prototype === null || typeof prototype !== "object") return prototype;
+				if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext) return prototype;
+				WeakSetMethods.add(makerOf(wrapper).exposed, prototype);
+				return prototype;
+			}
+
+			/**
+			 * The class a node's instance was made by (#667): the node holds an object built by a class (not a plain object, not
+			 * an array) as the module holds it, so it is the value itself rather than a copy the framework built from it, and the
+			 * class's own `prototype` is the instance's prototype. Found by descriptors alone, so none of the module's code runs to
+			 * find it: an instance with a `constructor` of its own, one whose prototype holds `constructor` as an accessor, and a
+			 * Proxy anywhere on the way answer null, as does any other node.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @returns {Function|null} The class, or null.
+			 * @private
+			 */
+			___heldInstanceClass() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const internal = wrapper.____slothletInternal;
+				const impl = internal.impl;
+				if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return null;
+				if (!isClassInstance(impl) || !hasOwn(internal, "sourceValue") || internal.sourceValue !== impl || hasOwn(impl, "constructor"))
+					return null;
+				const prototype = Reflect.getPrototypeOf(impl);
+				if (util.types.isProxy(prototype)) return null;
+				const instanceClass = Reflect.getOwnPropertyDescriptor(prototype, "constructor")?.value;
+				if (typeof instanceClass !== "function" || util.types.isProxy(instanceClass)) return null;
+				return Reflect.getOwnPropertyDescriptor(instanceClass, "prototype")?.value === prototype ? instanceClass : null;
+			}
+
+			/**
+			 * An emitter's own prototype as a node hands it to whoever may call the node (#667): its handle at the node's path, or
+			 * at its class's `prototype` when a node exports the class, the same to every reader, which reads and calls as the
+			 * prototype does and decides each change made through it for whoever makes it. A prototype made by no module is no
+			 * one's to hold back, and is handed out as it is.
+			 * @param {UnifiedWrapper} wrapper - The emitter's node's wrapper.
+			 * @param {object} prototype - The emitter's own prototype.
+			 * @returns {object} What the reader is handed.
+			 * @private
+			 */
+			___emitterPrototypeHandle(prototype) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const slothlet = wrapper.slothlet;
+				const site = prototypeSiteOf(wrapper, null);
+				recordPrototypePath(slothlet, prototype, site);
+				return prototypeHandleOf(slothlet, prototype);
+			}
+
+			/**
+			 * Where a node holding an instance of a class of the module's finds the instance's prototype (#725): its class's
+			 * `prototype`, at the path of the node standing for the class, or for an instance whose class cannot be told from
+			 * descriptors its own prototype at the instance's path. `undefined` for any other node, an emitter among them. Kept per
+			 * node for as long as it holds the same instance with the same prototype.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @returns {{prototype: object, checked: UnifiedWrapper, site: {parts: string[], key: string, prop: string|null}}|undefined}
+			 *   The prototype, the node reaching it is checked against, and the site it is read at.
+			 * @private
+			 */
+			___instancePrototypeSite() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const impl = wrapper.____slothletInternal.impl;
+				if (impl === null || typeof impl !== "object") return undefined;
+				const held = WeakMapMethods.get(INSTANCE_PROTOTYPE_SITES, wrapper);
+				const current = util.types.isProxy(impl) ? undefined : Reflect.getPrototypeOf(impl);
+				if (held !== undefined && held.impl === impl && held.current === current && held.apiPath === wrapper.____slothletInternal.apiPath)
+					return held.found;
+				let found;
+				if (emitterOwnPrototype(wrapper) === undefined) {
+					const classNode = wrapper.___instanceClassFront();
+					if (classNode) {
+						const checked = resolveWrapper(classNode);
+						found = { prototype: Reflect.getPrototypeOf(impl), checked, site: prototypeSiteOf(checked, "prototype") };
+					} else {
+						const unclassed = wrapper.___unclassedInstancePrototype();
+						if (unclassed !== undefined) found = { prototype: unclassed, checked: wrapper, site: prototypeSiteOf(wrapper, null) };
+					}
+				}
+				WeakMapMethods.set(INSTANCE_PROTOTYPE_SITES, wrapper, { impl, current, apiPath: wrapper.____slothletInternal.apiPath, found });
+				return found;
+			}
+
+			/**
+			 * The node reaching a closed node's prototype is checked against (#725): a class instance's prototype is checked as a
+			 * call of its class's node, as on an open node, and any other as a call of the node itself.
+			 * @param {UnifiedWrapper} wrapper - The closed node's wrapper.
+			 * @param {*} prototype - The prototype it reports, as the module holds it.
+			 * @returns {UnifiedWrapper} The node to check.
+			 * @private
+			 */
+			___prototypeCheckedBy(prototype) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const site = wrapper.___instancePrototypeSite();
+				return site !== undefined && site.prototype === prototype ? site.checked : wrapper;
+			}
+
+			/**
+			 * The prototype of an instance a node holds as its module holds it, when the class that made it cannot be told from
+			 * descriptors (see {@link heldInstanceClass}): its prototype's `constructor` is an accessor, the instance has a
+			 * `constructor` of its own, the prototype has none, or the prototype is a Proxy. The node reports it as the instance
+			 * does, by `Object.getPrototypeOf` and through `__proto__` alike (#667); no class node stands for it, so reaching it is
+			 * checked as a call of the instance's own node. Read from the instance's own `[[Prototype]]`, so none of the module's
+			 * code runs to find it. `undefined` for any other node, an emitter or a live grafted object among them, which answer
+			 * their own prototype.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @returns {object|undefined} The prototype, or `undefined`.
+			 * @private
+			 */
+			___unclassedInstancePrototype() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const internal = wrapper.____slothletInternal;
+				const impl = internal.impl;
+				if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return undefined;
+				if (!isClassInstance(impl) || !hasOwn(internal, "sourceValue") || internal.sourceValue !== impl) return undefined;
+				if (internal.deferChildAdopt || (EventEmitter && inherits(impl, EventEmitter))) return undefined;
+				if (wrapper.___heldInstanceClass() !== null) return undefined;
+				return Reflect.getPrototypeOf(impl);
+			}
+
+			/**
+			 * The class of the instance a node fronts, when a node of the instance fronts that class too (#667). Such a node
+			 * answers its class and prototype as the instance does, through the class's node. An instance of a class no node
+			 * fronts answers null here: the class would reach the reader with no node around it.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @returns {Function|null} The class, or null.
+			 * @private
+			 */
+			___exportedInstanceClass() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const instanceClass = wrapper.___heldInstanceClass();
+				if (instanceClass === null) return null;
+				return nodeRefOf(FUNCTION_NODES, wrapper.slothlet, instanceClass) !== undefined ? instanceClass : null;
+			}
+
+			/**
+			 * The node standing for the class of the instance a node fronts (#667): the node fronting the class when its module
+			 * exports it, or else the class's member node at the instance's `constructor` (see instanceClassNode), so an
+			 * instance of a class its module keeps to itself answers its prototype as one of an exported class does. Null for a
+			 * node fronting no such instance, and for an emitter or a live grafted object, which answer their own prototype.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @returns {Function|null} The class's node, or null.
+			 * @private
+			 */
+			___instanceClassFront() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const internal = wrapper.____slothletInternal;
+				const exported = wrapper.___exportedInstanceClass();
+				if (exported !== null)
+					return WeakRefMethods.deref(WeakMapMethods.get(WeakMapMethods.get(FUNCTION_NODES, wrapper.slothlet), exported));
+				if (internal.deferChildAdopt || (EventEmitter && inherits(internal.impl, EventEmitter))) return null;
+				return instanceClassNode(wrapper);
+			}
+
+			/**
+			 * Whether a lazy node loaded as a namespace: its impl is a plain object, not a function, an array or a callable. Its
+			 * proxy's function target stood in while it loaded, and its own `length` and `name` are no members of the node.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @returns {boolean} True for such a node.
+			 * @private
+			 */
+			___loadedAsNamespace() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
+				const wrapper = this;
+				const internal = wrapper.____slothletInternal;
+				if (internal.mode !== "lazy" || !internal.state.materialized) return false;
+				const impl = internal.impl;
+				return (
+					impl !== null &&
+					typeof impl === "object" &&
+					!Arrays.isArray(impl) &&
+					resolveWrapper(impl)?.____slothletInternal.isCallable !== true
+				);
 			}
 		}
 	);

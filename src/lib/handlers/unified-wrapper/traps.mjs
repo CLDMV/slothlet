@@ -100,51 +100,33 @@ let reservedKeysOwn,
 	rulesShared,
 	runShared,
 	takeRunWrite,
-	wrapOnSet,
 	NODE_TARGETS,
 	snapshotPrototype,
-	wrapperClassPrototype,
-	checkpointPrototypeHandout,
 	checkpointHandout,
 	builtinBehind,
-	checkpointFile,
 	snapshotBarrier,
 	takeCapturedAccess,
-	accessAsKept,
 	takeAccess,
 	enforceRead,
-	markAssignedData,
 	WRAPPER_ANSWERED_PROPS,
 	GET_TRAP_ALLOWED_INTERNALS,
 	valueHoldsName,
 	isBuiltinFunctionMember,
 	enforceCodeMember,
 	isCodeMemberWithheld,
-	implAccessor,
-	moduleInheritance,
 	behindGivenView,
-	givenPrototypeFor,
-	recordedPrototype,
 	prototypeGiven,
 	inRunTree,
 	ownRunTreeArray,
 	markRunTreeHeld,
 	runTreeHides,
-	runTreeHiddenFrom,
 	ownsPrototype,
-	nodeInherits,
-	functionMember,
-	implHas,
-	readImplMember,
-	writeImplMember,
 	moduleObjectOf,
 	OBJECT_PROTO_SETTER,
 	moduleObjectKeys,
-	gateNodeValue,
 	NO_NODE_PRIMITIVE,
 	nodePrimitive,
 	followModuleObject,
-	followModuleIntegrity,
 	reportsWritable,
 	onImpl,
 	originalAccessor,
@@ -152,47 +134,29 @@ let reservedKeysOwn,
 	memberHoldsCode,
 	searchDepth,
 	searchBudget,
-	constructAsNode,
-	exposePrototype,
-	ownInstances,
-	ownArguments,
 	FUNCTION_NODES,
 	nodeRefOf,
-	functionNodePrototype,
-	functionNodeFor,
 	prototypeForReader,
 	prototypeForHolder,
 	behindMemberView,
 	emitterOwnPrototype,
-	emitterPrototypeHandle,
-	prototypeCheckedBy,
-	unclassedInstancePrototype,
 	readsEngineProto,
-	exportedInstanceClass,
 	instanceClassNode,
 	UNLOADED_HAS_INSTANCE,
 	functionOf,
 	hasOwnMember,
 	isArrayMember,
-	hasOwnSymbolMember,
-	loadedAsNamespace,
 	isReadRedacted,
-	holdsValue,
-	heldValue,
-	gateFixedValue,
 	fixedDescriptor,
 	arrayKeyHolder,
 	SERIALIZERS,
-	redactToJSONResult,
 	enforcePermission,
-	runAfterPrincipalGate,
 	nodeInCycle,
 	capturedReader,
 	readAsReader,
 	INSPECT_HOOKS,
 	bindCapturedIdentity,
 	guardPromotedResult,
-	readTargetFailure,
 	unwrapError,
 	createNamedProxyTarget,
 	findThen,
@@ -206,7 +170,6 @@ let reservedKeysOwn,
 	definitionBindsTarget,
 	isFixedReadOnly,
 	shellValue,
-	definitionFixes,
 	refuseFixedObjectDefinition,
 	syncArrayIntegrity,
 	standInMember,
@@ -222,7 +185,6 @@ let reservedKeysOwn,
 	givenAsIs,
 	givenViewOn,
 	SEALED_SHELL_READER,
-	crossArgumentsFrom,
 	callingModule,
 	isSlothletValue,
 	INTRINSICS,
@@ -234,15 +196,12 @@ let reservedKeysOwn,
 	recordPrototypePath,
 	prototypeSiteOf,
 	prototypeHandleOf,
-	instancePrototypeSite,
 	WITHHELD_PROTOTYPES,
 	markFrameworkInternal,
-	instanceClassFront,
 	atClassSite,
 	DATA_NODE_IMPLS,
 	isTerminalData,
 	accessEntry,
-	runAccessor,
 	pinsAsCode,
 	pinnedCodeMember,
 	RUN_VIEW_ACCESS,
@@ -253,7 +212,6 @@ let reservedKeysOwn,
 	readGateDecision,
 	readsNothingBeneath,
 	serializesItself,
-	serializedHolder,
 	PENDING_INVARIANT_READ,
 	HAS_INSTANCE_BY_IMPL,
 	selfHasInstance,
@@ -285,11 +243,8 @@ export function TrapsLayer(Base) {
 					defineProxyInspect = methods.values.defineProxyInspect;
 					frontedDataMember = methods.values.frontedDataMember;
 					holdsDataKind = methods.holds.dataKind;
-					holdsValue = methods.holds.value;
-					implHas = methods.impl.has;
 					inheritedEngineMember = methods.inherited.engineMember;
 					inherits = methods.values.inherits;
-					nodeInherits = methods.node.inherits;
 					inspectShown = methods.inspect.shown;
 					isArrayIndex = methods.is.arrayIndex;
 					isArrayMember = methods.is.arrayMember;
@@ -303,9 +258,7 @@ export function TrapsLayer(Base) {
 					isPosition = methods.is.position;
 					isReadRedacted = methods.is.readRedacted;
 					isUnchangingDefinition = methods.is.unchangingDefinition;
-					markAssignedData = methods.values.markAssignedData;
 					ownsPrototype = methods.values.ownsPrototype;
-					redactToJSONResult = methods.values.redactToJSONResult;
 					valueHoldsName = methods.values.valueHoldsName;
 					FUNCTION_NODES = methods.nodes.FUNCTION_NODES;
 					NO_NODE_PRIMITIVE = methods.nodes.NO_NODE_PRIMITIVE;
@@ -313,32 +266,21 @@ export function TrapsLayer(Base) {
 					nodeRefOf = methods.node.refOf;
 					nodesShared = methods.nodes.nodesShared;
 					nodeInCycle = methods.node.inCycle;
-					emitterPrototypeHandle = methods.nodes.emitterPrototypeHandle;
-					exportedInstanceClass = methods.nodes.exportedInstanceClass;
-					exposePrototype = methods.nodes.exposePrototype;
-					followModuleIntegrity = methods.nodes.followModuleIntegrity;
 					followModuleObject = methods.nodes.followModuleObject;
-					functionMember = methods.function.member;
 					instanceClassNode = methods.instance.classNode;
-					loadedAsNamespace = methods.nodes.loadedAsNamespace;
-					moduleInheritance = methods.module.inheritance;
 					moduleObjectKeys = methods.module.objectKeys;
 					moduleObjectOf = methods.module.objectOf;
 					nodePrimitive = methods.node.primitive;
 					originalAccessor = methods.nodes.originalAccessor;
-					prototypeCheckedBy = methods.prototype.checkedBy;
 					prototypeForHolder = methods.prototype.forHolder;
 					prototypeForReader = methods.prototype.forReader;
 					prototypeGiven = methods.prototype.given;
 					reportsWritable = methods.nodes.reportsWritable;
-					unclassedInstancePrototype = methods.nodes.unclassedInstancePrototype;
 					valueOfFor = methods.nodes.valueOfFor;
-					wrapperClassPrototype = methods.wrapper.classPrototype;
 					enforcePermission = methods.rules.enforcePermission;
 					FRAMEWORK_WRITES = methods.rules.FRAMEWORK_WRITES;
 					NO_STORED_VALUE = methods.rules.NO_STORED_VALUE;
 					rulesShared = methods.rules.rulesShared;
-					accessAsKept = methods.access.asKept;
 					arrayKeyHolder = methods.rules.arrayKeyHolder;
 					assertOwnedWrite = methods.rules.assertOwnedWrite;
 					bindCapturedIdentity = methods.rules.bindCapturedIdentity;
@@ -346,38 +288,26 @@ export function TrapsLayer(Base) {
 					enforceCodeMember = methods.rules.enforceCodeMember;
 					enforceRead = methods.rules.enforceRead;
 					fixedDescriptor = methods.rules.fixedDescriptor;
-					gateFixedValue = methods.rules.gateFixedValue;
-					gateNodeValue = methods.rules.gateNodeValue;
 					hasOwnMember = methods.has.ownMember;
-					implAccessor = methods.impl.accessor;
 					memberHoldsCode = methods.rules.memberHoldsCode;
 					onImpl = methods.rules.onImpl;
 					placingTrap = methods.rules.placingTrap;
 					readAsReader = methods.read.asReader;
-					readImplMember = methods.read.implMember;
 					refuseFixedObjectDefinition = methods.rules.refuseFixedObjectDefinition;
 					shellValue = methods.rules.shellValue;
 					takeAccess = methods.rules.takeAccess;
 					takeCapturedAccess = methods.rules.takeCapturedAccess;
 					withRestartForwarding = methods.rules.withRestartForwarding;
-					writeImplMember = methods.rules.writeImplMember;
 					runShared = methods.run.shared;
-					checkpointFile = methods.checkpoint.file;
 					checkpointHandout = methods.checkpoint.handout;
-					checkpointPrototypeHandout = methods.checkpoint.prototypeHandout;
 					guardPromotedResult = methods.run.guardPromotedResult;
 					inRunTree = methods.run.inRunTree;
 					markRunTreeHeld = methods.run.markRunTreeHeld;
 					ownRunTreeArray = methods.run.ownRunTreeArray;
-					readTargetFailure = methods.read.targetFailure;
-					recordedPrototype = methods.run.recordedPrototype;
-					runAfterPrincipalGate = methods.run.afterPrincipalGate;
-					runTreeHiddenFrom = methods.run.treeHiddenFrom;
 					runTreeHides = methods.run.treeHides;
 					snapshotBarrier = methods.run.snapshotBarrier;
 					snapshotPrototype = methods.run.snapshotPrototype;
 					takeRunWrite = methods.run.takeRunWrite;
-					wrapOnSet = methods.run.wrapOnSet;
 					unwrapError = methods.run.unwrapError;
 					hasOwn = methods.has.own;
 					INTRINSIC_HAS_INSTANCE = methods.views.INTRINSIC_HAS_INSTANCE;
@@ -387,8 +317,6 @@ export function TrapsLayer(Base) {
 					capturedReader = methods.captured.reader;
 					emitterOwnPrototype = methods.views.emitterOwnPrototype;
 					functionOf = methods.function.of;
-					hasOwnSymbolMember = methods.has.ownSymbolMember;
-					ownInstances = methods.views.ownInstances;
 					readsEngineProto = methods.views.readsEngineProto;
 					selfIsMethodNode = methods.self.isMethodNode;
 					selfModuleReader = methods.self.moduleReader;
@@ -397,17 +325,10 @@ export function TrapsLayer(Base) {
 					SELF_VIEW_NODES = methods.views.SELF_VIEW_NODES;
 					SERIALIZERS = methods.views.SERIALIZERS;
 					behindGivenView = methods.membrane.behindGivenView;
-					constructAsNode = methods.membrane.constructAsNode;
-					functionNodeFor = methods.function.nodeFor;
-					functionNodePrototype = methods.function.nodePrototype;
-					givenPrototypeFor = methods.given.prototypeFor;
-					ownArguments = methods.membrane.ownArguments;
 					searchBudget = methods.membrane.searchBudget;
 					searchDepth = methods.membrane.searchDepth;
-					heldValue = methods.root.heldValue;
 					standInMember = methods.stand.inMember;
 					adoptArrayIntegrity = methods.materialize.adoptArrayIntegrity;
-					definitionFixes = methods.materialize.definitionFixes;
 					syncArrayIntegrity = methods.materialize.syncArrayIntegrity;
 					createNamedProxyTarget = methods.uw.createNamedProxyTarget;
 					findThen = methods.uw.findThen;
@@ -427,7 +348,6 @@ export function TrapsLayer(Base) {
 					givenAsIs = methods.given.asIs;
 					givenViewOn = methods.given.viewOn;
 					SEALED_SHELL_READER = methods.membrane.SEALED_SHELL_READER;
-					crossArgumentsFrom = methods.membrane.crossArgumentsFrom;
 					callingModule = methods.views.callingModule;
 					isSlothletValue = methods.is.slothletValue;
 					INTRINSICS = methods.values.INTRINSICS;
@@ -439,15 +359,12 @@ export function TrapsLayer(Base) {
 					recordPrototypePath = methods.nodes.recordPrototypePath;
 					prototypeSiteOf = methods.prototype.siteOf;
 					prototypeHandleOf = methods.prototype.handleOf;
-					instancePrototypeSite = methods.instance.prototypeSite;
 					WITHHELD_PROTOTYPES = methods.nodes.WITHHELD_PROTOTYPES;
 					markFrameworkInternal = methods.uw.markFrameworkInternal;
-					instanceClassFront = methods.instance.classFront;
 					atClassSite = methods.views.atClassSite;
 					DATA_NODE_IMPLS = methods.rules.DATA_NODE_IMPLS;
 					isTerminalData = methods.is.terminalData;
 					accessEntry = methods.access.entry;
-					runAccessor = methods.run.accessor;
 					pinsAsCode = methods.root.pinsAsCode;
 					pinnedCodeMember = methods.rules.pinnedCodeMember;
 					RUN_VIEW_ACCESS = methods.run.RUN_VIEW_ACCESS;
@@ -458,7 +375,6 @@ export function TrapsLayer(Base) {
 					readGateDecision = methods.read.gateDecision;
 					readsNothingBeneath = methods.rules.readsNothingBeneath;
 					serializesItself = methods.values.serializesItself;
-					serializedHolder = methods.values.serializedHolder;
 					PENDING_INVARIANT_READ = methods.views.PENDING_INVARIANT_READ;
 					HAS_INSTANCE_BY_IMPL = methods.views.HAS_INSTANCE_BY_IMPL;
 					selfHasInstance = methods.self.hasInstance;
@@ -581,7 +497,7 @@ export function TrapsLayer(Base) {
 						} else if (Arrays.isArray(value)) {
 							own()[key] = node[key];
 						} else if (serializesItself(value)) {
-							own()[key] = serializedHolder(wrapper, value, targetPath, callerOverride, kept);
+							own()[key] = wrapper.___serializedHolder(value, targetPath, callerOverride, kept);
 						} else {
 							const redacted = redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride, kept);
 							if (redacted !== value) own()[key] = redacted;
@@ -628,7 +544,7 @@ export function TrapsLayer(Base) {
 				 * @private
 				 */
 				function inheritsSymbol(wrapper, prop) {
-					const prototype = nodeInherits(wrapper, prop);
+					const prototype = wrapper.___nodeInherits(prop);
 					return prototype !== undefined && prototype !== null && Reflect.has(prototype, prop);
 				}
 
@@ -707,7 +623,8 @@ export function TrapsLayer(Base) {
 					const onUnobserved = (source) => {
 						unobserved = source;
 					};
-					const functionSource = (error) => failureSource({ type: "function", at: wrapper.clock.now() }, readTargetFailure(wrapper, error));
+					const functionSource = (error) =>
+						failureSource({ type: "function", at: wrapper.clock.now() }, wrapper.___readTargetFailure(error));
 
 					const invokeTarget = (targetArgs) => {
 						const impl = internal.impl;
@@ -752,7 +669,7 @@ export function TrapsLayer(Base) {
 						// Every rejection is recorded on its way out except one of a thenable no view could be put on (a frozen
 						// `then`); that one is the target's, so it is classified as the target before anything reads it (#599).
 						const recordedSource = ArrayMethods.find(sources, (record) => Objects.is(record.error, error))?.source;
-						const unrecorded = recordedSource === undefined && unobserved ? readTargetFailure(wrapper, error) : null;
+						const unrecorded = recordedSource === undefined && unobserved ? wrapper.___readTargetFailure(error) : null;
 						const originalError = unrecorded ? unrecorded.originalError() : unwrapError(error);
 						// A failure an inner hooked call already reported is not reported again (same rule as the
 						// pipeline without around hooks); `always` still observes this call.
@@ -1002,7 +919,7 @@ export function TrapsLayer(Base) {
 					}
 					if ("value" in held) return held.writable === true && Reflect.defineProperty(object, prop, { __proto__: null, value });
 					if (typeof held.set !== "function") return false;
-					runAccessor(wrapper, held.set, object, [value]);
+					wrapper.___runAccessor(held.set, object, [value]);
 					return true;
 				}
 
@@ -1051,7 +968,7 @@ export function TrapsLayer(Base) {
 					const impl = wrapper.____slothletInternal.impl;
 					// A primitive a loaded node holds (a lazy folder kept before it loaded as one) is data like a built-in (#797).
 					if (nodePrimitive(wrapper) !== NO_NODE_PRIMITIVE) {
-						gateNodeValue(wrapper, kept, access);
+						wrapper.___gateNodeValue(kept, access);
 						return;
 					}
 					if (impl === null || typeof impl !== "object") return;
@@ -1061,7 +978,7 @@ export function TrapsLayer(Base) {
 						WeakMapMethods.set(DATA_NODE_IMPLS, impl, isData);
 					}
 					if (!isData) return;
-					gateNodeValue(wrapper, kept, access);
+					wrapper.___gateNodeValue(kept, access);
 				}
 
 				/**
@@ -1078,12 +995,12 @@ export function TrapsLayer(Base) {
 				 * @private
 				 */
 				function instanceClassPrototype(wrapper, kept = null) {
-					const classNode = instanceClassFront(wrapper);
+					const classNode = wrapper.___instanceClassFront();
 					if (!classNode) return undefined;
 					const classWrapper = resolveWrapper(classNode);
 					const prototype = Reflect.getPrototypeOf(wrapper.____slothletInternal.impl);
 					enforceCodeMember(classWrapper, prototype, kept);
-					return atClassSite(wrapper.slothlet, prototypeForReader(classWrapper, exposePrototype(classWrapper, prototype), "prototype"));
+					return atClassSite(wrapper.slothlet, prototypeForReader(classWrapper, classWrapper.___exposePrototype(prototype), "prototype"));
 				}
 
 				/**
@@ -1133,12 +1050,12 @@ export function TrapsLayer(Base) {
 				 * @private
 				 */
 				function instanceShellPrototype(wrapper) {
-					const site = instancePrototypeSite(wrapper);
+					const site = wrapper.___instancePrototypeSite();
 					if (site === undefined) return undefined;
 					const { prototype, checked } = site;
 					if (prototype === null || WeakSetMethods.has(INTRINSICS, prototype) || isSharedValue(prototype) || !wrapper.slothlet)
 						return prototype;
-					recordPrototypePath(wrapper.slothlet, exposePrototype(checked, prototype), site.site);
+					recordPrototypePath(wrapper.slothlet, checked.___exposePrototype(prototype), site.site);
 					return prototypeHandleOf(wrapper.slothlet, prototype);
 				}
 
@@ -1263,7 +1180,7 @@ export function TrapsLayer(Base) {
 				function crossArguments(wrapper, args) {
 					const slothlet = wrapper?.slothlet;
 					if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
-					return crossArgumentsFrom(wrapper, args, callingModule(slothlet));
+					return wrapper.___crossArgumentsFrom(args, callingModule(slothlet));
 				}
 
 				/**
@@ -1304,7 +1221,7 @@ export function TrapsLayer(Base) {
 					const value = descriptor.value;
 					if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
 					if (util.types.isProxy(value) || resolveWrapper(value) !== null) return null;
-					if (definitionFixes(wrapper, target, prop, descriptor)) return null;
+					if (wrapper.___definitionFixes(target, prop, descriptor)) return null;
 					const current = Reflect.getOwnPropertyDescriptor(wrapper, prop);
 					const currentNode = current && "value" in current ? resolveWrapper(current.value) : null;
 					if (
@@ -1485,7 +1402,7 @@ export function TrapsLayer(Base) {
 								return wrapper[prop];
 							}
 							const fixedValue = target[prop];
-							gateFixedValue(wrapper, prop, fixedValue, kept);
+							wrapper.___gateFixedValue(prop, fixedValue, kept);
 							return fixedValue;
 						}
 					}
@@ -1618,7 +1535,7 @@ export function TrapsLayer(Base) {
 									PromiseMethods.then(wrapper.___materialize(), () => {
 										const held = nodePrimitive(wrapper);
 										if (held === NO_NODE_PRIMITIVE) return onFulfilled(wrapperInternal.proxy);
-										if (pinned) gateNodeValue(wrapper, kept, null, pinned);
+										if (pinned) wrapper.___gateNodeValue(kept, null, pinned);
 										return onFulfilled(held);
 									}),
 									onRejected
@@ -1662,7 +1579,7 @@ export function TrapsLayer(Base) {
 						// `__proto__` member of its own, or it has none to inherit the accessor from.
 						// So does a function node given another prototype; one keeping its function's reads it as the function does, below.
 						if (protoImpl !== null && (typeof protoImpl === "object" || typeof protoImpl === "function") && !hasOwn(wrapper, prop)) {
-							const from = nodeInherits(wrapper, prop);
+							const from = wrapper.___nodeInherits(prop);
 							if (
 								from !== undefined &&
 								from !== null &&
@@ -1687,7 +1604,7 @@ export function TrapsLayer(Base) {
 						// A function node answers its function's own `constructor` (`Function`, `AsyncFunction`, …), as the
 						// function does, rather than `Object` (#630); one the module defined on it is its code (#632).
 						if (typeof constructorImpl === "function") {
-							const fnConstructor = functionMember(wrapper, constructorImpl, prop);
+							const fnConstructor = wrapper.___functionMember(constructorImpl, prop);
 							const inherited = inheritedEngineMember(constructorImpl, prop, fnConstructor);
 							if (inherited) return inherited.value;
 							enforceCodeMember(wrapper, fnConstructor, kept);
@@ -1695,8 +1612,8 @@ export function TrapsLayer(Base) {
 						}
 						// An instance of a class a node fronts answers that node, as the instance answers its class (#667): the reader
 						// gets the class as a read of the node gives it.
-						const exportedClass = exportedInstanceClass(wrapper);
-						if (exportedClass !== null) return functionNodeFor(wrapper, exportedClass);
+						const exportedClass = wrapper.___exportedInstanceClass();
+						if (exportedClass !== null) return wrapper.___functionNodeFor(exportedClass);
 						const constructorIsLiveIdentity = internal.deferChildAdopt || (EventEmitter && inherits(constructorImpl, EventEmitter));
 						if (constructorIsLiveIdentity && constructorImpl && typeof constructorImpl === "object" && constructorImpl.constructor) {
 							// A class of the module's is its code, checked as a call of the node (#632).
@@ -1713,17 +1630,17 @@ export function TrapsLayer(Base) {
 						// is, run as the module (#597): the class it answers is handed out as above, as the plain instance answers it.
 						const constructorAccessor =
 							constructorImpl !== null && typeof constructorImpl === "object" && !Arrays.isArray(constructorImpl)
-								? implAccessor(wrapper, prop)
+								? wrapper.___implAccessor(prop)
 								: null;
 						if (constructorAccessor?.descriptor) {
-							const answered = readImplMember(wrapper, prop);
+							const answered = wrapper.___readImplMember(prop);
 							if (answered === null || (typeof answered !== "object" && typeof answered !== "function")) return answered;
 							if (typeof answered !== "function") return wrapper.___createChildWrapper(prop, answered) ?? answered;
-							if (nodeRefOf(FUNCTION_NODES, wrapper.slothlet, answered) !== undefined) return functionNodeFor(wrapper, answered);
+							if (nodeRefOf(FUNCTION_NODES, wrapper.slothlet, answered) !== undefined) return wrapper.___functionNodeFor(answered);
 							return instanceClassNode(wrapper, answered) ?? answered;
 						}
 						// A namespace given another prototype reads its `constructor` from there, through the member read below.
-						const constructorFrom = nodeInherits(wrapper, prop);
+						const constructorFrom = wrapper.___nodeInherits(prop);
 						if (constructorFrom === undefined || constructorFrom === Objects.prototype) return NativeObject;
 					}
 					if (prop === util.inspect.custom) {
@@ -1757,7 +1674,7 @@ export function TrapsLayer(Base) {
 						// without reading `prototype` through the node: that read is checked as a call of the node (#632), and a
 						// module the node is closed to may still test an instance against it.
 						const fnImpl = functionOf(impl);
-						if (fnImpl && !hasOwnSymbolMember(wrapper, prop)) {
+						if (fnImpl && !wrapper.___hasOwnSymbolMember(prop)) {
 							// A `Symbol.hasInstance` the function inherits from a class of the module's (a base class's own static) is
 							// that class's code, which `instanceof` asks as it asks it on the plain function (#667); it is handed out
 							// as a static method is, so reading it is checked as a call of the node (#632).
@@ -1772,7 +1689,7 @@ export function TrapsLayer(Base) {
 					// A symbol the module's value holds as its own key is a member, as in plain JS (`obj[sym]`); any other
 					// symbol is not one, and the wrapper has no answer of its own for it.
 					// One the node inherits from a prototype set on it is read below, as a member by any other key is.
-					if (typeof prop === "symbol" && !hasOwnSymbolMember(wrapper, prop) && !inheritsSymbol(wrapper, prop)) return undefined;
+					if (typeof prop === "symbol" && !wrapper.___hasOwnSymbolMember(prop) && !inheritsSymbol(wrapper, prop)) return undefined;
 					if (prop === "length" && !memberShadowsWrapperProp) {
 						// Return actual function length from impl
 						const impl = wrapperInternal.impl;
@@ -1794,7 +1711,7 @@ export function TrapsLayer(Base) {
 						if (!fnImpl) return undefined;
 						const prototype = fnImpl.prototype;
 						enforceCodeMember(wrapper, prototype, kept);
-						return prototypeForReader(wrapper, exposePrototype(wrapper, prototype), "prototype");
+						return prototypeForReader(wrapper, wrapper.___exposePrototype(prototype), "prototype");
 					}
 					if (prop === "name" && !memberShadowsWrapperProp) {
 						// A class reached as an instance's `constructor` answers the name the class has, as on the plain instance (#667).
@@ -1822,7 +1739,7 @@ export function TrapsLayer(Base) {
 						const impl = wrapperInternal.impl;
 						const fnImpl = functionOf(impl);
 						if (fnImpl) {
-							const method = functionMember(wrapper, fnImpl, prop);
+							const method = wrapper.___functionMember(fnImpl, prop);
 							// A function given a prototype without one has none, as the plain function then has.
 							if (typeof method !== "function") return method;
 							enforceCodeMember(wrapper, method, kept);
@@ -1845,7 +1762,7 @@ export function TrapsLayer(Base) {
 						const impl = wrapperInternal.impl;
 						const fnImpl = functionOf(impl);
 						if (fnImpl) {
-							const method = functionMember(wrapper, fnImpl, prop);
+							const method = wrapper.___functionMember(fnImpl, prop);
 							const inherited = inheritedEngineMember(fnImpl, prop, method);
 							if (inherited) return valueOfFor(wrapperInternal.proxy);
 							if (typeof method !== "function") return method;
@@ -1871,7 +1788,7 @@ export function TrapsLayer(Base) {
 							enforceCodeMember(wrapper, method, kept);
 							const path = wrapperInternal.apiPath;
 							const serializeOwn = (readers, ___node, keptAccess = kept, args = []) =>
-								redactToJSONResult(wrapper, Reflect.apply(method, impl, args), path, readers, keptAccess);
+								wrapper.___redactToJSONResult(Reflect.apply(method, impl, args), path, readers, keptAccess);
 							const ownToJSON = (...args) => serializeOwn([undefined], null, kept, args);
 							WeakMapMethods.set(SERIALIZERS, ownToJSON, serializeOwn);
 							return ownToJSON;
@@ -1944,7 +1861,7 @@ export function TrapsLayer(Base) {
 						if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function") && prop in liveImpl) {
 							const cachedDesc = Objects.getOwnPropertyDescriptor(wrapper, prop);
 							// Read as the module's own read of it (#597): a getter on the impl is the module's code.
-							const current = readImplMember(wrapper, prop);
+							const current = wrapper.___readImplMember(prop);
 							const stale =
 								typeof cachedDesc.get === "function"
 									? current !== null && (typeof current === "object" || typeof current === "function")
@@ -1978,8 +1895,8 @@ export function TrapsLayer(Base) {
 						// This ensures live runtime gets the actual value, not the wrapper object
 						const _cachedWrapper = resolveWrapper(cached);
 						// A node holding a primitive, or a file's null or undefined (#792), answers the value itself.
-						if (_cachedWrapper && holdsValue(_cachedWrapper)) {
-							const cachedValue = heldValue(_cachedWrapper);
+						if (_cachedWrapper && _cachedWrapper.___holdsValue()) {
+							const cachedValue = _cachedWrapper.___heldValue();
 							enforceReadGate(cachedValue);
 							return cachedValue;
 						}
@@ -2013,7 +1930,7 @@ export function TrapsLayer(Base) {
 							// A module's own Proxy answers as that module, whoever reads it (#597). What it hands out is not a node of its
 							// own, so the module's code among it — a method of a class instance behind a composition layer — is checked
 							// as a call of the node before it is handed out (#632).
-							const proxied = readImplMember(wrapper, prop);
+							const proxied = wrapper.___readImplMember(prop);
 							// A layer hands a method of the value under it out bound to that value: the method is what decides, so
 							// a built-in's (a Map's `get`) is the language's, not the module's.
 							enforceCodeMember(wrapper, layerMethodOriginal(proxied) ?? proxied, kept);
@@ -2076,8 +1993,8 @@ export function TrapsLayer(Base) {
 								// A Proxy answers reads through its get trap, which can serve members its `in` check does not
 								// report; the read below asks it, as eager does (#585 review).
 								!util.types.isProxy(wrapperInternal.impl) &&
-								!implHas(wrapper, wrapperInternal.impl, prop))) &&
-						moduleInheritance(wrapper, prop) === null
+								!wrapper.___implHas(wrapperInternal.impl, prop))) &&
+						wrapper.___moduleInheritance(prop) === null
 					) {
 						return undefined;
 					}
@@ -2105,7 +2022,7 @@ export function TrapsLayer(Base) {
 						// No test has a native Proxy set as the impl while inFlight; body is unreachable.
 						/* v8 ignore start */
 						if (wrapperInternal.impl && typeof wrapperInternal.impl === "object" && util.types.isProxy(wrapperInternal.impl)) {
-							return readImplMember(wrapper, prop);
+							return wrapper.___readImplMember(prop);
 						}
 						/* v8 ignore stop */
 						return wrapper.___createWaitingProxy([prop]);
@@ -2124,7 +2041,7 @@ export function TrapsLayer(Base) {
 						// Return the value directly - don't wrap it
 						// This preserves custom proxy behavior for array access, computed properties, etc.
 						// A module's own Proxy answers as that module, whoever reads it (#597).
-						return readImplMember(wrapper, prop);
+						return wrapper.___readImplMember(prop);
 					}
 					/* v8 ignore stop */
 
@@ -2135,14 +2052,14 @@ export function TrapsLayer(Base) {
 					/* v8 ignore next */
 					// An accessor the impl holds that adoption did not put on the wrapper — one on an object assigned through
 					// the api, or inherited — runs as the module the node belongs to, never as whoever reads it (#597).
-					let value = arrayElement ? arrayElement.value : wrapperInternal.impl ? readImplMember(wrapper, prop) : undefined;
+					let value = arrayElement ? arrayElement.value : wrapperInternal.impl ? wrapper.___readImplMember(prop) : undefined;
 					// A member the node inherits from its own prototype, or the module's object inherits from its, stays inherited:
 					// read as a member of the node is, and never kept as one of the node's own (#913).
 					const inheritedImpl = wrapperInternal.impl;
 					const isInherited =
 						value !== undefined &&
 						!arrayElement &&
-						(nodeInherits(wrapper, prop) !== undefined ||
+						(wrapper.___nodeInherits(prop) !== undefined ||
 							(inheritedImpl !== null && typeof inheritedImpl === "object" && !hasOwn(inheritedImpl, prop) && !hasOwn(target, prop)));
 
 					// Fallback: value lives directly on the proxy target rather than on impl.
@@ -2323,7 +2240,7 @@ export function TrapsLayer(Base) {
 					if (!___gatePassed) args = crossArguments(wrapper, args);
 					// A function or Proxy this module handed out comes back to it as itself (#597), and so does an instance of its
 					// own class the async runtime wrapped (#328).
-					if (!___gatePassed) args = ownInstances(wrapper, ownArguments(wrapper, args));
+					if (!___gatePassed) args = wrapper.___ownInstances(wrapper.___ownArguments(args));
 
 					// Ordinary JS call semantics (`obj.method()`) pass the *proxy* obj was read through as
 					// `this` — but a native method whose behavior depends on internal slots tied to exact
@@ -2390,7 +2307,7 @@ export function TrapsLayer(Base) {
 					if (!___gatePassed) {
 						const ___principalGate = enforcePermission(wrapper, args, true, kept, ___entry, ___handed, thisArg);
 						if (___principalGate) {
-							return runAfterPrincipalGate(wrapper, ___principalGate, () => applyTrap(target, thisArg, args, true, ___entry));
+							return wrapper.___runAfterPrincipalGate(___principalGate, () => applyTrap(target, thisArg, args, true, ___entry));
 						}
 					}
 					const ___entryIdentity = ___entry?.identity ? ___entry : null;
@@ -2500,7 +2417,7 @@ export function TrapsLayer(Base) {
 									settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 								} catch (error) {
 									// Target failure: same error-hook + suppression semantics as the sync path. Read as the target (#599).
-									const failure = readTargetFailure(wrapper, error);
+									const failure = wrapper.___readTargetFailure(error);
 									const originalError = failure.originalError();
 									// The processed marker stops DUPLICATE error hooks for a failure an inner
 									// hooked call already reported — it says nothing about `always`, which is a
@@ -2775,7 +2692,7 @@ export function TrapsLayer(Base) {
 								(error) => {
 									// Async function error, classified as the target before anything reads it (#599)
 									if (hasHooks) {
-										const failure = readTargetFailure(wrapper, error);
+										const failure = wrapper.___readTargetFailure(error);
 										const originalError = failure.originalError();
 										if (!isHookProcessed(error)) {
 											const sourceInfo = failureSource({ type: "function", at: wrapper.clock.now() }, failure);
@@ -2811,7 +2728,7 @@ export function TrapsLayer(Base) {
 						syncThrew = true;
 						// The target's failure, classified as the target before anything reads it (#599); the finally's
 						// always hooks then take the unwrapped error from what was read.
-						const targetFailure = hasHooks && !hookReported ? readTargetFailure(wrapper, error) : null;
+						const targetFailure = hasHooks && !hookReported ? wrapper.___readTargetFailure(error) : null;
 						if (targetFailure && !isHookProcessed(error)) {
 							const sourceInfo = failureSource({ type: "function", at: wrapper.clock.now() }, targetFailure);
 							hookManager.executeErrorHooks(wrapperInternal.apiPath, targetFailure.originalError(), sourceInfo, args, api, ctx);
@@ -2894,7 +2811,7 @@ export function TrapsLayer(Base) {
 						!isInternal &&
 						wrapper.____slothletInternal.impl &&
 						(typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") &&
-						(onImpl(wrapper, (impl) => implHas(wrapper, impl, prop)) || moduleInheritance(wrapper, prop) !== null)
+						(onImpl(wrapper, (impl) => wrapper.___implHas(impl, prop)) || wrapper.___moduleInheritance(prop) !== null)
 					) {
 						return true;
 					}
@@ -2921,7 +2838,7 @@ export function TrapsLayer(Base) {
 					// What this description reads through the node itself, read for that reader too.
 					const readNode = () =>
 						kept
-							? accessAsKept(wrapper, kept.reader, () => wrapper.____slothletInternal.proxy[prop])
+							? wrapper.___accessAsKept(kept.reader, () => wrapper.____slothletInternal.proxy[prop])
 							: wrapper.____slothletInternal.proxy[prop];
 					// A view asking for this member as it is held (describeAsHeld): taken now, for this read only.
 					const asHeld = rulesShared.describingAsHeld?.wrapper === wrapper && rulesShared.describingAsHeld.prop === prop;
@@ -3040,7 +2957,7 @@ export function TrapsLayer(Base) {
 					let ownDesc = Objects.getOwnPropertyDescriptor(target, prop);
 					// A lazy folder that loaded as a namespace has no `length` or `name` of a function, as the eager node has none:
 					// its function target's own only stood in while it loaded.
-					if (ownDesc?.configurable && (prop === "length" || prop === "name") && loadedAsNamespace(wrapper)) ownDesc = undefined;
+					if (ownDesc?.configurable && (prop === "length" || prop === "name") && wrapper.___loadedAsNamespace()) ownDesc = undefined;
 					if (redact && (!ownDesc || ownDesc.configurable) && isReadRedacted(wrapper, prop, kept, access)) {
 						return undefined;
 					}
@@ -3062,7 +2979,7 @@ export function TrapsLayer(Base) {
 								return {
 									__proto__: null,
 									...ownDesc,
-									value: prototypeForReader(wrapper, exposePrototype(wrapper, prototype), "prototype")
+									value: prototypeForReader(wrapper, wrapper.___exposePrototype(prototype), "prototype")
 								};
 						}
 						return ownDesc;
@@ -3099,7 +3016,7 @@ export function TrapsLayer(Base) {
 							return {
 								__proto__: null,
 								...described,
-								value: heldNode && holdsValue(heldNode) ? heldValue(heldNode) : described.value,
+								value: heldNode && heldNode.___holdsValue() ? heldNode.___heldValue() : described.value,
 								writable: reportsWritable(wrapper, prop)
 							};
 						}
@@ -3128,7 +3045,7 @@ export function TrapsLayer(Base) {
 							typeof implDescriptor.value === "object" &&
 							functionOf(wrapper.____slothletInternal.impl) !== null
 						) {
-							const value = prototypeForReader(wrapper, exposePrototype(wrapper, implDescriptor.value), "prototype");
+							const value = prototypeForReader(wrapper, wrapper.___exposePrototype(implDescriptor.value), "prototype");
 							return virtualizeDescriptor({ __proto__: null, ...implDescriptor, value });
 						}
 						// A member that is the node's own function, or an ancestor's, is described holding that node, as reading it gives.
@@ -3198,7 +3115,7 @@ export function TrapsLayer(Base) {
 
 					// A function target's own `length` / `name` come first, as on any function. A lazy folder that loaded as a
 					// namespace lists none, as the eager node does: its function target only stood in while it loaded.
-					const uw_listsAsFunction = typeof target === "function" && !loadedAsNamespace(wrapper);
+					const uw_listsAsFunction = typeof target === "function" && !wrapper.___loadedAsNamespace();
 					if (uw_listsAsFunction) {
 						SetMethods.add(keys, "length");
 						SetMethods.add(keys, "name");
@@ -3291,7 +3208,7 @@ export function TrapsLayer(Base) {
 					// A value another module or the host writes onto the node is theirs, handed to this one (#597).
 					markWritten(wrapper, value);
 					// An object written after the api was built is data (#826).
-					markAssignedData(wrapper, value);
+					wrapper.___markAssignedData(value);
 					if (
 						wrapper.____slothletInternal.mode === "lazy" &&
 						!wrapper.____slothletInternal.state.materialized &&
@@ -3434,7 +3351,7 @@ export function TrapsLayer(Base) {
 							if (!reportsWritable(wrapper, prop)) return false;
 							const runModuleObject = moduleObjectOf(wrapper, prop);
 							if (runModuleObject !== null && !hasOwn(runModuleObject, prop) && !Reflect.isExtensible(runModuleObject)) return false;
-							return runSink({ op: "set", value: wrapOnSet(wrapper, prop, value) });
+							return runSink({ op: "set", value: wrapper.___wrapOnSet(prop, value) });
 						}
 						const isObjectOrFunctionValue = value !== null && (typeof value === "object" || typeof value === "function");
 
@@ -3478,7 +3395,7 @@ export function TrapsLayer(Base) {
 								// write silently (no throw) and must not be reported as a successful assignment
 								// — that would suppress the strict-mode TypeError a real object write would raise.
 								// A setter the impl holds runs as the module the node belongs to, never as the writer (#597).
-								const setSucceeded = writeImplMember(wrapper, prop, value);
+								const setSucceeded = wrapper.___writeImplMember(prop, value);
 								if (!setSucceeded) return false;
 								const existingDescriptor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 								if (!existingDescriptor || typeof existingDescriptor.set !== "function") {
@@ -3486,11 +3403,11 @@ export function TrapsLayer(Base) {
 										__proto__: null,
 										get: () => {
 											const currentImpl = wrapper.____slothletInternal.impl;
-											return currentImpl ? readImplMember(wrapper, prop) : undefined;
+											return currentImpl ? wrapper.___readImplMember(prop) : undefined;
 										},
 										set: (newValue) => {
 											const currentImpl = wrapper.____slothletInternal.impl;
-											if (currentImpl) writeImplMember(wrapper, prop, newValue);
+											if (currentImpl) wrapper.___writeImplMember(prop, newValue);
 										},
 										enumerable: true,
 										configurable: true
@@ -3515,7 +3432,7 @@ export function TrapsLayer(Base) {
 							// reload (O15).
 							const liveImpl = wrapper.____slothletInternal.impl;
 							if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function")) {
-								if (!writeImplMember(wrapper, prop, value)) return false;
+								if (!wrapper.___writeImplMember(prop, value)) return false;
 								if (hasOwn(wrapper, prop)) delete wrapper[prop];
 								return true;
 							}
@@ -3555,7 +3472,7 @@ export function TrapsLayer(Base) {
 						// (___createChildWrapper returns null); native proxies and existing wrappers (never iterate
 						// a version dispatcher's traps — mirrors ___adoptImplChildren's proxy skip).
 						const inBuild = wrapper.slothlet.____buildDepth > 0;
-						const stored = inBuild ? value : wrapOnSet(wrapper, prop, value);
+						const stored = inBuild ? value : wrapper.___wrapOnSet(prop, value);
 						Objects.defineProperty(wrapper, prop, {
 							__proto__: null,
 							value: stored,
@@ -3880,12 +3797,12 @@ export function TrapsLayer(Base) {
 						// proxy getTrap. When newTarget is a derived class (e.g. super() inside a
 						// subclass), forward it unchanged so derived construction semantics are preserved.
 						const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl : newTarget;
-						return constructAsNode(wrapper, impl, args, effectiveNewTarget);
+						return wrapper.___constructAsNode(impl, args, effectiveNewTarget);
 					}
 
 					if (impl && typeof impl === "object" && typeof impl.default === "function") {
 						const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl.default : newTarget;
-						return constructAsNode(wrapper, impl.default, args, effectiveNewTarget);
+						return wrapper.___constructAsNode(impl.default, args, effectiveNewTarget);
 					}
 
 					throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", {
@@ -3920,7 +3837,7 @@ export function TrapsLayer(Base) {
 					const isLiveIdentity = internal.deferChildAdopt || (EventEmitter && inherits(impl, EventEmitter));
 					if (isLiveIdentity && impl && typeof impl === "object") return Objects.getPrototypeOf(impl);
 					// A namespace slothlet composed has the prototype its record holds, as a function node does.
-					return ownsPrototype(wrapper) ? recordedPrototype(wrapper) : null;
+					return ownsPrototype(wrapper) ? wrapper.___recordedPrototype() : null;
 				};
 				/**
 				 * The prototype the node reports to whoever asks now (#667), by `Object.getPrototypeOf` and, for an object node,
@@ -3946,12 +3863,12 @@ export function TrapsLayer(Base) {
 						if (nodesShared.heldPrototypeRead !== wrapper && !given) {
 							// A class instance's prototype is checked as a call of its class's node, as on an open node (#725).
 							const behind = behindMemberView(fixed);
-							enforceCodeMember(prototypeCheckedBy(wrapper, behind), behind, takeKept());
+							enforceCodeMember(wrapper.___prototypeCheckedBy(behind), behind, takeKept());
 						}
 						return fixed;
 					}
 					// A function node reports its function's prototype, a class it extends as that class's node (#667).
-					if (typeof impl === "function") return functionNodePrototype(wrapper, impl);
+					if (typeof impl === "function") return wrapper.___functionNodePrototype(impl);
 					const kept = takeKept();
 					const emitter = emitterOwnPrototype(wrapper) !== undefined;
 					// An instance of a class of the module's reports that class's prototype, as the instance does, behind the class's
@@ -3960,16 +3877,16 @@ export function TrapsLayer(Base) {
 					const classPrototype = emitter ? undefined : instanceClassPrototype(wrapper, kept);
 					if (classPrototype !== undefined) return classPrototype;
 					// An instance whose class cannot be told reports its own prototype, behind its own node's checks (#667).
-					const unclassed = unclassedInstancePrototype(wrapper);
+					const unclassed = wrapper.___unclassedInstancePrototype();
 					if (unclassed !== undefined) {
 						enforceCodeMember(wrapper, unclassed, kept);
-						return prototypeForReader(wrapper, exposePrototype(wrapper, unclassed), null);
+						return prototypeForReader(wrapper, wrapper.___exposePrototype(unclassed), null);
 					}
 					let prototype = heldPrototype();
 					// A node's own prototype is reported as it is to the host; one it was given is handed to module code as that
 					// module's view of it (see givenView).
 					if (prototype === null) return null;
-					if (ownsPrototype(wrapper)) return prototypeGiven(wrapper) ? givenPrototypeFor(wrapper, prototype, kept) : prototype;
+					if (ownsPrototype(wrapper)) return prototypeGiven(wrapper) ? wrapper.___givenPrototypeFor(prototype, kept) : prototype;
 					// A prototype of the module's holds its class and methods, so it is reported only to a caller that may call
 					// the node, as its `constructor` is read (#632). Any other caller is reported a stand-in inheriting from the
 					// nearest prototype above it holding none of the module's code, so `instanceof` against the language's or
@@ -3980,7 +3897,7 @@ export function TrapsLayer(Base) {
 						return prototypeForHolder(
 							wrapper.slothlet,
 							selfModuleReader(wrapper.slothlet) ?? kept?.reader ?? null,
-							emitterPrototypeHandle(wrapper, prototype)
+							wrapper.___emitterPrototypeHandle(prototype)
 						);
 					}
 					while (memberHoldsCode(prototype, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)))
@@ -4027,12 +3944,12 @@ export function TrapsLayer(Base) {
 										? sealedShellPrototype(wrapper, prototype)
 										: prototype
 							);
-						} else if (typeof array === "function") Reflect.setPrototypeOf(target, functionNodePrototype(wrapper, array));
+						} else if (typeof array === "function") Reflect.setPrototypeOf(target, wrapper.___functionNodePrototype(array));
 						// A lazy namespace's shell is a function, built before its value was known: it takes the namespace's prototype.
-						else if (ownsPrototype(wrapper)) Reflect.setPrototypeOf(target, recordedPrototype(wrapper));
+						else if (ownsPrototype(wrapper)) Reflect.setPrototypeOf(target, wrapper.___recordedPrototype());
 						// A prototype the node was given is held as the view every holder of the closed node reads it through.
 						if (prototypeGiven(wrapper)) {
-							Reflect.setPrototypeOf(target, givenShellPrototype(wrapper, recordedPrototype(wrapper)));
+							Reflect.setPrototypeOf(target, givenShellPrototype(wrapper, wrapper.___recordedPrototype()));
 						}
 						const keys = setFrom(concatLists(ownKeysTrap(target, false), Reflect.ownKeys(target)));
 						const frontsModuleObject = !Arrays.isArray(target) && moduleObjectOf(wrapper) !== null;
@@ -4088,7 +4005,7 @@ export function TrapsLayer(Base) {
 						// The access a view is making into this node, taken as the trap starts (see beginAccess).
 						const access = takeAccess(wrapper);
 						if (runTreeHides(wrapper, prop)) {
-							const from = runTreeHiddenFrom(wrapper);
+							const from = wrapper.___runTreeHiddenFrom();
 							return from === null ? undefined : Reflect.get(from, prop, receiver);
 						}
 						const value = getTrap(target, prop, receiver, access);
@@ -4097,7 +4014,7 @@ export function TrapsLayer(Base) {
 							const held = builtinBehind(value);
 							if (held !== null) checkpointHandout(wrapper.slothlet, held);
 							// So is a class's prototype, which a module's code and the host change as itself.
-							else if (prop === "prototype") checkpointPrototypeHandout(wrapper, wrapperClassPrototype(wrapper));
+							else if (prop === "prototype") wrapper.___checkpointPrototypeHandout(wrapper.___wrapperClassPrototype());
 						}
 						// A member fixed read-only on a frozen shell must be read as the shell holds it (proxy invariant), so it
 						// carries no view bound to the reader: it is checked against whoever calls or reads it.
@@ -4114,7 +4031,7 @@ export function TrapsLayer(Base) {
 							if (!anyRunOpen()) return applyTrap(target, thisArg, args);
 							// While a run is open, the file's exports are saved before its code runs outside every run, and what the
 							// call hands back as itself is saved before the caller has it (see helpers/run-snapshot).
-							checkpointFile(wrapper);
+							wrapper.___checkpointFile();
 							const result = applyTrap(target, thisArg, args);
 							if (result !== null && typeof result === "object") {
 								// What an async call settles with is saved before the caller has it, as what a call returns is.
@@ -4124,8 +4041,7 @@ export function TrapsLayer(Base) {
 							return result;
 						}
 						const keptAccess = rulesShared.capturedAccess?.wrapper === wrapper ? rulesShared.capturedAccess : null;
-						return redactToJSONResult(
-							wrapper,
+						return wrapper.___redactToJSONResult(
 							applyTrap(target, thisArg, args),
 							typeof path === "string" ? StringMethods.slice(path, 0, dot) : copyList(path, 0, dot),
 							[undefined],
@@ -4135,7 +4051,7 @@ export function TrapsLayer(Base) {
 					construct: constructTrap,
 					has: (target, prop) => {
 						if (runTreeHides(wrapper, prop)) {
-							const from = runTreeHiddenFrom(wrapper);
+							const from = wrapper.___runTreeHiddenFrom();
 							return from !== null && Reflect.has(from, prop);
 						}
 						return hasTrap(target, prop);
@@ -4179,14 +4095,14 @@ export function TrapsLayer(Base) {
 							// A view `self` handed out stands for its node: the node is what is defined (#625).
 							if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: unwrapSelfView(descriptor.value) };
 							// An object defined after the api was built is data, as one assigned is (#826).
-							if ("value" in descriptor) markAssignedData(wrapper, descriptor.value);
+							if ("value" in descriptor) wrapper.___markAssignedData(descriptor.value);
 							// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 							if (isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
 							// A member fixed in one step holding an object would be handed out as it is: refused while permissions are on.
 							if (
 								"value" in descriptor &&
 								!MapMethods.has(FRAMEWORK_WRITES, wrapper) &&
-								definitionFixes(wrapper, target, prop, descriptor)
+								wrapper.___definitionFixes(target, prop, descriptor)
 							) {
 								refuseFixedObjectDefinition(wrapper.slothlet, wrapper.____slothletInternal.apiPath, prop, descriptor.value);
 							}
@@ -4337,7 +4253,7 @@ export function TrapsLayer(Base) {
 					// A module may freeze or seal its own array after the node was read; the node reports what the array is.
 					isExtensible: (target) => {
 						syncArrayIntegrity(wrapper, target);
-						followModuleIntegrity(wrapper, target);
+						wrapper.___followModuleIntegrity(target);
 						return Reflect.isExtensible(target);
 					},
 					// A prototype set on an array member is set on its array, under a composed node's layer, which refuses
@@ -4392,14 +4308,14 @@ export function TrapsLayer(Base) {
 						}
 						// The one its value came with is the node's again as it was before any was given.
 						const given = behindGivenView(unwrapSelfView(proto));
-						recordedPrototype(wrapper);
+						wrapper.___recordedPrototype();
 						internal.prototypeGiven = given !== (typeof impl === "function" ? Reflect.getPrototypeOf(impl) : Objects.prototype);
 						internal.prototype = given;
 						return true;
 					},
 					getPrototypeOf: (target) => {
 						// A prototype of a module's own handed out is saved first for the runs open (see helpers/run-snapshot).
-						if (anyRunOpen()) checkpointPrototypeHandout(wrapper, snapshotPrototype(wrapper));
+						if (anyRunOpen()) wrapper.___checkpointPrototypeHandout(snapshotPrototype(wrapper));
 						return reportedPrototype(target, () => takeCapturedAccess(wrapper));
 					}
 				};

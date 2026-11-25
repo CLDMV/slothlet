@@ -105,7 +105,6 @@ let runtime_unwrapClassInstance,
 	readGateDecision,
 	readGateFor,
 	GIVEN_VIEWS,
-	recordedPrototype,
 	prototypeGiven,
 	ownsPrototype,
 	MAKERS,
@@ -128,7 +127,6 @@ let runtime_unwrapClassInstance,
 	isShared,
 	permissionsOn,
 	runningLeafOf,
-	exposePrototype,
 	FUNCTION_NODES,
 	nodeRefOf,
 	frontingNode,
@@ -154,7 +152,8 @@ let runtime_unwrapClassInstance,
 	WELL_KNOWN_SYMBOLS,
 	TYPED_ARRAY_BYTE_LENGTH,
 	TYPED_ARRAY_LENGTH,
-	readerHoldsPrototype;
+	readerHoldsPrototype,
+	isWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -467,25 +466,6 @@ function givenView(gate, node, value, reader, assertWrite) {
 	});
 	WeakMapMethods.set(GIVEN_VIEWS, view, record);
 	return view;
-}
-
-/**
- * The prototype a node was given, as whoever reads the node now is handed it (see {@link givenView}): the
- * object itself to the host and while the permission system is off, and to module code its own view, the same one on
- * every read, kept on the node's record for as long as the node has that prototype.
- * @param {object} wrapper - The node's wrapper.
- * @param {object|Function|null} prototype - The prototype the node was given.
- * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making.
- * @returns {object|Function|null} What the reader is handed.
- * @private
- */
-function givenPrototypeFor(wrapper, prototype, kept = null) {
-	if (givenAsIs(prototype)) return prototype;
-	const slothlet = wrapper.slothlet;
-	if (!slothlet?.handlers?.permissionManager?.isEnabled()) return prototype;
-	const reader = selfModuleReader(slothlet) ?? kept?.reader ?? null;
-	if (reader === null || reader === HOST_READER) return prototype;
-	return givenViewOn(wrapper.____slothletInternal, wrapper, wrapper, prototype, reader, () => assertOwnedWrite(wrapper, null));
 }
 
 /**
@@ -1713,113 +1693,6 @@ function kindStandIn(maker, owner, original, made = maker.made) {
 }
 
 /**
- * Construct a module's exported class or constructor function through its node (#597): the body runs as the module,
- * as a call of the node runs, and the instance is handed out as the module's. A subclass `new` was applied to (a
- * class extending the node) is the constructing code's, never the module's.
- * @param {object} wrapper - The node's wrapper.
- * @param {Function} constructor - The class or function.
- * @param {Array<*>} args - The arguments.
- * @param {Function} newTarget - What `new` was applied to, or the constructor itself.
- * @returns {object} The instance.
- * @private
- */
-function constructAsNode(wrapper, constructor, args, newTarget) {
-	/**
-	 * Whether an instance a module constructs through a node is handed out as the node's module's under `"fast"`, as
-	 * under `"precise"` (see {@link instanceHoldsReads}).
-	 * @param {object} wrapper - The node's wrapper.
-	 * @returns {boolean} True when the instance is handed out as the module's.
-	 * @private
-	 */
-	function instanceHoldsReads(wrapper) {
-		const slothlet = wrapper.slothlet;
-		const permissionManager = slothlet.handlers?.permissionManager;
-		if (!permissionManager?.isEnabled?.()) return false;
-		const reader = selfModuleReader(slothlet);
-		if (reader === null) return false;
-		if (!reader?.____slothletInternal) return true;
-		return permissionManager.readMayRefuseBeneath(
-			String(reader.____slothletInternal.apiPath ?? ""),
-			String(wrapper.____slothletInternal.apiPath ?? "")
-		);
-	}
-
-	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext)
-		return Reflect.construct(constructor, args, newTarget);
-	if (!handsOutAsModule(wrapper)) {
-		const instance = Reflect.construct(constructor, args, newTarget);
-		// Under `"fast"` the instance is handed out as it is, unless its `constructor` would hand out a function whose
-		// members the rules could refuse the module: then it is the module's, as under `"precise"`. A subclass's
-		// `super()` (another `newTarget`) gets its own instance.
-		if (newTarget !== constructor || !instanceHoldsReads(wrapper)) return instance;
-		return handOut(makerOf(wrapper), wrapper, instance);
-	}
-	const maker = makerOf(wrapper);
-	// The class's prototype is what `api.x.Class.prototype` reads, so its instances report that very object.
-	exposePrototype(wrapper, Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value);
-	const target = newTarget === constructor ? constructor : handIn(maker, newTarget);
-	if (target !== constructor && typeof target === "function") {
-		const prototype = Reflect.getOwnPropertyDescriptor(target, "prototype")?.value;
-		if (prototype !== null && typeof prototype === "object" && !WeakMapMethods.has(STAND_IN_RECORDS, prototype))
-			WeakSetMethods.add(maker.handedIn, prototype);
-	}
-	return runAsMaker(
-		wrapper,
-		(...constructArgs) => Reflect.construct(constructor, constructArgs, target),
-		undefined,
-		handInAll(maker, args),
-		true,
-		true
-	);
-}
-
-/**
- * {@link crossArguments} for values handed to a module by a known caller: a call's arguments, and what slothlet
- * itself hands a module's code for someone else (an event's payload to a listener).
- * @param {object} wrapper - The wrapper of the module handed the values.
- * @param {ArrayLike<*>} args - The values.
- * @param {object|null} caller - The wrapper of the module handing them over, or null for the host.
- * @returns {ArrayLike<*>} The values, the same list when nothing changed.
- * @private
- */
-function crossArgumentsFrom(wrapper, args, caller) {
-	const slothlet = wrapper?.slothlet;
-	if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
-	if (caller !== null && asOneModule(slothlet, caller, wrapper)) return args;
-	let result = args;
-	for (let index = 0; index < args.length; index++) {
-		const value = args[index];
-		if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
-		let from = caller;
-		if (caller === null) {
-			// The host's own values are handed in as they are. What a module's call returned to the host, passed on as it
-			// is, still comes from that module.
-			from =
-				WeakMapMethods.get(HOST_HANDED, value) ??
-				(typeof value === "object" ? WeakMapMethods.get(HOST_HANDED, runtime_unwrapClassInstance(value)) : null) ??
-				null;
-			if (from === null && !WeakMapMethods.has(CROSSINGS, value)) continue;
-		} else {
-			// What the caller holds as itself is its own: handed back to it later, it is the value again.
-			recordOrigin(value, caller);
-			if (typeof value === "function" && !isSlothletValue(value)) {
-				const prototype = Reflect.getOwnPropertyDescriptor(value, "prototype")?.value;
-				if (prototype !== null && typeof prototype === "object") recordOrigin(prototype, caller);
-			}
-		}
-		// A function of the language's or Node's own the caller hands over runs for the caller, with its target.
-		const crossed =
-			from !== null && guardOn(slothlet) && runsForHander(value, from) && !WeakMapMethods.has(CROSSINGS, value)
-				? handedView(value, wrapper, slothlet, from)
-				: crossTo(value, wrapper, slothlet, from);
-		if (crossed === value) continue;
-		if (result === args) result = copyList(args);
-		result[index] = crossed;
-	}
-	return result;
-}
-
-/**
  * The module whose call returned each object or function to the host while the permission system was on. The host
  * holds the value itself; handed on by the host to another module as it is, it reaches that module as a value the
  * first module handed it ({@link crossArguments}), and the module it came from as itself.
@@ -1827,20 +1700,6 @@ function crossArgumentsFrom(wrapper, args, caller) {
  * @private
  */
 const HOST_HANDED = new WeakMap();
-
-/**
- * The arguments a call into a module is handed (see {@link handIn}): a stand-in of that module's own values
- * comes back as the value itself, as it would in plain JavaScript (`registry.remove(registry.get(name))`); a
- * stand-in of another module's value stays one.
- * @param {object} wrapper - The wrapper being called.
- * @param {Array<*>} args - The call's arguments.
- * @returns {Array<*>} The arguments, the same array when nothing changed.
- * @private
- */
-function ownArguments(wrapper, args) {
-	if (!args?.length || !wrapper?.slothlet?.instanceID || !handsOutAsModule(wrapper)) return args;
-	return handInAll(makerOf(wrapper), args, wrapper);
-}
 
 /**
  * {@link frontingNode}, bound to the module reading now as a read of that node is (see
@@ -1853,46 +1712,7 @@ function ownArguments(wrapper, args) {
 function frontingNodeNow(slothlet, fn) {
 	const node = frontingNode(slothlet, fn);
 	if (node === undefined || node === slothlet.boundApi) return node;
-	return functionNodeFor(resolveWrapper(node), fn) ?? node;
-}
-
-/**
- * The prototype a function node reports (#667), as its function's own `[[Prototype]]` is: the engine's
- * (`Function.prototype`, `AsyncFunction.prototype`, …) as it is, and a class of the module's (the base class a derived
- * class extends) as the node fronting it, bound to the reading module as a read of that node is. A class of the module's
- * no node fronts is not reported: handing it out would hand out the module's code with no node's checks around it.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @param {Function} fn - Its function.
- * @returns {object|Function|null} The prototype to report, or `null`.
- * @private
- */
-function functionNodePrototype(wrapper, fn) {
-	const prototype = ownsPrototype(wrapper) ? recordedPrototype(wrapper) : Objects.getPrototypeOf(fn);
-	if (prototype === null || prototype === Functions.prototype) return prototype;
-	// One given to the node is no part of the module's function: the host is handed it as it is, and module code its
-	// own view of it (see givenView).
-	if (prototypeGiven(wrapper)) return givenPrototypeFor(wrapper, prototype);
-	if (typeof prototype !== "function") {
-		return memberHoldsCode(prototype, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)) ? null : prototype;
-	}
-	return functionNodeFor(wrapper, prototype) ?? null;
-}
-
-/**
- * The node fronting a function of the module's (see {@link FUNCTION_NODES}), bound to the module reading now as a read
- * of that node is, or `undefined` when no node of the instance fronts it.
- * @param {UnifiedWrapper} wrapper - A node of the instance, read now.
- * @param {Function} fn - The function.
- * @returns {Function|undefined} The node, or `undefined`.
- * @private
- */
-function functionNodeFor(wrapper, fn) {
-	const node = nodeRefOf(FUNCTION_NODES, wrapper.slothlet, fn);
-	if (node === undefined) return undefined;
-	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
-	if (!permissionManager?.isEnabled() || permissionManager.isCaptureEnabled?.() === false) return node;
-	const identity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
-	return identity?.currentWrapper ? capturedView(node, identity.currentWrapper, true, identity.ceiling ?? null) : node;
+	return resolveWrapper(node).___functionNodeFor(fn) ?? node;
 }
 
 /**
@@ -3357,9 +3177,7 @@ export function MembraneLayer(Base) {
 					searchBudget,
 					attributeResult,
 					membrane,
-					constructAsNode,
 					HOST_HANDED,
-					ownArguments,
 					frontingNodeNow,
 					knownPrototype,
 					carryTo,
@@ -3371,11 +3189,9 @@ export function MembraneLayer(Base) {
 					asOneModule,
 					crossTo,
 					ANY_MEMBER_SEGMENT,
-					memberPathOf,
-					crossArgumentsFrom
+					memberPathOf
 				});
-				Base.define("given", { asIs: givenAsIs, member: givenMember, prototypeFor: givenPrototypeFor, viewOn: givenViewOn });
-				Base.define("function", { nodePrototype: functionNodePrototype, nodeFor: functionNodeFor });
+				Base.define("given", { asIs: givenAsIs, member: givenMember, viewOn: givenViewOn });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
 					INTRINSICS = methods.values.INTRINSICS;
@@ -3405,7 +3221,6 @@ export function MembraneLayer(Base) {
 					MAKERS = methods.nodes.MAKERS;
 					nodeRefOf = methods.node.refOf;
 					classPrototypeSites = methods.nodes.classPrototypeSites;
-					exposePrototype = methods.nodes.exposePrototype;
 					makerOf = methods.nodes.makerOf;
 					moduleKey = methods.module.key;
 					prototypeForHolder = methods.prototype.forHolder;
@@ -3416,7 +3231,6 @@ export function MembraneLayer(Base) {
 					memberHoldsCode = methods.rules.memberHoldsCode;
 					readGateDecision = methods.read.gateDecision;
 					readGateFor = methods.read.gateFor;
-					recordedPrototype = methods.run.recordedPrototype;
 					runAsMaker = methods.run.asMaker;
 					runningLeafOf = methods.run.runningLeafOf;
 					runsForHander = methods.run.runsForHander;
@@ -3454,6 +3268,7 @@ export function MembraneLayer(Base) {
 					TYPED_ARRAY_BYTE_LENGTH = methods.values.TYPED_ARRAY_BYTE_LENGTH;
 					TYPED_ARRAY_LENGTH = methods.values.TYPED_ARRAY_LENGTH;
 					readerHoldsPrototype = methods.nodes.readerHoldsPrototype;
+					isWrapper = methods.brand.isWrapper;
 				});
 			}
 
@@ -3463,6 +3278,197 @@ export function MembraneLayer(Base) {
 			constructor(slothlet) {
 				if (new.target !== realClass) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
 				super(slothlet);
+			}
+
+			/**
+			 * The prototype a node was given, as whoever reads the node now is handed it (see {@link givenView}): the
+			 * object itself to the host and while the permission system is off, and to module code its own view, the same one on
+			 * every read, kept on the node's record for as long as the node has that prototype.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {object|Function|null} prototype - The prototype the node was given.
+			 * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making.
+			 * @returns {object|Function|null} What the reader is handed.
+			 * @private
+			 */
+			___givenPrototypeFor(prototype, kept = null) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
+				const wrapper = this;
+				if (givenAsIs(prototype)) return prototype;
+				const slothlet = wrapper.slothlet;
+				if (!slothlet?.handlers?.permissionManager?.isEnabled()) return prototype;
+				const reader = selfModuleReader(slothlet) ?? kept?.reader ?? null;
+				if (reader === null || reader === HOST_READER) return prototype;
+				return givenViewOn(wrapper.____slothletInternal, wrapper, wrapper, prototype, reader, () => assertOwnedWrite(wrapper, null));
+			}
+
+			/**
+			 * Construct a module's exported class or constructor function through its node (#597): the body runs as the module,
+			 * as a call of the node runs, and the instance is handed out as the module's. A subclass `new` was applied to (a
+			 * class extending the node) is the constructing code's, never the module's.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {Function} constructor - The class or function.
+			 * @param {Array<*>} args - The arguments.
+			 * @param {Function} newTarget - What `new` was applied to, or the constructor itself.
+			 * @returns {object} The instance.
+			 * @private
+			 */
+			___constructAsNode(constructor, args, newTarget) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
+				const wrapper = this;
+				/**
+				 * Whether an instance a module constructs through a node is handed out as the node's module's under `"fast"`, as
+				 * under `"precise"` (see {@link instanceHoldsReads}).
+				 * @param {object} wrapper - The node's wrapper.
+				 * @returns {boolean} True when the instance is handed out as the module's.
+				 * @private
+				 */
+				function instanceHoldsReads(wrapper) {
+					const slothlet = wrapper.slothlet;
+					const permissionManager = slothlet.handlers?.permissionManager;
+					if (!permissionManager?.isEnabled?.()) return false;
+					const reader = selfModuleReader(slothlet);
+					if (reader === null) return false;
+					if (!reader?.____slothletInternal) return true;
+					return permissionManager.readMayRefuseBeneath(
+						String(reader.____slothletInternal.apiPath ?? ""),
+						String(wrapper.____slothletInternal.apiPath ?? "")
+					);
+				}
+
+				if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext)
+					return Reflect.construct(constructor, args, newTarget);
+				if (!handsOutAsModule(wrapper)) {
+					const instance = Reflect.construct(constructor, args, newTarget);
+					// Under `"fast"` the instance is handed out as it is, unless its `constructor` would hand out a function whose
+					// members the rules could refuse the module: then it is the module's, as under `"precise"`. A subclass's
+					// `super()` (another `newTarget`) gets its own instance.
+					if (newTarget !== constructor || !instanceHoldsReads(wrapper)) return instance;
+					return handOut(makerOf(wrapper), wrapper, instance);
+				}
+				const maker = makerOf(wrapper);
+				// The class's prototype is what `api.x.Class.prototype` reads, so its instances report that very object.
+				wrapper.___exposePrototype(Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value);
+				const target = newTarget === constructor ? constructor : handIn(maker, newTarget);
+				if (target !== constructor && typeof target === "function") {
+					const prototype = Reflect.getOwnPropertyDescriptor(target, "prototype")?.value;
+					if (prototype !== null && typeof prototype === "object" && !WeakMapMethods.has(STAND_IN_RECORDS, prototype))
+						WeakSetMethods.add(maker.handedIn, prototype);
+				}
+				return runAsMaker(
+					wrapper,
+					(...constructArgs) => Reflect.construct(constructor, constructArgs, target),
+					undefined,
+					handInAll(maker, args),
+					true,
+					true
+				);
+			}
+
+			/**
+			 * {@link crossArguments} for values handed to a module by a known caller: a call's arguments, and what slothlet
+			 * itself hands a module's code for someone else (an event's payload to a listener).
+			 * @param {object} wrapper - The wrapper of the module handed the values.
+			 * @param {ArrayLike<*>} args - The values.
+			 * @param {object|null} caller - The wrapper of the module handing them over, or null for the host.
+			 * @returns {ArrayLike<*>} The values, the same list when nothing changed.
+			 * @private
+			 */
+			___crossArgumentsFrom(args, caller) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
+				const wrapper = this;
+				const slothlet = wrapper?.slothlet;
+				if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
+				if (caller !== null && asOneModule(slothlet, caller, wrapper)) return args;
+				let result = args;
+				for (let index = 0; index < args.length; index++) {
+					const value = args[index];
+					if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
+					let from = caller;
+					if (caller === null) {
+						// The host's own values are handed in as they are. What a module's call returned to the host, passed on as it
+						// is, still comes from that module.
+						from =
+							WeakMapMethods.get(HOST_HANDED, value) ??
+							(typeof value === "object" ? WeakMapMethods.get(HOST_HANDED, runtime_unwrapClassInstance(value)) : null) ??
+							null;
+						if (from === null && !WeakMapMethods.has(CROSSINGS, value)) continue;
+					} else {
+						// What the caller holds as itself is its own: handed back to it later, it is the value again.
+						recordOrigin(value, caller);
+						if (typeof value === "function" && !isSlothletValue(value)) {
+							const prototype = Reflect.getOwnPropertyDescriptor(value, "prototype")?.value;
+							if (prototype !== null && typeof prototype === "object") recordOrigin(prototype, caller);
+						}
+					}
+					// A function of the language's or Node's own the caller hands over runs for the caller, with its target.
+					const crossed =
+						from !== null && guardOn(slothlet) && runsForHander(value, from) && !WeakMapMethods.has(CROSSINGS, value)
+							? handedView(value, wrapper, slothlet, from)
+							: crossTo(value, wrapper, slothlet, from);
+					if (crossed === value) continue;
+					if (result === args) result = copyList(args);
+					result[index] = crossed;
+				}
+				return result;
+			}
+
+			/**
+			 * The arguments a call into a module is handed (see {@link handIn}): a stand-in of that module's own values
+			 * comes back as the value itself, as it would in plain JavaScript (`registry.remove(registry.get(name))`); a
+			 * stand-in of another module's value stays one.
+			 * @param {object} wrapper - The wrapper being called.
+			 * @param {Array<*>} args - The call's arguments.
+			 * @returns {Array<*>} The arguments, the same array when nothing changed.
+			 * @private
+			 */
+			___ownArguments(args) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
+				const wrapper = this;
+				if (!args?.length || !wrapper?.slothlet?.instanceID || !handsOutAsModule(wrapper)) return args;
+				return handInAll(makerOf(wrapper), args, wrapper);
+			}
+
+			/**
+			 * The prototype a function node reports (#667), as its function's own `[[Prototype]]` is: the engine's
+			 * (`Function.prototype`, `AsyncFunction.prototype`, …) as it is, and a class of the module's (the base class a derived
+			 * class extends) as the node fronting it, bound to the reading module as a read of that node is. A class of the module's
+			 * no node fronts is not reported: handing it out would hand out the module's code with no node's checks around it.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @param {Function} fn - Its function.
+			 * @returns {object|Function|null} The prototype to report, or `null`.
+			 * @private
+			 */
+			___functionNodePrototype(fn) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
+				const wrapper = this;
+				const prototype = ownsPrototype(wrapper) ? wrapper.___recordedPrototype() : Objects.getPrototypeOf(fn);
+				if (prototype === null || prototype === Functions.prototype) return prototype;
+				// One given to the node is no part of the module's function: the host is handed it as it is, and module code its
+				// own view of it (see givenView).
+				if (prototypeGiven(wrapper)) return wrapper.___givenPrototypeFor(prototype);
+				if (typeof prototype !== "function") {
+					return memberHoldsCode(prototype, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)) ? null : prototype;
+				}
+				return wrapper.___functionNodeFor(prototype) ?? null;
+			}
+
+			/**
+			 * The node fronting a function of the module's (see {@link FUNCTION_NODES}), bound to the module reading now as a read
+			 * of that node is, or `undefined` when no node of the instance fronts it.
+			 * @param {UnifiedWrapper} wrapper - A node of the instance, read now.
+			 * @param {Function} fn - The function.
+			 * @returns {Function|undefined} The node, or `undefined`.
+			 * @private
+			 */
+			___functionNodeFor(fn) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
+				const wrapper = this;
+				const node = nodeRefOf(FUNCTION_NODES, wrapper.slothlet, fn);
+				if (node === undefined) return undefined;
+				const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+				if (!permissionManager?.isEnabled() || permissionManager.isCaptureEnabled?.() === false) return node;
+				const identity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
+				return identity?.currentWrapper ? capturedView(node, identity.currentWrapper, true, identity.ceiling ?? null) : node;
 			}
 		}
 	);

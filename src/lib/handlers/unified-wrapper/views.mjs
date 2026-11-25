@@ -105,7 +105,6 @@ let runtime_unwrapClassInstance,
 	FRAMEWORK_MEMBER_NAMES,
 	frameworkViewOf,
 	nodeWrapperOf,
-	accessAsKept,
 	beginAccess,
 	endAccess,
 	takeAccess,
@@ -125,7 +124,6 @@ let runtime_unwrapClassInstance,
 	makerInstanceID,
 	nodeAtPath,
 	HOST_HANDED,
-	ownArguments,
 	FUNCTION_NODES,
 	nodeRefOf,
 	LAYER_FRONTS,
@@ -144,18 +142,9 @@ let runtime_unwrapClassInstance,
 	moduleKey,
 	recordOrigin,
 	crossTo,
-	emitterPrototypeHandle,
-	instancePrototypeSite,
-	prototypeCheckedBy,
-	unclassedInstancePrototype,
-	instanceClassFront,
 	isArrayMember,
-	describeAsHeld,
-	runAfterPrincipalGate,
-	applyWithEntry,
 	capturedViewSet,
 	capturedViewNodes,
-	enforceCapturedPair,
 	isConstructor,
 	isClassInstance,
 	resolveWrapper,
@@ -169,7 +158,8 @@ let runtime_unwrapClassInstance,
 	COMMON_READERS,
 	TYPED_ARRAY_READERS,
 	DATA_READERS,
-	MEMBER_HOLDERS;
+	MEMBER_HOLDERS,
+	isWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -1427,7 +1417,7 @@ function selfHasInstance(prototype, instance) {
 	while (WeakMapMethods.has(SELF_VIEW_NODES, behind) || WeakMapMethods.has(capturedViewTargets, behind))
 		behind = WeakMapMethods.get(SELF_VIEW_NODES, behind) ?? WeakMapMethods.get(capturedViewTargets, behind);
 	const instanceNode = resolveWrapper(behind);
-	if (instanceNode && instanceClassFront(instanceNode) !== null) instance = instanceNode.____slothletInternal.impl;
+	if (instanceNode && instanceNode.___instanceClassFront() !== null) instance = instanceNode.____slothletInternal.impl;
 	// The class's prototype may be handed to the reader as a view or as the object itself (#667): compared as what it stands for.
 	prototype = behindMemberView(prototype);
 	for (let proto = Reflect.getPrototypeOf(instance); proto !== null; proto = Reflect.getPrototypeOf(proto)) {
@@ -1633,7 +1623,7 @@ function selfView(node, reader, from = null, access = null) {
 	// class's `prototype` through the node standing for it (see instanceClassFront): the same view that read gives,
 	// checked the same way. Null for any other prototype.
 	const classPrototype = (prototype) => {
-		const classNode = inner ? instanceClassFront(inner) : null;
+		const classNode = inner ? inner.___instanceClassFront() : null;
 		if (classNode === null || classNode === undefined) return null;
 		// The class was found by descriptors (see heldInstanceClass): a `constructor` accessor of the module's is
 		// never run to compare it.
@@ -1653,15 +1643,15 @@ function selfView(node, reader, from = null, access = null) {
 		if (heldEmitterPrototype !== undefined) {
 			// A closed node's answer is fixed, per reader, on what this view stands over.
 			if (!Reflect.isExtensible(node) && behindMemberView(prototype) === heldEmitterPrototype) return Reflect.getPrototypeOf(node);
-			if (prototype === heldEmitterPrototype) return prototypeForHolder(slothlet, reader, emitterPrototypeHandle(inner, prototype));
+			if (prototype === heldEmitterPrototype) return prototypeForHolder(slothlet, reader, inner.___emitterPrototypeHandle(prototype));
 			if (behindMemberView(prototype) === heldEmitterPrototype) return prototype;
 		}
 		// A closed node holding a class instance fixes its prototype per reader too, on every path (#725).
-		if (inner && !Reflect.isExtensible(node) && behindMemberView(prototype) === instancePrototypeSite(inner)?.prototype)
+		if (inner && !Reflect.isExtensible(node) && behindMemberView(prototype) === inner.___instancePrototypeSite()?.prototype)
 			return Reflect.getPrototypeOf(node);
 		const shown = classPrototype(prototype);
 		if (shown !== null) return shown;
-		if (inner && prototype === unclassedInstancePrototype(inner)) return viewMember(null, prototype);
+		if (inner && prototype === inner.___unclassedInstancePrototype()) return viewMember(null, prototype);
 		return prototype;
 	};
 	// What a read of a member hands out, the read and the description that follows it made as one access.
@@ -2132,7 +2122,7 @@ function selfHookHandler(handler, slothlet, reader) {
 			if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 			if (!permissionsOn(reader)) return toView(value);
 			const view = toView(value, WeakMapMethods.has(CROSSINGS, value) ? null : argumentSource(value, caller, called));
-			const own = ownInstances(reader, ownArguments(reader, [view]))[0];
+			const own = reader.___ownInstances(reader.___ownArguments([view]))[0];
 			if (own !== view) MapMethods.set(originals, own, MapMethods.has(originals, view) ? MapMethods.get(originals, view) : value);
 			return own;
 		};
@@ -2374,29 +2364,6 @@ function callingModule(slothlet) {
 }
 
 /**
- * The arguments a call into a module is handed, with each class instance of the module's own that comes back in the
- * async runtime's context wrapper (#328) handed in as the instance itself, as in plain JavaScript: the module's own
- * object is `===` the one it made, and its private fields are there.
- * @param {object} wrapper - The wrapper being called.
- * @param {ArrayLike<*>} args - The call's arguments.
- * @returns {ArrayLike<*>} The arguments, the same list when nothing changed.
- * @private
- */
-function ownInstances(wrapper, args) {
-	let result = args;
-	const count = args?.length ?? 0;
-	for (let index = 0; index < count; index++) {
-		const value = args[index];
-		if (value === null || typeof value !== "object" || !runtime_isWrappedClassInstance(value)) continue;
-		const creator = runtime_classInstanceCreator(value);
-		if (creator === null || !sameModule(creator, wrapper)) continue;
-		if (result === args) result = copyList(args);
-		result[index] = runtime_unwrapClassInstance(value);
-	}
-	return result;
-}
-
-/**
  * The api node standing for a module's function: the api root for the root file's function, the node fronting it for
  * any other (see {@link FUNCTION_NODES} and {@link LAYER_FRONTS}), or `undefined` when no node of the instance does.
  * @param {object} slothlet - The instance.
@@ -2520,48 +2487,12 @@ const HAS_INSTANCE_BY_IMPL = new WeakMap();
 const FUNCTION_HAS_INSTANCE = INTRINSIC_HAS_INSTANCE;
 
 /**
- * Whether the node holds `prop`, a symbol, as a member the module put there (adopted onto the wrapper, or
- * still on the value), read through a child wrapper like a string-keyed one. Symbols the value inherits, such as an array's
- * `Symbol.iterator`, are not members.
- *
- * @param {object} wrapper - The node's wrapper.
- * @param {symbol} prop - The key.
- * @returns {boolean} True when the value has `prop` as an own key.
- * @private
- */
-function hasOwnSymbolMember(wrapper, prop) {
-	// Adoption moves an object's members, symbol-keyed ones included, onto the wrapper; an array keeps its own.
-	if (hasOwn(wrapper, prop)) return true;
-	const impl = wrapper.____slothletInternal.impl;
-	// An array's members include those a prototype the module gave it supplies (see isArrayMember).
-	if (Arrays.isArray(impl)) return isArrayMember(impl, prop);
-	// A user proxy answers through its own descriptor; reading one may run its trap, as a read of the member does.
-	return (
-		impl !== null && (typeof impl === "object" || typeof impl === "function") && Reflect.getOwnPropertyDescriptor(impl, prop) !== undefined
-	);
-}
-
-/**
  * The serializer behind each `toJSON` a node hands out, by that function: it takes the reader to redact for and the
  * node to read arrays through, so a node a module kept serializes for that module wherever it is serialized.
  * @type {WeakMap<Function, function(Array<{currentWrapper: object, context: object}|undefined>, object): *>}
  * @private
  */
 const SERIALIZERS = new WeakMap();
-
-/**
- * The caller identity executing right now on a wrapper's instance, with the store it was read on, or null
- * when permissions are off or nothing is in context.
- * @param {object} wrapper - The wrapper about to be called.
- * @returns {{store: object|null, identity: object}|null} The identity.
- * @private
- */
-function liveEntry(wrapper) {
-	const contextManager = wrapper.slothlet.contextManager;
-	const identity = contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID);
-	if (!identity) return null;
-	return { store: contextManager.tryGetContext?.(wrapper.slothlet.instanceID) ?? null, identity };
-}
 
 /**
  * Per-reader views over shared child wrappers.
@@ -2680,7 +2611,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 			const instanceID = leaf ? makerInstanceID(slothlet) : null;
 			// The call is made as it is, by the code whose identity was just read: the target's gate takes that identity
 			// as it starts, with nothing but slothlet's own code run in between, instead of reading the stack again.
-			if (instanceID === null) return resolved?.identity ? applyWithEntry(target, resolved, call) : call();
+			if (instanceID === null) return resolved?.identity ? target.___applyWithEntry(resolved, call) : call();
 			return slothlet.contextManager.runInContext(
 				instanceID,
 				call,
@@ -2706,8 +2637,8 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 	 * @private
 	 */
 	function closedPrototypeHandle(wrapper, prototype) {
-		const found = instancePrototypeSite(wrapper);
-		if (found === undefined || found.prototype !== prototype) return emitterPrototypeHandle(wrapper, prototype);
+		const found = wrapper.___instancePrototypeSite();
+		if (found === undefined || found.prototype !== prototype) return wrapper.___emitterPrototypeHandle(prototype);
 		recordPrototypePath(wrapper.slothlet, prototype, found.site);
 		return prototypeHandleOf(wrapper.slothlet, prototype);
 	}
@@ -2777,7 +2708,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 	// loaded yet, which runs its node's code before any gate.
 	// A held view never answers for whoever accesses through it: the access is theirs, and the reader's as well.
 	const asKept = (access) =>
-		!gated || gated === "held" || WeakSetMethods.has(STAND_INS, child) ? access() : accessAsKept(inner, capturedCaller, access);
+		!gated || gated === "held" || WeakSetMethods.has(STAND_INS, child) ? access() : inner.___accessAsKept(capturedCaller, access);
 	// A read through a stand-in says who it reads for to the stand-in alone (see standInKeptRead).
 	const readKept = (access) => {
 		if (gated === "held") {
@@ -2885,7 +2816,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 		// is answered by redaction, into a thrown read.
 		// A symbol-keyed member the node holds is gated like a string-keyed one; any other symbol (the wrapper's
 		// own `Symbol.toStringTag`, an inspect hook) is no member and reads as it did.
-		const isMember = typeof prop === "string" || (typeof prop === "symbol" && hasOwnSymbolMember(inner, prop));
+		const isMember = typeof prop === "string" || (typeof prop === "symbol" && inner.___hasOwnSymbolMember(prop));
 		// A node standing for a plain value (a leaf a descriptor hands out as its node) is read as that value; a lazy
 		// node not loaded yet holds no value of its own (`impl` is empty) and stays a node.
 		const leaf = resolved !== undefined && !isTerminalData(resolved) ? resolveWrapper(resolved) : null;
@@ -2924,7 +2855,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 	// The child's descriptor of a member as the child holds it, whoever is reading. The shadow holds what the node
 	// holds, never an answer that depends on the reader or on when it read (rules change); each read through the view
 	// is gated as it is made.
-	const rawDescriptor = (key, access = null) => describeAsHeld(inner, child, key, access);
+	const rawDescriptor = (key, access = null) => inner.___describeAsHeld(child, key, access);
 	// Whether the reader may read a member now.
 	const readable = (key) => {
 		try {
@@ -3032,7 +2963,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 				return selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller, null, inner);
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
-			const pending = enforceCapturedPair(inner, capturedCaller, ceiling, undefined, args, true);
+			const pending = inner.___enforceCapturedPair(capturedCaller, ceiling, undefined, args, true);
 			const call = callAsDefiner(inner, () =>
 				selfViewResult(
 					asKept(() => Reflect.apply(child, thisArg, args)),
@@ -3043,14 +2974,14 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 			);
 			if (pending) {
 				// The live caller is read now: once the gate's await settles, the stack no longer holds it.
-				const entry = liveEntry(inner);
-				return runAfterPrincipalGate(inner, pending, () => applyWithEntry(inner, entry, call));
+				const entry = inner.___liveEntry();
+				return inner.___runAfterPrincipalGate(pending, () => inner.___applyWithEntry(entry, call));
 			}
 			return call();
 		},
 		construct(_, args, newTarget) {
 			if (gated && !(gated === "held" && WeakSetMethods.has(STAND_INS, child)))
-				enforceCapturedPair(inner, capturedCaller, ceiling, undefined, args);
+				inner.___enforceCapturedPair(capturedCaller, ceiling, undefined, args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
@@ -3119,7 +3050,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 			// A view of a prototype the node was given checks each read made through it itself.
 			if (inner && !WeakMapMethods.has(GIVEN_VIEWS, fixed)) {
 				const behind = behindMemberView(fixed);
-				enforceCodeMember(prototypeCheckedBy(inner, behind), behind);
+				enforceCodeMember(inner.___prototypeCheckedBy(behind), behind);
 			}
 			return fixed;
 		},
@@ -3265,7 +3196,7 @@ export function ViewsLayer(Base) {
 	return Base.layer(
 		class Views extends Base {
 			static {
-				Base.define("has", { own: hasOwn, ownSymbolMember: hasOwnSymbolMember });
+				Base.define("has", { own: hasOwn });
 				Base.define("views", {
 					SELF_VIEW_NODES,
 					SELF_VIEW_READERS,
@@ -3289,7 +3220,6 @@ export function ViewsLayer(Base) {
 					RUNTIME_CALLABLE_SELVES,
 					permissionsOn,
 					callingModule,
-					ownInstances,
 					frontingNode,
 					atClassSite,
 					PROTOTYPE_PATHS,
@@ -3349,15 +3279,11 @@ export function ViewsLayer(Base) {
 					LAYER_FRONTS = methods.nodes.LAYER_FRONTS;
 					nodeRefOf = methods.node.refOf;
 					classSiteOf = methods.nodes.classSiteOf;
-					emitterPrototypeHandle = methods.nodes.emitterPrototypeHandle;
-					instanceClassFront = methods.instance.classFront;
-					instancePrototypeSite = methods.instance.prototypeSite;
 					makerInstanceID = methods.nodes.makerInstanceID;
 					makerOf = methods.nodes.makerOf;
 					moduleKey = methods.module.key;
 					nodeAtPath = methods.node.atPath;
 					nodeWrapperOf = methods.node.wrapperOf;
-					prototypeCheckedBy = methods.prototype.checkedBy;
 					prototypeClassNode = methods.prototype.classNode;
 					prototypeForHolder = methods.prototype.forHolder;
 					prototypeHandedTo = methods.prototype.handedTo;
@@ -3365,17 +3291,12 @@ export function ViewsLayer(Base) {
 					prototypeHandleOf = methods.prototype.handleOf;
 					prototypeSiteOf = methods.prototype.siteOf;
 					readerHoldsPrototype = methods.nodes.readerHoldsPrototype;
-					unclassedInstancePrototype = methods.nodes.unclassedInstancePrototype;
 					FRAMEWORK_MEMBER_NAMES = methods.rules.FRAMEWORK_MEMBER_NAMES;
-					accessAsKept = methods.access.asKept;
 					accessIdentity = methods.access.identity;
-					applyWithEntry = methods.rules.applyWithEntry;
 					assertReaderWrite = methods.rules.assertReaderWrite;
 					beginAccess = methods.rules.beginAccess;
-					describeAsHeld = methods.rules.describeAsHeld;
 					describeWithAccess = methods.rules.describeWithAccess;
 					endAccess = methods.rules.endAccess;
-					enforceCapturedPair = methods.rules.enforceCapturedPair;
 					enforceCodeMember = methods.rules.enforceCodeMember;
 					enforceRead = methods.rules.enforceRead;
 					frameworkViewOf = methods.framework.viewOf;
@@ -3384,7 +3305,6 @@ export function ViewsLayer(Base) {
 					refuseEndedAccess = methods.rules.refuseEndedAccess;
 					refuseWriteWithoutStanding = methods.rules.refuseWriteWithoutStanding;
 					takeAccess = methods.rules.takeAccess;
-					runAfterPrincipalGate = methods.run.afterPrincipalGate;
 					CROSSING_ORIGINS = methods.membrane.CROSSING_ORIGINS;
 					CROSSINGS = methods.membrane.CROSSINGS;
 					HOST_HANDED = methods.membrane.HOST_HANDED;
@@ -3392,7 +3312,6 @@ export function ViewsLayer(Base) {
 					crossTo = methods.membrane.crossTo;
 					frontingNodeNow = methods.membrane.frontingNodeNow;
 					knownPrototype = methods.membrane.knownPrototype;
-					ownArguments = methods.membrane.ownArguments;
 					recordOrigin = methods.membrane.recordOrigin;
 					SEALED_SHELL_READER = methods.membrane.SEALED_SHELL_READER;
 					STAND_IN_RECORDS = methods.membrane.STAND_IN_RECORDS;
@@ -3417,6 +3336,7 @@ export function ViewsLayer(Base) {
 					TYPED_ARRAY_READERS = methods.values.TYPED_ARRAY_READERS;
 					DATA_READERS = methods.values.DATA_READERS;
 					MEMBER_HOLDERS = methods.values.MEMBER_HOLDERS;
+					isWrapper = methods.brand.isWrapper;
 				});
 			}
 
@@ -3426,6 +3346,73 @@ export function ViewsLayer(Base) {
 			constructor(slothlet) {
 				if (new.target !== realClass) throw ownBindingsRefusal("lib/handlers/unified-wrapper/views", import.meta.url);
 				super(slothlet);
+			}
+
+			/**
+			 * The arguments a call into a module is handed, with each class instance of the module's own that comes back in the
+			 * async runtime's context wrapper (#328) handed in as the instance itself, as in plain JavaScript: the module's own
+			 * object is `===` the one it made, and its private fields are there.
+			 * @param {object} wrapper - The wrapper being called.
+			 * @param {ArrayLike<*>} args - The call's arguments.
+			 * @returns {ArrayLike<*>} The arguments, the same list when nothing changed.
+			 * @private
+			 */
+			___ownInstances(args) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/views", import.meta.url);
+				const wrapper = this;
+				let result = args;
+				const count = args?.length ?? 0;
+				for (let index = 0; index < count; index++) {
+					const value = args[index];
+					if (value === null || typeof value !== "object" || !runtime_isWrappedClassInstance(value)) continue;
+					const creator = runtime_classInstanceCreator(value);
+					if (creator === null || !sameModule(creator, wrapper)) continue;
+					if (result === args) result = copyList(args);
+					result[index] = runtime_unwrapClassInstance(value);
+				}
+				return result;
+			}
+
+			/**
+			 * Whether the node holds `prop`, a symbol, as a member the module put there (adopted onto the wrapper, or
+			 * still on the value), read through a child wrapper like a string-keyed one. Symbols the value inherits, such as an array's
+			 * `Symbol.iterator`, are not members.
+			 *
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {symbol} prop - The key.
+			 * @returns {boolean} True when the value has `prop` as an own key.
+			 * @private
+			 */
+			___hasOwnSymbolMember(prop) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/views", import.meta.url);
+				const wrapper = this;
+				// Adoption moves an object's members, symbol-keyed ones included, onto the wrapper; an array keeps its own.
+				if (hasOwn(wrapper, prop)) return true;
+				const impl = wrapper.____slothletInternal.impl;
+				// An array's members include those a prototype the module gave it supplies (see isArrayMember).
+				if (Arrays.isArray(impl)) return isArrayMember(impl, prop);
+				// A user proxy answers through its own descriptor; reading one may run its trap, as a read of the member does.
+				return (
+					impl !== null &&
+					(typeof impl === "object" || typeof impl === "function") &&
+					Reflect.getOwnPropertyDescriptor(impl, prop) !== undefined
+				);
+			}
+
+			/**
+			 * The caller identity executing right now on a wrapper's instance, with the store it was read on, or null
+			 * when permissions are off or nothing is in context.
+			 * @param {object} wrapper - The wrapper about to be called.
+			 * @returns {{store: object|null, identity: object}|null} The identity.
+			 * @private
+			 */
+			___liveEntry() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/views", import.meta.url);
+				const wrapper = this;
+				const contextManager = wrapper.slothlet.contextManager;
+				const identity = contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID);
+				if (!identity) return null;
+				return { store: contextManager.tryGetContext?.(wrapper.slothlet.instanceID) ?? null, identity };
 			}
 		}
 	);

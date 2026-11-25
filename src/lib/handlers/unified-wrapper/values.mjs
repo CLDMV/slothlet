@@ -138,12 +138,10 @@ let trustedRootOwn,
 	SELF_MEMBER_VIEWS,
 	NODE_MEMBER,
 	nodeWrapperOf,
-	startPrototypes,
 	sameLookup,
 	resolveEnforcedCaller,
 	readGateDecision,
 	enforceCodeMember,
-	recordedPrototype,
 	moduleObjectOf,
 	STAND_IN_RECORDS,
 	INBOUND_VIEWS,
@@ -771,7 +769,7 @@ function inheritedAtStart(node, version, snap, prop, inherited) {
 	const object = moduleObjectOf(wrapper);
 	const ownNow = object !== null ? hasOwn(object, prop) : holdsOwnMember(node, prop);
 	if (!inherited && ownNow) return undefined;
-	const held = startPrototypes(wrapper, version);
+	const held = wrapper.___startPrototypes(version);
 	if (held === undefined) return undefined;
 	const atStart = inheritedLookup(held.start, prop, (proto) => rawContent(snap, proto));
 	if (atStart === undefined) return undefined;
@@ -838,85 +836,6 @@ function valueKind(value) {
 }
 
 /**
- * What `slothlet.node(target)` reports about a wrapper it reached.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @param {string[]|null} [path=null] - The path to report, when it is not the wrapper's own (a stand-in's chain).
- * @param {{value: *}|null} [held=null] - What a stand-in's chain read as once its node loaded, when that is no node.
- * @returns {object} The frozen report.
- * @private
- * @example
- * wrapperReport(wrapper);
- */
-function wrapperReport(wrapper, path = null, held = null) {
-	const internal = wrapper.____slothletInternal;
-	const slothlet = wrapper.slothlet;
-	const handlers = slothlet.handlers;
-	const system = handlers?.metadata?.getSystemMetadata?.(wrapper) ?? null;
-	const lazy = internal.mode === "lazy";
-	const materialized = internal.state.materialized === true;
-	const loading = internal.state.inFlight === true;
-
-	// A report is a read of what slothlet knows: it never starts loading a lazy node.
-	let type;
-	let callable;
-	if (held) {
-		type = valueKind(held.value);
-		callable = typeof held.value === "function";
-	} else if (lazy && loading) {
-		type = TYPE_STATES.IN_FLIGHT;
-		callable = false;
-	} else if (lazy && !materialized) {
-		type = TYPE_STATES.UNMATERIALIZED;
-		callable = false;
-	} else if (path !== null) {
-		// A stand-in whose chain reaches nothing yet.
-		type = TYPE_STATES.IN_FLIGHT;
-		callable = false;
-	} else {
-		const impl = internal.impl;
-		if (impl === null || (typeof impl !== "object" && typeof impl !== "function") || Arrays.isArray(impl) || isTerminalData(impl)) {
-			// A node holding a plain value (a primitive, an array, built-in data such as a Map) is that value: data.
-			callable = false;
-			type = "data";
-		} else {
-			callable = internal.isCallable === true || typeof impl === "function";
-			const members = filterList(Objects.keys(wrapper), (key) => !isFrameworkReservedKey(key));
-			// A callable with members of its own is a callable namespace (a callable folder); one with none is a function.
-			if (members.length > 0) type = "namespace";
-			else if (callable) type = "function";
-			else type = valueKind(impl);
-		}
-	}
-
-	const rawModule = system?.baseModuleID ?? internal.moduleID ?? null;
-	const separatorAt = typeof rawModule === "string" ? StringMethods.indexOf(rawModule, "__slothlet_sep__") : -1;
-	const module = separatorAt === -1 ? rawModule : StringMethods.slice(rawModule, 0, separatorAt);
-	const versionManager = handlers?.versionManager;
-	const segments =
-		path ??
-		(versionManager?.pathSegments
-			? versionManager.pathSegments(String(internal.apiPath ?? ""))
-			: internal.apiPath
-				? splitText(String(internal.apiPath), ".")
-				: []);
-
-	const report = {
-		callable,
-		file: internal.filePath ?? system?.filePath ?? null,
-		folder: internal.sourceFolder ?? system?.sourceFolder ?? null,
-		loading: held ? false : loading,
-		materialized: held ? true : materialized,
-		mode: internal.mode,
-		module,
-		path: Objects.freeze(copyList(segments)),
-		type
-	};
-	const manifest = handlers?.metadata?.getModuleManifest?.(module);
-	if (manifest) report.manifest = manifest;
-	return report;
-}
-
-/**
  * Classify a resolved property value as terminal data.
  *
  * A value is terminal data unless it is a plain object / array / function that getTrap
@@ -976,20 +895,6 @@ const DATA_MEMBER_NODES = new WeakMap();
  * @private
  */
 const ASSIGNED_DATA = new WeakSet();
-
-/**
- * Record an object written to a node outside a build as data (see {@link ASSIGNED_DATA}): a plain object or array, never
- * a node, a Proxy or a function.
- * @param {object} wrapper - The node written to.
- * @param {*} value - The value written.
- * @returns {void}
- * @private
- */
-function markAssignedData(wrapper, value) {
-	if (value === null || typeof value !== "object" || wrapper.slothlet?.____buildDepth > 0) return;
-	if (util.types.isProxy(value) || resolveWrapper(value) !== null || isTerminalData(value)) return;
-	WeakSetMethods.add(ASSIGNED_DATA, value);
-}
 
 /**
  * Whether a node holds data written to the api after it was built, or data such a value holds (see
@@ -1155,35 +1060,6 @@ function ownsPrototype(wrapper) {
 		owns
 	};
 	return owns;
-}
-
-/**
- * The prototype a member a node's value does not hold itself is read from, when the node's prototype is its record's
- * (see {@link ownsPrototype}): `undefined` for a member the value holds and for any other node, whose value
- * answers for what it inherits.
- * @param {object} wrapper - The node's wrapper.
- * @param {PropertyKey} prop - The member's key.
- * @returns {object|Function|null|undefined} The prototype, `null` when the node has none, or `undefined`.
- * @private
- */
-function nodeInherits(wrapper, prop) {
-	if (!ownsPrototype(wrapper) || hasOwn(wrapper.____slothletInternal.impl, prop)) return undefined;
-	return recordedPrototype(wrapper);
-}
-
-/**
- * Whether a node's value holds or inherits a member, as `in` asks it: from the prototype on the node's record when that
- * is the node's (see {@link ownsPrototype}).
- * @param {object} wrapper - The node's wrapper.
- * @param {object|Function} impl - The node's value.
- * @param {PropertyKey} prop - The member's key.
- * @returns {boolean} Whether it does.
- * @private
- */
-function implHas(wrapper, impl, prop) {
-	const prototype = nodeInherits(wrapper, prop);
-	if (prototype === undefined) return prop in impl;
-	return prototype !== null && Reflect.has(prototype, prop);
 }
 
 /**
@@ -2198,35 +2074,6 @@ function isHeldPrimitive(impl) {
 }
 
 /**
- * Whether a node stands for a file whose module value is `null` or `undefined` (#792): it was built or loaded from such
- * a file, still holds nothing, and has no members of its own, so a read answers the value as the plain module's
- * `default` does. A node a later contribution gave members stays the node it is.
- * @param {object} wrapper - The node's wrapper.
- * @returns {boolean} True for such a node.
- * @private
- */
-function holdsNullish(wrapper) {
-	const internal = wrapper.____slothletInternal;
-	if (!internal.nullish || internal.invalid || (internal.impl !== null && internal.impl !== undefined)) return false;
-	for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
-		const key = ofList[ofIndex];
-		if (!isFrameworkReservedKey(key)) return false;
-	}
-	return true;
-}
-
-/**
- * Whether a node answers a value in its place: a primitive it holds (see {@link isHeldPrimitive}), or a file's
- * `null` or `undefined` (see {@link holdsNullish}).
- * @param {object} wrapper - The node's wrapper.
- * @returns {boolean} True when a read of the node answers {@link heldValue}.
- * @private
- */
-function holdsValue(wrapper) {
-	return isHeldPrimitive(wrapper.____slothletInternal.impl) || holdsNullish(wrapper);
-}
-
-/**
  * The members a function node answers from its function rather than as api members (see the node's get trap), which
  * the api root answers the same way when its file's default export is a function.
  * @type {ReadonlySet<string>}
@@ -2303,118 +2150,6 @@ function unwrapLeafValue(value) {
 function serializesItself(value) {
 	if (value === null || typeof value !== "object" || isTerminalData(value) || resolveWrapper(value) !== null) return false;
 	return typeof value.toJSON === "function";
-}
-
-/**
- * Stand-in for a value that serializes through its own `toJSON`, in a snapshot handed to `JSON.stringify`: its
- * `toJSON` runs the value's own, as `JSON.stringify` would, and leaves out of what that gives each member the reader
- * may not read at the value's path and the member's name (see {@link redactSerializedResult}).
- * @param {object} wrapper - Wrapper the snapshot was extracted from.
- * @param {object} value - The value.
- * @param {string} path - Api path the value is at.
- * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
- *   reading now.
- * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
- * @returns {object} The stand-in.
- * @private
- */
-function serializedHolder(wrapper, value, path, callerOverride, kept) {
-	const holder = Objects.create(null);
-	holder.toJSON = (key) =>
-		redactSerializedResult(wrapper, Reflect.apply(value.toJSON, value, [key]), path, new WeakSet(), callerOverride, kept);
-	return holder;
-}
-
-/**
- * What a module's own `toJSON` gave, with the members the reader may not read left out at `basePath` and each
- * member's name, as a node's own members are left out of its serialization (see {@link redactSerialized}):
- * an object member the rules leave the reader nothing of goes, arrays are read element by element at `<path>.<i>`,
- * and a value inside that serializes through a `toJSON` of its own is held to the same at its path. What the result
- * holds is never changed: an object or array that loses a member is copied.
- * @param {object} wrapper - The node whose `toJSON` gave the result.
- * @param {*} data - What the `toJSON` gave.
- * @param {string} basePath - Api path the result stands for.
- * @param {WeakSet<object>} seen - The objects on the current path.
- * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
- *   reading now.
- * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making.
- * @returns {*} `data`, or a copy of it with what the reader may not read left out.
- * @private
- *
- * @example
- * // rule: deny reader.** → owner.cfg.hidden; owner.cfg.toJSON() gives { pub: 1, hidden: "H" }
- * JSON.stringify(self.owner.cfg); // '{"pub":1}'
- */
-function redactSerializedResult(wrapper, data, basePath, seen, callerOverride, kept = null) {
-	/**
-	 * Whether the rules leave the reader nothing at a path that names no node (a member of what a module's `toJSON`
-	 * gave): the path is denied and nothing beneath it is allowed, as {@link readsNothingBeneath} answers for a
-	 * member of a node's data.
-	 * @param {object} wrapper - The node being serialized.
-	 * @param {string} targetPath - The member's api path.
-	 * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
-	 *   reading now.
-	 * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
-	 * @returns {boolean} Whether the reader may read nothing there.
-	 * @private
-	 */
-	function deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept) {
-		if (readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) return false;
-		const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
-		const beneath = readGateDecision(wrapper, probePath, callerOverride, kept);
-		if (beneath.allowed) return false;
-		return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
-	}
-
-	if (!data || typeof data !== "object" || WeakSetMethods.has(seen, data) || isTerminalData(data) || resolveWrapper(data) !== null)
-		return data;
-	WeakSetMethods.add(seen, data);
-	const isList = Arrays.isArray(data);
-	let copy = null;
-	const own = () => (copy ??= isList ? Objects.assign([], data) : Objects.assign(Objects.create(Objects.getPrototypeOf(data)), data));
-	for (let ofIndex = 0, ofList = Objects.keys(data); ofIndex < ofList.length; ofIndex++) {
-		const key = ofList[ofIndex];
-		const value = data[key];
-		const targetPath = `${basePath}.${key}`;
-		if (isTerminalData(value)) {
-			if (!readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
-		} else if (value === null || typeof value !== "object" || resolveWrapper(value) !== null) {
-			// A function is left out by JSON.stringify, and a node serializes for its reader through its own toJSON.
-			continue;
-		} else if (deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept)) {
-			delete own()[key];
-		} else if (serializesItself(value)) {
-			own()[key] = serializedHolder(wrapper, value, targetPath, callerOverride, kept);
-		} else {
-			const redacted = redactSerializedResult(wrapper, value, targetPath, seen, callerOverride, kept);
-			if (redacted !== value) own()[key] = redacted;
-		}
-	}
-	WeakSetMethods.delete(seen, data);
-	return copy ?? data;
-}
-
-/**
- * What a `toJSON` of a node's own gave, held for each reader in turn (see {@link redactSerializedResult}),
- * when the permission system gates reads.
- * @param {object} wrapper - The node's wrapper.
- * @param {*} result - What the `toJSON` gave.
- * @param {string} path - The node's api path.
- * @param {Array<{currentWrapper: object, context: object}|undefined>} readers - The readers (`undefined` for whoever is
- *   reading now).
- * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
- * @returns {*} The result with what the readers may not read left out.
- * @private
- */
-function redactToJSONResult(wrapper, result, path, readers, kept) {
-	const pm = wrapper.slothlet.handlers?.permissionManager;
-	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return result;
-	let redacted = result;
-	for (let ofIndex = 0, ofList = readers; ofIndex < ofList.length; ofIndex++) {
-		const reader = ofList[ofIndex];
-		redacted = redactSerializedResult(wrapper, redacted, path, new WeakSet(), reader, kept);
-	}
-	return redacted;
 }
 
 /**
@@ -2593,47 +2328,6 @@ function isFixedReadOnly(target, prop) {
 }
 
 /**
- * What `util.inspect` shows for a namespace node: its members as the caller inspecting it may read them, through
- * the node, so a member listed is read-gated and a primitive shows as the value it is, as in plain JS (#603 review).
- * A member the caller may not read is left out, as `Object.keys()` leaves it out.
- *
- * @param {object} wrapper - The node's wrapper.
- * @returns {object} The members to show.
- * @private
- *
- * @example
- * util.inspect(api.config); // { host: 'db', port: 5432 }
- */
-function inspectMembers(wrapper) {
-	/**
-	 * What `util.inspect` shows for an accessor, as it shows one of a plain object: `[Getter]`, `[Setter]` or
-	 * `[Getter/Setter]`, without running it.
-	 * @param {PropertyDescriptor} descriptor - The accessor's descriptor.
-	 * @returns {object} A value `util.inspect` shows as that text.
-	 * @private
-	 */
-	function accessorLabel(descriptor) {
-		return inspectLabel(descriptor.get && descriptor.set ? "[Getter/Setter]" : descriptor.get ? "[Getter]" : "[Setter]");
-	}
-
-	const node = wrapper.____slothletInternal.proxy;
-	const shown = {};
-	for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
-		const key = ofList[ofIndex];
-		// A member listed that the caller may not read after all (one the module's Proxy among the value's prototypes
-		// answers, which reading runs as a call of the node) is left out as well.
-		try {
-			// An accessor is shown by its form, as `util.inspect` shows one, and not run: it is the module's code.
-			const descriptor = Reflect.getOwnPropertyDescriptor(node, key);
-			shown[key] = descriptor && !("value" in descriptor) ? accessorLabel(descriptor) : node[key];
-		} catch (error) {
-			if (error?.code !== "PERMISSION_DENIED") throw error;
-		}
-	}
-	return shown;
-}
-
-/**
  * A value `util.inspect` shows as `text` itself, unquoted, as it shows a form such as `[Function: name]` inside an object.
  * @param {string} text - The text.
  * @returns {object} The label.
@@ -2654,10 +2348,10 @@ function inspectLabel(text) {
  * @returns {*} What is shown.
  * @private
  */
-function inspectShown(wrapper, args, forModule = inspectReaderIsModule(wrapper)) {
+function inspectShown(wrapper, args, forModule = wrapper.___inspectReaderIsModule()) {
 	const internal = wrapper.____slothletInternal;
 	const childKeys = filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k));
-	if (childKeys.length > 0 && !internal.isCallable) return inspectMembers(wrapper);
+	if (childKeys.length > 0 && !internal.isCallable) return wrapper.___inspectMembers();
 	// A lazy node not loaded yet shows as the function stand-in it is, `[Function: name]` — the form a module's view of
 	// it shows (#824) — not as the Proxy around it, which `util.inspect` prints as `Proxy([Function: name])`. Its members
 	// are not read: reading them would load it. A node on an object shell that holds nothing (a loaded node removed, #811) shows what it holds, as eager's
@@ -2675,9 +2369,9 @@ function inspectShown(wrapper, args, forModule = inspectReaderIsModule(wrapper))
 	if (!layered && (!forModule || !memberHoldsCode(internal.impl, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet))))
 		return internal.impl;
 	// The node's own members, read through it as the module reading them may.
-	if (typeof internal.impl !== "function") return inspectMembers(wrapper);
+	if (typeof internal.impl !== "function") return wrapper.___inspectMembers();
 	const label = codeLabel(layered ? layerUnderlying(internal.impl) : internal.impl);
-	const members = inspectMembers(wrapper);
+	const members = wrapper.___inspectMembers();
 	if (Objects.keys(members).length === 0) return label;
 	const options = args[1],
 		inspect = args[2];
@@ -2697,17 +2391,6 @@ function inspectShown(wrapper, args, forModule = inspectReaderIsModule(wrapper))
 function inspectSafe(value, args, forModule, slothlet) {
 	if (!forModule || !memberHoldsCode(value, searchDepth(slothlet) + 1, searchBudget(slothlet))) return value;
 	return typeof value === "function" ? codeLabel(value) : "[Object]";
-}
-
-/**
- * Whether a module's code is what reads a node's inspect hook now (not the host's).
- * @param {object} wrapper - The node's wrapper.
- * @returns {boolean} True for a module, or a reader that cannot be told.
- * @private
- */
-function inspectReaderIsModule(wrapper) {
-	const identity = wrapper.slothlet?.contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID);
-	return Boolean(identity?.currentWrapper || identity?.unresolved);
 }
 
 /**
@@ -2789,6 +2472,7 @@ export function ValuesLayer(Base) {
 				registeredWrapper = (value) => WeakMapMethods.get(Values.#proxyRegistry, value);
 				isRegisteredProxy = (value) => WeakMapMethods.has(Values.#proxyRegistry, value);
 				registerProxy = (proxy, wrapper) => WeakMapMethods.set(Values.#proxyRegistry, proxy, wrapper);
+				Base.define("brand", { isWrapper: (value) => value !== null && typeof value === "object" && #brand in value });
 				Base.define("values", {
 					registeredWrapper,
 					registerProxy,
@@ -2798,14 +2482,12 @@ export function ValuesLayer(Base) {
 					frontedDataMember,
 					dataReadOptions,
 					ASSIGNED_DATA,
-					markAssignedData,
 					valueHoldsName,
 					ownsPrototype,
 					INTRINSICS,
 					SNAPSHOT_OMIT,
 					VM_SCRIPT,
 					VM_NATIVE_SCRIPT,
-					redactToJSONResult,
 					INSPECT_HOOKS,
 					definitionBindsTarget,
 					defineProxyInspect,
@@ -2819,7 +2501,6 @@ export function ValuesLayer(Base) {
 					TYPED_ARRAY_BYTE_LENGTH,
 					TYPED_ARRAY_LENGTH,
 					serializesItself,
-					serializedHolder,
 					registerInspectHook
 				});
 				Base.define("is", {
@@ -2869,14 +2550,10 @@ export function ValuesLayer(Base) {
 					ownMember: holdsOwnMember,
 					assignedData: holdsAssignedData,
 					code: holdsCode,
-					slottedData: holdsSlottedData,
-					value: holdsValue
+					slottedData: holdsSlottedData
 				});
-				Base.define("wrapper", { report: wrapperReport });
-				Base.define("node", { inherits: nodeInherits });
-				Base.define("impl", { has: implHas });
 				Base.define("captured", { viewSet: capturedViewSet });
-				Base.define("inspect", { label: inspectLabel, shown: inspectShown, safe: inspectSafe, readerIsModule: inspectReaderIsModule });
+				Base.define("inspect", { label: inspectLabel, shown: inspectShown, safe: inspectSafe });
 				Base.define("is", { wrapper: (value) => value !== null && typeof value === "object" && #brand in value });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
@@ -2894,8 +2571,6 @@ export function ValuesLayer(Base) {
 					memberHoldsCode = methods.rules.memberHoldsCode;
 					readGateDecision = methods.read.gateDecision;
 					readsNothingBeneath = methods.rules.readsNothingBeneath;
-					recordedPrototype = methods.run.recordedPrototype;
-					startPrototypes = methods.run.startPrototypes;
 					capturedViewChildren = methods.captured.viewChildren;
 					hasOwn = methods.has.own;
 					NODE_MEMBER = methods.views.NODE_MEMBER;
@@ -2928,6 +2603,343 @@ export function ValuesLayer(Base) {
 			constructor(slothlet) {
 				if (new.target !== realClass) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
 				super(slothlet);
+			}
+
+			/**
+			 * What `slothlet.node(target)` reports about a wrapper it reached.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @param {string[]|null} [path=null] - The path to report, when it is not the wrapper's own (a stand-in's chain).
+			 * @param {{value: *}|null} [held=null] - What a stand-in's chain read as once its node loaded, when that is no node.
+			 * @returns {object} The frozen report.
+			 * @private
+			 * @example
+			 * wrapperReport(wrapper);
+			 */
+			___wrapperReport(path = null, held = null) {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				const internal = wrapper.____slothletInternal;
+				const slothlet = wrapper.slothlet;
+				const handlers = slothlet.handlers;
+				const system = handlers?.metadata?.getSystemMetadata?.(wrapper) ?? null;
+				const lazy = internal.mode === "lazy";
+				const materialized = internal.state.materialized === true;
+				const loading = internal.state.inFlight === true;
+
+				// A report is a read of what slothlet knows: it never starts loading a lazy node.
+				let type;
+				let callable;
+				if (held) {
+					type = valueKind(held.value);
+					callable = typeof held.value === "function";
+				} else if (lazy && loading) {
+					type = TYPE_STATES.IN_FLIGHT;
+					callable = false;
+				} else if (lazy && !materialized) {
+					type = TYPE_STATES.UNMATERIALIZED;
+					callable = false;
+				} else if (path !== null) {
+					// A stand-in whose chain reaches nothing yet.
+					type = TYPE_STATES.IN_FLIGHT;
+					callable = false;
+				} else {
+					const impl = internal.impl;
+					if (impl === null || (typeof impl !== "object" && typeof impl !== "function") || Arrays.isArray(impl) || isTerminalData(impl)) {
+						// A node holding a plain value (a primitive, an array, built-in data such as a Map) is that value: data.
+						callable = false;
+						type = "data";
+					} else {
+						callable = internal.isCallable === true || typeof impl === "function";
+						const members = filterList(Objects.keys(wrapper), (key) => !isFrameworkReservedKey(key));
+						// A callable with members of its own is a callable namespace (a callable folder); one with none is a function.
+						if (members.length > 0) type = "namespace";
+						else if (callable) type = "function";
+						else type = valueKind(impl);
+					}
+				}
+
+				const rawModule = system?.baseModuleID ?? internal.moduleID ?? null;
+				const separatorAt = typeof rawModule === "string" ? StringMethods.indexOf(rawModule, "__slothlet_sep__") : -1;
+				const module = separatorAt === -1 ? rawModule : StringMethods.slice(rawModule, 0, separatorAt);
+				const versionManager = handlers?.versionManager;
+				const segments =
+					path ??
+					(versionManager?.pathSegments
+						? versionManager.pathSegments(String(internal.apiPath ?? ""))
+						: internal.apiPath
+							? splitText(String(internal.apiPath), ".")
+							: []);
+
+				const report = {
+					callable,
+					file: internal.filePath ?? system?.filePath ?? null,
+					folder: internal.sourceFolder ?? system?.sourceFolder ?? null,
+					loading: held ? false : loading,
+					materialized: held ? true : materialized,
+					mode: internal.mode,
+					module,
+					path: Objects.freeze(copyList(segments)),
+					type
+				};
+				const manifest = handlers?.metadata?.getModuleManifest?.(module);
+				if (manifest) report.manifest = manifest;
+				return report;
+			}
+
+			/**
+			 * Record an object written to a node outside a build as data (see {@link ASSIGNED_DATA}): a plain object or array, never
+			 * a node, a Proxy or a function.
+			 * @param {object} wrapper - The node written to.
+			 * @param {*} value - The value written.
+			 * @returns {void}
+			 * @private
+			 */
+			___markAssignedData(value) {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				if (value === null || typeof value !== "object" || wrapper.slothlet?.____buildDepth > 0) return;
+				if (util.types.isProxy(value) || resolveWrapper(value) !== null || isTerminalData(value)) return;
+				WeakSetMethods.add(ASSIGNED_DATA, value);
+			}
+
+			/**
+			 * The prototype a member a node's value does not hold itself is read from, when the node's prototype is its record's
+			 * (see {@link ownsPrototype}): `undefined` for a member the value holds and for any other node, whose value
+			 * answers for what it inherits.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {PropertyKey} prop - The member's key.
+			 * @returns {object|Function|null|undefined} The prototype, `null` when the node has none, or `undefined`.
+			 * @private
+			 */
+			___nodeInherits(prop) {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				if (!ownsPrototype(wrapper) || hasOwn(wrapper.____slothletInternal.impl, prop)) return undefined;
+				return wrapper.___recordedPrototype();
+			}
+
+			/**
+			 * Whether a node's value holds or inherits a member, as `in` asks it: from the prototype on the node's record when that
+			 * is the node's (see {@link ownsPrototype}).
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {object|Function} impl - The node's value.
+			 * @param {PropertyKey} prop - The member's key.
+			 * @returns {boolean} Whether it does.
+			 * @private
+			 */
+			___implHas(impl, prop) {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				const prototype = wrapper.___nodeInherits(prop);
+				if (prototype === undefined) return prop in impl;
+				return prototype !== null && Reflect.has(prototype, prop);
+			}
+
+			/**
+			 * Whether a node stands for a file whose module value is `null` or `undefined` (#792): it was built or loaded from such
+			 * a file, still holds nothing, and has no members of its own, so a read answers the value as the plain module's
+			 * `default` does. A node a later contribution gave members stays the node it is.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @returns {boolean} True for such a node.
+			 * @private
+			 */
+			___holdsNullish() {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				const internal = wrapper.____slothletInternal;
+				if (!internal.nullish || internal.invalid || (internal.impl !== null && internal.impl !== undefined)) return false;
+				for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					if (!isFrameworkReservedKey(key)) return false;
+				}
+				return true;
+			}
+
+			/**
+			 * Whether a node answers a value in its place: a primitive it holds (see {@link isHeldPrimitive}), or a file's
+			 * `null` or `undefined` (see {@link holdsNullish}).
+			 * @param {object} wrapper - The node's wrapper.
+			 * @returns {boolean} True when a read of the node answers {@link heldValue}.
+			 * @private
+			 */
+			___holdsValue() {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				return isHeldPrimitive(wrapper.____slothletInternal.impl) || wrapper.___holdsNullish();
+			}
+
+			/**
+			 * Stand-in for a value that serializes through its own `toJSON`, in a snapshot handed to `JSON.stringify`: its
+			 * `toJSON` runs the value's own, as `JSON.stringify` would, and leaves out of what that gives each member the reader
+			 * may not read at the value's path and the member's name (see {@link redactSerializedResult}).
+			 * @param {object} wrapper - Wrapper the snapshot was extracted from.
+			 * @param {object} value - The value.
+			 * @param {string} path - Api path the value is at.
+			 * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
+			 *   reading now.
+			 * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+			 * @returns {object} The stand-in.
+			 * @private
+			 */
+			___serializedHolder(value, path, callerOverride, kept) {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				const holder = Objects.create(null);
+				holder.toJSON = (key) =>
+					wrapper.___redactSerializedResult(Reflect.apply(value.toJSON, value, [key]), path, new WeakSet(), callerOverride, kept);
+				return holder;
+			}
+
+			/**
+			 * What a module's own `toJSON` gave, with the members the reader may not read left out at `basePath` and each
+			 * member's name, as a node's own members are left out of its serialization (see {@link redactSerialized}):
+			 * an object member the rules leave the reader nothing of goes, arrays are read element by element at `<path>.<i>`,
+			 * and a value inside that serializes through a `toJSON` of its own is held to the same at its path. What the result
+			 * holds is never changed: an object or array that loses a member is copied.
+			 * @param {object} wrapper - The node whose `toJSON` gave the result.
+			 * @param {*} data - What the `toJSON` gave.
+			 * @param {string} basePath - Api path the result stands for.
+			 * @param {WeakSet<object>} seen - The objects on the current path.
+			 * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
+			 *   reading now.
+			 * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making.
+			 * @returns {*} `data`, or a copy of it with what the reader may not read left out.
+			 * @private
+			 *
+			 * @example
+			 * // rule: deny reader.** → owner.cfg.hidden; owner.cfg.toJSON() gives { pub: 1, hidden: "H" }
+			 * JSON.stringify(self.owner.cfg); // '{"pub":1}'
+			 */
+			___redactSerializedResult(data, basePath, seen, callerOverride, kept = null) {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				/**
+				 * Whether the rules leave the reader nothing at a path that names no node (a member of what a module's `toJSON`
+				 * gave): the path is denied and nothing beneath it is allowed, as {@link readsNothingBeneath} answers for a
+				 * member of a node's data.
+				 * @param {object} wrapper - The node being serialized.
+				 * @param {string} targetPath - The member's api path.
+				 * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
+				 *   reading now.
+				 * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+				 * @returns {boolean} Whether the reader may read nothing there.
+				 * @private
+				 */
+				function deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept) {
+					if (readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) return false;
+					const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
+					const beneath = readGateDecision(wrapper, probePath, callerOverride, kept);
+					if (beneath.allowed) return false;
+					return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
+				}
+
+				if (!data || typeof data !== "object" || WeakSetMethods.has(seen, data) || isTerminalData(data) || resolveWrapper(data) !== null)
+					return data;
+				WeakSetMethods.add(seen, data);
+				const isList = Arrays.isArray(data);
+				let copy = null;
+				const own = () => (copy ??= isList ? Objects.assign([], data) : Objects.assign(Objects.create(Objects.getPrototypeOf(data)), data));
+				for (let ofIndex = 0, ofList = Objects.keys(data); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					const value = data[key];
+					const targetPath = `${basePath}.${key}`;
+					if (isTerminalData(value)) {
+						if (!readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
+					} else if (value === null || typeof value !== "object" || resolveWrapper(value) !== null) {
+						// A function is left out by JSON.stringify, and a node serializes for its reader through its own toJSON.
+						continue;
+					} else if (deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept)) {
+						delete own()[key];
+					} else if (serializesItself(value)) {
+						own()[key] = wrapper.___serializedHolder(value, targetPath, callerOverride, kept);
+					} else {
+						const redacted = wrapper.___redactSerializedResult(value, targetPath, seen, callerOverride, kept);
+						if (redacted !== value) own()[key] = redacted;
+					}
+				}
+				WeakSetMethods.delete(seen, data);
+				return copy ?? data;
+			}
+
+			/**
+			 * What a `toJSON` of a node's own gave, held for each reader in turn (see {@link redactSerializedResult}),
+			 * when the permission system gates reads.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @param {*} result - What the `toJSON` gave.
+			 * @param {string} path - The node's api path.
+			 * @param {Array<{currentWrapper: object, context: object}|undefined>} readers - The readers (`undefined` for whoever is
+			 *   reading now).
+			 * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+			 * @returns {*} The result with what the readers may not read left out.
+			 * @private
+			 */
+			___redactToJSONResult(result, path, readers, kept) {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				const pm = wrapper.slothlet.handlers?.permissionManager;
+				if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return result;
+				let redacted = result;
+				for (let ofIndex = 0, ofList = readers; ofIndex < ofList.length; ofIndex++) {
+					const reader = ofList[ofIndex];
+					redacted = wrapper.___redactSerializedResult(redacted, path, new WeakSet(), reader, kept);
+				}
+				return redacted;
+			}
+
+			/**
+			 * What `util.inspect` shows for a namespace node: its members as the caller inspecting it may read them, through
+			 * the node, so a member listed is read-gated and a primitive shows as the value it is, as in plain JS (#603 review).
+			 * A member the caller may not read is left out, as `Object.keys()` leaves it out.
+			 *
+			 * @param {object} wrapper - The node's wrapper.
+			 * @returns {object} The members to show.
+			 * @private
+			 *
+			 * @example
+			 * util.inspect(api.config); // { host: 'db', port: 5432 }
+			 */
+			___inspectMembers() {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				/**
+				 * What `util.inspect` shows for an accessor, as it shows one of a plain object: `[Getter]`, `[Setter]` or
+				 * `[Getter/Setter]`, without running it.
+				 * @param {PropertyDescriptor} descriptor - The accessor's descriptor.
+				 * @returns {object} A value `util.inspect` shows as that text.
+				 * @private
+				 */
+				function accessorLabel(descriptor) {
+					return inspectLabel(descriptor.get && descriptor.set ? "[Getter/Setter]" : descriptor.get ? "[Getter]" : "[Setter]");
+				}
+
+				const node = wrapper.____slothletInternal.proxy;
+				const shown = {};
+				for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					// A member listed that the caller may not read after all (one the module's Proxy among the value's prototypes
+					// answers, which reading runs as a call of the node) is left out as well.
+					try {
+						// An accessor is shown by its form, as `util.inspect` shows one, and not run: it is the module's code.
+						const descriptor = Reflect.getOwnPropertyDescriptor(node, key);
+						shown[key] = descriptor && !("value" in descriptor) ? accessorLabel(descriptor) : node[key];
+					} catch (error) {
+						if (error?.code !== "PERMISSION_DENIED") throw error;
+					}
+				}
+				return shown;
+			}
+
+			/**
+			 * Whether a module's code is what reads a node's inspect hook now (not the host's).
+			 * @param {object} wrapper - The node's wrapper.
+			 * @returns {boolean} True for a module, or a reader that cannot be told.
+			 * @private
+			 */
+			___inspectReaderIsModule() {
+				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
+				const wrapper = this;
+				const identity = wrapper.slothlet?.contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID);
+				return Boolean(identity?.currentWrapper || identity?.unresolved);
 			}
 		}
 	);

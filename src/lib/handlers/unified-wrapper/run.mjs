@@ -106,17 +106,13 @@ let trustedRootOwn,
 	assertOwnedWrite,
 	nodeWrapperOf,
 	nodeOpen,
-	wrapperClassPrototype,
 	readOnBehalf,
-	runAccessor,
 	ownsPrototype,
 	moduleObjectOf,
 	INTRINSICS,
 	isSlothletValue,
 	makerOf,
 	makerInstanceID,
-	holdsValue,
-	heldValue,
 	resolveWrapper,
 	viewAccessor,
 	unwrapSelfView,
@@ -135,7 +131,8 @@ let trustedRootOwn,
 	registerFrameworkMember,
 	FRAMEWORK_MEMBER_NAMES,
 	takeRefusedChange,
-	WAITING_CHAINS;
+	WAITING_CHAINS,
+	isWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -229,42 +226,7 @@ function takeRunWrite(node, prop) {
  * @internal
  */
 function runViewAccessor(accessor, half, receiver, args) {
-	return runAccessor(accessor.wrapper, half, receiver, args);
-}
-
-/**
- * What a node stores for a value assigned to it outside a build (wrap-on-set, #329): an object or function becomes a
- * node of its own, wrapped as `api.slothlet.api.add()` wraps one and marked as user-assigned; a primitive, a proxy, a
- * node, and a value the node cannot wrap are stored as they are.
- * @param {object} wrapper - The node written.
- * @param {string|symbol} prop - The member.
- * @param {*} value - The value assigned.
- * @returns {*} What the node stores.
- * @private
- */
-function wrapOnSet(wrapper, prop, value) {
-	let stored = value;
-	if (
-		value !== null &&
-		(typeof value === "object" || typeof value === "function") &&
-		!util.types.isProxy(value) &&
-		resolveWrapper(value) === null
-	) {
-		// deferChildAdopt: a user-assigned object is wrapped lazily so an arbitrarily deep
-		// grafted chain is not adopted recursively at assignment (#329 / #247 unbounded depth).
-		const wrapped = wrapper.___createChildWrapper(prop, value, null, true);
-		if (wrapped !== null && wrapped !== undefined) {
-			const wrappedInternal = resolveWrapper(wrapped);
-			// `wrapped` is guarded non-null/undefined above, and `___createChildWrapper` only ever
-			// returns a resolvable UnifiedWrapper here (a nested wrapper proxy, or the value itself
-			// when it was already a wrapper) — its null/undefined/opaque/cycle returns are excluded
-			// by that guard. So `wrappedInternal` is always truthy; the else can't be reached.
-			/* v8 ignore else - wrappedInternal is always a resolved wrapper here (see above); the else is unreachable */
-			if (wrappedInternal) wrappedInternal.____slothletInternal.userAssigned = true;
-			stored = wrapped;
-		}
-	}
-	return stored;
+	return accessor.wrapper.___runAccessor(half, receiver, args);
 }
 
 /**
@@ -295,7 +257,7 @@ function captureNode(wrapper) {
 		// A child node answering a value in its place (a primitive a file exports) is kept as that value.
 		let value = described.value;
 		const child = value !== null && (typeof value === "object" || typeof value === "function") ? resolveWrapper(value) : null;
-		if (child !== null && holdsValue(child)) value = heldValue(child);
+		if (child !== null && child.___holdsValue()) value = child.___heldValue();
 		MapMethods.set(members, key, {
 			__proto__: null,
 			value,
@@ -362,38 +324,9 @@ function snapshotPrototype(wrapper) {
 	if (holdsDataKind(impl)) return Reflect.getPrototypeOf(impl);
 	const moduleObject = moduleObjectOf(wrapper);
 	if (moduleObject !== null) return Reflect.getPrototypeOf(moduleObject);
-	if (ownsPrototype(wrapper)) return recordedPrototype(wrapper);
+	if (ownsPrototype(wrapper)) return wrapper.___recordedPrototype();
 	if (impl !== null && (typeof impl === "object" || typeof impl === "function")) return Reflect.getPrototypeOf(layerUnderlying(impl));
 	return SNAPSHOT_UNKNOWN_PROTOTYPE;
-}
-
-/**
- * The prototype a node holds as a run reads it, as of the run's start: the one its saved version holds (when the
- * instance changed the node since), else the one it holds now. Undefined when the snapshot cannot tell it.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @param {{prototype?: (object|null|symbol)}|null} version - The node's saved version, if any.
- * @returns {{start: (object|null), now: (object|null)}|undefined} The prototype at the start and the one now.
- * @private
- */
-function startPrototypes(wrapper, version) {
-	const now = snapshotPrototype(wrapper);
-	const start = version !== null && version !== undefined && version.prototype !== undefined ? version.prototype : now;
-	if (start === SNAPSHOT_UNKNOWN_PROTOTYPE || now === SNAPSHOT_UNKNOWN_PROTOTYPE) return undefined;
-	return { start, now };
-}
-
-/**
- * Save a prototype of a module's own a node hands out as itself (its class's, or the one it inherits from), for the
- * runs open (see {@link checkpointHandout}). The language's own prototypes, nodes and Proxies are left alone.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @param {*} prototype - The prototype.
- * @returns {void}
- * @private
- */
-function checkpointPrototypeHandout(wrapper, prototype) {
-	if (prototype === null || typeof prototype !== "object" || prototype === SNAPSHOT_UNKNOWN_PROTOTYPE) return;
-	if (isLanguagePrototype(prototype) || resolveWrapper(prototype) !== null) return;
-	checkpointHandout(wrapper.slothlet, prototype);
 }
 
 /**
@@ -411,7 +344,7 @@ function checkpointNodePrototypes(domain, node) {
 	// A function's own prototype is a class's, or holds what the module put on it, and is saved as any object is. A plain
 	// function's that still holds only its `constructor` is saved as the function only, its content made when a run that
 	// started before the module gave it more reads it (see saveDefaultPrototype).
-	const classPrototype = wrapperClassPrototype(node);
+	const classPrototype = node.___wrapperClassPrototype();
 	if (classPrototype === null || isLanguagePrototype(classPrototype)) return;
 	const fn = layerUnderlying(node.____slothletInternal.impl);
 	if (isDefaultPrototype(classPrototype, fn)) saveDefaultPrototype(domain, classPrototype, fn);
@@ -435,7 +368,7 @@ function runWriteSinceClosed(node, prop, op, payload, sink) {
 	const wrapper = nodeWrapperOf(node);
 	if (wrapper === null) return false;
 	assertOwnedWrite(wrapper, prop);
-	if (op === "set") return sink({ op, value: wrapOnSet(wrapper, prop, payload) });
+	if (op === "set") return sink({ op, value: wrapper.___wrapOnSet(prop, payload) });
 	if (op === "define") return sink({ op, descriptor: payload });
 	if (op === "prototype") return sink({ op, prototype: payload });
 	if (op === "close") return sink({ op });
@@ -522,37 +455,6 @@ function checkpointBuiltin(domain, value) {
 const SETTLED_CHECKPOINTS = new WeakMap();
 
 /**
- * Before a file's code runs while a run is open: save every node of the file once per window (see
- * `checkpointOnce` in `helpers/run-snapshot`), so a change the code makes to what the file exports through its own
- * variables does not reach the runs open.
- * @param {UnifiedWrapper} wrapper - The leaf about to run.
- * @returns {void}
- * @private
- */
-function checkpointFile(wrapper) {
-	const slothlet = wrapper.slothlet;
-	const domain = domainOf(slothlet);
-	if (!runsOpen(domain)) return;
-	const filePath = wrapper.____slothletInternal.filePath;
-	if (!filePath) return;
-	// Once per file per window, whichever flow calls first: a call from a run saves what the instance holds then too,
-	// which is what the runs open read, and it spares every later call the work of telling whether it runs in one.
-	checkpointOnce(domain, filePath, () => {
-		const nodes = fileNodes(slothlet, filePath);
-		for (let index = 0; index < nodes.length; index++) {
-			const node = nodes[index];
-			if (node.slothlet !== slothlet) continue;
-			const internal = node.____slothletInternal;
-			if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) continue;
-			beforeChange(domain, node, captureNode);
-			// What the file exports as built-ins (a `Map`) and the prototypes of its own its code changes as themselves.
-			checkpointNodeBuiltins(domain, node);
-			checkpointNodePrototypes(domain, node);
-		}
-	});
-}
-
-/**
  * Save the built-ins a node holds for the runs open (see {@link checkpointBuiltin}): the one it fronts, the
  * ones it keeps as values of its own (a `Map` a file exports is kept on the file's node as it is), and the ones its
  * value holds. Read by descriptors only.
@@ -625,22 +527,6 @@ function fillPrototype(wrapper) {
 }
 
 /**
- * The prototype on a node's record (see {@link fillPrototype}), recorded now when the node was handed its value
- * without it (a value put back as it was, or moved from another node). Until the node is given one, the record follows
- * its value: a module that changes its own function's prototype changes what its node has.
- * @param {object} wrapper - The node's wrapper.
- * @returns {object|Function|null} The prototype.
- * @private
- */
-function recordedPrototype(wrapper) {
-	const internal = wrapper.____slothletInternal;
-	if (internal.prototypeOf !== internal.impl || (!internal.prototypeGiven && typeof internal.impl === "function")) {
-		fillPrototype(wrapper);
-	}
-	return internal.prototype;
-}
-
-/**
  * Whether a node belongs to a tree a run built of its own (see `Slothlet#ownTree`), which is built from the very module
  * values the instance's tree uses: a change the node would make to one of those values is the node's own instead.
  * @param {UnifiedWrapper} wrapper - The node's wrapper.
@@ -706,16 +592,6 @@ function markRunTreeHeld(wrapper, prop) {
 function runTreeHides(wrapper, prop) {
 	const hidden = wrapper.____slothletInternal.runHiddenKeys;
 	return hidden !== undefined && SetMethods.has(hidden, prop) && !hasOwn(wrapper, prop);
-}
-
-/**
- * The prototype a node of a run's tree reads a member it removed from (see {@link runTreeHides}) through.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @returns {object|null} The prototype.
- * @private
- */
-function runTreeHiddenFrom(wrapper) {
-	return Reflect.getPrototypeOf(wrapper.____slothletInternal.proxy ?? wrapper);
 }
 
 /**
@@ -808,25 +684,6 @@ function runningLeafOf(maker, fallback) {
 }
 
 /**
- * Run a call whose permission gate was deferred for a principal resolve (#459), returning its result
- * through the same contract the #253 hook promotion uses.
- *
- * @param {object} wrapper - Target UnifiedWrapper.
- * @param {Promise<void>} gate - The deferred gate from {@link deferForPrincipals}.
- * @param {function(): *} run - Performs the call once the gate passes (enforcement already done).
- * @returns {Promise<*>} The call's result. A genuinely-async leaf's callers already hold a Promise
- *   contract, so it is returned plainly; a sync leaf's is guarded so value-coercion of the
- *   unawaited Promise throws a named error instead of silently misbehaving.
- * @private
- */
-function runAfterPrincipalGate(wrapper, gate, run) {
-	const promoted = PromiseMethods.then(gate, run);
-	const impl = wrapper.____slothletInternal.impl;
-	const leafIsAsync = util.types.isAsyncFunction(impl) || util.types.isAsyncFunction(impl?.default);
-	return leafIsAsync ? promoted : guardPromotedResult(promoted, wrapper.____slothletInternal.apiPath, wrapper.SlothletError);
-}
-
-/**
  * Guards a promoted return value so unawaited consumption fails loudly (#253).
  *
  * @param {Promise<*>} promise - The promoted pipeline's result.
@@ -863,24 +720,6 @@ function guardPromotedResult(promise, path, SlothletErrorCtor) {
 		}
 	});
 	return guarded;
-}
-
-/**
- * The record of a target's failure (#599): the one kept for it (the innermost code it was thrown from), or a new one that
- * reads it as the target.
- *
- * Unwrapping the error, formatting its stack and naming its class each read accessors the code that threw it may have
- * put there (or a Proxy's traps). Read in the caller's flow, after the target returned, they would run with the
- * caller's identity; the record reads them as the code they belong to, each at most once and only when something asks
- * (see failureRecord), so reporting the failure reads nothing off it in the caller's flow.
- *
- * @param {object} wrapper - The target's wrapper.
- * @param {*} error - What the target threw or rejected with.
- * @returns {object} The failure's record.
- * @private
- */
-function readTargetFailure(wrapper, error) {
-	return rememberMadeFailure(wrapper, error);
 }
 
 /**
@@ -1017,7 +856,7 @@ function runViewReceiver(thisArg) {
 		const instance = layerUnderlying(impl);
 		// A Proxy is asked nothing: reading its prototype would run its traps.
 		if (instance === null || typeof instance !== "object" || util.types.isProxy(instance) || !declaresPrivate(instance)) return null;
-		checkpointFile(wrapper);
+		wrapper.___checkpointFile();
 		return instance;
 	}
 
@@ -1167,7 +1006,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 	 */
 	function classPrototypeOf(node) {
 		const wrapper = nodeWrapperOf(node);
-		return wrapper === null ? null : wrapperClassPrototype(wrapper);
+		return wrapper === null ? null : wrapper.___wrapperClassPrototype();
 	}
 
 	/**
@@ -1205,7 +1044,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 
 		const wrapper = nodeWrapperOf(node);
 		if (wrapper === null || snap === null || snap === undefined || snap.closed) return undefined;
-		const held = startPrototypes(wrapper, version);
+		const held = wrapper.___startPrototypes(version);
 		if (held === undefined) return undefined;
 		const { start, now } = held;
 		if (start === null || isLanguagePrototype(start) || resolveWrapper(start) !== null)
@@ -2613,21 +2452,16 @@ export function RunLayer(Base) {
 					runsForHander,
 					shared: runShared,
 					takeRunWrite,
-					wrapOnSet,
 					snapshotPrototype,
-					startPrototypes,
 					runningRecord,
 					snapshotBarrier,
 					fillPrototype,
-					recordedPrototype,
 					inRunTree,
 					ownRunTreeArray,
 					markRunTreeHeld,
 					treeHides: runTreeHides,
-					treeHiddenFrom: runTreeHiddenFrom,
 					asMaker: runAsMaker,
 					runningLeafOf,
-					afterPrincipalGate: runAfterPrincipalGate,
 					guardPromotedResult,
 					unwrapError,
 					makeRunSelf,
@@ -2636,19 +2470,15 @@ export function RunLayer(Base) {
 					captureNode
 				});
 				Base.define("checkpoint", {
-					prototypeHandout: checkpointPrototypeHandout,
 					handout: checkpointHandout,
-					file: checkpointFile,
 					nodeBuiltins: checkpointNodeBuiltins,
 					nodePrototypes: checkpointNodePrototypes
 				});
-				Base.define("read", { targetFailure: readTargetFailure });
 				Base.define("is", { callerLocked: isCallerLocked });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
 					INTRINSICS = methods.values.INTRINSICS;
 					holdsDataKind = methods.holds.dataKind;
-					holdsValue = methods.holds.value;
 					isSlothletValue = methods.is.slothletValue;
 					ownsPrototype = methods.values.ownsPrototype;
 					makerInstanceID = methods.nodes.makerInstanceID;
@@ -2656,13 +2486,10 @@ export function RunLayer(Base) {
 					moduleObjectOf = methods.module.objectOf;
 					nodeOpen = methods.node.open;
 					nodeWrapperOf = methods.node.wrapperOf;
-					wrapperClassPrototype = methods.wrapper.classPrototype;
 					FRAMEWORK_WRITES = methods.rules.FRAMEWORK_WRITES;
 					assertOwnedWrite = methods.rules.assertOwnedWrite;
 					readOnBehalf = methods.read.onBehalf;
-					runAccessor = methods.run.accessor;
 					hasOwn = methods.has.own;
-					heldValue = methods.root.heldValue;
 					fileNodes = methods.uw.fileNodes;
 					outerCallerCeiling = methods.uw.outerCallerCeiling;
 					resolveWrapper = methods.uw.resolveWrapper;
@@ -2685,6 +2512,7 @@ export function RunLayer(Base) {
 					FRAMEWORK_MEMBER_NAMES = methods.rules.FRAMEWORK_MEMBER_NAMES;
 					takeRefusedChange = methods.waiting.takeRefusedChange;
 					WAITING_CHAINS = methods.nodes.WAITING_CHAINS;
+					isWrapper = methods.brand.isWrapper;
 				});
 			}
 
@@ -2694,6 +2522,180 @@ export function RunLayer(Base) {
 			constructor(slothlet) {
 				if (new.target !== realClass) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
 				super(slothlet);
+			}
+
+			/**
+			 * What a node stores for a value assigned to it outside a build (wrap-on-set, #329): an object or function becomes a
+			 * node of its own, wrapped as `api.slothlet.api.add()` wraps one and marked as user-assigned; a primitive, a proxy, a
+			 * node, and a value the node cannot wrap are stored as they are.
+			 * @param {object} wrapper - The node written.
+			 * @param {string|symbol} prop - The member.
+			 * @param {*} value - The value assigned.
+			 * @returns {*} What the node stores.
+			 * @private
+			 */
+			___wrapOnSet(prop, value) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
+				const wrapper = this;
+				let stored = value;
+				if (
+					value !== null &&
+					(typeof value === "object" || typeof value === "function") &&
+					!util.types.isProxy(value) &&
+					resolveWrapper(value) === null
+				) {
+					// deferChildAdopt: a user-assigned object is wrapped lazily so an arbitrarily deep
+					// grafted chain is not adopted recursively at assignment (#329 / #247 unbounded depth).
+					const wrapped = wrapper.___createChildWrapper(prop, value, null, true);
+					if (wrapped !== null && wrapped !== undefined) {
+						const wrappedInternal = resolveWrapper(wrapped);
+						// `wrapped` is guarded non-null/undefined above, and `___createChildWrapper` only ever
+						// returns a resolvable UnifiedWrapper here (a nested wrapper proxy, or the value itself
+						// when it was already a wrapper) — its null/undefined/opaque/cycle returns are excluded
+						// by that guard. So `wrappedInternal` is always truthy; the else can't be reached.
+						/* v8 ignore else - wrappedInternal is always a resolved wrapper here (see above); the else is unreachable */
+						if (wrappedInternal) wrappedInternal.____slothletInternal.userAssigned = true;
+						stored = wrapped;
+					}
+				}
+				return stored;
+			}
+
+			/**
+			 * The prototype a node holds as a run reads it, as of the run's start: the one its saved version holds (when the
+			 * instance changed the node since), else the one it holds now. Undefined when the snapshot cannot tell it.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @param {{prototype?: (object|null|symbol)}|null} version - The node's saved version, if any.
+			 * @returns {{start: (object|null), now: (object|null)}|undefined} The prototype at the start and the one now.
+			 * @private
+			 */
+			___startPrototypes(version) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
+				const wrapper = this;
+				const now = snapshotPrototype(wrapper);
+				const start = version !== null && version !== undefined && version.prototype !== undefined ? version.prototype : now;
+				if (start === SNAPSHOT_UNKNOWN_PROTOTYPE || now === SNAPSHOT_UNKNOWN_PROTOTYPE) return undefined;
+				return { start, now };
+			}
+
+			/**
+			 * Save a prototype of a module's own a node hands out as itself (its class's, or the one it inherits from), for the
+			 * runs open (see {@link checkpointHandout}). The language's own prototypes, nodes and Proxies are left alone.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @param {*} prototype - The prototype.
+			 * @returns {void}
+			 * @private
+			 */
+			___checkpointPrototypeHandout(prototype) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
+				const wrapper = this;
+				if (prototype === null || typeof prototype !== "object" || prototype === SNAPSHOT_UNKNOWN_PROTOTYPE) return;
+				if (isLanguagePrototype(prototype) || resolveWrapper(prototype) !== null) return;
+				checkpointHandout(wrapper.slothlet, prototype);
+			}
+
+			/**
+			 * Before a file's code runs while a run is open: save every node of the file once per window (see
+			 * `checkpointOnce` in `helpers/run-snapshot`), so a change the code makes to what the file exports through its own
+			 * variables does not reach the runs open.
+			 * @param {UnifiedWrapper} wrapper - The leaf about to run.
+			 * @returns {void}
+			 * @private
+			 */
+			___checkpointFile() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
+				const wrapper = this;
+				const slothlet = wrapper.slothlet;
+				const domain = domainOf(slothlet);
+				if (!runsOpen(domain)) return;
+				const filePath = wrapper.____slothletInternal.filePath;
+				if (!filePath) return;
+				// Once per file per window, whichever flow calls first: a call from a run saves what the instance holds then too,
+				// which is what the runs open read, and it spares every later call the work of telling whether it runs in one.
+				checkpointOnce(domain, filePath, () => {
+					const nodes = fileNodes(slothlet, filePath);
+					for (let index = 0; index < nodes.length; index++) {
+						const node = nodes[index];
+						if (node.slothlet !== slothlet) continue;
+						const internal = node.____slothletInternal;
+						if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) continue;
+						beforeChange(domain, node, captureNode);
+						// What the file exports as built-ins (a `Map`) and the prototypes of its own its code changes as themselves.
+						checkpointNodeBuiltins(domain, node);
+						checkpointNodePrototypes(domain, node);
+					}
+				});
+			}
+
+			/**
+			 * The prototype on a node's record (see {@link fillPrototype}), recorded now when the node was handed its value
+			 * without it (a value put back as it was, or moved from another node). Until the node is given one, the record follows
+			 * its value: a module that changes its own function's prototype changes what its node has.
+			 * @param {object} wrapper - The node's wrapper.
+			 * @returns {object|Function|null} The prototype.
+			 * @private
+			 */
+			___recordedPrototype() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
+				const wrapper = this;
+				const internal = wrapper.____slothletInternal;
+				if (internal.prototypeOf !== internal.impl || (!internal.prototypeGiven && typeof internal.impl === "function")) {
+					fillPrototype(wrapper);
+				}
+				return internal.prototype;
+			}
+
+			/**
+			 * The prototype a node of a run's tree reads a member it removed from (see {@link runTreeHides}) through.
+			 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+			 * @returns {object|null} The prototype.
+			 * @private
+			 */
+			___runTreeHiddenFrom() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
+				const wrapper = this;
+				return Reflect.getPrototypeOf(wrapper.____slothletInternal.proxy ?? wrapper);
+			}
+
+			/**
+			 * Run a call whose permission gate was deferred for a principal resolve (#459), returning its result
+			 * through the same contract the #253 hook promotion uses.
+			 *
+			 * @param {object} wrapper - Target UnifiedWrapper.
+			 * @param {Promise<void>} gate - The deferred gate from {@link deferForPrincipals}.
+			 * @param {function(): *} run - Performs the call once the gate passes (enforcement already done).
+			 * @returns {Promise<*>} The call's result. A genuinely-async leaf's callers already hold a Promise
+			 *   contract, so it is returned plainly; a sync leaf's is guarded so value-coercion of the
+			 *   unawaited Promise throws a named error instead of silently misbehaving.
+			 * @private
+			 */
+			___runAfterPrincipalGate(gate, run) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
+				const wrapper = this;
+				const promoted = PromiseMethods.then(gate, run);
+				const impl = wrapper.____slothletInternal.impl;
+				const leafIsAsync = util.types.isAsyncFunction(impl) || util.types.isAsyncFunction(impl?.default);
+				return leafIsAsync ? promoted : guardPromotedResult(promoted, wrapper.____slothletInternal.apiPath, wrapper.SlothletError);
+			}
+
+			/**
+			 * The record of a target's failure (#599): the one kept for it (the innermost code it was thrown from), or a new one that
+			 * reads it as the target.
+			 *
+			 * Unwrapping the error, formatting its stack and naming its class each read accessors the code that threw it may have
+			 * put there (or a Proxy's traps). Read in the caller's flow, after the target returned, they would run with the
+			 * caller's identity; the record reads them as the code they belong to, each at most once and only when something asks
+			 * (see failureRecord), so reporting the failure reads nothing off it in the caller's flow.
+			 *
+			 * @param {object} wrapper - The target's wrapper.
+			 * @param {*} error - What the target threw or rejected with.
+			 * @returns {object} The failure's record.
+			 * @private
+			 */
+			___readTargetFailure(error) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
+				const wrapper = this;
+				return rememberMadeFailure(wrapper, error);
 			}
 		}
 	);

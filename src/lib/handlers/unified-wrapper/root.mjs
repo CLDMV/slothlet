@@ -82,7 +82,6 @@ let trustedRootOwn,
 	prototypeForReader,
 	isReadRedacted,
 	isHeldPrimitive,
-	holdsValue,
 	isRootFunctionAnswer,
 	isHostRead,
 	assertRootChange,
@@ -93,7 +92,8 @@ let trustedRootOwn,
 	UnifiedWrapper,
 	resolveWrapper,
 	behindGivenView,
-	registerInspectHook;
+	registerInspectHook,
+	isWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -194,17 +194,6 @@ function rootGate(slothlet) {
 		WeakMapMethods.set(ROOT_GATES, slothlet, gate);
 	}
 	return gate;
-}
-
-/**
- * The value a node answers in its place (see {@link holdsValue}).
- * @param {object} wrapper - The node's wrapper.
- * @returns {*} The value.
- * @private
- */
-function heldValue(wrapper) {
-	const internal = wrapper.____slothletInternal;
-	return isHeldPrimitive(internal.impl) ? internal.impl : internal.nullish.value;
 }
 
 /**
@@ -413,8 +402,8 @@ function rootMemberRead(slothlet, prop, value) {
 		if (node !== null) {
 			// A node is traversal, as at any node; a file's primitive, null or undefined default export is its value,
 			// read through the gate.
-			if (!holdsValue(node)) return value;
-			const held = heldValue(node);
+			if (!node.___holdsValue()) return value;
+			const held = node.___heldValue();
 			enforceRead(rootGate(slothlet), prop, held);
 			return held;
 		}
@@ -472,7 +461,7 @@ function rootMemberDescriptor(slothlet, prop, descriptor) {
 	const value = descriptor.value;
 	if (!("value" in descriptor) || value === null || (typeof value !== "object" && typeof value !== "function")) return descriptor;
 	const node = resolveWrapper(value);
-	return node !== null && holdsValue(node) ? { __proto__: null, ...descriptor, value: heldValue(node) } : descriptor;
+	return node !== null && node.___holdsValue() ? { __proto__: null, ...descriptor, value: node.___heldValue() } : descriptor;
 }
 
 /**
@@ -1033,7 +1022,6 @@ export function RootLayer(Base) {
 					behindPinnedCode,
 					pinsAsCode,
 					gate: rootGate,
-					heldValue,
 					fileOf: rootFileOf,
 					noteRootFile,
 					proxy: rootProxy
@@ -1042,7 +1030,6 @@ export function RootLayer(Base) {
 					realClass = registered;
 					UnifiedWrapper = registered;
 					INTRINSICS = methods.values.INTRINSICS;
-					holdsValue = methods.holds.value;
 					inspectLabel = methods.inspect.label;
 					inspectSafe = methods.inspect.safe;
 					isCodeMemberWithheld = methods.is.codeMemberWithheld;
@@ -1084,6 +1071,7 @@ export function RootLayer(Base) {
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					behindGivenView = methods.membrane.behindGivenView;
 					registerInspectHook = methods.values.registerInspectHook;
+					isWrapper = methods.brand.isWrapper;
 				});
 			}
 
@@ -1093,6 +1081,19 @@ export function RootLayer(Base) {
 			constructor(slothlet) {
 				if (new.target !== realClass) throw ownBindingsRefusal("lib/handlers/unified-wrapper/root", import.meta.url);
 				super(slothlet);
+			}
+
+			/**
+			 * The value a node answers in its place (see {@link holdsValue}).
+			 * @param {object} wrapper - The node's wrapper.
+			 * @returns {*} The value.
+			 * @private
+			 */
+			___heldValue() {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/root", import.meta.url);
+				const wrapper = this;
+				const internal = wrapper.____slothletInternal;
+				return isHeldPrimitive(internal.impl) ? internal.impl : internal.nullish.value;
 			}
 		}
 	);
