@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:47:24-08:00 (1795636044)
+ *	@Last modified time: 2026-11-25T13:04:43-08:00 (1795640683)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,6 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.
 const ROOT = path.join(REPO, "tmp", "permissions-baseline-async-context-frame");
 const CHILD = path.join(ROOT, "child.mjs");
 const BASE = path.join(REPO, "api_tests", "api_test_stack_settings", "api");
-const MAJOR = Number(process.versions.node.split(".")[0]);
 /** Node flags for a child with the frame on, and with it off. */
 const FRAME_ON = [];
 const FRAME_OFF = ["--no-async-context-frame"];
@@ -126,7 +125,7 @@ describe("permissions baseline > async-context-frame > a child process", () => {
 		expect(child("strict", FRAME_OFF)).toEqual({ start: "PERMISSION_BASELINE_UNMET", checks: "async-context-frame" });
 	});
 
-	it.runIf(MAJOR >= 24)("tells a frame turned off through NODE_OPTIONS, which no flag parse of the command line sees", () => {
+	it("tells a frame turned off through NODE_OPTIONS, which no flag parse of the command line sees", () => {
 		expect(child("strict", [], { NODE_OPTIONS: "--no-async-context-frame" })).toEqual({
 			start: "PERMISSION_BASELINE_UNMET",
 			checks: "async-context-frame"

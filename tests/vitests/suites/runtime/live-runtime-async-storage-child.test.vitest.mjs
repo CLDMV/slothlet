@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:48:23-08:00 (1795636103)
+ *	@Last modified time: 2026-11-25T13:05:10-08:00 (1795640710)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 const ROOT = path.join(process.cwd(), "tmp", "live-runtime-async-storage-child");
 const PROBE = path.join(ROOT, "probe.mjs");
-const NODE_MAJOR = Number(process.versions.node.split(".")[0]);
 
 /**
  * Write a fixture file, creating its folder.
@@ -259,7 +258,7 @@ describe.each(LIVE_CONFIGS)(
 			expect(out.counts.async.constructed).toBeGreaterThan(0);
 			expect(out.counts.async.run).toBeGreaterThan(0);
 			// Node 24 and later run AsyncLocalStorage without async hooks.
-			expect(out.trampoline.async).toBe(NODE_MAJOR < 24);
+			expect(out.trampoline.async).toBe(false);
 		});
 	}
 );
