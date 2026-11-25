@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T03:24:47-08:00 (1795605887)
+ *	@Last modified time: 2026-11-25T08:08:24-08:00 (1795622904)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4717,6 +4717,14 @@ function runtime_holdsOwnMember(node, prop) {
  * @private
  */
 const STAND_INS = new WeakSet();
+
+/**
+ * The getters a node holding a class instance keeps for a member written through it, which only read the member off the
+ * instance (see the set trap): the member is the instance's, and is described as the instance holds it (#971).
+ * @type {WeakSet<Function>}
+ * @private
+ */
+const INSTANCE_FORWARDERS = new WeakSet();
 
 /**
  * Whether a value is a stand-in a lazy node handed out for a member it has not loaded (#653): a change made through
@@ -16398,6 +16406,31 @@ function runtime_isPosition(key) {
 }
 
 /**
+ * Keys in the order an ordinary object lists its own (#971): array positions ascending, then the other string keys,
+ * then symbols, each of those two kept in the order given, which is the order they were made.
+ *
+ * @param {Array<string|symbol>} keys - The keys, in the order they were made.
+ * @returns {Array<string|symbol>} The same keys, ordered.
+ * @private
+ *
+ * @example
+ * runtime_ordinaryKeyOrder(["b", "2", Symbol.for("s"), "a", "0"]); // ["0", "2", "b", "a", Symbol(s)]
+ */
+function runtime_ordinaryKeyOrder(keys) {
+	const positions = [];
+	const strings = [];
+	const symbols = [];
+	for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) {
+		const key = keys[ofIndex];
+		if (typeof key === "symbol") listPush(symbols, key);
+		else if (runtime_isPosition(key)) listPush(positions, key);
+		else listPush(strings, key);
+	}
+	ArrayMethods.sort(positions, (a, b) => Number(a) - Number(b));
+	return concatLists(positions, strings, symbols);
+}
+
+/**
  * Whether a key is a position at or past an array shell's read-only `length`, which takes no write or definition.
  *
  * @param {object} target - The proxy target.
@@ -17146,14 +17179,16 @@ function runtime_forwardHandlerTo(trapHandler, resolveLive) {
 function runtime_inspectMembers(wrapper) {
 	const node = wrapper.____slothletInternal.proxy;
 	const shown = {};
-	for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
+	// Every enumerable member, a symbol-keyed one included, as `util.inspect` shows an object's own (#971).
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(node); ofIndex < ofList.length; ofIndex++) {
 		const key = ofList[ofIndex];
 		// A member listed that the caller may not read after all (one the module's Proxy among the value's prototypes
 		// answers, which reading runs as a call of the node) is left out as well.
 		try {
 			// An accessor is shown by its form, as `util.inspect` shows one, and not run: it is the module's code.
 			const descriptor = Reflect.getOwnPropertyDescriptor(node, key);
-			shown[key] = descriptor && !("value" in descriptor) ? runtime_accessorLabel(descriptor) : node[key];
+			if (!descriptor?.enumerable) continue;
+			shown[key] = !("value" in descriptor) ? runtime_accessorLabel(descriptor) : node[key];
 		} catch (error) {
 			if (error?.code !== "PERMISSION_DENIED") throw error;
 		}
@@ -17196,7 +17231,9 @@ function runtime_inspectLabel(text) {
 function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIsModule(wrapper)) {
 	const internal = wrapper.____slothletInternal;
 	const childKeys = filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k));
-	if (childKeys.length > 0 && !internal.isCallable) return runtime_inspectMembers(wrapper);
+	// A class instance the node holds as it is holds every member written or defined through the node (see
+	// runtime_definesOnInstance): it is shown as the instance, below, as it was before anything was written (#971).
+	if (childKeys.length > 0 && !internal.isCallable && !runtime_definesOnInstance(wrapper)) return runtime_inspectMembers(wrapper);
 	// A lazy node not loaded yet shows as the function stand-in it is, `[Function: name]` — the form a module's view of
 	// it shows (#824) — not as the Proxy around it, which `util.inspect` prints as `Proxy([Function: name])`. Its members
 	// are not read: reading them would load it. A node on an object shell that holds nothing (a loaded node removed, #811) shows what it holds, as eager's
@@ -17211,8 +17248,12 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
 	// A function the node composed its members onto is a layer, which `util.inspect` would show as its bare shell: it is
 	// shown by its form and members, as to a module.
 	const layered = isCompositionLayer(internal.impl) && typeof internal.impl === "function";
+	// A function node holding members of its own, beside its function's, shows them with its form, as a function shows
+	// the members written onto it (#971): its function alone would leave them out.
+	const holdsOwnMembers = typeof internal.impl === "function" && childKeys.length > 0;
 	if (
 		!layered &&
+		!holdsOwnMembers &&
 		(!forModule || !runtime_memberHoldsCode(internal.impl, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)))
 	)
 		return internal.impl;
@@ -22960,7 +23001,14 @@ class UnifiedWrapper extends ComponentBase {
 
 			// Check wrapper properties (children), filter internals
 			const isInternal = isFrameworkReservedKey(prop);
-			if (!isInternal && hasOwn(wrapper, prop)) {
+			// A member written through a node holding a class instance is the instance's, which the node only reads through
+			// (see the set trap): it is described below as the instance holds it, a value as a value (#971).
+			const forwarded =
+				!isInternal &&
+				hasOwn(wrapper, prop) &&
+				WeakSetMethods.has(INSTANCE_FORWARDERS, Objects.getOwnPropertyDescriptor(wrapper, prop).get) &&
+				runtime_onImpl(wrapper, (impl) => hasOwn(impl, prop));
+			if (!isInternal && !forwarded && hasOwn(wrapper, prop)) {
 				const desc = Objects.getOwnPropertyDescriptor(wrapper, prop);
 				// hasOwn() guarantees a descriptor exists; the null guard's false branch is dead code.
 				// Return descriptor if it exists
@@ -23061,9 +23109,33 @@ class UnifiedWrapper extends ComponentBase {
 			}
 
 			// A sealed node holds its members on its shell (see preventExtensions), and a non-extensible target
-			// must be listed exactly (proxy invariant).
-			if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
+			// must be listed exactly (proxy invariant). The invariant asks for the shell's keys, not their order: they
+			// are listed as the node lists them open, which is the order they were made, as a closed object lists its
+			// own (#971). A key the shell fixed before the node was closed is no earlier for it, and one only the shell
+			// holds (its inspect hook) goes with the keys of its kind.
+			if (!Reflect.isExtensible(target)) {
+				const held = Reflect.ownKeys(target);
+				if (Arrays.isArray(wrapper.____slothletInternal.impl)) return held;
+				const heldKeys = setFrom(held);
+				const ordered = filterList(listMembers(target, false, kept), (key) => SetMethods.has(heldKeys, key));
+				const listed = setFrom(ordered);
+				for (let ofIndex = 0; ofIndex < held.length; ofIndex++) {
+					if (!SetMethods.has(listed, held[ofIndex])) listPush(ordered, held[ofIndex]);
+				}
+				return runtime_ordinaryKeyOrder(ordered);
+			}
+			return listMembers(target, redact, kept);
+		};
 
+		/**
+		 * The keys an open node lists, in the order an object lists its own (#971).
+		 * @private
+		 * @param {Object} target - Proxy target.
+		 * @param {boolean} redact - Withhold the keys the calling module may not read.
+		 * @param {*} kept - The access a node a module kept is reading for (see runtime_takeCapturedAccess).
+		 * @returns {Array<string|symbol>} Property keys.
+		 */
+		const listMembers = (target, redact, kept) => {
 			const keys = new Set();
 
 			// An array-backed wrapper lists its array as it is now, in the array's own order (#602): not
@@ -23100,16 +23172,20 @@ class UnifiedWrapper extends ComponentBase {
 				SetMethods.add(keys, "name");
 			}
 
-			// Add all target keys (wrapper or function), checking configurability
-			for (let ofIndex = 0, ofList = Reflect.ownKeys(target); ofIndex < ofList.length; ofIndex++) {
-				const key = ofList[ofIndex];
-				const descriptor = Objects.getOwnPropertyDescriptor(target, key);
-				// Include non-configurable properties (required by proxy invariants)
-				// OR enumerable properties (child wrappers)
-				if (!descriptor.configurable || descriptor.enumerable) {
-					SetMethods.add(keys, key);
+			// Add all target keys (wrapper or function), checking configurability: non-configurable properties (required by
+			// proxy invariants) OR enumerable properties (child wrappers). A wrapper that is its own target lists its members
+			// here, in the order they were made; a shell holds only keys it fixed, whenever that was, so they are listed
+			// after the members the node holds, in their place among them if the node holds them too (#971).
+			const addTargetKeys = () => {
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(target); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					const descriptor = Objects.getOwnPropertyDescriptor(target, key);
+					if (!descriptor.configurable || descriptor.enumerable) {
+						SetMethods.add(keys, key);
+					}
 				}
-			}
+			};
+			if (target === wrapper) addTargetKeys();
 
 			// The members the node holds itself are on the wrapper, the shell being the target. A member defined
 			// non-enumerable on the node is listed too, as an object lists every key of its own (#971); the wrapper holds
@@ -23146,6 +23222,7 @@ class UnifiedWrapper extends ComponentBase {
 				}
 			}
 			if (instanceFirst) addWrapperKeys();
+			if (target !== wrapper) addTargetKeys();
 
 			// Withhold keys whose terminal value this caller may not read, so enumeration cannot
 			// disclose the shape of a namespace the caller has no access to. Non-configurable own
@@ -23169,9 +23246,9 @@ class UnifiedWrapper extends ComponentBase {
 					if (SetMethods.has(keys, key)) listPush(uw_ordered, key);
 				}
 				for (const key of setValues(keys)) if (key !== "length" && key !== "name" && key !== "prototype") listPush(uw_ordered, key);
-				return uw_ordered;
+				return runtime_ordinaryKeyOrder(uw_ordered);
 			}
-			return setToArray(keys);
+			return runtime_ordinaryKeyOrder(setToArray(keys));
 		};
 
 		/**
@@ -23380,12 +23457,14 @@ class UnifiedWrapper extends ComponentBase {
 						if (!setSucceeded) return false;
 						const existingDescriptor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 						if (!existingDescriptor || typeof existingDescriptor.set !== "function") {
+							const forward = () => {
+								const currentImpl = wrapper.____slothletInternal.impl;
+								return currentImpl ? runtime_readImplMember(wrapper, prop) : undefined;
+							};
+							if (isClassInstance(liveImpl)) WeakSetMethods.add(INSTANCE_FORWARDERS, forward);
 							Objects.defineProperty(wrapper, prop, {
 								__proto__: null,
-								get: () => {
-									const currentImpl = wrapper.____slothletInternal.impl;
-									return currentImpl ? runtime_readImplMember(wrapper, prop) : undefined;
-								},
+								get: forward,
 								set: (newValue) => {
 									const currentImpl = wrapper.____slothletInternal.impl;
 									if (currentImpl) runtime_writeImplMember(wrapper, prop, newValue);
