@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T23:27:12-08:00 (1795332432)
+ *	@Last modified time: 2026-11-25T04:19:18-08:00 (1795609158)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -567,6 +567,8 @@ export function copyForRun(slothlet, parentStore) {
  */
 function withSnapshot(record, slothlet, parent) {
 	record.snap = openRunSnapshot(slothlet, parent?.snap ?? null);
+	// The tree an outermost run starts on: the one the calling code answers from now.
+	if (parent === null) record.snap.root = slothlet.api ?? null;
 	return record;
 }
 

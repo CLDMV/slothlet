@@ -1,24 +1,25 @@
 /**
+ *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/coverage/analyze-coverage.mjs
- *	@Date: 2026-04-18 23:32:25 -07:00 (1776580345)
+ *	@Date: 2026-04-18T23:32:25-07:00 (1776580345)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-27 05:51:34 -07:00 (1777294294)
+ *	@Last modified time: 2026-11-25T12:07:49-08:00 (1795637269)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
  */
 
 /**
- * @Project: @cldmv/slothlet
- * @Filename: /tools/coverage/detailed-coverage-report.mjs
  * @Description: Detailed report showing contextual code blocks for uncovered statements, branches, and functions in V8 coverage.
  */
 
 import fs from "node:fs";
 import path from "path";
+import { fileURLToPath } from "node:url";
 import * as acorn from "acorn";
 import { walk } from "estree-walker";
 import chalk from "chalk";
@@ -134,19 +135,31 @@ function getContextRange(source, targetLine, totalLines) {
 	return fallback;
 }
 
-async function generateReport() {
-	if (!fs.existsSync(COVERAGE_FILE)) {
-		console.error(`Error: Coverage file not found at ${COVERAGE_FILE}`);
-		process.exit(1);
+/**
+ * Print every uncovered statement, branch arm and function in a coverage-final.json report, with the
+ * surrounding code.
+ * @param {object} [options]
+ * @param {string} [options.coverageFile="./coverage/coverage-final.json"] - Report to read.
+ * @param {string[]} [options.only] - Source files to report on (absolute or relative to cwd); all files when omitted.
+ * @returns {Promise<number>} The number of uncovered items printed.
+ * @throws {Error} When the report file doesn't exist.
+ * @example
+ * await generateReport({ only: ["src/lib/helpers/segments.mjs"] });
+ */
+export async function generateReport({ coverageFile = COVERAGE_FILE, only } = {}) {
+	if (!fs.existsSync(coverageFile)) {
+		throw new Error(`Coverage file not found at ${coverageFile}`);
 	}
 
-	const coverageData = JSON.parse(fs.readFileSync(COVERAGE_FILE, "utf8"));
+	const coverageData = JSON.parse(fs.readFileSync(coverageFile, "utf8"));
+	const onlySet = only ? new Set(only.map((file) => resolvePath(file))) : null;
 	let totalIssues = 0;
 
 	console.log("🔍 Generating Detailed Coverage Report...\n");
 
 	for (const [filePath, fileCoverage] of Object.entries(coverageData)) {
 		const absolutePath = resolvePath(filePath);
+		if (onlySet && !onlySet.has(absolutePath)) continue;
 		if (!fs.existsSync(absolutePath)) continue;
 
 		const source = fs.readFileSync(absolutePath, "utf8");
@@ -269,9 +282,12 @@ async function generateReport() {
 	} else {
 		console.log(`❌ Report complete. Total uncovered statements/branches/functions identified: ${totalIssues}`);
 	}
+	return totalIssues;
 }
 
-generateReport().catch((err) => {
-	console.error("Report generation failed:", err);
-	process.exit(1);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+	generateReport().catch((err) => {
+		console.error("Report generation failed:", err?.message ?? err);
+		process.exit(1);
+	});
+}
