@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:44:28-08:00 (1795419868)
+ *	@Last modified time: 2026-11-25T11:44:43-08:00 (1795635883)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -119,7 +119,7 @@ function runtime_carryOwnExtras(wrapper, original) {
 		// and subclassing working.
 		if (key === "length" || key === "name" || key === "prototype") continue;
 		const descriptor = Objects.getOwnPropertyDescriptor(original, key);
-		/* v8 ignore next -- a key from Reflect.ownKeys always has a descriptor; belt-and-braces so an exotic host can't throw here. */
+		/* v8 ignore if -- a key from Reflect.ownKeys always has a descriptor; belt-and-braces so an exotic host can't throw here. */
 		if (!descriptor) continue;
 		// Copied as a descriptor, not by assignment: a static accessor (`PerformanceObserver.supportedEntryTypes`)
 		// stays an accessor, and a non-enumerable key stays non-enumerable.
@@ -251,7 +251,6 @@ function runtime_patchObserverConstructor(name) {
 		// then reaches the callback, which the platform calls from wherever the observed change happened. The carrier
 		// itself is no one's work (see UNCOUNTED_RESOURCE in helpers/flow-stores): the observer counts from its first
 		// observe(). Null on the live runtime alone, and in a browser.
-		/* v8 ignore next */
 		const carrier = pins && record === null && AsyncResource && anyAsyncInstance() ? new AsyncResource(UNCOUNTED_RESOURCE) : null;
 		if (carrier !== null) {
 			const inner = pinned;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
+ *	@Last modified time: 2026-11-25T11:44:46-08:00 (1795635886)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -132,9 +132,9 @@ function i18n_resolvePackPath(lang) {
  * @private
  */
 function i18n_localeRefs(lang) {
-	/* v8 ignore start - browser arm: importmap-resolved specifiers; the single real-Chromium run can take
+	/* v8 ignore if - browser arm: importmap-resolved specifiers; the single real-Chromium run can take
 	   only one side of the `import.meta.resolve` capability check + one filter outcome, so it can't cover
-	   every sub-branch here — keep it ignored (balanced range) rather than read as partially covered. */
+	   every sub-branch here — keep the arm ignored rather than read as partially covered. */
 	if (!isNode) {
 		const specs = [`@cldmv/slothlet-i18n/language/${lang}.json`, `@cldmv/slothlet/i18n/language/${lang}.json`];
 		if (typeof import.meta.resolve !== "function") return specs;
@@ -149,7 +149,6 @@ function i18n_localeRefs(lang) {
 			}
 		});
 	}
-	/* v8 ignore stop */
 	const refs = [];
 	const packPath = i18n_resolvePackPath(lang);
 	if (packPath) listPush(refs, packPath);
@@ -214,8 +213,7 @@ function i18n_detectLanguage() {
 	if (!isNode) {
 		// A real browser/worker always defines `navigator`; the `: null` arm is a defensive guard for
 		// an exotic non-Node host without it (unreachable under real-Chromium coverage).
-		/* v8 ignore next */
-		const navLang = typeof navigator !== "undefined" ? navigator.languages?.[0] || navigator.language : null;
+		const navLang = typeof navigator !== "undefined" ? navigator.languages?.[0] || navigator.language : /* v8 ignore next */ null;
 		return navLang ? i18n_normalizeEnvLanguage(navLang) : "en-us";
 	}
 	// Try environment variables
@@ -237,7 +235,7 @@ function i18n_detectLanguage() {
 function i18n_loadLanguageSync(lang) {
 	// Genuinely unreachable in both hosts: the only caller (setLanguage) is node-gated, and in
 	// a browser setLanguage takes the async arm and never calls this. Defensive guard.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (!isNode) return null;
 	// Try each candidate ref in priority order (pack → internal); a miss falls through to en-us.
 	for (let ofIndex = 0, ofList = i18n_localeRefs(lang); ofIndex < ofList.length; ofIndex++) {
@@ -292,7 +290,7 @@ function i18n_warnLoadFailed(lang, options) {
 	// errors.mjs registers the class when it loads, which is after this module's import-time initialisation. A
 	// failure from that initialisation is held and raised on registration. The suite always has errors.mjs loaded
 	// first, so the held case is not reproducible there.
-	/* v8 ignore next 4 */
+	/* v8 ignore if */
 	if (!WarningClass) {
 		listPush(pendingLoadFailures, lang);
 		return;
