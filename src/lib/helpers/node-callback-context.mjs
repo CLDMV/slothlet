@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:21-08:00 (1794976461)
+ *	@Last modified time: 2026-11-25T11:44:42-08:00 (1795635882)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -268,7 +268,7 @@ function runtime_carryOwn(wrapper, original) {
 		const key = keys[index];
 		if (key === "prototype") continue;
 		const descriptor = Reflect.getOwnPropertyDescriptor(original, key);
-		/* v8 ignore next -- a key from Reflect.ownKeys always has a descriptor; guards an exotic host. */
+		/* v8 ignore if -- a key from Reflect.ownKeys always has a descriptor; guards an exotic host. */
 		if (!descriptor) continue;
 		Objects.defineProperty(wrapper, key, descriptor);
 	}
@@ -352,7 +352,7 @@ function runtime_patch(host, name, pin, serve) {
 		return null;
 	}
 	// A read-only property ignores the write outside strict mode.
-	/* v8 ignore next 4 */
+	/* v8 ignore if */
 	if (!holdsValue(host, name, wrapper)) {
 		layer.active = false;
 		return null;
