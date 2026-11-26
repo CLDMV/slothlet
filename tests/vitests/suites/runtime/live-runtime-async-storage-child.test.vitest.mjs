@@ -7,23 +7,23 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:21-08:00 (1794882621)
+ *	@Last modified time: 2026-11-25T13:05:10-08:00 (1795640710)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview A process whose instances all use the live runtime never makes or runs an `AsyncLocalStorage`, so on
- * Node 22 (where a run store switches async hooks on for the whole process) async hooks stay off.
+ * @fileoverview A process whose instances all use the live runtime never makes or runs an `AsyncLocalStorage`, so
+ * async hooks stay off.
  *
  * A child process replaces `AsyncLocalStorage` and `createHook` on `node:async_hooks` with counting versions before it
  * imports slothlet (slothlet takes the members of Node's built-in modules as it loads), then builds a live-runtime
  * instance and uses it: plain and awaited calls, the first call of a lazy callable folder, a refused call, a hook,
  * `context.run()`, an event, a timer and shutdown. Nothing may have been constructed, run or hooked by then, and a
  * `setImmediate` callback's stack has no `callbackTrampoline` frame (Node's sign that async hooks are on; Node 24 and
- * later run `AsyncLocalStorage` without async hooks, so there only the counts tell). An async-runtime instance made
- * afterwards in the same process does make and run one (and on Node 22 the frame appears), so the check is not
+ * later run `AsyncLocalStorage` without async hooks, so only the counts tell). An async-runtime instance made
+ * afterwards in the same process does make and run one, so the check is not
  * vacuous. Mixed processes, either order, both alive and one shut down, answer every step as a single runtime does.
  */
 
@@ -34,7 +34,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 const ROOT = path.join(process.cwd(), "tmp", "live-runtime-async-storage-child");
 const PROBE = path.join(ROOT, "probe.mjs");
-const NODE_MAJOR = Number(process.versions.node.split(".")[0]);
 
 /**
  * Write a fixture file, creating its folder.
@@ -258,8 +257,8 @@ describe.each(LIVE_CONFIGS)(
 			expect(out.async).toEqual(expected(permissions, hooked));
 			expect(out.counts.async.constructed).toBeGreaterThan(0);
 			expect(out.counts.async.run).toBeGreaterThan(0);
-			// Node 22 runs AsyncLocalStorage on async hooks; Node 24 and later do not.
-			expect(out.trampoline.async).toBe(NODE_MAJOR < 24);
+			// Node 24 and later run AsyncLocalStorage without async hooks.
+			expect(out.trampoline.async).toBe(false);
 		});
 	}
 );

@@ -178,6 +178,22 @@ slothlet reads `Date.now` and the timers from the copies it took when it loaded,
 
 The `.mjs` artifact appears with any setup that externalizes `node_modules` and attributes coverage from the runner's module graph (vitest + the v8 provider). It is independent of eager vs lazy mode and of the `slothlet-dev` condition — the deciding axis is externalized vs inlined, nothing else. The TypeScript requirements (source maps and the cache directory in `include`) apply in every setup, including inlined slothlet and slothlet's own repo.
 
-## Node.js floors
+## Node.js floor
 
-slothlet has two Node.js floors. `engines.node` (`>=22.15.0`) is what the package supports at run time; `devEngines` (`>=22.22.0`) is what its own test and build toolchain (vitest, tsup) needs, and CI's test matrix starts there. The versions between the two are covered by a smoke test run by hand: `tests/smoke/runtime-floor.mjs` is a plain-Node script with no dev dependencies that builds a small api in eager and lazy mode, loads the CJS entry and `@cldmv/slothlet/runtime`, boots once with permissions on, and checks an AsyncContextFrame canary. npm refuses `npm run` below the dev floor, so the npm scripts run on the dev Node and launch the smoke test on the Node binary named by `SLOTHLET_FLOOR_NODE`, once with its default flags and once with `--experimental-async-context-frame`: `SLOTHLET_FLOOR_NODE=/path/to/node-v22.15.0/bin/node npm run test:runtime-floor` checks src, and `npm run test:runtime-floor:dist` (after `npm run build`) checks dist.
+slothlet has one Node.js floor: `engines.node` and `devEngines` are both `>=24.15.0`, the first Node 24 release with everything the async runtime and the module hooks rely on (`async_hooks.createHook({ trackPromises: false })`, and `module.registerHooks()` asked for a `require.resolve()`). CI's test matrix starts there. `tests/smoke/runtime-floor.mjs` is a plain-Node script with no dev dependencies that builds a small api in eager and lazy mode, loads the CJS entry and `@cldmv/slothlet/runtime`, boots once with permissions on, and checks an AsyncContextFrame canary; it checks a Node binary by hand without the vitest toolchain. `npm run test:runtime-floor` runs it on src and `npm run test:runtime-floor:dist` (after `npm run build`) on dist, each once with Node's default flags and once with `--no-async-context-frame`, on the Node binary named by `SLOTHLET_FLOOR_NODE` (`SLOTHLET_FLOOR_NODE=/path/to/node-v24.15.0/bin/node npm run test:runtime-floor`), or on the Node running npm when it is not set.
+
+## Re-measuring one source file
+
+A full coverage run takes a long time, and most of it is spent on test files that never touch the file I'm working on. `npm run coverage:file` runs only the test files that reach one source file and prints that file's uncovered lines:
+
+```sh
+npm run coverage:file -- src/lib/helpers/module-sort.mjs
+npm run coverage:file -- src/lib/helpers/module-sort.mjs --fn sortModules --dry-run
+npm run coverage:file -- src/lib/helpers/module-sort.mjs -- --workers 2
+```
+
+It reads `coverage-index.json`, which `@cldmv/vitest-runner` writes when it merges the blobs of a coverage run (`npm run coverage:node` and CI both produce it, merged with a 12 GB heap that `VITEST_MERGE_HEAP_MB` overrides): for each source file, every function and the test files that executed it. Module top-level code isn't indexed, so a test that only loads a file doesn't count as reaching it. The script takes the index from `--index <path>`, else from `coverage/coverage-index.json` when that was written for the current HEAD, else from the index CI publishes for the branch on the `badges` branch (`--branch next|master|hotfixes`, `next` by default). An index for another commit still works, but it prints a warning: tests added since won't be in it.
+
+`--fn <name>` narrows the run to the tests that reach one function. A name used more than once in a file is indexed as `name@<line>`; the bare name matches all of them. `--dry-run` lists the tests and stops. Anything after a second `--` goes to `npm run coverage:node`.
+
+One limit for now: the run measures the whole `src` tree, because `npm run vitest` doesn't pass `--coverage.include` on to the per-file runs yet ([#954](https://github.com/CLDMV/slothlet/issues/954)); the report is filtered to the one file, so only the run time is affected.

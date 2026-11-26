@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T02:55:30-08:00 (1795604130)
+ *	@Last modified time: 2026-11-25T13:38:38-08:00 (1795642718)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -469,6 +469,34 @@ const LOCKED_ADD_OPTIONS = Objects.freeze([
 ]);
 
 /**
+ * The collision modes `api.add` takes, the same ones the instance's `api.collision.mode` config takes.
+ * @type {ReadonlyArray<string>}
+ * @private
+ */
+const ADD_COLLISION_MODES = Objects.freeze(["skip", "warn", "replace", "merge", "merge-replace", "error"]);
+
+/**
+ * Read a per-call `collision.mode` the way the instance config reads its own: any case, one of the known modes. An
+ * unknown mode would match none of the build's collision branches and replace the existing node, so it is refused.
+ * @param {object} slothlet - The instance.
+ * @param {*} mode - The mode as given.
+ * @returns {string} The mode, lowercased.
+ * @throws {SlothletError} INVALID_ARGUMENT when the mode is not a string naming a known mode.
+ * @private
+ */
+function runtime_addCollisionMode(slothlet, mode) {
+	const normalized = typeof mode === "string" ? StringMethods.toLowerCase(mode) : null;
+	if (normalized === null || !ArrayMethods.includes(ADD_COLLISION_MODES, normalized)) {
+		throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+			argument: "options.collision.mode",
+			expected: ArrayMethods.join(ADD_COLLISION_MODES, " | "),
+			received: typeof mode === "string" ? `"${mode}"` : mode === null ? "null" : typeof mode
+		});
+	}
+	return normalized;
+}
+
+/**
  * Read `api.add`'s options into the shape the build takes. The `{ exports, ...options }` inline form gives its sibling
  * keys as options (an explicit options key wins); every key is checked against the method's schema first, so a key
  * `api.add` does not take is refused rather than ignored. `collision` (or a bare mode string), `id`, `replay` and
@@ -480,7 +508,7 @@ const LOCKED_ADD_OPTIONS = Objects.freeze([
  * @returns {{ source: *, options: object, versionConfig: object|null }} The content to mount, the build's options and
  *   the version config (`null` when no `version` is given).
  * @throws {SlothletError} INVALID_CONFIG_UNKNOWN_KEY for a key `api.add` does not take; INVALID_ARGUMENT for an options,
- *   `collision` or `version` value that is not an object.
+ *   `collision` or `version` value that is not an object, or a `collision.mode` that is not a known mode.
  * @private
  */
 function runtime_readAddOptions(slothlet, source, options) {
@@ -510,7 +538,7 @@ function runtime_readAddOptions(slothlet, source, options) {
 	if (collision !== undefined) {
 		const group = typeof collision === "string" ? { mode: collision } : collision;
 		objectArgument(group, "options.collision");
-		if (group.mode !== undefined) read.collisionMode = group.mode;
+		if (group.mode !== undefined) read.collisionMode = runtime_addCollisionMode(slothlet, group.mode);
 		if (group.force !== undefined) read.forceOverwrite = group.force;
 		if (group.mutate !== undefined) read.mutateExisting = group.mutate;
 	}
@@ -2827,7 +2855,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// A name the object does not hold itself reads as in plain JS, as at an api node: undefined when nothing has it
-					// (serializers and Node 22/24's util.inspect probe objects for such names, `$$typeof`, `0`), and what the
+					// (serializers and Node 24's util.inspect probe objects for such names, `$$typeof`, `0`), and what the
 					// language's own prototypes give every object or function (`constructor`, `toString`) as it is.
 					const own = Reflect.getOwnPropertyDescriptor(target, prop);
 					if (!own) {
@@ -3111,7 +3139,7 @@ export class ApiBuilder extends ComponentBase {
 		 * A namespace object as `util.inspect` shows it to the code inspecting it now: the members that code lists, each
 		 * read through the route proxy as it reads it, a function and an accessor by their form (nothing is run), and a
 		 * nested object the same way to the depth asked for. A plain copy, so `util.inspect` formats no route proxy and no
-		 * object behind one (Node formats a Proxy's target, not what its traps answer, and Node 22/24 one level of it only).
+		 * object behind one (Node formats a Proxy's target, not what its traps answer, and Node 24 one level of it only).
 		 * @param {object} view - The route proxy over `raw`, as the reader reaches it.
 		 * @param {object} raw - The namespace object.
 		 * @param {string} routePath - Its route (`slothlet.env`).
@@ -3160,8 +3188,8 @@ export class ApiBuilder extends ComponentBase {
 
 		/**
 		 * Give a namespace object the `util.inspect` hook that shows it as {@link namespaceShown} does, to whoever inspects
-		 * it: Node formats the object behind a route proxy (the innermost one on Node 26, the next one on Node 22/24), so
-		 * without it a module would be shown members it may not read, or Node 22/24 would list the next proxy itself.
+		 * it: Node formats the object behind a route proxy (the innermost one on Node 26, the next one on Node 24), so
+		 * without it a module would be shown members it may not read, or Node 24 would list the next proxy itself.
 		 * @param {object} raw - The namespace object.
 		 * @param {string} routePath - Its route.
 		 * @returns {void}
@@ -4192,7 +4220,7 @@ export class ApiBuilder extends ComponentBase {
 					});
 				}
 				// The live runtime binds through its own manager: the flow and caller bound in are what the callback runs in.
-				if (slothlet.contextManager?.constructor?.name === "LiveContextManager") return pinScopeToCurrentCaller(fn);
+				if (slothlet.contextManager?.kind === "live") return pinScopeToCurrentCaller(fn);
 				// No AsyncResource where there is no node:async_hooks, so bind is identity (`: fn`). This nested
 				// method lives outside api_builder's instrumented coverage region (the v8 map stops inside
 				// createSlothletNamespace, before its returned object's methods), so neither the node run nor
@@ -4217,7 +4245,7 @@ export class ApiBuilder extends ComponentBase {
 					// With child instance approach, we always find the right context by current instanceID
 
 					// For live mode, use currentInstanceID tracking
-					if (slothlet.contextManager.constructor.name === "LiveContextManager") {
+					if (slothlet.contextManager?.kind === "live") {
 						const currentID = slothlet.contextManager.currentInstanceID;
 
 						// Check if current is this instance or a child of this instance.
@@ -4250,7 +4278,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// For async mode, get current store from ALS and lookup by its instanceID
-					if (slothlet.contextManager.constructor.name === "AsyncContextManager") {
+					if (slothlet.contextManager?.kind === "async") {
 						let currentStore = slothlet.contextManager.tryGetContext();
 
 						// If we're in a .run() scope, currentStore will be the child instance
@@ -4347,7 +4375,7 @@ export class ApiBuilder extends ComponentBase {
 					// The active store, when the call runs inside this instance's base or one of its run()/scope() stores:
 					// a key that store protects, or that another owner owns there, is refused as a runtime write is.
 					const active =
-						contextManager.constructor.name === "LiveContextManager"
+						contextManager?.kind === "live"
 							? contextManager.currentInstanceID
 								? MapMethods.get(instances, contextManager.currentInstanceID)
 								: null
@@ -6578,7 +6606,7 @@ export class ApiBuilder extends ComponentBase {
 				const { utilities } = slothlet.helpers;
 
 				// For live binding mode, use child instance approach
-				if (contextManager.constructor.name === "LiveContextManager") {
+				if (contextManager?.kind === "live") {
 					// The store of THIS instance's flow the code opening the scope is part of: a run()/scope() of it only when
 					// the code runs inside that flow, never one a sibling run() left in the active field while it waits.
 					const currentStore = contextManager.runParent(slothlet.instanceID);
@@ -6672,7 +6700,7 @@ export class ApiBuilder extends ComponentBase {
 				}
 
 				// For async mode, use child instance approach
-				if (contextManager.constructor.name === "AsyncContextManager") {
+				if (contextManager?.kind === "async") {
 					// CRITICAL: Get THIS instance's store (base or child), not just any active store
 					let currentStore = null;
 
