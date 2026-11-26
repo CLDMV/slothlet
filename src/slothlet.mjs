@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:13:07-08:00 (1795486387)
+ *	@Last modified time: 2026-11-25T04:58:58-08:00 (1795611538)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -118,7 +118,7 @@ import {
 	whenIdle,
 	WRITE_TARGET
 } from "#helpers/flow-stores";
-import { anyRunOpen, beforeChange, closeRunSnapshot, domainOf, shallowCopy } from "#helpers/run-snapshot";
+import { anyRunOpen, beforeChange, closeRunSnapshot, domainOf, runsOpen, shallowCopy } from "#helpers/run-snapshot";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -202,7 +202,8 @@ const {
 	runtime_unwrapSelfView,
 	runtime_assertCapability,
 	runtime_markInstanceEnded,
-	runtime_instanceEnded
+	runtime_instanceEnded,
+	runtime_checkpointLoaded
 } = unifiedWrapperInternals("slothlet");
 const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
 const trustedRootOwn = trustedRootInternals("slothlet");
@@ -400,7 +401,8 @@ const RELOAD_COPY_FIELDS = [
 	"_materializeCallbackCalled",
 	"_materializedPayload",
 	"_buildEpoch",
-	"_treeEpoch"
+	"_treeEpoch",
+	"_startTreeEpoch"
 ];
 
 /**
@@ -973,6 +975,9 @@ class Slothlet {
 		this._runRestarts = 0;
 		// The epoch of the tree this set answers from: the live one for the instance, a copy's own for a run's tree.
 		this._treeEpoch = 0;
+		// For a copy kept for runs when the instance changed the tree they started on, that tree's epoch: its nodes answer
+		// as themselves to those runs while they stand (see Slothlet#copyForSharers). Null for every other set.
+		this._startTreeEpoch = null;
 		// How many api trees copies hold apart from the instance's own (a run that changed its tree, a copy kept for runs
 		// across a change of the instance's tree): while any is, a node answers for the tree of the code reading it.
 		this._treeCopies = 0;
@@ -2041,14 +2046,14 @@ class Slothlet {
 			// A run that started before a change to the root reads the root as it was (see helpers/run-snapshot): the root's
 			// members are saved before every change to it, once per window, while a run is open.
 			const rootBarrier = () => {
-				if (anyRunOpen() && this.api && !inRunTree()) beforeChange(domainOf(this), this.api, rootCapture);
+				if (!anyRunOpen() || !this.api) return;
+				if (!inRunTree()) beforeChange(domainOf(this), this.api, rootCapture);
+				// The root of a run's own tree is saved for the runs opened in that run (see Slothlet#_runTreeSnapshot).
+				else beforeChange(this._runTreeSnapshot(this._treeEpoch), this.api, rootCapture);
 			};
 			// The root's members as they are, inheriting from the prototype the root has (a function root's is on its record).
 			const rootCapture = (api) => {
-				const copy = shallowCopy(api);
-				const held = rootHeld();
-				if (Reflect.getPrototypeOf(copy) !== held) Reflect.setPrototypeOf(copy, held);
-				return copy;
+				return shallowCopy(api, rootHeld());
 			};
 			// Whether a member is read from a prototype the function root was given: one the root does not hold itself.
 			const rootInherits = (prop) => {
@@ -3219,17 +3224,43 @@ class Slothlet {
 	 */
 	async #instanceTreeWrite() {
 		this.#keepCurrentCopy();
-		await this.#copyForSharers((this.#fields ?? this).api, null);
+		this.#checkpointTree();
+		await this.#copyForSharers((this.#fields ?? this).api, null, true);
+	}
+
+	/**
+	 * Before the instance changes its tree in place (`add()`, `remove()`, a `reload(path)`) or tears it down for a
+	 * `restart()`, save the root and every loaded node as they are for the runs open (see `helpers/run-snapshot`): the change is made as a build, which saves
+	 * nothing as it goes, and a run reads those nodes as of its start, also after a later change the instance makes to
+	 * one of them saves it again. Once per window, as every save is.
+	 * @returns {void}
+	 * @private
+	 */
+	#checkpointTree() {
+		if (!runsOpen(domainOf(this))) return;
+		const api = (this.#fields ?? this).api;
+		if (api === null || api === undefined || (typeof api !== "object" && typeof api !== "function")) return;
+		this.____rootBarrier?.();
+		for (let index = 0, keys = Reflect.ownKeys(api); index < keys.length; index++) {
+			const described = Reflect.getOwnPropertyDescriptor(api, keys[index]);
+			const value = described !== undefined && "value" in described ? described.value : undefined;
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
+			const wrapper = resolveWrapper(value);
+			if (wrapper !== null) runtime_checkpointLoaded(wrapper);
+		}
 	}
 
 	/**
 	 * Give every copy that reads a tree without owning it a copy of its own, before the tree's owner changes it.
 	 * @param {object} tree - The api tree about to change.
 	 * @param {object|null} writer - Its owner (null for the instance), which gets none.
+	 * @param {boolean} [keepStart=false] - True when the instance changes the tree in place (`add()`, `remove()`, a
+	 *   `reload(path)`) or replaces it (`restart()`): the runs reading a kept copy started on that tree, whose nodes they read as of their start, and
+	 *   each copy built here answers them with those nodes while they stand (see {@link Slothlet#ownTree}).
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async #copyForSharers(tree, writer) {
+	async #copyForSharers(tree, writer, keepStart = false) {
 		for (let index = 0, held = setToArray(this.#held); index < held.length; index++) {
 			const holder = held[index];
 			if (holder === writer || holder.torn === true) continue;
@@ -3237,7 +3268,7 @@ class Slothlet {
 			const values = holder.values;
 			if (values === null || values === undefined || values.api !== tree) continue;
 			if (WeakMapMethods.get(this.#treeOwners, tree) === holder) continue;
-			await this.#ownTree(holder, "copy");
+			await this.#ownTree(holder, "copy", keepStart && holder.ns === undefined);
 		}
 	}
 
@@ -3272,10 +3303,14 @@ class Slothlet {
 	 * Give a copy a tree of its own (see {@link Slothlet#buildCopy}), one build at a time per copy.
 	 * @param {object} holder - A run's record or a kept token.
 	 * @param {"copy"|"reload"|"restart"} kind - What the build is.
+	 * @param {boolean} [keepStart=false] - For a kept token's copy of a tree the instance changes in place: the nodes of
+	 *   that tree answer the token's runs as themselves while they stand, so a node a run reads as of its start (one the
+	 *   instance replaced since) is not answered by the copy's node at its path. A node the instance removed answers from
+	 *   the copy's.
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async #ownTree(holder, kind) {
+	async #ownTree(holder, kind, keepStart = false) {
 		let release;
 		holder.treeBusy = new Promise((resolve) => {
 			release = resolve;
@@ -3289,12 +3324,13 @@ class Slothlet {
 			const kept = kind === "copy" ? this.#keptScopeOf(holder) : null;
 			// A reload after a restart of the run seals its CommonJS leaves as that restart did (see `RUN_BUILD_SEAL`).
 			const seal = kind === "reload" ? (holder.restart?.seal ?? null) : null;
-			const next = await this.#buildCopy(view, history, kind, kept?.instanceID, seal);
+			const next = await this.#buildCopy(view, history, kind, kept?.instanceID, seal, this.#startOf(holder, view, kind));
 			if (holder.torn === true) {
 				this.#retireTree(next);
 				return;
 			}
 			if (kind === "copy") this.#carryRootPrototype(view.api, next.api);
+			if (keepStart) next._startTreeEpoch = view._treeEpoch;
 			this.#adoptTree(holder, next);
 			this.#noteRunRestart(holder, kind, next);
 			// A full-isolation run's `self` writes what it kept so far into the run's new tree, as that tree's build, and
@@ -3315,6 +3351,25 @@ class Slothlet {
 			holder.treeBusy = null;
 			release();
 		}
+	}
+
+	/**
+	 * The snapshot a run's first copy of its tree is built as of (see {@link Slothlet#buildCopy}): a run that changes
+	 * the tree it started on (the instance's, or a copy kept for it when the instance changed that tree) gets the tree
+	 * as it read it, as of its start, not as the instance holds it now. Null for a kept token, a rebuild, a run that
+	 * owns a tree already, and a run reading another run's tree.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {object} view - The set copied (see {@link Slothlet#viewOf}).
+	 * @param {"copy"|"reload"|"restart"} kind - What the build is.
+	 * @returns {object|null} The run's snapshot.
+	 * @private
+	 */
+	#startOf(holder, view, kind) {
+		if (kind !== "copy" || holder.ns === undefined || holder.ownsTree === true) return null;
+		const snap = holder.snap ?? null;
+		if (snap === null || snap.closed || snap.root === null || snap.root === undefined) return null;
+		const owner = WeakMapMethods.get(this.#treeOwners, view.api);
+		return owner === undefined || owner.ns === undefined ? snap : null;
 	}
 
 	/**
@@ -3440,14 +3495,17 @@ class Slothlet {
 	 * @param {string} [loadID] - The ID the copied tree's files were loaded under, when the instance has left it.
 	 * @param {{stamp: string}|null} [seal=null] - For a reload, the seal of the run's last restart (see
 	 *   `RUN_BUILD_SEAL`); a restart draws its own.
+	 * @param {object|null} [asOf=null] - For a run's copy, the run's snapshot: what was written into the tree is carried
+	 *   as the run read it, as of its start (see {@link Slothlet#startOf}).
 	 * @returns {Promise<object>} The new set.
 	 * @private
 	 */
-	async #buildCopy(view, history, kind, loadID, seal = null) {
+	async #buildCopy(view, history, kind, loadID, seal = null, asOf = null) {
 		const next = this.#copyOfFields(view);
 		const epoch = --this.#copyEpochs;
 		next._buildEpoch = epoch;
 		next._treeEpoch = epoch;
+		next._startTreeEpoch = null;
 		next._lazyTally = {};
 		next._totalLazyCount = 0;
 		next._unmaterializedLazyCount = 0;
@@ -3459,7 +3517,7 @@ class Slothlet {
 		next._materializeCallbackCalled = true;
 		next._moduleIncarnations = kind === "restart" ? new Map() : this.#copyMap(view._moduleIncarnations);
 		next._retiredIncarnations = kind === "restart" ? new Map() : this.#copyMap(view._retiredIncarnations);
-		const mark = { copyOf: this, next, view, kind, silent: kind === "copy", bust: kind === "copy" ? null : this.#clock.now() };
+		const mark = { copyOf: this, next, view, kind, silent: kind === "copy", bust: kind === "copy" ? null : this.#clock.now(), asOf };
 		mark.seal = kind === "restart" ? Objects.freeze({ stamp: `${mark.bust}` }) : kind === "reload" ? seal : null;
 		MapMethods.set(this.#treeSets, epoch, { values: next, bust: mark.bust, seal: mark.seal });
 		const build = () => this._runAsHost(() => this.#buildCopyOnto(mark, history));
@@ -3660,7 +3718,9 @@ class Slothlet {
 		}
 		if (kind === "copy") {
 			// What code wrote into the copied tree at runtime (`self.x = …`, a member the host set) is in the copy too.
-			await handlers.apiManager?.carryRuntimeMembers?.(view.api, apiWithBuiltins, oldHandlers.ownership);
+			// A run's first copy carries it as the run read it, as of its start (see Slothlet#startOf).
+			const asOf = mark.asOf ?? null;
+			await handlers.apiManager?.carryRuntimeMembers?.(asOf?.root ?? view.api, apiWithBuiltins, oldHandlers.ownership, asOf);
 			// Which version is the default and each version's metadata are the copied set's too.
 			handlers.versionManager?.carryState?.(oldHandlers.versionManager);
 		}
@@ -3746,6 +3806,27 @@ class Slothlet {
 	_runRestart() {
 		if (this._runRestarts === 0) return null;
 		return this.#runRecord()?.restart ?? null;
+	}
+
+	/**
+	 * The snapshot of the run that owns a tree a copy built for it (see {@link Slothlet#ownTree}), by the tree's epoch:
+	 * the runs opened in that run read the tree as of their start on it, so the run saves the tree's nodes and root
+	 * before it changes them while one is open (see `helpers/run-snapshot`). Null for a tree no run owns (the
+	 * instance's, a copy kept for runs) and once the run has let it go.
+	 * @param {number} epoch - The tree's epoch.
+	 * @returns {object|null} The run's snapshot.
+	 * @internal
+	 *
+	 * @example
+	 * const snap = slothlet._runTreeSnapshot(wrapper.____slothletInternal.epoch);
+	 */
+	_runTreeSnapshot(epoch) {
+		if (this._treeCopies === 0 || typeof epoch !== "number" || epoch >= 0) return null;
+		const api = MapMethods.get(this.#treeSets, epoch)?.values?.api;
+		const owner = api === null || api === undefined ? undefined : WeakMapMethods.get(this.#treeOwners, api);
+		if (owner === undefined || owner.ns === undefined || owner.torn === true) return null;
+		const snap = owner.snap ?? null;
+		return snap === null || snap.closed ? null : snap;
 	}
 
 	/**
@@ -4451,7 +4532,8 @@ class Slothlet {
 		try {
 			// Each run open now keeps a tree of its own, built before the teardown below: it keeps the api tree, the
 			// handlers and the modules it started with, and nothing of the rebuilt instance reaches it.
-			await runInReloadBuild(this, work, () => this.#copyForSharers((this.#fields ?? this).api, null));
+			this.#checkpointTree();
+			await runInReloadBuild(this, work, () => this.#copyForSharers((this.#fields ?? this).api, null, true));
 			this.#keepScopeForCopies();
 			return await runInReloadBuild(this, work, () => this.#restartOnto());
 		} finally {

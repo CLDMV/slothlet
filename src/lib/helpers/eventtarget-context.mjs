@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:44:26-08:00 (1795419866)
+ *	@Last modified time: 2026-11-25T11:44:39-08:00 (1795635879)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -147,7 +147,6 @@ function runtime_wrapListener(listener) {
 	// mechanism. Not takeable from a Node run for the same reason as the EventEmitter helper.
 	// Made only while an instance on the async runtime is up, the one runtime with a store to carry: none on the live
 	// runtime alone, which carries the caller by pinning below.
-	/* v8 ignore next */
 	const resource = AsyncResource && anyAsyncInstance() ? new AsyncResource("slothlet-event-target-listener") : null;
 
 	// Bind to whoever is registering, for the runtime the AsyncResource capture does not serve. Done
@@ -166,7 +165,7 @@ function runtime_wrapListener(listener) {
 
 	const runtime_wrappedListener = function (event) {
 		try {
-			/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
+			/* v8 ignore if -- the no-AsyncResource (browser) path; see the capture above. */
 			if (!resource) return FunctionMethods.call(invoke, this, event);
 			return resource.runInAsyncScope(() => FunctionMethods.call(invoke, this, event), this);
 		} finally {
@@ -362,7 +361,7 @@ function runtime_patchRemove() {
 function enableEventTargetPatching() {
 	// A host without a global `EventTarget` has no boundary to patch. Both Node and every browser
 	// provide one, so this is purely a guard against an exotic embedder.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (typeof EventTarget !== "function") return;
 	if (isPatchingEnabled) return;
 

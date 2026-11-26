@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:44:26-08:00 (1795419866)
+ *	@Last modified time: 2026-11-25T11:44:39-08:00 (1795635879)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -219,7 +219,6 @@ function runtime_wrapEventListener(listener) {
 	// this suite can swap — so it is exercised only where the platform lacks the module.
 	// Made only while an instance on the async runtime is up, the one runtime with a store to carry: none on the live
 	// runtime alone, which carries the caller by pinning below.
-	/* v8 ignore next */
 	let resource = AsyncResource && anyAsyncInstance() ? new AsyncResource("slothlet-event-listener") : null;
 
 	// Bind the listener to whoever registered it, for the runtimes the AsyncResource capture does
@@ -242,7 +241,7 @@ function runtime_wrapEventListener(listener) {
 		if (epoch !== releaseEpoch) return FunctionMethods.apply(listener, this, args);
 		// AsyncResource.runInAsyncScope() automatically restores the ALS context
 		// that was active when the resource was created, no need for explicit contextManager!
-		/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
+		/* v8 ignore if -- the no-AsyncResource (browser) path; see the capture above. */
 		if (!resource) return FunctionMethods.apply(bound, this, args);
 		return resource.runInAsyncScope(() => {
 			if (flow !== undefined && listenerFlow !== null) return listenerFlow.run(flow, bound, this, args);
@@ -354,7 +353,6 @@ function runtime_getWrappedListener(emitter, event, originalListener) {
 	// `wrappers.length === 0` is unreachable: runtime_untrackListener (below)
 	// deletes the originalListener key atomically when the list empties, so
 	// a subsequent get() returns undefined and the `!wrappers` arm fires first.
-	/* v8 ignore next */
 	if (!wrappers || wrappers.length === 0) return undefined;
 	return wrappers[wrappers.length - 1];
 }
@@ -373,7 +371,7 @@ function runtime_untrackListener(emitter, event, originalListener) {
 	const emitterTracking = WeakMapMethods.get(wrappedListeners, emitter);
 	// Defensive: emitter is always registered before untrack is called.
 	// A missing emitter entry would require untracking a listener that was never tracked.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (!emitterTracking) return;
 
 	// Defensive: `eventTracking` and a non-empty `wrappers` list are guaranteed
@@ -382,11 +380,11 @@ function runtime_untrackListener(emitter, event, originalListener) {
 	// preceding track. The early-return arms are kept for safety but are
 	// unreachable in normal flow.
 	const eventTracking = MapMethods.get(emitterTracking, event);
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (!eventTracking) return;
 
 	const wrappers = MapMethods.get(eventTracking, originalListener);
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (!wrappers || wrappers.length === 0) return;
 
 	const wrappedListener = ArrayMethods.pop(wrappers);
@@ -426,20 +424,21 @@ function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappe
 	// Defensive: the once-wrapper that calls this always tracked its emitter first, so an
 	// untracked emitter never reaches here — same unreachable-by-construction reasoning as the
 	// two sibling guards below (272, 276), which are already ignored.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (!emitterTracking) return;
 
 	// Defensive early-returns: cleanup downstream atomically deletes empty
 	// entries, so by the time this function is called these maps either still
 	// contain the wrapper or the entry has already been removed (returning
 	// undefined from .get(), hitting the `!eventTracking` / `!wrappers` arms
-	// of the OR). The `length === 0` arms are unreachable for the same reason.
+	// of the OR). The `length === 0` arms are unreachable for the same reason. The suite has no order of
+	// removal that empties the entry before the once-wrapper runs, so both early returns stay hinted.
 	const eventTracking = MapMethods.get(emitterTracking, event);
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (!eventTracking) return;
 
 	const wrappers = MapMethods.get(eventTracking, originalListener);
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (!wrappers || wrappers.length === 0) return;
 
 	const idx = ArrayMethods.indexOf(wrappers, wrappedListener);
@@ -447,7 +446,7 @@ function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappe
 	// exact wrapped function — by the time it calls untrack, the wrapper is
 	// guaranteed to be in the array (or the whole entry has been cleaned up
 	// already, hitting the !wrappers arm above).
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (idx === -1) return;
 
 	listSplice(wrappers, idx, 1);

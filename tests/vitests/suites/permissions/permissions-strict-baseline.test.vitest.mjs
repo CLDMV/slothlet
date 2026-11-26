@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:23-08:00 (1794874643)
+ *	@Last modified time: 2026-11-25T11:48:03-08:00 (1795636083)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,9 +41,9 @@
  * realm is gone, and the row for a probe that throws uses the vitest check.
  *
  * Rows changed by the `async-context-frame` check (2026-11-17): the child processes start with Node's
- * `AsyncContextFrame` on (`--experimental-async-context-frame` on Node 22, nothing on Node 24 and later) and their
+ * `AsyncContextFrame` on (no flag, the frame is on by default) and their
  * reports list `async-context-frame` met; under vitest the report lists it before `vitest-plugin`, met when the worker
- * runs with the frame on, and where it is off (Node 22's default) strict refuses and on warns once for it. The check
+ * runs with the frame on, and where it is off (`--no-async-context-frame`) strict refuses and on warns once for it. The check
  * itself is covered in `permissions-baseline-async-context-frame.test.vitest.mjs`.
  *
  * Rows changed by the ruling that the live runtime uses no `node:async_hooks` / `AsyncLocalStorage` (2026-11-17): a
@@ -113,8 +113,8 @@ function frameOnHere() {
 }
 
 const FRAME_ON_HERE = frameOnHere();
-/** The Node flags that turn `AsyncContextFrame` on in a child: Node 22 needs the flag, Node 24 and later have it on. */
-const FRAMES_ON = Number(process.versions.node.split(".")[0]) < 24 ? ["--experimental-async-context-frame"] : [];
+/** The Node flags that turn `AsyncContextFrame` on in a child: none, Node 24 and later have it on. */
+const FRAMES_ON = [];
 const NO_CODEGEN = ["--disallow-code-generation-from-strings"];
 /** `capabilities` is the permission manager's list of capabilities and the callers rules open each to. */
 const MET_NODE = {
@@ -125,8 +125,8 @@ const MET_NODE = {
 	},
 	capabilities: expect.any(Array)
 };
-/** The Node flags that turn `AsyncContextFrame` off in a child: Node 22's default, a flag on Node 24 and later. */
-const FRAMES_OFF = Number(process.versions.node.split(".")[0]) < 24 ? [] : ["--no-async-context-frame"];
+/** The Node flags that turn `AsyncContextFrame` off in a child. */
+const FRAMES_OFF = ["--no-async-context-frame"];
 
 /**
  * The report of an instance whose every check is met: a live instance runs no `async-context-frame` check.
