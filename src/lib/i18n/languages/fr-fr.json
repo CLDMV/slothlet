@@ -560,7 +560,6 @@
 		"PERMISSION_BASELINE_REASON_CSP_BLOB_ALLOWED": "la page exécute des scripts d'URL blob: : sa Content Security Policy les autorise, ou elle n'en a pas.",
 		"PERMISSION_BASELINE_REASON_CSP_DATA_ALLOWED": "la page exécute des scripts d'URL data: : sa Content Security Policy les autorise, ou elle n'en a pas.",
 		"PERMISSION_BASELINE_REASON_VITEST_PLUGIN_ABSENT": "exécution sous vitest sans le plugin @cldmv/slothlet/vite de slothlet dans la configuration de vitest.",
-		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_ENABLE": "AsyncContextFrame de Node est désactivé : Node garde le contenu d'un AsyncLocalStorage sur des ressources asynchrones que le code d'un module peut atteindre. Démarrez Node avec {flag}.",
 		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_REMOVE_FLAG": "AsyncContextFrame de Node est désactivé : Node garde le contenu d'un AsyncLocalStorage sur des ressources asynchrones que le code d'un module peut atteindre. Retirez {flag} des options de Node et de {env}.",
 		"INVALID_CONFIG_UNKNOWN_KEY": "Clé inconnue '{key}' dans {where}. Ce n'est pas une option de slothlet v4. [{path|list}]",
 		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "Vérifiez que la clé n'a pas de faute de frappe. Le code écrit pour slothlet v3 peut passer aux noms de v4 avec npx @cldmv/slothlet-migrate."

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T20:46:22-08:00 (1793853982)
+ *	@Last modified time: 2026-11-25T01:35:52-08:00 (1795599352)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -151,7 +151,8 @@ export default defineConfig({
 
 		coverage: {
 			provider: "v8",
-			include: ["src/**"],
+			// `npm run vitest -- --coverage.include=<glob>` narrows this through SLOTHLET_COVERAGE_INCLUDE (a JSON array).
+			include: process.env.SLOTHLET_COVERAGE_INCLUDE ? JSON.parse(process.env.SLOTHLET_COVERAGE_INCLUDE) : ["src/**"],
 			exclude: ["**/*.json", "api_tests/**", "tests/**", "tools/**"],
 			reporter: ["text", "html", "json-summary", "json"]
 		}
