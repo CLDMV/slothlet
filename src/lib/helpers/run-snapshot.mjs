@@ -743,19 +743,104 @@ export function declaresPrivate(value) {
  * @private
  */
 function scanPrivate(source) {
+	// The last character that is not white space or part of a comment, and the word it ends, if any: a `/` after one of
+	// these starts a regular expression literal, after anything else it divides.
+	let previous = "";
+	let wordEnd = -1;
+	// How many braces are open in code, and for each template substitution (`${`) open, how many were open at it: its
+	// closing brace returns to the template's text.
+	let depth = 0;
+	const substitutions = [];
 	for (let index = 0; index < source.length; index++) {
 		const char = source[index];
-		if (char === "'" || char === '"' || char === "`") {
+		if (char === "`" || (char === "}" && substitutions.length !== 0 && substitutions[substitutions.length - 1] === depth)) {
+			if (char === "}") substitutions.length--;
+			// A template's text, up to its end or the next substitution.
+			for (index++; index < source.length; index++) {
+				const at = source[index];
+				if (at === "\\") index++;
+				else if (at === "`") break;
+				else if (at === "$" && source[index + 1] === "{") {
+					index++;
+					listPush(substitutions, depth);
+					break;
+				}
+			}
+			previous = source[index] === "`" ? "`" : "{";
+			wordEnd = index;
+			continue;
+		} else if (char === "'" || char === '"') {
 			for (index++; index < source.length && source[index] !== char; index++) if (source[index] === "\\") index++;
 		} else if (char === "/" && source[index + 1] === "/") {
 			while (index < source.length && source[index] !== "\n") index++;
+			continue;
 		} else if (char === "/" && source[index + 1] === "*") {
 			const end = StringMethods.indexOf(source, "*/", index + 2);
 			if (end < 0) return false;
 			index = end + 1;
+			continue;
+		} else if (char === "/" && startsRegExp(source, previous, wordEnd)) {
+			let inClass = false;
+			for (index++; index < source.length; index++) {
+				const at = source[index];
+				if (at === "\\") index++;
+				else if (at === "[") inClass = true;
+				else if (at === "]") inClass = false;
+				else if ((at === "/" && !inClass) || at === "\n") break;
+			}
 		} else if (char === "#" && RegExpMethods.exec(/[A-Za-z_$\u0080-\uffff]/, source[index + 1] ?? "") !== null) return true;
+		else if (char === "{") depth++;
+		else if (char === "}") depth--;
+		if (char === " " || char === "\t" || char === "\n" || char === "\r") continue;
+		previous = char;
+		wordEnd = index;
 	}
 	return false;
+}
+
+/**
+ * The characters after which a `/` starts a regular expression literal, not a division.
+ * @type {string}
+ * @private
+ */
+const BEFORE_REGEXP = "(,=:[!&|?{};+-*%<>~^";
+
+/**
+ * The words after which a `/` starts a regular expression literal, not a division.
+ * @type {Set<string>}
+ * @private
+ */
+const WORDS_BEFORE_REGEXP = new Set([
+	"return",
+	"typeof",
+	"instanceof",
+	"in",
+	"of",
+	"new",
+	"delete",
+	"void",
+	"throw",
+	"case",
+	"do",
+	"else",
+	"yield",
+	"await"
+]);
+
+/**
+ * Whether a `/` in class source, outside strings and comments, starts a regular expression literal: told by what comes
+ * before it, as a tokenizer would for the cases class source holds.
+ * @param {string} source - The class's source.
+ * @param {string} previous - The last character before it that is not white space or a comment ("" at the start).
+ * @param {number} wordEnd - The index of that character.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function startsRegExp(source, previous, wordEnd) {
+	if (previous === "" || StringMethods.includes(BEFORE_REGEXP, previous)) return true;
+	let start = wordEnd;
+	while (start > 0 && RegExpMethods.exec(/[A-Za-z]/, source[start - 1]) !== null) start--;
+	return SetMethods.has(WORDS_BEFORE_REGEXP, StringMethods.slice(source, start, wordEnd + 1));
 }
 
 /**

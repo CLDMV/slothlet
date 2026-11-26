@@ -215,7 +215,7 @@ export async function discoverModules(options = {}, hooks = {}) {
 			// name@version key necessarily came from a DIFFERENT realPath — the
 			// equal-paths branch is unreachable. Defensive guard kept for safety
 			// against an upstream refactor that loosens the realPath dedupe.
-			/* v8 ignore next */
+			/* v8 ignore else */
 			if (otherRealPath !== realPath) {
 				throw new SlothletError("MODULE_DUPLICATE_NAME_VERSION_MISMATCH", {
 					package: pkg.name,
@@ -575,7 +575,7 @@ function deepFreeze(obj) {
 	// === "object")` so null / primitive inputs never reach the recursive call.
 	// All three conditions of this OR thus evaluate to false in every invocation
 	// today; the guard exists for callers that may legitimately pass a frozen tree.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (obj === null || typeof obj !== "object" || Objects.isFrozen(obj)) return obj;
 	Objects.freeze(obj);
 	for (let ofIndex = 0, ofList = Objects.keys(obj); ofIndex < ofList.length; ofIndex++) {
