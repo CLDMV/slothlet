@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T20:09:44-08:00 (1795493384)
+ *	@Last modified time: 2026-11-25T11:44:47-08:00 (1795635887)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -797,8 +797,6 @@ export class Loader extends ComponentBase {
 							});
 
 							child.on("message", (msg) => {
-								// The false arm (msg.type === "error") is covered in isolation but lost in full-suite coverage merge (fork I/O module caching).
-								/* v8 ignore next */
 								if (msg.type === "success") {
 									this.slothlet._typesGenerated = true;
 									resolve();
@@ -1201,10 +1199,9 @@ export class Loader extends ComponentBase {
 		const { url, cacheDir } = await writeTransformedToCache(filePath, code, instanceID, transform, refuseLeafEdge);
 		SetMethods.add((this.slothlet._typescriptCacheDirs ??= new Set()), cacheDir);
 		let moduleUrl = `${url}?slothlet_instance=${instanceID}`;
-		// The false (no-moduleID) arm is covered by initial-TS-load tests in isolation but lost in
-		// full-suite coverage merge — the .mjs branch above (lines 195-204) uses the same pattern
-		// and matches via cross-file aggregation; the TS branch fires in fewer files so v8 drops it.
-		/* v8 ignore next 3 */
+		// Every caller (modes-processor's loadModule calls) passes the build's module id, so the false arm is
+		// unreachable.
+		/* v8 ignore else */
 		if (moduleID) {
 			moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 		}
@@ -1397,7 +1394,7 @@ export class Loader extends ComponentBase {
 		const manifest = this.slothlet.config?.loader?.files;
 		// manifest is validated during transformConfig; this guard protects against
 		// accidental calls before config is fully applied.
-		/* v8 ignore next 3 */
+		/* v8 ignore if */
 		if (!manifest) {
 			throw new this.SlothletError("INVALID_CONFIG_FILES_REQUIRED", {});
 		}
@@ -1409,10 +1406,8 @@ export class Loader extends ComponentBase {
 		// through transformConfig (config.base non-empty) and pass a resolved dir
 		// via scanDirectory's public callers (modes/{eager,lazy}.mjs + api.add).
 		// Direct internal `loader.scanDirectory("")` is not a supported path.
-		/* v8 ignore next */
-		const configBase = regExpReplace(/\/$/, this.slothlet.config?.base || "", "");
-		/* v8 ignore next */
-		let relativePath = regExpReplace(/\/$/, dir || "", "");
+		const configBase = regExpReplace(/\/$/, /* v8 ignore next */ this.slothlet.config?.base || "", "");
+		let relativePath = regExpReplace(/\/$/, /* v8 ignore next */ dir || "", "");
 		if (configBase && StringMethods.startsWith(relativePath, configBase)) {
 			relativePath = regExpReplace(/^\/|\/$/g, StringMethods.slice(relativePath, configBase.length), "");
 		}
@@ -1443,15 +1438,14 @@ export class Loader extends ComponentBase {
 		// `node.directories || []` defensive fallback for malformed manifest nodes
 		// — generateManifest always emits the field, and the validation in Config
 		// guarantees the top-level shape. The fallback is unreachable in normal flow.
-		/* v8 ignore next */
-		for (let i = 0, dirs = node.directories || []; i < dirs.length; i++) {
+		for (let i = 0, dirs = /* v8 ignore next */ node.directories || []; i < dirs.length; i++) {
 			const dir = dirs[i];
 			// `dir.path || dir.name || ""` is a defensive fallback chain. Both fields
 			// are normally populated by generateManifest; hand-crafted manifests may
 			// omit one or the other. The final `|| ""` arm is unreachable because
-			// at least one of `path` / `name` is required for a usable directory entry.
-			/* v8 ignore next */
-			const dirPath = regExpReplace(/^\/|\/$/g, regExpReplace(/\\/g, dir.path || dir.name || "", "/"), "");
+			// at least one of `path` / `name` is required for a usable directory entry. A hint cannot sit on
+			// that last operand alone, so it covers the chain; the statement stays counted.
+			const dirPath = regExpReplace(/^\/|\/$/g, regExpReplace(/\\/g, /* v8 ignore next */ dir.path || dir.name || "", "/"), "");
 			if (dirPath === normalised) return dir.children || dir;
 			// Recurse into sub-directories for nested paths like "billing/reports".
 			const found = this.#findManifestNode(dir.children || dir, normalised);
@@ -1500,14 +1494,13 @@ export class Loader extends ComponentBase {
 			// Inner ternary's false-arm (lastDot < 0) is unreachable here: the
 			// ALLOWED_EXTS check above (`continue` when ext === "") filters out any
 			// file without a dot in its fullName before reaching this name fallback.
-			/* v8 ignore next */
 			const name =
 				file.name ||
 				(lastDot >= 0
 					? typeof fullName === "string"
 						? StringMethods.slice(fullName, 0, lastDot)
 						: copyList(fullName, 0, lastDot)
-					: fullName);
+					: /* v8 ignore next */ fullName);
 
 			// Consumer `hidden` glob, matched against the file's extension-stripped api-relative
 			// dotted path, over the dot/double-underscore skip — same semantics as the disk scan.
@@ -1589,8 +1582,7 @@ export class Loader extends ComponentBase {
 			this.slothlet.config?.loader?.resolve ??
 			(({ path: p }) => {
 				// `?? ""`: transformConfig always sets `base`, so the fallback arm is defensive.
-				/* v8 ignore next */
-				const base = this.slothlet.config?.base ?? "";
+				const base = /* v8 ignore next */ this.slothlet.config?.base ?? "";
 				// If base already has a URL scheme (file://, https://, etc.) keep it; otherwise
 				// convert a plain filesystem path to a file:// URL with a trailing slash so that
 				// new URL(relativePath, base) resolves correctly.
@@ -1599,8 +1591,7 @@ export class Loader extends ComponentBase {
 				// runs under POSIX paths and cannot exercise the Windows branch
 				// without an actual Windows filesystem — passing a custom resolver
 				// bypasses this code path entirely.
-				/* v8 ignore next */
-				const leadingSlash = StringMethods.startsWith(base, "/") ? "" : "/";
+				const leadingSlash = StringMethods.startsWith(base, "/") ? "" : /* v8 ignore next */ "/";
 				const baseUrl =
 					RegExpMethods.exec(/^[a-zA-Z][\w+\-.]*:\/\//, base) !== null
 						? StringMethods.endsWith(base, "/")
@@ -1615,8 +1606,7 @@ export class Loader extends ComponentBase {
 		// Ternary false-arm (lastDot < 0) is unreachable: files reaching
 		// #loadModuleBrowser have already passed #manifestNodeToStructure's
 		// ALLOWED_EXTS filter, which requires a dot + recognised JS extension.
-		/* v8 ignore next */
-		const name = lastDot >= 0 ? StringMethods.slice(fullName, 0, lastDot) : fullName;
+		const name = lastDot >= 0 ? StringMethods.slice(fullName, 0, lastDot) : /* v8 ignore next */ fullName;
 
 		const specifier = resolveModuleSpecifier({ path: filePath, name, full: fullName });
 		const imported = withInstanceQuery(specifier, instanceID, moduleID, cacheBust);

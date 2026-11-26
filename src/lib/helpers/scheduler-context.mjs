@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:44:29-08:00 (1795419869)
+ *	@Last modified time: 2026-11-25T11:44:45-08:00 (1795635885)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -255,7 +255,7 @@ function runtime_carryOwnExtras(wrapper, original) {
 		// and subclassing working.
 		if (key === "length" || key === "name" || key === "prototype") continue;
 		const descriptor = Objects.getOwnPropertyDescriptor(original, key);
-		/* v8 ignore next -- a key from Reflect.ownKeys always has a descriptor; belt-and-braces so an exotic host can't throw here. */
+		/* v8 ignore if -- a key from Reflect.ownKeys always has a descriptor; belt-and-braces so an exotic host can't throw here. */
 		if (!descriptor) continue;
 		// Copied as a descriptor, not by assignment: a static accessor (`PerformanceObserver.supportedEntryTypes`)
 		// stays an accessor, and a non-enumerable key stays non-enumerable.

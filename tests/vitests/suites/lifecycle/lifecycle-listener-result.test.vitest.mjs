@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:07-08:00 (1794882607)
+ *	@Last modified time: 2026-11-25T13:48:06-08:00 (1795643286)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  * Rules: everything allowed except `sub.** → vault.**`, so the subscriber's code is refused the vault.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
@@ -60,8 +60,18 @@ describe.each(getMatrixConfigs())("Lifecycle > a subscriber's result is settled 
 		events = 0;
 		if (byModule) await api.app.mount("extra", EXTRA);
 		else await api.slothlet.api.add("extra", EXTRA);
-		// A lazy tree emits as its nodes load, after the mount resolves.
-		await new Promise((resolve) => setTimeout(resolve, 150));
+		// A lazy tree emits as its nodes load, after the mount resolves. Poll until events have arrived and then stopped
+		// coming, so the results are drained once, after the last of them (a drain clears what arrives while it runs).
+		let lastSeen = -1;
+		let steady = 0;
+		await vi.waitFor(
+			() => {
+				steady = events > 0 && events === lastSeen ? steady + 1 : 0;
+				lastSeen = events;
+				expect(steady).toBeGreaterThanOrEqual(10);
+			},
+			{ timeout: 10000, interval: 25 }
+		);
 		return { records: await api.sub.drain(), events };
 	}
 

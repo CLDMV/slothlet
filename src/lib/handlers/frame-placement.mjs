@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T11:20:15-08:00 (1795548015)
+ *	@Last modified time: 2026-11-25T11:44:32-08:00 (1795635872)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -735,7 +735,7 @@ function* runtime_siteFrames(callSites, lean, skip = 0) {
 			// is whatever the evaluating code chose, so it cannot attribute anything to anyone (#597).
 			evaluated: evaluated || (sourceURL !== null && fileName !== null && sourceURL !== fileName),
 			// The script the frame runs in — the SHA-256 of the source it was compiled from, on every Node slothlet
-			// supports (22.15+): code compiled under another module's location runs in a script of its own, with its
+			// supports: code compiled under another module's location runs in a script of its own, with its
 			// own hash (#597).
 			hash: evaluated ? null : (site.getScriptHash?.() ?? null),
 			key: described.key,
@@ -1325,13 +1325,11 @@ const DESCRIPTIONS = new WeakMap();
  */
 function describeCall(wrapper) {
 	// A live wrapper always carries its internals, file and api path; the fallbacks describe a partial one
-	// (a direct caller's stand-in) as having no file.
-	/* v8 ignore start */
+	// (a direct caller's stand-in) as having no file. The hints cover only the `??` fallbacks.
 	const internal = wrapper?.____slothletInternal;
 	const impl = internal?.impl;
-	const filePath = internal?.filePath ?? null;
-	const apiPath = internal?.apiPath ?? "";
-	/* v8 ignore stop */
+	const filePath = /* v8 ignore next */ internal?.filePath ?? null;
+	const apiPath = /* v8 ignore next */ internal?.apiPath ?? "";
 	const cached = WeakMapMethods.get(DESCRIPTIONS, wrapper);
 	if (cached && cached.impl === impl && cached.filePath === filePath) return cached.description;
 	const description = {
@@ -1494,10 +1492,11 @@ function runtime_candidateIndex(candidates) {
 		SetMethods.add(wrappers, wrapper);
 		// Every candidate is a live wrapper, which always reaches its instance's cache and loader; the chains guard a
 		// partially-built wrapper handed in by a direct caller.
-		/* v8 ignore next 4 */
 		const cache = wrapper?.slothlet?.handlers?.apiCacheManager;
+		/* v8 ignore else */
 		if (cache) SetMethods.add(caches, cache);
 		const loader = wrapper?.slothlet?.processors?.loader;
+		/* v8 ignore else */
 		if (loader) SetMethods.add(loaders, loader);
 	}
 
@@ -1790,8 +1789,8 @@ export function runtime_namedAmong(list, head) {
  * Whether a frame is one the microtask runner puts below a resumed function: a resumed function has
  * nothing of its own below it. Node also drains the microtask queue between the callbacks of one timer list and of
  * the immediate queue, so a function resumed there has the timers' own frames (`listOnTimeout`, `processTimers`,
- * `processImmediate`) below the runner's. While async hooks are enabled (on Node 22 by any `AsyncLocalStorage` in use,
- * slothlet's own included; on any version by `async_hooks.createHook()`), Node calls those queues through
+ * `processImmediate`) below the runner's. While async hooks are enabled (with `AsyncContextFrame` off by any
+ * `AsyncLocalStorage` in use, slothlet's own included; in any case by `async_hooks.createHook()`), Node calls those queues through
  * `callbackTrampoline` as well, which is one more of Node's own frames below them. That frame counts only when its
  * script hashes as Node's own.
  * @param {{path: string, head: string, hash?: string|null}} frame - A frame.
@@ -2787,7 +2786,7 @@ function runtime_isHostObjectLeaf(leaf, filePath) {
 	const { ownership, apiManager } = leaf.slothlet.handlers;
 	// A synthetic leaf always carries the moduleID of the add that built it, and its instance its handlers; the guard
 	// covers a partial wrapper handed in by a direct caller.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (!internal?.moduleID || !ownership || !apiManager) return false;
 	// The deepest of its module's mounts that holds it, and the mounter recorded for it: null for host code, the module's
 	// id for a module's own add.
@@ -4665,19 +4664,19 @@ const RUN_IN_ASYNC_SCOPE = typeof AsyncResource?.prototype?.runInAsyncScope === 
  * job that the engine calls by itself) collects none either; the caller tells that apart by another callback running
  * below the job (see `begunByNode` in `handlers/context-async`). A stack that cannot be read counts as entered by code.
  *
- * Used where Node runs every async hook for a promise's job (Node 22.15 and 24.0, whose hooks cannot leave promises
- * out), and before the install-time probe has answered.
+ * Used before the install-time probe has answered whether Node leaves the async hook out of promise jobs, and where it
+ * finds that Node does not.
  * @returns {boolean} True when a call of `runInAsyncScope()` is on the stack, or the stack cannot say.
  * @internal
  */
 function scopeEnteredByCode() {
 	// Only the async runtime asks, which runs only where `node:async_hooks` (and so `runInAsyncScope`) exists.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (RUN_IN_ASYNC_SCOPE === null) return true;
 	const read = readStack(runtime_siteCount, { limit: 1, skip: RUN_IN_ASYNC_SCOPE });
 	// A read that cannot be trusted (the stack settings fixed in place where no realm of slothlet's own can be made) can
 	// happen, and counts as entered by code; the suite cannot make a realm fail to be made.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (read === null) return true;
 	return read.value !== 0;
 }
@@ -6174,8 +6173,8 @@ let storeSampled = false;
 
 /**
  * Record the scripts of Node's own code that run a store's callback (`AsyncLocalStorage#run` and `#exit`) as Node's own
- * (see {@link NODE_SCRIPTS}). Not done as slothlet loads: on Node 22 a store that has run switches async hooks on for the
- * whole process, and the live runtime runs no store. The async runtime's manager calls it once, as it makes its store,
+ * (see {@link NODE_SCRIPTS}). Not done as slothlet loads: with `AsyncContextFrame` off a store that has run switches async
+ * hooks on for the whole process, and the live runtime runs no store. The async runtime's manager calls it once, as it makes its store,
  * which happens when the first instance on the async runtime is being created, before any file of that instance loads.
  * The class and its methods are the ones taken as slothlet loaded, run on a store of its own, so nothing a module
  * changed since runs inside the sample.
