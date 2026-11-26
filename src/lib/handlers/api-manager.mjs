@@ -50,6 +50,7 @@ import {
 } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, isFrameworkRoutineMarker, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { dataMemberOf } from "#helpers/reserved-keys";
+import { builtinCopy, CURRENT, versionAt } from "#helpers/run-snapshot";
 import { MODULE_ID_SEPARATOR, MODULE_MANIFEST } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
@@ -108,7 +109,10 @@ const {
 	runtime_selfModuleReader,
 	runtime_unwrapSelfView,
 	runtime_dataReadOptions,
-	releaseModuleMakers
+	releaseModuleMakers,
+	runtime_nodeVersion,
+	runtime_sameSnapshotMember,
+	runtime_builtinBehind
 } = unifiedWrapperOwn;
 const { versionDispatcherRecord } = frameworkInternalsInternals("lib/handlers/api-manager");
 
@@ -130,6 +134,14 @@ const { versionDispatcherRecord } = frameworkInternalsInternals("lib/handlers/ap
 // Rule 18 (M07): Single-file/synthetic one-key unwrap — ~L2067
 // Rule 18 (M08): Bare-function merged value → callable container — ~L2260
 // Rule 18 (M09): Removal remove-if-sole vs revert-if-shared — ~L2874 / ~L3095
+
+/**
+ * The key {@link ApiManager#carryRuntimeMembers} keeps an array node's length as of a run's start under, among the
+ * members it held then.
+ * @type {symbol}
+ * @private
+ */
+const LENGTH_AT_START = Symbol("lengthAtStart");
 
 /**
  * Root members of the api the framework itself serves: its namespace and its root functions (#625).
@@ -6285,14 +6297,61 @@ export class ApiManager extends ComponentBase {
 	 * node the copied tree loaded is loaded in the copy first. A member a module created stays that module's in the copy.
 	 * A plain object or array written at runtime is the same object in both trees, as a shallow copy shares it.
 	 *
+	 * With a run's snapshot (a copy built for a run that changes the tree it started on), what is carried is what the
+	 * tree held as of the run's start (see `helpers/run-snapshot`): `fromRoot` is the root the run started on, a node the
+	 * instance changed since is read from its version for the start, and a member a node of the copy took from a module's
+	 * object that the instance changed since is written back as it was then.
+	 *
 	 * @param {object|Function} fromRoot - The copied tree's root.
 	 * @param {object|Function} toRoot - The copy's root (this api manager's tree).
 	 * @param {object|null} fromOwnership - The copied tree's ownership records.
+	 * @param {object|null} [snap=null] - The snapshot of the run the copy is built for, or null to carry what the tree holds now.
 	 * @returns {Promise<void>}
 	 * @internal
 	 */
-	async carryRuntimeMembers(fromRoot, toRoot, fromOwnership) {
+	async carryRuntimeMembers(fromRoot, toRoot, fromOwnership, snap = null) {
 		const visited = new WeakSet();
+		// What a node of the copied tree held as of the run's start: its members then (by key, in their order), or null
+		// while it is as it was then (and without a snapshot). A member saved as a module's object held it is the node
+		// the tree holds for it now when that node fronts the same object, so the copy's node there is walked.
+		const startMembers = (wrapper) => {
+			if (snap === null) return null;
+			const version = runtime_nodeVersion(wrapper.____slothletInternal.proxy ?? wrapper, snap);
+			if (version === null) return null;
+			const members = new Map();
+			for (let index = 0, list = mapEntriesToArray(version.members); index < list.length; index++) {
+				const key = list[index][0];
+				const held = list[index][1];
+				if (typeof key !== "string" || SetMethods.has(ComponentBase.INTERNAL_KEYS, key)) continue;
+				if (held.live === true || held.accessor !== undefined || held.enumerable === false) continue;
+				let value = held.value;
+				if (value !== null && (typeof value === "object" || typeof value === "function") && resolveWrapper(value) === null) {
+					let live;
+					try {
+						live = wrapper[key];
+					} catch {
+						live = undefined;
+					}
+					if (runtime_sameSnapshotMember(live, value)) value = live;
+				}
+				MapMethods.set(members, key, value);
+			}
+			// An array's length as of the start, which its elements follow.
+			const length = MapMethods.get(version.members, "length");
+			if (Arrays.isArray(wrapper.____slothletInternal.impl) && length !== undefined && "value" in length)
+				MapMethods.set(members, LENGTH_AT_START, length.value);
+			return members;
+		};
+		// A built-in the copy shares with the instance (a `Map` a module exports, held by a node or fronted by one) is the
+		// run's own copy of it, as the run read it before (see `builtinCopy` in helpers/run-snapshot): what the instance
+		// changes in it after the start does not reach the run, and what the run changes stays in the run.
+		const ownBuiltin = (target, key, value, path) => {
+			if (snap === null || value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+			const builtin = runtime_builtinBehind(value);
+			if (builtin === null) return false;
+			write(target, key, builtinCopy(snap, builtin), path);
+			return true;
+		};
 		const carryValue = (value) => {
 			const wrapper = value !== null && (typeof value === "object" || typeof value === "function") ? resolveWrapper(value) : null;
 			// A node written at runtime is carried as what was written, for the copy to make its own node of.
@@ -6338,6 +6397,17 @@ export class ApiManager extends ComponentBase {
 			if (MapMethods.has(made, wrapper)) return MapMethods.get(made, wrapper);
 			const value = isArray ? [] : Objects.create(prototype);
 			MapMethods.set(made, wrapper, value);
+			const atStart = startMembers(wrapper);
+			if (atStart !== null) {
+				for (let index = 0, list = mapEntriesToArray(atStart); index < list.length; index++) {
+					const key = list[index][0];
+					const member = list[index][1];
+					if (key === LENGTH_AT_START) continue;
+					const child = member !== null && (typeof member === "object" || typeof member === "function") ? resolveWrapper(member) : null;
+					value[key] = child === null ? member : writtenNode(member) ? writtenValue(child, made) : (child.____impl ?? member);
+				}
+				return value;
+			}
 			const keys = setFrom(Objects.keys(impl));
 			for (let index = 0, own = Objects.keys(wrapper); index < own.length; index++)
 				if (!SetMethods.has(ComponentBase.INTERNAL_KEYS, own[index])) SetMethods.add(keys, own[index]);
@@ -6361,34 +6431,74 @@ export class ApiManager extends ComponentBase {
 				await toWrapper.___materialize?.();
 			}
 			const toProxy = toWrapper.____slothletInternal.proxy;
-			for (let ofIndex = 0, keys = Objects.keys(fromWrapper); ofIndex < keys.length; ofIndex++) {
+			const atStart = startMembers(fromWrapper);
+			if (atStart !== null) {
+				// An array the copy's node fronts holds as many elements as it did as of the run's start.
+				if (MapMethods.has(atStart, LENGTH_AT_START)) {
+					const length = MapMethods.get(atStart, LENGTH_AT_START);
+					MapMethods.delete(atStart, LENGTH_AT_START);
+					if (toProxy.length !== length) write(toProxy, "length", length, path ? `${path}.length` : "length");
+				}
+				// A member the copy's node took from a module's object that it did not hold as of the run's start goes.
+				for (let ofIndex = 0, keys = Objects.keys(toWrapper); ofIndex < keys.length; ofIndex++) {
+					const key = keys[ofIndex];
+					if (SetMethods.has(ComponentBase.INTERNAL_KEYS, key) || MapMethods.has(atStart, key)) continue;
+					let toValue;
+					try {
+						toValue = toWrapper[key];
+					} catch {
+						continue;
+					}
+					if (isTreeNode(toValue) && !writtenNode(toValue)) continue;
+					try {
+						runtime_frameworkWrite(toProxy, () => {
+							delete toProxy[key];
+						});
+					} catch {
+						// A member the copy holds fixed stays.
+					}
+				}
+			}
+			for (
+				let ofIndex = 0, keys = atStart === null ? Objects.keys(fromWrapper) : mapKeysToArray(atStart);
+				ofIndex < keys.length;
+				ofIndex++
+			) {
 				const key = keys[ofIndex];
 				if (SetMethods.has(ComponentBase.INTERNAL_KEYS, key)) continue;
 				let fromValue;
 				try {
-					fromValue = fromWrapper[key];
+					fromValue = atStart === null ? fromWrapper[key] : MapMethods.get(atStart, key);
 				} catch {
 					continue;
 				}
 				const memberPath = path ? `${path}.${key}` : key;
 				if (isTreeNode(fromValue)) {
 					const toValue = toWrapper[key];
+					if (ownBuiltin(toProxy, key, toValue, memberPath)) continue;
 					if (isTreeNode(toValue)) await walk(resolveWrapper(fromValue), resolveWrapper(toValue), memberPath);
 					else if (toValue === undefined && writtenNode(fromValue))
 						write(toProxy, key, writtenValue(resolveWrapper(fromValue)), memberPath);
 					continue;
 				}
-				if (Objects.hasOwn(toWrapper, key) && Objects.is(toWrapper[key], fromValue)) continue;
-				write(toProxy, key, carryValue(fromValue), memberPath);
+				if (Objects.hasOwn(toWrapper, key) && Objects.is(toWrapper[key], fromValue)) {
+					ownBuiltin(toProxy, key, fromValue, memberPath);
+					continue;
+				}
+				if (!ownBuiltin(toProxy, key, fromValue, memberPath)) write(toProxy, key, carryValue(fromValue), memberPath);
 			}
 		};
 		const toTarget = this.slothlet.boundApi ?? toRoot;
-		for (let ofIndex = 0, keys = Objects.keys(fromRoot); ofIndex < keys.length; ofIndex++) {
+		// The root as of the run's start: the members it held then, when the instance changed it since.
+		const rootAtStart = snap === null ? CURRENT : versionAt(snap.instance, fromRoot, snap.base);
+		const rootFrom = rootAtStart === CURRENT ? fromRoot : rootAtStart;
+		for (let ofIndex = 0, keys = Objects.keys(rootFrom); ofIndex < keys.length; ofIndex++) {
 			const key = keys[ofIndex];
 			if (isFrameworkReservedKey(key) || key === "slothlet" || key === "shutdown" || key === "destroy") continue;
-			const fromValue = fromRoot[key];
+			const fromValue = rootFrom[key];
 			if (isTreeNode(fromValue)) {
 				const toValue = toRoot[key];
+				if (ownBuiltin(toTarget, key, toValue, key)) continue;
 				if (isTreeNode(toValue)) await walk(resolveWrapper(fromValue), resolveWrapper(toValue), key);
 				else if (toValue === undefined && writtenNode(fromValue)) write(toTarget, key, writtenValue(resolveWrapper(fromValue)), key);
 				continue;
