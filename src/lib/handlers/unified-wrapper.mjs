@@ -8335,6 +8335,19 @@ function runtime_isModuleProxy(value) {
 }
 
 /**
+ * The language's `%ThrowTypeError%`: the getter and setter of a strict arguments object's `callee`, taken at load.
+ * @type {Function}
+ * @private
+ */
+const THROW_TYPE_ERROR = Reflect.getOwnPropertyDescriptor(
+	(function () {
+		"use strict";
+		return arguments;
+	})(),
+	"callee"
+).get;
+
+/**
  * Whether a function is one of the engine's own (a builtin), which runs none of a module's code. Decided from
  * `Function.prototype.toString` alone, so nothing of the function runs: a builtin reports itself as native code
  * under its own non-empty name (`function push() { [native code] }`), while a bound function — a module's function
@@ -8344,6 +8357,9 @@ function runtime_isModuleProxy(value) {
  * @private
  */
 function runtime_isBuiltinFunction(fn) {
+	// The language's own thrower behind a strict arguments object's `callee` reports native code with no name, as a bound
+	// function does; it is told by identity.
+	if (fn === THROW_TYPE_ERROR) return true;
 	// This copy's wrapper of `Function.prototype.toString` (see helpers/function-source-context) stands in for the
 	// engine's own while an instance is up, and runs none of a module's code. It is told by identity, never by its text.
 	if (isFunctionSourcePatch(fn)) return true;
@@ -10305,7 +10321,9 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		ownKeys: () => {
 			if (!exec(() => Reflect.isExtensible(original))) settle();
 			const keys = exec(() => Reflect.ownKeys(original));
-			if (!Reflect.isExtensible(shadow)) return Reflect.ownKeys(shadow);
+			// The shadow was just settled to hold exactly these keys; they are listed in the original's order, as the
+			// original lists them, not in the order the shadow came to hold them.
+			if (!Reflect.isExtensible(shadow)) return keys;
 			// Every member the shadow holds fixed is still the original's; the language requires it be listed.
 			for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
