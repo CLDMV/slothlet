@@ -19,7 +19,7 @@
  *
  * @description
  * These drive specific internal branches directly through the live `RoutineManager` instance
- * (grabbed via `resolveWrapper(api.<leaf>).slothlet.handlers.routineManager`, the same seam the
+ * (grabbed via `resolveWrapper(api.<leaf>).____slothlet.handlers.routineManager`, the same seam the
  * existing routine tests use): the speculative-revert helpers, the post-destroy guards, the
  * unresolvable-receiver / missing-segment / failed-materialization paths, and the lazy-mode
  * materialization walkers. Each targets a concrete, reachable condition (a rejected internal
@@ -49,7 +49,7 @@ afterEach(async () => {
  */
 async function build({ leaf = "ping", ...opts } = {}) {
 	api = await slothlet({ silent: true, ...opts });
-	const rm = resolveWrapper(api[leaf]).slothlet.handlers.routineManager;
+	const rm = resolveWrapper(api[leaf]).____slothlet.handlers.routineManager;
 	return { api, rm };
 }
 
@@ -286,7 +286,7 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 		// A dotted (bounded, non-recursive) routine drives #materializeFor's per-endpoint loop. Seed a
 		// stale ownership endpoint that points at a path no longer on the tree, so its
 		// #resolveContainer returns null and the loop's `continue` (1272) fires for it.
-		const ownership = resolveWrapper(a.other).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(a.other).____slothlet.handlers.ownership;
 		ownership.moduleEndpoints.set("stale-mod-id", "ghostmount");
 		let threw = false;
 		try {
@@ -365,7 +365,7 @@ describe("RoutineManager coverage — lazy materialization walkers (#341)", () =
 				stack: true
 			}
 		});
-		const ownership = resolveWrapper(a.other).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(a.other).____slothlet.handlers.ownership;
 		const adminWrapper = resolveWrapper(a.admin);
 		expect(adminWrapper.____slothletInternal.state.materialized).toBe(false);
 		// Simulate an instance whose only mount endpoints are NAMED (an api.add-only composition, no
@@ -404,7 +404,7 @@ describe("RoutineManager coverage — lazy materialization walkers (#341)", () =
 			}
 		});
 		const otherWrapper = resolveWrapper(a.other);
-		const rootApi = otherWrapper.slothlet.api;
+		const rootApi = otherWrapper.____slothlet.api;
 		// A mount root the bounded #materializeGlobPath walk steps through: give it a primitive child
 		// (dotted "prim.leaf" → materializeGlobPath(primitive, ["leaf"]) → 1161), a literal child whose
 		// read throws (dotted "boom.leaf" → literal-segment read catch, 1191), and a wildcard whose

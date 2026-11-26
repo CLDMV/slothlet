@@ -121,7 +121,7 @@ describe.each(getMatrixConfigs({}))("class-instance default > Config: $name", ({
 
 	it("stops a member scan at a prototype chain that loops back to itself", async () => {
 		api = await slothlet({ ...config, base: BASE });
-		const flatten = resolveWrapper(api.tools).slothlet.processors.flatten;
+		const flatten = resolveWrapper(api.tools).____slothlet.processors.flatten;
 		const looped = new Proxy({}, { getPrototypeOf: () => looped });
 		expect(flatten.defaultHasMember(looped, "x")).toBe(false);
 		const target = Object.create(looped);
@@ -131,7 +131,7 @@ describe.each(getMatrixConfigs({}))("class-instance default > Config: $name", ({
 
 	it("copies a default without changing its shape", async () => {
 		api = await slothlet({ ...config, base: BASE });
-		const flatten = resolveWrapper(api.tools).slothlet.processors.flatten;
+		const flatten = resolveWrapper(api.tools).____slothlet.processors.flatten;
 		const list = ["a", "b"];
 		list.extra = "x";
 		const listCopy = flatten.cloneDefault(list);

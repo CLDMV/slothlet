@@ -60,7 +60,7 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 function getSlInstance(api, prop = "math") {
 	const wrapper = resolveWrapper(api[prop]);
 	if (!wrapper) throw new Error(`resolveWrapper(api.${prop}) returned null`);
-	return wrapper.slothlet;
+	return wrapper.____slothlet;
 }
 
 // ---------------------------------------------------------------------------

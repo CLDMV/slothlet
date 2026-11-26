@@ -45,7 +45,7 @@ describe.each(["eager", "lazy"])("impl:removed subscribers read the v4 payload >
 			await api["^ext.*.initialize"]();
 			expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize"]);
 
-			const sl = resolveWrapper(api.ext).slothlet;
+			const sl = resolveWrapper(api.ext).____slothlet;
 			const entry = sl.handlers.routineManager.raw.find((e) => e.apiPath === "ext.auth.initialize");
 			expect(entry?.moduleID).toBeTruthy();
 			await sl.handlers.lifecycle.emit("impl:removed", {
@@ -70,7 +70,7 @@ describe.each(["eager", "lazy"])("impl:removed subscribers read the v4 payload >
 		const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, silent: true });
 		try {
 			await api.slothlet.api.add(["ext", "auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1, { metadata: { tag: "auth" } });
-			const sl = resolveWrapper(api.ext).slothlet;
+			const sl = resolveWrapper(api.ext).____slothlet;
 			expect(sl.handlers.metadata.exportUserState().userMetadataStore.has("ext")).toBe(true);
 
 			await sl.handlers.lifecycle.emit("impl:removed", {

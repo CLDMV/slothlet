@@ -181,7 +181,7 @@ describe("typegen types the composed api from each node's module origin (#484)",
 	it("records each node's exportPath in the ownership records", async () => {
 		const api = await slothlet({ base: FIXTURE, mode: "eager", typescript: { mode: "fast" }, silent: true });
 		try {
-			const ownership = resolveWrapper(api.math).slothlet.handlers.ownership;
+			const ownership = resolveWrapper(api.math).____slothlet.handlers.ownership;
 			const origin = (apiPath) => {
 				const found = ownership.getOrigin(apiPath);
 				return found && { file: path.relative(FIXTURE, found.filePath).split(path.sep).join("/"), exportPath: found.exportPath };
@@ -230,7 +230,7 @@ describe("typegen types the composed api from each node's module origin (#484)",
 
 		const api = await slothlet({ base: path.join(root, "api"), mode: "eager", silent: true });
 		try {
-			const ownership = resolveWrapper(api.tuning).slothlet.handlers.ownership;
+			const ownership = resolveWrapper(api.tuning).____slothlet.handlers.ownership;
 			expect(api.tuning.TUNE_STEP).toBe(5);
 			expect(ownership.getOrigin("tuning.TUNE_STEP")?.exportPath).toEqual(["TUNE_STEP"]);
 

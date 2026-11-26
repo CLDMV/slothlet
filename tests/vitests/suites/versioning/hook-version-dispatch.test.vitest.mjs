@@ -335,7 +335,7 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 			}
 		});
 
-		const hookManager = resolveWrapper(api.mod).slothlet.handlers.hookManager;
+		const hookManager = resolveWrapper(api.mod).____slothlet.handlers.hookManager;
 		const registrations = hookManager.exportHooks();
 		expect(hookManager.remove({ id: "replayed" })).toBe(2);
 		hookManager.importHooks(registrations);

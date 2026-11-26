@@ -94,7 +94,7 @@ for (const { config, name } of configs) {
 
 		it("reload does not register a garbage (non-string) ownership entry", async () => {
 			const id = await api.slothlet.api.add("gcComp", TEST_DIRS.API_TEST);
-			const ownership = resolveWrapper(api.gcComp).slothlet.handlers.ownership;
+			const ownership = resolveWrapper(api.gcComp).____slothlet.handlers.ownership;
 
 			await api.slothlet.api.reload("gcComp");
 

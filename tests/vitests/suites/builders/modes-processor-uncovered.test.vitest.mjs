@@ -616,7 +616,7 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 		expect(await _api.utils.sharedKey()).toBe("root-shared");
 
 		const wrapper = resolveWrapper(_api.utils.sharedKey) || resolveWrapper(_api.utils);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const entry = sl.handlers.routineManager.raw.find((e) => e.apiPath === "utils.sharedKey");
 		expect(entry).toBeDefined();
 		expect(await entry.fn()).toBe("root-shared");
@@ -652,7 +652,7 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			Object.values(_api)
 				.map((v) => resolveWrapper(v))
 				.find(Boolean);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		expect(sl.handlers.routineManager.raw.filter((e) => e.moduleID === "errmod")).toEqual([]);
 	});
 
@@ -708,7 +708,7 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			Object.values(_api)
 				.map((v) => resolveWrapper(v))
 				.find(Boolean);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const [entry] = sl.handlers.ownership.pathToModule.get("utils.sharedKey");
 		expect(entry.filePath).toBe(path.join(DIRS.MULTI_EXPORT_SKIP, "utils.mjs"));
 		expect(entry.value()).toBe("root-shared");

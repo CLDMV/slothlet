@@ -58,7 +58,7 @@ afterEach(async () => {
  * @returns {object} Raw Slothlet instance.
  */
 function getSlFromApi(_api, key) {
-	return resolveWrapper(_api[key])?.slothlet;
+	return resolveWrapper(_api[key])?.____slothlet;
 }
 
 // ─── #deepFreeze — null/undefined guard (line 59) ─────────────────────────────

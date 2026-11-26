@@ -606,7 +606,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 
 		it("are dropped when the node is reloaded", async () => {
 			await load("lazy");
-			const instance = resolveWrapper(api.holder).slothlet;
+			const instance = resolveWrapper(api.holder).____slothlet;
 			for (let round = 0; round < 3; round++) {
 				await leaveRefusal();
 				expect(refusedChangeCount(instance)).toBe(1);
@@ -743,7 +743,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 
 		it("are dropped when the module is removed and added again", async () => {
 			await load("lazy");
-			const instance = resolveWrapper(api.holder).slothlet;
+			const instance = resolveWrapper(api.holder).____slothlet;
 			await leaveRefusal();
 			await api.slothlet.api.remove("holder");
 			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
@@ -753,7 +753,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 
 		it("are dropped when the whole instance reloads", async () => {
 			await load("lazy");
-			const instance = resolveWrapper(api.holder).slothlet;
+			const instance = resolveWrapper(api.holder).____slothlet;
 			for (let round = 0; round < 3; round++) {
 				await leaveRefusal();
 				await api.slothlet.reload();
@@ -764,7 +764,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 
 		it("are dropped when the instance shuts down", async () => {
 			await load("lazy");
-			const instance = resolveWrapper(api.holder).slothlet;
+			const instance = resolveWrapper(api.holder).____slothlet;
 			await leaveRefusal();
 			expect(refusedChangeCount(instance)).toBe(1);
 			await api.slothlet.shutdown();

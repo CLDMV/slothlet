@@ -49,7 +49,7 @@ const ADD_DIR = new URL("../../../../api_tests/api_test_add_prefix", import.meta
  * @returns {string[]} Sorted owned paths.
  */
 function ownedPaths(node, moduleID) {
-	const ownership = resolveWrapper(node).slothlet.handlers.ownership;
+	const ownership = resolveWrapper(node).____slothlet.handlers.ownership;
 	return [...(ownership.moduleToPath.get(moduleID) ?? [])].sort();
 }
 
@@ -101,7 +101,7 @@ describe("ApiManager > api.add ownership prefix — base load is unaffected", ()
 		// The fix routes record paths through buildApiPath, which is a no-op when there is no prefix.
 		// Loaded as the base, the same fixture must record bare paths exactly as before.
 		api = await slothlet({ mode: "eager", base: ADD_DIR });
-		const ownership = resolveWrapper(api.single).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(api.single).____slothlet.handlers.ownership;
 		const all = [...ownership.moduleToPath.values()].flatMap((set) => [...set]);
 		expect(all, "base load records the file's own leaf, unprefixed").toContain("single");
 		expect(all).toContain("nested.alpha");

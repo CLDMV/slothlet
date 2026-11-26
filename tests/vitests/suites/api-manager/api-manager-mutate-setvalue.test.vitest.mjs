@@ -347,7 +347,7 @@ describe("setValueAtPath — applies mutateApiValue's return value instead of di
 		// silently dropped the replacement — setValueAtPath still reported success, but the stale
 		// existing function stayed live.
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
-		const apiManager = resolveWrapper(api.math).slothlet.handlers.apiManager;
+		const apiManager = resolveWrapper(api.math).____slothlet.handlers.apiManager;
 
 		const root = { thing: function stackedCallable() {} };
 		const plainObjectValue = { notAFunction: true };
@@ -365,7 +365,7 @@ describe("setValueAtPath — applies mutateApiValue's return value instead of di
 
 	it("merge mode actually writes the new value when existing is a bare (non-wrapper) function", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", hook: { enabled: false } });
-		const apiManager = resolveWrapper(api.math).slothlet.handlers.apiManager;
+		const apiManager = resolveWrapper(api.math).____slothlet.handlers.apiManager;
 
 		const root = { thing: function stackedCallable() {} };
 		const plainObjectValue = { notAFunction: true };

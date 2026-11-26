@@ -76,7 +76,7 @@ function createInstance(config) {
  * @returns {Record<string, {stack: string[], owner: (string|undefined)}>} Ownership by path.
  */
 function sessionOwnership(api) {
-	const ownership = resolveWrapper(api.launcher).slothlet.handlers.ownership;
+	const ownership = resolveWrapper(api.launcher).____slothlet.handlers.ownership;
 	const result = {};
 	for (const apiPath of ["launcher.session", "launcher.session.create", "launcher.session.peek", "launcher.session.close"]) {
 		result[apiPath] = {
@@ -216,7 +216,7 @@ for (const { config, name } of getMatrixConfigs()) {
 
 		it("keeps shadow's overwrite when ownership tracking is unavailable", async () => {
 			await mount();
-			const sl = resolveWrapper(api.launcher).slothlet;
+			const sl = resolveWrapper(api.launcher).____slothlet;
 			const ownership = sl.handlers.ownership;
 			sl.handlers.ownership = null;
 			try {

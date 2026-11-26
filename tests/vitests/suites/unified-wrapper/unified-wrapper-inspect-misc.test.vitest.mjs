@@ -75,20 +75,20 @@ async function makeLazy() {
 describe("getSafeFunctionName fallback (line 85) — callable createProxy with null apiPath", () => {
 	it("createProxy with null apiPath on callable wrapper uses fallback function name", async () => {
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const w = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: null,
 			initialImpl: () => "callable",
 			isCallable: true
 		});
-		const proxy = w.createProxy();
+		const proxy = w.___createProxy();
 		expect(typeof proxy).toBe("function");
 	});
 
 	it("createProxy with digit-leading apiPath prefixes safeName with underscore (line 85 TRUE arm)", async () => {
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		// apiPath "1test" produces baseName "1test", safeName "1test",
 		// which fails /^[A-Za-z_$]/ so the TRUE arm fires: safeName = "_1test"
 		const w = new UnifiedWrapper(sl, {
@@ -97,7 +97,7 @@ describe("getSafeFunctionName fallback (line 85) — callable createProxy with n
 			initialImpl: () => "callable",
 			isCallable: true
 		});
-		const proxy = w.createProxy();
+		const proxy = w.___createProxy();
 		// The proxy target function should be named _1test (getSafeFunctionName prefixed it)
 		// proxy.name returns the last path segment "1test" (proxy get trap), so check target name via createNamedProxyTarget result
 		expect(typeof proxy).toBe("function");
@@ -144,10 +144,10 @@ describe("prototype [util.inspect.custom] on raw wrapper (lines 310-316)", () =>
 describe("prototype [util.inspect.custom] unmaterialized lazy branch (line 352)", () => {
 	it("util.inspect on a freshly-created lazy wrapper returns the proxy before materialization (line 352)", async () => {
 		const eagerApi = await makeEager();
-		const sl = resolveWrapper(eagerApi.math).slothlet;
+		const sl = resolveWrapper(eagerApi.math).____slothlet;
 		// Create a lazy wrapper that has a proxy but is NOT yet materialized
 		const w = new UnifiedWrapper(sl, { mode: "lazy", apiPath: "test.inspect.lazy" });
-		const ____proxy = w.createProxy();
+		const ____proxy = w.___createProxy();
 		// Verify it is genuinely unmaterialized
 		expect(w.____slothletInternal.state.materialized).toBe(false);
 		expect(w.____slothletInternal.proxy).toBeTruthy();
@@ -187,7 +187,7 @@ describe("background materialization via loader.materialize (line 352)", () => {
 describe("__metadata fallback when metadata handler is null (line 2122)", () => {
 	it("accessing __metadata on a proxy when handlers.metadata is null returns empty object", async () => {
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const originalMetadata = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
@@ -206,7 +206,7 @@ describe("__metadata fallback when metadata handler is null (line 2122)", () => 
 describe("___createChildWrapper returns undefined for undefined value (line 1179)", () => {
 	it("___setImpl with an undefined-valued property hits return undefined in ___createChildWrapper", async () => {
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const w = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: "test.undefined.value",
@@ -252,14 +252,14 @@ describe("util.inspect via own-property closure on callable wrapper proxy", () =
 
 	it("util.inspect on a manually-created callable lazy wrapper returns string", async () => {
 		const eagerApi = await makeEager();
-		const sl = resolveWrapper(eagerApi.math).slothlet;
+		const sl = resolveWrapper(eagerApi.math).____slothlet;
 		const w = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: "test.callable.inspect",
 			initialImpl: () => "result",
 			isCallable: true
 		});
-		const proxy = w.createProxy();
+		const proxy = w.___createProxy();
 		const result = util.inspect(proxy);
 		expect(typeof result).toBe("string");
 	});

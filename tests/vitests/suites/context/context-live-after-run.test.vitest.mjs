@@ -310,7 +310,7 @@ describe.each(PERMISSIONS)("live runtime: a finished run's store is released onc
 			...(permissions ? { permissions } : {})
 		});
 		try {
-			const manager = resolveWrapper(api.who.tag).slothlet.contextManager;
+			const manager = resolveWrapper(api.who.tag).____slothlet.contextManager;
 			const before = manager.instances.size;
 			let collected = 0;
 			const registry = new FinalizationRegistry(() => collected++);
@@ -350,7 +350,7 @@ describe.each(PERMISSIONS)("live runtime: a finished run's store is released onc
 			...(permissions ? { permissions } : {})
 		});
 		try {
-			const manager = resolveWrapper(api.who.tag).slothlet.contextManager;
+			const manager = resolveWrapper(api.who.tag).____slothlet.contextManager;
 			let collected = false;
 			const registry = new FinalizationRegistry(() => (collected = true));
 			let handle;
@@ -382,7 +382,7 @@ describe.each(PERMISSIONS)("live runtime: a finished run's store is released onc
 			context: { tag: "base" },
 			...(permissions ? { permissions } : {})
 		});
-		const manager = resolveWrapper(api.who.tag).slothlet.contextManager;
+		const manager = resolveWrapper(api.who.tag).____slothlet.contextManager;
 		const after = gate();
 		const fired = [];
 		let runID = null;
@@ -412,7 +412,7 @@ describe.each(PERMISSIONS)("live runtime: shutdown once work a run left behind h
 	 */
 	async function shutdownAfterLateWork(schedule) {
 		const probe = await slothlet({ base: path.join(ROOT, "api"), runtime: "live", mode: "eager", silent: true });
-		const manager = resolveWrapper(probe.who.tag).slothlet.contextManager;
+		const manager = resolveWrapper(probe.who.tag).____slothlet.contextManager;
 		await probe.shutdown();
 		const before = [...manager.instances.keys()];
 		const api = await slothlet({
@@ -466,7 +466,7 @@ describe.each(MATRIX)(
 		 */
 		async function shutdownFromLateWork(schedule) {
 			const probe = await slothlet({ base: path.join(ROOT, "api"), runtime, mode: "eager", silent: true });
-			const manager = resolveWrapper(probe.who.tag).slothlet.contextManager;
+			const manager = resolveWrapper(probe.who.tag).____slothlet.contextManager;
 			await probe.shutdown();
 			const before = [...manager.instances.keys()];
 			const api = await slothlet({

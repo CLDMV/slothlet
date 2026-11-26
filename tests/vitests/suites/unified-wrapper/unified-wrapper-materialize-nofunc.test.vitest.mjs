@@ -35,7 +35,7 @@ afterEach(async () => {
 describe("UnifiedWrapper.___materialize no-func coverage", () => {
 	it("___materialize on a lazy wrapper with no materializeFunc skips the materialize block (unified-wrapper.mjs:1385 else)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		// materializeFunc defaults to null; a lazy, not-yet-materialized wrapper reaches ___materialize's
 		// promise body and takes the `if (materializeFunc)` FALSE path (the block is skipped).
 		const wrapper = new UnifiedWrapper(sl, { mode: "lazy", apiPath: "coverage.nofunc" });

@@ -250,7 +250,7 @@ for (const { config, name } of getMatrixConfigs()) {
 		it("keeps the co-mounted leaves when ownership tracking is unavailable", async () => {
 			api = await createComounted(config);
 			await expectLeaves(api, { ...EXT_LEAVES, ...OTHER_LEAVES });
-			const sl = resolveWrapper(api.plugins).slothlet;
+			const sl = resolveWrapper(api.plugins).____slothlet;
 			const ownership = sl.handlers.ownership;
 			sl.handlers.ownership = null;
 			try {
@@ -347,7 +347,7 @@ for (const { config, name } of getMatrixConfigs()) {
 				// The owner's leaf is live; it carries new code only when the owner is the module reloaded.
 				expect(await api.plugins.tools.net.ping()).toBe(owner === target ? `${owner}:ping:v2` : `${owner}:ping`);
 				await expectLeaves(api, { ...EXT_LEAVES, ...OTHER_LEAVES });
-				const ownership = resolveWrapper(api.plugins).slothlet.handlers.ownership;
+				const ownership = resolveWrapper(api.plugins).____slothlet.handlers.ownership;
 				expect(ownership.getCurrentOwner("plugins.tools.net.ping")?.moduleID).toBe(owner);
 			}
 		);

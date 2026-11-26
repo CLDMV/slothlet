@@ -432,7 +432,7 @@ describe("UnifiedWrapper callable-impl helpers (#533)", () => {
 		await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
 		await api.slothlet.api.add("plugins", EXT_DIR, { id: "ext" });
 		// Two functions recorded at the namespace under merge: the first owns it, the second loses (O08).
-		const ownership = resolveWrapper(api.plugins).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(api.plugins).____slothlet.handlers.ownership;
 		const register = (moduleID, value) =>
 			ownership.register({ moduleID, apiPath: "plugins", value, source: "core", collisionMode: "merge" });
 		expect(register("winner", () => "winner").isMergeLoss).toBe(false);
@@ -450,7 +450,7 @@ describe("UnifiedWrapper callable-impl helpers (#533)", () => {
 		api = await createInstance(getMatrixConfigs()[0].config);
 		await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
 		const wrapper = resolveWrapper(api.plugins);
-		const ownership = wrapper.slothlet.handlers.ownership;
+		const ownership = wrapper.____slothlet.handlers.ownership;
 		const before = ownership.getPathHistory("plugins").map((entry) => entry.value);
 
 		expect(() => ownership.pinLiveEntries("no.such.path", wrapper, {}, resolveWrapper)).not.toThrow();

@@ -62,7 +62,7 @@ afterEach(async () => {
 function getSlInstance(apiProxy, prop = "math") {
 	const wrapper = resolveWrapper(apiProxy[prop]);
 	if (!wrapper) throw new Error(`resolveWrapper(api.${prop}) returned null`);
-	return wrapper.slothlet;
+	return wrapper.____slothlet;
 }
 
 // ─── list({ id, enabled }) — mismatched enabled (line 321 third branch) ──────

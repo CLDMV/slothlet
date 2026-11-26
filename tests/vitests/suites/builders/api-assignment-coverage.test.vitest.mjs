@@ -35,7 +35,7 @@ afterEach(async () => {
 describe("ApiAssignment collision-mode arm coverage", () => {
 	it("uses config.collision[collisionContext] when no collisionModeOverride is given (api-assignment.mjs:253 arm 2)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		const assignment = resolveWrapper(api.math).slothlet.builders.apiAssignment;
+		const assignment = resolveWrapper(api.math).____slothlet.builders.apiAssignment;
 		// Case 2 (collision detection): existing !== undefined, no collisionModeOverride, so the
 		// resolved mode comes from config.api.collision.mode[collisionContext] ("skip") — the middle arm.
 		const target = { foo: "old" };
@@ -51,7 +51,7 @@ describe("ApiAssignment collision-mode arm coverage", () => {
 
 	it('falls back to "merge" when neither collisionModeOverride nor config.collision[collisionContext] is set (api-assignment.mjs:253 arm 3)', async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		const assignment = resolveWrapper(api.math).slothlet.builders.apiAssignment;
+		const assignment = resolveWrapper(api.math).____slothlet.builders.apiAssignment;
 		// Case 2 (collision detection): existing !== undefined, no collisionModeOverride, and
 		// config.collision has no entry for "initial" at all — both operands of the `||` chain are
 		// falsy, so the resolved mode falls through to the final "merge" default (the third arm).

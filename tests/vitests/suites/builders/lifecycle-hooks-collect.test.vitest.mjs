@@ -60,7 +60,7 @@ const COLLECT_ROUTINES = {
  * @returns {object} Internal slothlet instance.
  */
 function getSlothlet(api) {
-	return resolveWrapper(api.math).slothlet;
+	return resolveWrapper(api.math).____slothlet;
 }
 
 describe.each(["eager", "lazy"])("mode: %s", (mode) => {

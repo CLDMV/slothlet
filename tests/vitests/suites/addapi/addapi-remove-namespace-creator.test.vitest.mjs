@@ -207,12 +207,12 @@ describe("invalidateSpeculativeWrappers with a live-kept list (#555)", () => {
 			api: { mutations: { add: true, remove: true } }
 		});
 		await api.slothlet.api.add("plugins", MODULES.other.dir, { id: "other" });
-		const slothletInstance = resolveWrapper(api.plugins).slothlet;
+		const slothletInstance = resolveWrapper(api.plugins).____slothlet;
 		const UnifiedWrapper = resolveWrapper(api.plugins).constructor;
 		const gamma = api.plugins.gamma;
 		// A wrapper that was never placed in the tree, at a path nothing occupies.
 		const detached = new UnifiedWrapper(slothletInstance, { mode: "eager", apiPath: "nowhere.thing", initialImpl: () => "detached" });
-		const detachedProxy = detached.createProxy();
+		const detachedProxy = detached.___createProxy();
 		expect(await detachedProxy()).toBe("detached");
 
 		const kept = [];

@@ -424,7 +424,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			}
 		});
 
-		const sl = resolveWrapper(api.internalProxyHelper).slothlet;
+		const sl = resolveWrapper(api.internalProxyHelper).____slothlet;
 		const orig = sl.handlers.permissionManager;
 
 		// Partial stub: bind the real implementations the helper depends on, but intentionally omit

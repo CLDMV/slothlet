@@ -112,7 +112,7 @@ const DIRS = {
  * const sl = getSlFromApi(lazyApi, "someKey");
  */
 function getSlFromApi(api, key) {
-	return resolveWrapper(api[key]).slothlet;
+	return resolveWrapper(api[key]).____slothlet;
 }
 
 let _api = null;

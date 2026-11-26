@@ -483,12 +483,12 @@ describe("ApiAssignment.assignToApiPath Case 1 — awaits the async syncWrapper 
 	 * @returns {Proxy} A materialized eager wrapper proxy.
 	 */
 	function makeEagerWrapperProxy(sl, apiPath) {
-		return new UnifiedWrapper(sl, { mode: "eager", apiPath, initialImpl: {} }).createProxy();
+		return new UnifiedWrapper(sl, { mode: "eager", apiPath, initialImpl: {} }).___createProxy();
 	}
 
 	it("does not return until syncWrapper's own async work has actually finished", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const assignment = sl.builders.apiAssignment;
 
 		const existingProxy = makeEagerWrapperProxy(sl, "case1sync.existing");
@@ -518,7 +518,7 @@ describe("ApiAssignment.assignToApiPath Case 1 — awaits the async syncWrapper 
 
 	it("propagates a syncWrapper rejection to the caller instead of leaking an unhandled rejection", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const assignment = sl.builders.apiAssignment;
 
 		const existingProxy = makeEagerWrapperProxy(sl, "case1err.existing");

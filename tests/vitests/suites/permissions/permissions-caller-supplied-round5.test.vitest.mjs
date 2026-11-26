@@ -289,7 +289,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 
 	it("a module removed whole drops the record of what it made", async () => {
 		await build({ policy: "allow", rules: [] });
-		const instance = resolveWrapper(api.callee).slothlet;
+		const instance = resolveWrapper(api.callee).____slothlet;
 		await api.supplier.bag.klass();
 		await api.callee.ops.makeClient();
 		const before = moduleMakerCount(instance);

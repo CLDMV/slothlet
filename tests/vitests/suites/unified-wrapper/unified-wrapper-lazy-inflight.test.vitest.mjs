@@ -67,7 +67,7 @@ function getSlothletInstance(api, childKey = "task") {
 	if (!wrapper) {
 		throw new Error(`No wrapper found at api.${childKey}`);
 	}
-	return wrapper.slothlet;
+	return wrapper.____slothlet;
 }
 
 // ---------------------------------------------------------------------------
@@ -206,7 +206,7 @@ describe("unified-wrapper: in-flight callable lazy wrapper → successful resolu
 		expect(callableWrapper.____slothletInternal.state.materialized).toBe(false);
 
 		// Create proxy and call it while in-flight
-		const proxy = callableWrapper.createProxy();
+		const proxy = callableWrapper.___createProxy();
 		const result = await proxy(7);
 
 		// After materialization, (7 * 3) = 21
@@ -234,7 +234,7 @@ describe("unified-wrapper: in-flight callable lazy wrapper → successful resolu
 
 		callableWrapper.___materialize();
 
-		const proxy = callableWrapper.createProxy();
+		const proxy = callableWrapper.___createProxy();
 
 		// Call with different args
 		const [r1, r2, r3] = await Promise.all([proxy(1, 2), proxy(10, 20), proxy(5, 5)]);
@@ -271,7 +271,7 @@ describe("unified-wrapper: in-flight callable lazy wrapper → successful resolu
 		});
 
 		callableWrapper.___materialize();
-		const proxy = callableWrapper.createProxy();
+		const proxy = callableWrapper.___createProxy();
 
 		// impl is { default: fn } - should call impl.default(5)
 		const result = await proxy(5);
@@ -312,7 +312,7 @@ describe("unified-wrapper: in-flight wrapper materialization failure (lines 2609
 		// Verify inFlight is true
 		expect(failingWrapper.____slothletInternal.state.inFlight).toBe(true);
 
-		const proxy = failingWrapper.createProxy();
+		const proxy = failingWrapper.___createProxy();
 
 		// Call while in-flight — polling promise detects inFlight=false after failure
 		// → rejects with LAZY_MATERIALIZATION_FAILED
@@ -343,7 +343,7 @@ describe("unified-wrapper: in-flight wrapper materialization failure (lines 2609
 
 		failingWrapper.___materialize().catch(() => {});
 
-		const proxy = failingWrapper.createProxy();
+		const proxy = failingWrapper.___createProxy();
 
 		// Queue multiple calls
 		const calls = [proxy(1), proxy(2), proxy(3)];
@@ -411,7 +411,7 @@ describe("unified-wrapper: lazy apply trap starts materialization itself (line 2
 		expect(lazyWrapper.____slothletInternal.state.inFlight).toBe(false);
 		expect(lazyWrapper.____slothletInternal.state.materialized).toBe(false);
 
-		const proxy = lazyWrapper.createProxy();
+		const proxy = lazyWrapper.___createProxy();
 
 		// In the apply trap:
 		// 1. mode=lazy && !materialized && !inFlight → calls ___materialize() (line 2524)
@@ -439,7 +439,7 @@ describe("unified-wrapper: lazy apply trap starts materialization itself (line 2
 			}
 		});
 
-		const proxy = lazyWrapper.createProxy();
+		const proxy = lazyWrapper.___createProxy();
 		const result = await proxy(10, 32);
 		expect(result).toBe(42);
 	});
@@ -486,7 +486,7 @@ describe("unified-wrapper: in-flight, null contextManager, impl=function (line 2
 		slothletInst.contextManager = null;
 
 		try {
-			const proxy = callableWrapper.createProxy();
+			const proxy = callableWrapper.___createProxy();
 			// Calling while inFlight + null contextManager → line 2543 fires
 			const result = await proxy(3, 4);
 			expect(result).toBe(7);
@@ -527,7 +527,7 @@ describe("unified-wrapper: in-flight, wrapper.contextManager set, impl={default:
 		});
 
 		// Set a wrapper-level contextManager (not slothlet-level)
-		// line 2546 checks wrapper.contextManager (not wrapper.slothlet.contextManager)
+		// line 2546 checks wrapper.contextManager (not wrapper.____slothlet.contextManager)
 		const mockContextManager = {
 			runInContext: (_id, fn, thisArg, args, ____wrapper) => fn.apply(thisArg, args)
 		};
@@ -542,7 +542,7 @@ describe("unified-wrapper: in-flight, wrapper.contextManager set, impl={default:
 		slothletInst.contextManager = null;
 
 		try {
-			const proxy = callableWrapper.createProxy();
+			const proxy = callableWrapper.___createProxy();
 			// Calling while inFlight + wrapper.contextManager set + impl.default=fn → line 2547 fires
 			const result = await proxy(3, 4);
 			expect(result).toBe(12);

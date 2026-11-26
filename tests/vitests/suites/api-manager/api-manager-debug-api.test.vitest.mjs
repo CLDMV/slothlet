@@ -55,7 +55,7 @@ import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helpe
 function getSlInstance(api, prop = "math") {
 	const wrapper = resolveWrapper(api[prop]);
 	if (!wrapper) throw new Error(`resolveWrapper(api.${prop}) returned null`);
-	return wrapper.slothlet;
+	return wrapper.____slothlet;
 }
 
 // This suite intentionally enables config.debug.api=true for branch coverage.

@@ -53,7 +53,7 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 function getSlInstance(api, prop = "math") {
 	const wrapper = resolveWrapper(api[prop]);
 	if (!wrapper) throw new Error(`resolveWrapper(api.${prop}) returned null`);
-	return wrapper.slothlet;
+	return wrapper.____slothlet;
 }
 
 // ---------------------------------------------------------------------------
@@ -432,7 +432,7 @@ describe("invalidateSpeculativeWrappers — recursively invalidates every wrappe
 			moduleID: "m",
 			initialImpl: function child2fn() {}
 		});
-		const tree = { child1: child1.createProxy(), nested: { child2: child2.createProxy() } };
+		const tree = { child1: child1.___createProxy(), nested: { child2: child2.___createProxy() } };
 
 		expect(child1.____slothletInternal.invalid).toBe(false);
 		expect(child2.____slothletInternal.invalid).toBe(false);
@@ -476,7 +476,7 @@ describe("invalidateSpeculativeWrappers — recursively invalidates every wrappe
 		// Mirrors ___adoptImplChildren()'s own adoption shape exactly, so the child is a real own
 		// property of the PARENT WRAPPER ITSELF (not of some separate plain-object container).
 		Object.defineProperty(parentWrapper, "child", {
-			value: childWrapper.createProxy(),
+			value: childWrapper.___createProxy(),
 			writable: false,
 			enumerable: true,
 			configurable: true
@@ -484,7 +484,7 @@ describe("invalidateSpeculativeWrappers — recursively invalidates every wrappe
 
 		expect(childWrapper.____slothletInternal.invalid).toBe(false);
 
-		apiManager.invalidateSpeculativeWrappers(parentWrapper.createProxy());
+		apiManager.invalidateSpeculativeWrappers(parentWrapper.___createProxy());
 
 		expect(parentWrapper.____slothletInternal.invalid).toBe(true);
 		expect(childWrapper.____slothletInternal.invalid).toBe(true);
@@ -522,7 +522,7 @@ describe("deletePath — permanently invalidates a removed wrapper's still-in-fl
 				setImpl(function realImpl() {});
 			}
 		});
-		const root = { thing: wrapper.createProxy() };
+		const root = { thing: wrapper.___createProxy() };
 
 		const matPromise = wrapper.___materialize();
 		expect(wrapper.____slothletInternal.state.inFlight).toBe(true);

@@ -81,7 +81,7 @@ async function make(config, collision = "merge") {
 		permissions: { mode: "on" },
 		api: { collision: { mode: { api: collision } } }
 	});
-	const handlers = resolveWrapper(api.ping).slothlet.handlers;
+	const handlers = resolveWrapper(api.ping).____slothlet.handlers;
 	const owner = (path) => handlers.ownership.getCurrentOwner(path)?.moduleID ?? null;
 	return { api, handlers, owner };
 }
