@@ -566,7 +566,6 @@ export function internals(consumer) {
 			"lib/handlers/context-live",
 			"lib/handlers/frame-placement",
 			"lib/handlers/unified-wrapper",
-			"lib/handlers/unified-wrapper/base",
 			"lib/runtime/runtime-livebindings",
 			"slothlet"
 		])

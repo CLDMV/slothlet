@@ -24,9 +24,7 @@
  *   table once the chain is complete ({@link WrapperBase.linkLayer}), and is recorded as a layer ({@link WrapperBase.layer});
  * - `UnifiedWrapper` registers the finished chain once, with a token only its own file holds
  *   ({@link WrapperBase.register}). That closes the table and hands it to each class in the registered chain, and to no
- *   other;
- * - after that the table is reachable only through {@link WrapperBase#___methods}, which a genuine wrapper answers to the
- *   holder of the token.
+ *   other. That handoff is the only way to the table: no wrapper hands it out afterwards.
  *
  * Code that loads before slothlet and registers, defines or links first makes slothlet's own registration throw, so a
  * forged chain fails loudly instead of running beside the real one.
@@ -37,12 +35,7 @@ import { ComponentBase } from "#factories/component-base";
 import { DEFAULT_CLOCK } from "#helpers/clock";
 import { listPush, Objects, Reflect, WeakMap, WeakMapMethods, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
 import { ownBindingsRefusal } from "#helpers/instance-imports";
-import { internals as trustedRootInternals } from "#handlers/trusted-root";
 
-const trustedRootOwn = trustedRootInternals("lib/handlers/unified-wrapper/base");
-
-/** The token the chain was registered with. @type {symbol|undefined} */
-let wrapperToken;
 /** The registered class (`UnifiedWrapper`). @type {Function|undefined} */
 let wrapperClass;
 /**
@@ -201,7 +194,6 @@ export class WrapperBase {
 			listPush(chain, current);
 		}
 		wrapperClass = cls;
-		wrapperToken = token;
 		const groups = Objects.keys(methods);
 		for (let i = 0; i < groups.length; i++) Objects.freeze(methods[groups[i]]);
 		Objects.freeze(methods);
@@ -209,15 +201,5 @@ export class WrapperBase {
 			const take = WeakMapMethods.get(linkers, chain[i]);
 			if (take !== undefined) take(methods, cls);
 		}
-	}
-
-	/**
-	 * The method table, for the holder of the registration token, asked of a genuine wrapper.
-	 * @param {symbol} token - The registration token.
-	 * @returns {object} The table.
-	 */
-	___methods(token) {
-		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, this) || wrapperToken === undefined || token !== wrapperToken) throw refusal();
-		return methods;
 	}
 }
