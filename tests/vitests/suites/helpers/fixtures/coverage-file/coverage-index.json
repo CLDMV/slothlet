@@ -1,0 +1,18 @@
+{
+	"version": 1,
+	"commit": "1111111111111111111111111111111111111111",
+	"files": {
+		"src/lib/helpers/module-sort.mjs": {
+			"sortModules": ["tests/vitests/suites/modules/sort.test.vitest.mjs"],
+			"defaultModuleComparator": [
+				"tests/vitests/suites/modules/coverage-gaps.test.vitest.mjs",
+				"tests/vitests/suites/modules/sort.test.vitest.mjs"
+			]
+		},
+		"src/lib/helpers/segments.mjs": {
+			"segmentsOf": [],
+			"join@12": ["tests/vitests/suites/rules/rule-coverage.test.vitest.mjs"],
+			"join@40": ["tests/vitests/suites/modules/sort.test.vitest.mjs"]
+		}
+	}
+}
