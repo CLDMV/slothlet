@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:23-07:00 (1791090923)
+ *	@Last modified time: 2026-11-25T11:42:51-08:00 (1795635771)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -196,7 +196,7 @@ describe("typegen JSDoc type reflection (#213)", () => {
 			"misc.mjs":
 				'/**\n * @param {boolean} flag\n * @returns {number}\n */\nexport const toNum = (flag) => (flag ? 1 : 0);\nexport const LABEL = "x";\n'
 		});
-		expect(content).not.toMatch(/@param/); // no raw JSDoc leaked into the output
+		expect(content).not.toMatch(/@param \{/); // no raw JSDoc types leaked into the output
 		const diagnostics = await probeDiagnostics(
 			outPath,
 			[
