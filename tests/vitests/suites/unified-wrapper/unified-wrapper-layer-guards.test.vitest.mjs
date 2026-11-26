@@ -89,12 +89,16 @@ describe("unified-wrapper layers > the chain is built once", () => {
 		expect(outcome(() => new below(wrapper.slothlet))).toBe(REFUSED);
 	});
 
-	it("hands the method table to no one without the registration token, and to nothing but a genuine wrapper", () => {
+	it("hands the method table out only at registration: a second registration and a wrong token are refused", () => {
 		expect(wrapper).not.toBeNull();
-		expect(outcome(() => wrapper.___methods(Symbol("slothlet.wrapperToken")))).toBe(REFUSED);
-		expect(outcome(() => wrapper.___methods())).toBe(REFUSED);
+		// A second registration of the real chain, with a token of the same description, is refused.
+		expect(outcome(() => UnifiedWrapper.register(UnifiedWrapper, Symbol("slothlet.wrapperToken")))).toBe(REFUSED);
+		// A token that is no symbol, or none at all, is refused.
+		expect(outcome(() => UnifiedWrapper.register(UnifiedWrapper, "slothlet.wrapperToken"))).toBe(REFUSED);
+		expect(outcome(() => UnifiedWrapper.register(UnifiedWrapper))).toBe(REFUSED);
+		// No wrapper hands the table out afterwards, genuine or forged.
 		const forged = Object.create(UnifiedWrapper.prototype);
-		expect(outcome(() => forged.___methods(Symbol("slothlet.wrapperToken")))).toBe(REFUSED);
+		expect(["___methods" in wrapper, "___methods" in forged]).toEqual([false, false]);
 	});
 });
 
