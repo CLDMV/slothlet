@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T00:00:00-08:00 (1794988800)
+ *	@Last modified time: 2026-11-25T10:51:25-08:00 (1795632685)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview Where Node keeps what an `AsyncLocalStorage` holds for an async resource, found by looking.
  *
  * @description
- * While `AsyncContextFrame` is off (Node 22's default, or a later Node run with `--no-async-context-frame`), Node keeps
+ * While `AsyncContextFrame` is off (Node run with `--no-async-context-frame`), Node keeps
  * each storage's value for an async resource on the resource itself. Where depends on the Node:
  *
  * - directly under the storage's own `kResourceStore` symbol (`resource[storage.kResourceStore]`);

@@ -404,6 +404,8 @@ api.slothlet.hook.on("{math,database}.*:before", handler);
 api.slothlet.hook.on("*.{add,update,delete}:after", handler);
 ```
 
+A pattern that names `__proto__`, `constructor` or `prototype` as a segment (including inside braces, as in `{a,constructor}.x`) is refused with `API_PATH_INVALID`, wherever a pattern is taken: `hook.on()`, `remove`/`enable`/`disable`/`list` filters, `hook.pattern.enable()`/`disable()` and the configured `hook.pattern`. No api path can hold those segments, so the pattern could never match; other names such as `toString` and `valueOf` are ordinary api names and stay allowed.
+
 ### Diagnostic: Test a Pattern
 
 ```javascript

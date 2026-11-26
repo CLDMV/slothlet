@@ -750,6 +750,12 @@ function promiseSettled(promise) {
 
 export class LiveContextManager {
 	/**
+	 * Runtime identity, checked instead of the class name (a minified bundle renames classes).
+	 * @type {"live"}
+	 */
+	kind = "live";
+
+	/**
 	 * The active-instance field as last written. Calls restore it in settle order, not entry order, so
 	 * once calls overlap it can name an instance none of whose calls is running; readers go through
 	 * {@link LiveContextManager#currentInstanceID}, which resolves past that.

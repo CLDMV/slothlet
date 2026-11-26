@@ -397,11 +397,13 @@ function scheduleMacrotask(fn, hosts = MACROTASK_HOSTS, clock = undefined) {
 		return;
 	}
 	if (typeof Channel === "function") {
+		// Pinned here like the other two branches, not left to whatever the port's `onmessage` setter does with it.
+		const pinned = pinToCurrentCaller(fn);
 		const channel = new Channel();
 		channel.port1.onmessage = () => {
 			// Closing the port releases it; in Node an open port would keep the event loop alive.
 			channel.port1.close();
-			fn();
+			pinned();
 		};
 		channel.port2.postMessage(null);
 		return;

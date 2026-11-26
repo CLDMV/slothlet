@@ -692,12 +692,7 @@ export class ModuleManager extends ComponentBase {
 		for (let i = 0; i < resolved.length; i++) {
 			const item = resolved[i];
 			try {
-				const mountResult = await this.#mountSingle(
-					item,
-					collisionMode,
-					(versionConfigs ? MapMethods.get(versionConfigs, i) : undefined) ?? null,
-					writer
-				);
+				const mountResult = await this.#mountSingle(item, collisionMode, MapMethods.get(versionConfigs, i) ?? null, writer);
 				listPush(mounted, mountResult);
 			} catch (err) {
 				if (onFailure === "throw") {
@@ -741,12 +736,7 @@ export class ModuleManager extends ComponentBase {
 				if (i >= resolved.length) return;
 				const item = resolved[i];
 				try {
-					const mountResult = await this.#mountSingle(
-						item,
-						collisionMode,
-						(versionConfigs ? MapMethods.get(versionConfigs, i) : undefined) ?? null,
-						writer
-					);
+					const mountResult = await this.#mountSingle(item, collisionMode, MapMethods.get(versionConfigs, i) ?? null, writer);
 					listPush(mounted, mountResult);
 				} catch (err) {
 					if (onFailure === "best-effort") {
