@@ -87,6 +87,12 @@ describe.each(CONFIGS)("Wrapper member names > $mode / $runtime / permissions $p
 	const loaded = async (node) => (mode === "lazy" ? await node : node);
 
 	/**
+	 * The names the host's listing of a node shows: with permissions on, a `_` member is module-private and left out.
+	 * @type {string[]}
+	 */
+	const hostListed = permissions ? NAMES.filter((name) => !name.startsWith("_")) : NAMES;
+
+	/**
 	 * Check a node holding every name: none was called while the node was worked, each reads as a member and answers its
 	 * own value (to the host, and to the module's own code through `self`), and no call was handed the instance. With
 	 * permissions on, a `_` member is module-private: the host is refused it, the module's own code reads it.
@@ -135,7 +141,7 @@ describe.each(CONFIGS)("Wrapper member names > $mode / $runtime / permissions $p
 
 		expect(await holder.touch()).toBe(3);
 		expect(box.zeta.leaf).toBe(1);
-		expect(Object.keys(box)).toEqual(expect.arrayContaining([...NAMES, "zeta"]));
+		expect(Object.keys(box)).toEqual(expect.arrayContaining([...hostListed, "zeta"]));
 
 		await expectOrdinaryMembers(box, holder, "nested");
 	});
@@ -149,7 +155,7 @@ describe.each(CONFIGS)("Wrapper member names > $mode / $runtime / permissions $p
 		const target = await loaded(writer.target);
 		expect(target.first.leaf).toBe(1);
 		expect(target.later.nested.leaf).toBe(2);
-		expect(Object.keys(target)).toEqual(expect.arrayContaining([...NAMES, "first", "later"]));
+		expect(Object.keys(target)).toEqual(expect.arrayContaining([...hostListed, "first", "later"]));
 
 		await expectOrdinaryMembers(target, writer, "runtime");
 	});
