@@ -24444,6 +24444,31 @@ export function readApiMember(container, key) {
 }
 
 /**
+ * Whether an api node still holds any member, as the node itself holds them: the members on its wrapper and its
+ * impl's own enumerable keys, whoever is running. Composition code deciding whether a namespace is empty asks this
+ * instead of listing the node through a read: a listing made while a module's call is executing goes through that
+ * module's view, which withholds the members the module may not read and resolves who is reading once for every
+ * member it describes (#625). A plain object's own enumerable keys are its members.
+ * @param {object|Function} node - Api node (a wrapper proxy) or plain object.
+ * @returns {boolean} True when the node holds at least one member.
+ * @internal
+ *
+ * @example
+ * holdsApiMembers(api.plugins); // false once its last member is removed
+ */
+export function holdsApiMembers(node) {
+	const wrapper = resolveWrapper(node);
+	if (!wrapper) return Objects.keys(node).length > 0;
+	const keys = Objects.keys(wrapper);
+	for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) if (!isFrameworkReservedKey(keys[ofIndex])) return true;
+	const impl = wrapper.____slothletInternal.impl;
+	if (impl === null || (typeof impl !== "object" && typeof impl !== "function")) return false;
+	return runtime_onImpl(wrapper, (held) =>
+		ArrayMethods.some(Objects.keys(held), (key) => !SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, key))
+	);
+}
+
+/**
  * {@link readApiMember}, loading an unloaded lazy wrapper first when `key` is a name the wrapper
  * answers itself — the one case where an unloaded node cannot tell its own answer from a member of
  * that name (#571). Any other key is read without loading.
