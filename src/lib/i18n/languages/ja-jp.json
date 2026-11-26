@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "配列に空の文字列セグメントが含まれています",
 		"API_PATH_REASON_RESERVED_NAME": "予約名 (slothlet, shutdown, destroy) と衝突しています",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "プロトタイプチェーンを汚染する安全でないセグメント (__proto__, constructor, prototype) が含まれています",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "どの API パスにも含められないセグメントを指定しています (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "'then' セグメントが含まれており、その名前空間が await 可能になってしまいます",
 		"API_PATH_REASON_INVALID_TYPE": "文字列、文字列の配列、空の文字列 (ルート)、または null/undefined (ルート) である必要があります",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "空のパスセグメントが含まれています",

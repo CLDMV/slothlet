@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "le tableau contient des segments de chaînes vides",
 		"API_PATH_REASON_RESERVED_NAME": "entre en conflit avec les noms réservés (slothlet, shutdown, destroy)",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "contient un segment non sécurisé (__proto__, constructor, prototype) qui polluerait la chaîne de prototypes",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "nomme un segment qu'aucun chemin d'API ne peut contenir (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "contient un segment 'then', qui rendrait cet espace de noms awaitable",
 		"API_PATH_REASON_INVALID_TYPE": "doit être une chaîne, un tableau de chaînes, une chaîne vide (racine) ou null/undefined (racine)",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "contient des segments de chemin vides",

@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "array contains empty string segments",
 		"API_PATH_REASON_RESERVED_NAME": "conflicts with reserved names (slothlet, shutdown, destroy)",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "contains an unsafe segment (__proto__, constructor, prototype) that would pollute the prototype chain",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "names a segment that no api path can hold (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "contains a 'then' segment, which would make that namespace awaitable",
 		"API_PATH_REASON_INVALID_TYPE": "must be a string, array of strings, empty string (root), or null/undefined (root)",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "contains empty path segments",
