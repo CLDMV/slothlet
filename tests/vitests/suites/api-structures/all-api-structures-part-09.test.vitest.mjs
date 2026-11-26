@@ -1,0 +1,27 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/api-structures/all-api-structures-part-09.test.vitest.mjs
+ *	@Date: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview API structures, lazy against eager, for part 9 of 12 of the api_tests folders.
+ *
+ * @description
+ * The cases and assertions live in `tests/vitests/setup/all-api-structures.mjs`; this file runs its part of the sorted
+ * fixture folders (a contiguous slice), under every matrix pair.
+ * @module tests/vitests/suites/api-structures/all-api-structures-part-09
+ */
+
+import { describeApiStructures } from "../../setup/all-api-structures.mjs";
+
+describeApiStructures(9);
