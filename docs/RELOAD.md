@@ -117,7 +117,7 @@ await api.calc(4); // 8
 await api.calc.half(4); // 2
 
 // Shorthand: when the inline object carries an `exports` key, its sibling keys ARE options
-// (here a custom moduleID), exactly as if passed third. `exports` must be present.
+// (here a custom module `id`), exactly as if passed third. `exports` must be present.
 await api.slothlet.api.add("svc", { exports: { ping: () => "pong" }, id: "svc-id" });
 
 // Mount at root ("" or null) — exports land directly on api.*
@@ -220,7 +220,7 @@ await api.slothlet.api.reload(pathOrModuleID, options);
 
 | Form        | Example                             | Behavior                                                   |
 | ----------- | ----------------------------------- | ---------------------------------------------------------- |
-| Base module | `null` / `undefined` / `""` / `"."` | Reloads all initially-loaded `dir` modules                 |
+| Base module | `null` / `undefined` / `""` / `"."` | Reloads all initially-loaded `base` modules                |
 | API path    | `"plugins"`                         | Reloads all caches that contribute to or include that path |
 | moduleID    | `"core-plugins"`                    | Reloads that single cache entry                            |
 
@@ -382,7 +382,7 @@ await api.slothlet.api.reload();
 
 Replay faithfully reproduces the full runtime state, including operations that are not plain path adds:
 
-- **Scoped removals** (`remove(moduleID, apiPath)`) are recorded with their `moduleID` and replayed as the two-argument form, so a scoped removal stays applied after a reload instead of the module reappearing. A module's id survives a reload — the `add` op records `options.moduleID` and it is reused on re-add — which is what lets the scoped remove resolve the same module on replay.
+- **Scoped removals** (`remove(apiPath, id)`) are recorded with their module id and replayed as the two-argument form, so a scoped removal stays applied after a reload instead of the module reappearing. A module's id survives a reload — the `add` op records `options.id` and it is reused on re-add — which is what lets the scoped remove resolve the same module on replay.
 - **Synthetic / in-memory adds** (an inline function, an export map, or the `{ exports, … }` shorthand) record their original inline value as the replay source, so `reload()` re-runs the identical synthetic add; the mount is not lost on a base reload and stays removable by its `moduleID` afterward.
 
 Targeted reloads (by path or moduleID) rebuild only the affected cache entries and do not replay operation history - they operate on the existing namespace tree in-place.
