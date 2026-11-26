@@ -204,8 +204,9 @@ const PER_FILE_HEAP_OVERRIDES = [
  * seconds, overrides). The runner's own default of 30 minutes is too close for the slowest suites on a
  * 4-core CI runner: in a plain (no coverage) Node 22 run on next, all-api-structures took 23.5 minutes and
  * api-root-integrity, reload-held-code and permissions-sync-leaf-thenable 12–15, and coverage runs are
- * slower. The idle limit stays at the runner's 10 minutes: every file prints as its tests finish, and the
- * longest silence inside one file in that run was under 3 minutes.
+ * slower. Outside coverage the idle limit stays at the runner's 10 minutes: every file prints as its tests
+ * finish, and the longest silence inside one file in that run was under 3 minutes. A coverage run prints
+ * nothing per file, so it turns the idle limit off.
  * @type {number}
  */
 const FILE_TIMEOUT_MS = 60 * 60 * 1000;
@@ -491,6 +492,12 @@ function buildRunOptions(parsed) {
 	// An explicit option would shadow VITEST_FILE_TIMEOUT, so only set it when the env var is absent.
 	if (!process.env.VITEST_FILE_TIMEOUT) {
 		runOptions.fileTimeoutMs = FILE_TIMEOUT_MS;
+	}
+
+	// A coverage run writes each file's results to a blob instead of printing them, so a file that runs
+	// longer than the idle limit looks silent and is killed. Only the overall time limit applies there.
+	if ((parsed.coverageQuiet || hasCoverage) && !process.env.VITEST_FILE_IDLE_TIMEOUT) {
+		runOptions.fileIdleTimeoutMs = 0;
 	}
 
 	if (maxOldSpaceMb && Number.isFinite(maxOldSpaceMb)) {
