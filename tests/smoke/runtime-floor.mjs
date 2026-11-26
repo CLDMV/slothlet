@@ -7,19 +7,18 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T00:00:00-08:00 (1794902400)
+ *	@Last modified time: 2026-11-25T10:51:44-08:00 (1795632704)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Plain-Node smoke check for slothlet's runtime floor (`engines.node`).
+ * @fileoverview Plain-Node smoke check for slothlet's Node floor (`engines.node`).
  *
- * CI's test matrix starts at the dev floor (`devEngines`), because vitest and the build toolchain
- * need a newer Node than the package itself. This script needs nothing but Node and the package, so
- * it is run by hand on the runtime floor (Node 22.15.0) to cover the versions in between. It loads slothlet through the
- * ESM and CJS entries, builds a small api in eager and lazy mode, calls leaves (one reaching a
+ * This script needs nothing but Node and the package (no vitest, no build toolchain), so it can be
+ * run by hand on any Node binary, the exact floor (Node 24.15.0) included, against src or the built
+ * dist. It loads slothlet through the ESM and CJS entries, builds a small api in eager and lazy mode, calls leaves (one reaching a
  * sibling through `self`), imports `@cldmv/slothlet/runtime`, boots once with permissions on, and
  * shuts every instance down. It also runs an AsyncContextFrame canary: with AsyncContextFrame off,
  * an AsyncLocalStorage store is reachable from the current async resource; with it on, it is not.
@@ -100,8 +99,8 @@ function reaches(value, marker, depth = 0, seen = new Set()) {
  * AsyncContextFrame canary. Without AsyncContextFrame, an AsyncLocalStorage store is stored on the
  * current async resource (and on promises created inside `run`), so it is reachable from
  * `executionAsyncResource()`. With AsyncContextFrame on it lives in the frame instead. The search is
- * shape-agnostic: Node 22 keys the store by `Symbol(kResourceStore)`, newer lines nest it under
- * `Symbol(kAsyncLocalStorageContext)`.
+ * shape-agnostic: older Node 24 releases key the store by `Symbol(kResourceStore)`, newer ones nest it
+ * under `Symbol(kAsyncLocalStorageContext)`.
  * @returns {{ exposed: boolean, resource: boolean, promise: boolean, asyncResource: boolean }}
  */
 function probeAsyncContextFrame() {
@@ -117,14 +116,12 @@ function probeAsyncContextFrame() {
 }
 
 /**
- * Whether this process runs with AsyncContextFrame on: opt-in by flag before Node 24, default from 24.
+ * Whether this process runs with AsyncContextFrame on: the default on every supported Node, off with
+ * `--no-async-context-frame`.
  * @returns {boolean}
  */
 function asyncContextFrameEnabled() {
-	const major = Number(process.versions.node.split(".")[0]);
-	if (flags.includes("--no-async-context-frame")) return false;
-	if (flags.includes("--experimental-async-context-frame")) return true;
-	return major >= 24;
+	return !flags.includes("--no-async-context-frame");
 }
 
 try {

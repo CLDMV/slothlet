@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "एरे में खाली स्ट्रिंग खंड हैं",
 		"API_PATH_REASON_RESERVED_NAME": "आरक्षित नामों (slothlet, shutdown, destroy) के साथ संघर्ष",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "एक असुरक्षित सेगमेंट (__proto__, constructor, prototype) शामिल है जो प्रोटोटाइप श्रृंखला को दूषित करेगा",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "ऐसे सेगमेंट का नाम देता है जो किसी एपीआई पाथ में नहीं हो सकता (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "इसमें 'then' खंड है, जो उस नेमस्पेस को await योग्य बना देगा",
 		"API_PATH_REASON_FRAMEWORK_SEGMENT": "इसमें तीन अंडरस्कोर से शुरू होने वाला खंड है, जो फ़्रेमवर्क के अपने सदस्यों के लिए आरक्षित नाम है",
 		"API_PATH_REASON_INVALID_TYPE": "स्ट्रिंग, स्ट्रिंग का एरे, खाली स्ट्रिंग (रूट), या null/undefined (रूट) होना चाहिए",
@@ -560,7 +561,6 @@
 		"PERMISSION_BASELINE_REASON_CSP_BLOB_ALLOWED": "पेज blob: URL की स्क्रिप्ट चलाता है: उसकी Content Security Policy इनकी अनुमति देती है, या कोई नीति नहीं है।",
 		"PERMISSION_BASELINE_REASON_CSP_DATA_ALLOWED": "पेज data: URL की स्क्रिप्ट चलाता है: उसकी Content Security Policy इनकी अनुमति देती है, या कोई नीति नहीं है।",
 		"PERMISSION_BASELINE_REASON_VITEST_PLUGIN_ABSENT": "vitest कॉन्फ़िग में slothlet के @cldmv/slothlet/vite प्लगइन के बिना vitest के तहत चल रहा है।",
-		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_ENABLE": "Node का AsyncContextFrame बंद है, इसलिए Node किसी AsyncLocalStorage का मान उन एसिंक संसाधनों पर रखता है जिन तक मॉड्यूल कोड पहुँच सकता है। Node को {flag} के साथ शुरू करें।",
 		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_REMOVE_FLAG": "Node का AsyncContextFrame बंद है, इसलिए Node किसी AsyncLocalStorage का मान उन एसिंक संसाधनों पर रखता है जिन तक मॉड्यूल कोड पहुँच सकता है। Node के फ़्लैग और {env} से {flag} हटाएँ।",
 		"INVALID_CONFIG_UNKNOWN_KEY": "{where} में अज्ञात कुंजी '{key}'। यह slothlet v4 का कोई विकल्प नहीं है। [{path|list}]",
 		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "कुंजी में टाइपिंग की गलती जाँचें। slothlet v3 के लिए लिखा कोड npx @cldmv/slothlet-migrate से v4 के नामों पर ले जाया जा सकता है।"

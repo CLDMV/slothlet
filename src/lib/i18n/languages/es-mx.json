@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "el array contiene segmentos de cadena vacíos",
 		"API_PATH_REASON_RESERVED_NAME": "entra en conflicto con nombres reservados (slothlet, shutdown, destroy)",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "contiene un segmento no seguro (__proto__, constructor, prototype) que contaminaría la cadena de prototipos",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "nombra un segmento que ninguna ruta de la API puede contener (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "contiene un segmento 'then', que haría que ese espacio de nombres fuera awaitable",
 		"API_PATH_REASON_FRAMEWORK_SEGMENT": "contiene un segmento que empieza con tres guiones bajos, un nombre reservado para los miembros propios del framework",
 		"API_PATH_REASON_INVALID_TYPE": "debe ser una cadena, un array de cadenas, cadena vacía (raíz) o null/undefined (raíz)",
@@ -560,7 +561,6 @@
 		"PERMISSION_BASELINE_REASON_CSP_BLOB_ALLOWED": "la página ejecuta scripts de URL blob:: su Content Security Policy los permite, o no tiene ninguna.",
 		"PERMISSION_BASELINE_REASON_CSP_DATA_ALLOWED": "la página ejecuta scripts de URL data:: su Content Security Policy los permite, o no tiene ninguna.",
 		"PERMISSION_BASELINE_REASON_VITEST_PLUGIN_ABSENT": "se ejecuta con vitest sin el plugin @cldmv/slothlet/vite de slothlet en la configuración de vitest.",
-		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_ENABLE": "AsyncContextFrame de Node está desactivado, así que Node guarda lo que contiene un AsyncLocalStorage en recursos asíncronos que el código de un módulo puede alcanzar. Inicia Node con {flag}.",
 		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_REMOVE_FLAG": "AsyncContextFrame de Node está desactivado, así que Node guarda lo que contiene un AsyncLocalStorage en recursos asíncronos que el código de un módulo puede alcanzar. Quita {flag} de las opciones de Node y de {env}.",
 		"INVALID_CONFIG_UNKNOWN_KEY": "Clave desconocida '{key}' en {where}. No es una opción que tenga slothlet v4. [{path|list}]",
 		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "Revisa si la clave tiene un error de escritura. El código escrito para slothlet v3 se puede pasar a los nombres de v4 con npx @cldmv/slothlet-migrate."

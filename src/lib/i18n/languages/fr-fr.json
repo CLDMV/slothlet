@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "le tableau contient des segments de chaînes vides",
 		"API_PATH_REASON_RESERVED_NAME": "entre en conflit avec les noms réservés (slothlet, shutdown, destroy)",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "contient un segment non sécurisé (__proto__, constructor, prototype) qui polluerait la chaîne de prototypes",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "nomme un segment qu'aucun chemin d'API ne peut contenir (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "contient un segment 'then', qui rendrait cet espace de noms awaitable",
 		"API_PATH_REASON_FRAMEWORK_SEGMENT": "contient un segment commençant par trois traits de soulignement, un nom réservé aux membres propres du framework",
 		"API_PATH_REASON_INVALID_TYPE": "doit être une chaîne, un tableau de chaînes, une chaîne vide (racine) ou null/undefined (racine)",
@@ -560,7 +561,6 @@
 		"PERMISSION_BASELINE_REASON_CSP_BLOB_ALLOWED": "la page exécute des scripts d'URL blob: : sa Content Security Policy les autorise, ou elle n'en a pas.",
 		"PERMISSION_BASELINE_REASON_CSP_DATA_ALLOWED": "la page exécute des scripts d'URL data: : sa Content Security Policy les autorise, ou elle n'en a pas.",
 		"PERMISSION_BASELINE_REASON_VITEST_PLUGIN_ABSENT": "exécution sous vitest sans le plugin @cldmv/slothlet/vite de slothlet dans la configuration de vitest.",
-		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_ENABLE": "AsyncContextFrame de Node est désactivé : Node garde le contenu d'un AsyncLocalStorage sur des ressources asynchrones que le code d'un module peut atteindre. Démarrez Node avec {flag}.",
 		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_REMOVE_FLAG": "AsyncContextFrame de Node est désactivé : Node garde le contenu d'un AsyncLocalStorage sur des ressources asynchrones que le code d'un module peut atteindre. Retirez {flag} des options de Node et de {env}.",
 		"INVALID_CONFIG_UNKNOWN_KEY": "Clé inconnue '{key}' dans {where}. Ce n'est pas une option de slothlet v4. [{path|list}]",
 		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "Vérifiez que la clé n'a pas de faute de frappe. Le code écrit pour slothlet v3 peut passer aux noms de v4 avec npx @cldmv/slothlet-migrate."
