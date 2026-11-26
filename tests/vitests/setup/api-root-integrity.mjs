@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
+ *	@Last modified time: 2026-11-25T20:27:06-08:00 (1795667226)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,11 +25,11 @@
  * host handed it and through `self.slothlet.diag.api()`, to `zz` and to the root of a fresh instance, and the root's
  * answer must be the twin's: with no write rule, with write rules granting each member, with the permission system off
  * and with it disabled. The host's own changes are checked against a plain object's. Eager and lazy mode, the async and
- * live runtime, both attributions.
+ * live runtime, both attributions (the off and disabled arms under the first only: they set no attribution).
  *
  * The cases are spread over the `suites/proxies/api-root-integrity-*.test.vitest.mjs` files by root and mode (see
  * {@link describeApiRootIntegrity}) so each file finishes in a few minutes; together they run every case the single
- * file ran.
+ * file ran, except the off and disabled arms' repeat under the second attribution.
  * @module tests/vitests/setup/api-root-integrity
  */
 
@@ -76,6 +76,14 @@ const PERMISSIONS = {
 	"the permission system off": () => undefined,
 	"the permission system disabled": () => ({ mode: "disabled" })
 };
+
+/**
+ * The permission configs that carry no attribution: with the permission system off or disabled nothing is attributed (the
+ * attribution is only read while permissions are on), and these configs do not set it, so both attributions build the
+ * same instance. They run under the first attribution only.
+ * @type {Set<string>}
+ */
+const ATTRIBUTION_FREE = new Set(["the permission system off", "the permission system disabled"]);
 
 /**
  * Build an instance over a root, with the same folder mounted again at `zz` and the writer at `w`.
@@ -212,50 +220,53 @@ export function describeApiRootIntegrity({ roots, modes = MODES, runtimes = RUNT
 				api = null;
 			});
 
-			describe.each(Object.keys(PERMISSIONS))("%s", (name) => {
-				const permissions = PERMISSIONS[name](attribution);
+			describe.each(Object.keys(PERMISSIONS).filter((name) => attribution === ATTRIBUTIONS[0] || !ATTRIBUTION_FREE.has(name)))(
+				"%s",
+				(name) => {
+					const permissions = PERMISSIONS[name](attribution);
 
-				it.each(TWIN_CHANGES.flatMap((change) => ["given", "api"].map((via) => [change, via])))(
-					"a module's %s through the %s api answers at the root as at its twin one level down",
-					async (change, via) => {
-						api = await build(root, { mode, runtime, permissions });
-						const twin = api.w.ops.change(change, via, "zz", api);
-						const atRoot = api.w.ops.change(change, via, "", api);
-						expect(atRoot).toEqual(twin);
-						// The root is left holding what the twin holds.
-						expect(listed(api).sort()).toEqual(listed(api.zz).sort());
-						expect(Object.isExtensible(api)).toBe(Object.isExtensible(api.zz));
-					}
-				);
+					it.each(TWIN_CHANGES.flatMap((change) => ["given", "api"].map((via) => [change, via])))(
+						"a module's %s through the %s api answers at the root as at its twin one level down",
+						async (change, via) => {
+							api = await build(root, { mode, runtime, permissions });
+							const twin = api.w.ops.change(change, via, "zz", api);
+							const atRoot = api.w.ops.change(change, via, "", api);
+							expect(atRoot).toEqual(twin);
+							// The root is left holding what the twin holds.
+							expect(listed(api).sort()).toEqual(listed(api.zz).sort());
+							expect(Object.isExtensible(api)).toBe(Object.isExtensible(api.zz));
+						}
+					);
 
-				it.each(CLOSING_CHANGES.flatMap((change) => ["given", "api"].map((via) => [change, via])))(
-					"a module's %s through the %s api is refused at the root, which holds slothlet's own members, and leaves it open",
-					async (change, via) => {
+					it.each(CLOSING_CHANGES.flatMap((change) => ["given", "api"].map((via) => [change, via])))(
+						"a module's %s through the %s api is refused at the root, which holds slothlet's own members, and leaves it open",
+						async (change, via) => {
+							api = await build(root, { mode, runtime, permissions });
+							const twin = api.w.ops.change(change, via, "zz", api);
+							const atRoot = api.w.ops.change(change, via, "", api);
+							// Refused as at the twin where the twin is refused, and otherwise as a change to slothlet's root function is.
+							expect(atRoot).toEqual("threw" in twin ? twin : api.w.ops.change("setReserved", "self", ""));
+							expect(Object.isExtensible(api)).toBe(true);
+							expect(typeof api.shutdown).toBe("function");
+						}
+					);
+
+					it("a module assigning slothlet's own root function through the api it was handed is refused as through `self`", async () => {
 						api = await build(root, { mode, runtime, permissions });
-						const twin = api.w.ops.change(change, via, "zz", api);
-						const atRoot = api.w.ops.change(change, via, "", api);
-						// Refused as at the twin where the twin is refused, and otherwise as a change to slothlet's root function is.
-						expect(atRoot).toEqual("threw" in twin ? twin : api.w.ops.change("setReserved", "self", ""));
-						expect(Object.isExtensible(api)).toBe(true);
+						expect(api.w.ops.change("setReserved", "given", "", api)).toEqual(api.w.ops.change("setReserved", "self", ""));
 						expect(typeof api.shutdown).toBe("function");
-					}
-				);
+					});
 
-				it("a module assigning slothlet's own root function through the api it was handed is refused as through `self`", async () => {
-					api = await build(root, { mode, runtime, permissions });
-					expect(api.w.ops.change("setReserved", "given", "", api)).toEqual(api.w.ops.change("setReserved", "self", ""));
-					expect(typeof api.shutdown).toBe("function");
-				});
-
-				it("a module setting the root's prototype is refused as at its twin, and otherwise sets it as on an object", async () => {
-					api = await build(root, { mode, runtime, permissions });
-					const twin = api.w.ops.change("setPrototypeOf", "given", "zz", api);
-					const atRoot = api.w.ops.change("setPrototypeOf", "given", "", api);
-					if ("threw" in twin) expect(atRoot).toEqual(twin);
-					// A function root takes it too, on the root, as a function does.
-					else expect(atRoot).toEqual({ same: true, inherited: 5 });
-				});
-			});
+					it("a module setting the root's prototype is refused as at its twin, and otherwise sets it as on an object", async () => {
+						api = await build(root, { mode, runtime, permissions });
+						const twin = api.w.ops.change("setPrototypeOf", "given", "zz", api);
+						const atRoot = api.w.ops.change("setPrototypeOf", "given", "", api);
+						if ("threw" in twin) expect(atRoot).toEqual(twin);
+						// A function root takes it too, on the root, as a function does.
+						else expect(atRoot).toEqual({ same: true, inherited: 5 });
+					});
+				}
+			);
 
 			describe("the host's own changes", () => {
 				it("defines a member on the api, as on an object", async () => {
