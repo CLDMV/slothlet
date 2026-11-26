@@ -25,15 +25,24 @@
  * @module tests/vitests/suites/helpers/function-source-context-patch
  */
 
+import { pathToFileURL } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
 import {
 	disableFunctionSourcePatching,
 	enableFunctionSourcePatching,
 	internals,
 	isFunctionSourcePatch,
-	isFunctionSourcePatched,
-	setFunctionSourceReader
+	isFunctionSourcePatched
 } from "#helpers/function-source-context";
+import { internalLibPath } from "../../setup/internal-resolve.mjs";
+
+let copies = 0;
+
+/**
+ * A fresh copy of `helpers/function-source-context`, for a test that sets its one-shot reader.
+ * @returns {Promise<object>} The copy.
+ */
+const freshCopy = () => import(`${pathToFileURL(internalLibPath("helpers/function-source-context.mjs")).href}?patch=${++copies}`);
 
 const FunctionPrototype = Function.prototype;
 
@@ -58,22 +67,32 @@ describe("function source patch > answering", () => {
 		expect(FunctionPrototype.toString.call(sample)).toBe(SAMPLE_SOURCE);
 	});
 
-	it("answers as before when telling the receiver throws", () => {
-		setFunctionSourceReader(() => {
+	it("answers as before when telling the receiver throws", async () => {
+		const copy = await freshCopy();
+		copy.setFunctionSourceReader(() => {
 			throw new Error("reader failed");
 		});
-		enableFunctionSourcePatching();
-		expect(FunctionPrototype.toString.call(sample)).toBe(SAMPLE_SOURCE);
-		expect(() => FunctionPrototype.toString.call({})).toThrow(TypeError);
+		copy.enableFunctionSourcePatching();
+		try {
+			expect(FunctionPrototype.toString.call(sample)).toBe(SAMPLE_SOURCE);
+			expect(() => FunctionPrototype.toString.call({})).toThrow(TypeError);
+		} finally {
+			copy.disableFunctionSourcePatching();
+		}
 	});
 
-	it("answers the source of the function a stand-in stands for", () => {
+	it("answers the source of the function a stand-in stands for", async () => {
 		const standIn = () => 2;
-		setFunctionSourceReader((value) => (value === standIn ? sample : undefined));
-		enableFunctionSourcePatching();
-		expect(FunctionPrototype.toString.call(standIn)).toBe(SAMPLE_SOURCE);
-		// Asked about itself, the wrapper answers as the function it wraps.
-		expect(FunctionPrototype.toString.call(FunctionPrototype.toString)).toMatch(/\[native code\]/);
+		const copy = await freshCopy();
+		copy.setFunctionSourceReader((value) => (value === standIn ? sample : undefined));
+		copy.enableFunctionSourcePatching();
+		try {
+			expect(FunctionPrototype.toString.call(standIn)).toBe(SAMPLE_SOURCE);
+			// Asked about itself, the wrapper answers as the function it wraps.
+			expect(FunctionPrototype.toString.call(FunctionPrototype.toString)).toMatch(/\[native code\]/);
+		} finally {
+			copy.disableFunctionSourcePatching();
+		}
 	});
 
 	it("does nothing when turned off twice", () => {
