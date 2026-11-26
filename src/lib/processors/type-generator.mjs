@@ -312,7 +312,7 @@ function originType(origin, context) {
 	// TypeScript types `import("x.cjs")` itself as `module.exports` (its `["default"]` is not the same
 	// type under NodeNext or Bundler), so the leading `default` segment is dropped.
 	if (segments[0] === "default" && context.ownership.isCommonJSModule(origin.filePath)) {
-		segments = typeof segments === "string" ? StringMethods.slice(segments, 1) : copyList(segments, 1);
+		segments = copyList(segments, 1);
 	}
 	const access = ArrayMethods.join(
 		mapList(segments, (segment) => `[${JSON.stringify(segment)}]`),

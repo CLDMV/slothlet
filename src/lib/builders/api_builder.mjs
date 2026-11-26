@@ -1234,9 +1234,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				gateShadow(prop, value);
 				return handOut(prop, value, true);
 			}
-			if (real === undefined || real === null) return below(prop) ? viewAt(concatLists(parts, [prop]), undefined, true) : undefined;
-			// A member the node does not hold itself is inherited from the prototype the run gave it, if it gave one.
+			// A member the node does not hold itself is inherited from the prototype the run gave it, if it gave one: a namespace
+			// only the run wrote holds nothing else.
 			const gave = given();
+			if (real === undefined || real === null) {
+				if (below(prop)) return viewAt(concatLists(parts, [prop]), undefined, true);
+				return gave === null || gave.prototype === null ? undefined : Reflect.get(gave.prototype, prop, receiver);
+			}
 			if (gave !== null && Reflect.getOwnPropertyDescriptor(real, prop) === undefined) {
 				return gave.prototype === null ? undefined : Reflect.get(gave.prototype, prop, receiver);
 			}
@@ -1510,7 +1514,10 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					const entry = own(prop);
 					if (entry !== undefined) return entry.op !== "delete";
 					if (below(prop)) return true;
-					if (real === undefined || real === null) return false;
+					if (real === undefined || real === null) {
+						const gave = given();
+						return gave !== null && gave.prototype !== null && prop in gave.prototype;
+					}
 					const version = snapshotOf();
 					if (version !== null) {
 						if (MapMethods.has(version.members, prop)) return true;
@@ -1650,7 +1657,12 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					const desc = WeakMapMethods.has(RUN_OF_VIEW, node)
 						? readThroughOuter(() => Reflect.getOwnPropertyDescriptor(node, prop))
 						: Reflect.getOwnPropertyDescriptor(node, prop);
-					if (!desc) return undefined;
+					if (!desc) {
+						// A namespace only the run wrote below the node (`self["ns.child"] = …`) is a member it lists, as it reads it.
+						if (!forked() && below(prop))
+							return { __proto__: null, value: readMember(prop, view), writable: true, enumerable: true, configurable: true };
+						return undefined;
+					}
 					if (!("value" in desc)) return { __proto__: null, ...desc, configurable: true };
 					return { __proto__: null, ...desc, value: forked() ? desc.value : readMember(prop, view), configurable: true };
 				},
