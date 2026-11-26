@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
+ *	@Last modified time: 2026-11-25T16:05:39-08:00 (1795651539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -493,7 +493,7 @@ function checkpointNodeBuiltins(domain, node) {
  * @private
  */
 function snapshotBarrier(wrapper) {
-	const slothlet = wrapper.slothlet;
+	const slothlet = wrapper.____slothlet;
 	const domain = domainOf(slothlet);
 	if (!runsOpen(domain)) return;
 	if (runShared.RUN_WRITE !== null && runShared.RUN_WRITE.node === wrapper) return;
@@ -653,17 +653,17 @@ function rememberMadeFailure(owner, error) {
  * @private
  */
 function runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attribute = true, asNode = false, origin = null) {
-	const contextManager = owner.slothlet?.contextManager;
-	if (!contextManager?.runInContext || !owner.slothlet.instanceID) return Reflect.apply(fn, thisArg, args);
+	const contextManager = owner.____slothlet?.contextManager;
+	if (!contextManager?.runInContext || !owner.____slothlet.instanceID) return Reflect.apply(fn, thisArg, args);
 	// An instance that is gone (shut down) has no context to run its code in: the code runs outside every instance, as
 	// plain code no instance's api is reachable from — never as whoever happens to be reading.
-	const instanceID = makerInstanceID(owner.slothlet);
+	const instanceID = makerInstanceID(owner.____slothlet);
 	if (instanceID === null) return contextManager.runDetached(fn, thisArg, args);
 	// The code's own reads are its own: a reader snapshot being completed for is not passed on into it. A stand-in of a
 	// value handed out records its definer and grants nothing: the caller running it, read now, is its ceiling, so every
 	// access has to be allowed for both (#726). A node's own code (an accessor or a Proxy export of an api object, `new`
 	// on an exported class) is checked as a call of its node, and runs as that call does, under no ceiling of its caller.
-	const ceiling = asNode ? null : outerCallerCeiling(contextManager, instanceID, owner.slothlet, origin);
+	const ceiling = asNode ? null : outerCallerCeiling(contextManager, instanceID, owner.____slothlet, origin);
 	return readOnBehalf(undefined, () =>
 		contextManager.runInContext(instanceID, fn, thisArg, args, owner, true, false, ceiling, null, attribute, true)
 	);
@@ -678,7 +678,7 @@ function runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attribute = tr
  * @private
  */
 function runningLeafOf(maker, fallback) {
-	const slothlet = fallback?.slothlet;
+	const slothlet = fallback?.____slothlet;
 	const current = slothlet?.contextManager?.tryGetContext?.(slothlet.instanceID)?.currentWrapper ?? null;
 	return current && WeakSetMethods.has(trustedRootOwn.genuineWrappers, current) && makerOf(current) === maker ? current : fallback;
 }
@@ -2596,7 +2596,7 @@ export function RunLayer(Base) {
 				const wrapper = this;
 				if (prototype === null || typeof prototype !== "object" || prototype === SNAPSHOT_UNKNOWN_PROTOTYPE) return;
 				if (isLanguagePrototype(prototype) || resolveWrapper(prototype) !== null) return;
-				checkpointHandout(wrapper.slothlet, prototype);
+				checkpointHandout(wrapper.____slothlet, prototype);
 			}
 
 			/**
@@ -2610,7 +2610,7 @@ export function RunLayer(Base) {
 			___checkpointFile() {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
 				const wrapper = this;
-				const slothlet = wrapper.slothlet;
+				const slothlet = wrapper.____slothlet;
 				const domain = domainOf(slothlet);
 				if (!runsOpen(domain)) return;
 				const filePath = wrapper.____slothletInternal.filePath;
@@ -2621,7 +2621,7 @@ export function RunLayer(Base) {
 					const nodes = fileNodes(slothlet, filePath);
 					for (let index = 0; index < nodes.length; index++) {
 						const node = nodes[index];
-						if (node.slothlet !== slothlet) continue;
+						if (node.____slothlet !== slothlet) continue;
 						const internal = node.____slothletInternal;
 						if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) continue;
 						beforeChange(domain, node, captureNode);
@@ -2680,7 +2680,7 @@ export function RunLayer(Base) {
 				const promoted = PromiseMethods.then(gate, run);
 				const impl = wrapper.____slothletInternal.impl;
 				const leafIsAsync = util.types.isAsyncFunction(impl) || util.types.isAsyncFunction(impl?.default);
-				return leafIsAsync ? promoted : guardPromotedResult(promoted, wrapper.____slothletInternal.apiPath, wrapper.SlothletError);
+				return leafIsAsync ? promoted : guardPromotedResult(promoted, wrapper.____slothletInternal.apiPath, wrapper.____SlothletError);
 			}
 
 			/**

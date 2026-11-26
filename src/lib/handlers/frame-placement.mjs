@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T11:20:15-08:00 (1795548015)
+ *	@Last modified time: 2026-11-25T16:05:37-08:00 (1795651537)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -276,7 +276,7 @@ export function toComparablePath(value) {
  */
 function runtime_importedLocations(wrapper, filePath) {
 	if (!filePath) return null;
-	const recorded = wrapper?.slothlet?.processors?.loader?.importedLocationsFor?.(filePath, wrapper?.____slothletInternal?.moduleID);
+	const recorded = wrapper?.____slothlet?.processors?.loader?.importedLocationsFor?.(filePath, wrapper?.____slothletInternal?.moduleID);
 	if (!recorded?.size) return null;
 	return setFrom(mapList(setToArray(recorded), toComparablePath));
 }
@@ -1222,7 +1222,7 @@ function runtime_isOwnModuleLocation(wrapper, path) {
 	) {
 		return true;
 	}
-	const cache = wrapper.slothlet?.handlers?.apiCacheManager;
+	const cache = wrapper.____slothlet?.handlers?.apiCacheManager;
 	if (!cache) return false;
 	return ArrayMethods.some(
 		runtime_moduleRoots(cache),
@@ -1495,9 +1495,9 @@ function runtime_candidateIndex(candidates) {
 		// Every candidate is a live wrapper, which always reaches its instance's cache and loader; the chains guard a
 		// partially-built wrapper handed in by a direct caller.
 		/* v8 ignore next 4 */
-		const cache = wrapper?.slothlet?.handlers?.apiCacheManager;
+		const cache = wrapper?.____slothlet?.handlers?.apiCacheManager;
 		if (cache) SetMethods.add(caches, cache);
-		const loader = wrapper?.slothlet?.processors?.loader;
+		const loader = wrapper?.____slothlet?.processors?.loader;
 		if (loader) SetMethods.add(loaders, loader);
 	}
 
@@ -1976,7 +1976,7 @@ function ownReceiver(parent, identity) {
 	if (!parent?.flagged || !identity || identity.unresolved || !parent.wrapper) return null;
 	if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, parent.wrapper)) return null;
 	// With `provenance` off no frames are read, so code the parent was handed is not told from the parent's own.
-	if (parent.wrapper.slothlet?.config?.permissions?.caller?.provenance === false) return null;
+	if (parent.wrapper.____slothlet?.config?.permissions?.caller?.provenance === false) return null;
 	if (identity.currentWrapper !== parent.wrapper || (identity.ceiling ?? null) !== (parent.ceiling ?? null)) return null;
 	return parent;
 }
@@ -2558,7 +2558,7 @@ function runtime_outerCallers(frames, index, slothlet = null, throughOwnEntry = 
  */
 function runtime_topLevelRunning(record) {
 	const module = record.wrapper;
-	const slothlet = module.slothlet;
+	const slothlet = module.____slothlet;
 	const description = describeCall(module);
 	// A lazy tree's module node has no file of its own: the load knows the file.
 	const filePath = description.filePath ?? record.file ?? null;
@@ -2758,7 +2758,7 @@ function runtime_madeCodeDefiner(record) {
 		// Node's own code reads values for whoever called it: the next frame out decides.
 		if (StringMethods.startsWith(frame.path, "node:") && runtime_isNodeScript(frame)) continue;
 		if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return undefined;
-		const leaves = runtime_leavesAt(recorded.slothlet, frame);
+		const leaves = runtime_leavesAt(recorded.____slothlet, frame);
 		if (!leaves.length) return undefined;
 		const definers = runtime_narrowToLeaf(leaves, frame, runtime_framesAfter(frames, index));
 		if (ArrayMethods.includes(definers, recorded)) return null;
@@ -2783,7 +2783,7 @@ function runtime_madeCodeDefiner(record) {
  */
 function runtime_siblingAuthor(record, frame, outer) {
 	const leaf = record.wrapper;
-	const leaves = runtime_leavesAt(leaf.slothlet, frame);
+	const leaves = runtime_leavesAt(leaf.____slothlet, frame);
 	if (leaves.length < 2 || !ArrayMethods.includes(leaves, leaf)) return null;
 	const source = runtime_sourceOf(leaf.____slothletInternal.filePath, frame);
 	if (!source) return null;
@@ -2814,7 +2814,7 @@ function runtime_siblingAuthor(record, frame, outer) {
 function runtime_isHostObjectLeaf(leaf, filePath) {
 	if (typeof filePath !== "string" || !StringMethods.startsWith(filePath, "synthetic:")) return false;
 	const internal = leaf.____slothletInternal;
-	const { ownership, apiManager } = leaf.slothlet.handlers;
+	const { ownership, apiManager } = leaf.____slothlet.handlers;
 	// A synthetic leaf always carries the moduleID of the add that built it, and its instance its handlers; the guard
 	// covers a partial wrapper handed in by a direct caller.
 	/* v8 ignore next */
@@ -2845,9 +2845,12 @@ function runtime_isHostObjectLeaf(leaf, filePath) {
 function runtime_isFilelessLeafCode(record, frame) {
 	const leaf = record.wrapper;
 	if (runtime_isUnownedPackage(leaf, frame, true)) return false;
-	if (!StringMethods.includes(frame.path, "/node_modules/") && SetMethods.size(runtime_packageImportingLeaves(leaf.slothlet, frame.path)))
+	if (
+		!StringMethods.includes(frame.path, "/node_modules/") &&
+		SetMethods.size(runtime_packageImportingLeaves(leaf.____slothlet, frame.path))
+	)
 		return false;
-	return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) || runtime_runsHostLoadedTransform(frame);
+	return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.____slothlet, frame) || runtime_runsHostLoadedTransform(frame);
 }
 
 /**
@@ -2863,7 +2866,7 @@ function runtime_isFilelessLeafCode(record, frame) {
  * @private
  */
 function runtime_isUnownedPackage(leaf, frame, fileless) {
-	if (!StringMethods.includes(frame.path, "/node_modules/") || isInstanceOwnerFile(leaf.slothlet, frame.path)) return false;
+	if (!StringMethods.includes(frame.path, "/node_modules/") || isInstanceOwnerFile(leaf.____slothlet, frame.path)) return false;
 	return fileless ? Boolean(RUNNER_MODULES) : !runtime_fileImporters(frame.path).length;
 }
 
@@ -3014,7 +3017,7 @@ function runtime_packageAnswer(record, frame, fileless, own = null) {
 	// A leaf with no file is its own entity: a package's code inside it is the leaf's, whoever else imports it, and a file
 	// a module loaded is that module's (#717).
 	if (fileless) return runtime_isFilelessLeafCode(record, frame) ? null : UNACCOUNTED_SUPPLIER;
-	const importers = runtime_packageImportingLeaves(leaf.slothlet, frame.path);
+	const importers = runtime_packageImportingLeaves(leaf.____slothlet, frame.path);
 	// No module loaded it. A package file with no loader recorded at all (vite loaded the modules, or it was loaded
 	// before slothlet) has no known owner and is refused, as a package can be anyone's code. Any other file is the host's
 	// own only when the frame runs its own source: code compiled under a name no file holds, or holding another source
@@ -3022,7 +3025,7 @@ function runtime_packageAnswer(record, frame, fileless, own = null) {
 	// The package that created the instance is the host's own, wherever it is installed (#714).
 	if (!SetMethods.size(importers)) {
 		if (runtime_isUnownedPackage(leaf, frame, false)) return UNACCOUNTED_SUPPLIER;
-		return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.slothlet, frame) || runtime_runsHostLoadedTransform(frame)
+		return runtime_runsFileSource(frame) || runtime_runsOwnerTransform(leaf.____slothlet, frame) || runtime_runsHostLoadedTransform(frame)
 			? null
 			: UNACCOUNTED_SUPPLIER;
 	}
@@ -3613,9 +3616,9 @@ function runtime_enteredAsItself(leaf, frame, outer) {
  */
 function runtime_leafCallAnswer(leaf, running) {
 	const internal = leaf.____slothletInternal;
-	const permissionManager = leaf.slothlet?.handlers?.permissionManager;
+	const permissionManager = leaf.____slothlet?.handlers?.permissionManager;
 	const target = String(internal.apiPath ?? "");
-	const context = leaf.slothlet?.contextManager?.tryGetContext?.()?.context ?? null;
+	const context = leaf.____slothlet?.contextManager?.tryGetContext?.()?.context ?? null;
 	const runners = new Set();
 	for (let ofIndex = 0, ofList = running; ofIndex < ofList.length; ofIndex++) {
 		const part = ofList[ofIndex];
@@ -3666,11 +3669,11 @@ function runtime_authorAnswer(record, frame, outer = []) {
 	if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return null;
 	// Another copy of a file the instance loaded under its tag, which a package or the host imported itself: no leaf's
 	// code, as frame placement reads it (see createFramePlacer).
-	if (runtime_untaggedInstanceCopy(record.wrapper.slothlet, frame)) return null;
+	if (runtime_untaggedInstanceCopy(record.wrapper.____slothlet, frame)) return null;
 	// The nearest leaf frame of the file, or the file's module when no frame of it is inside a leaf's range (#726).
 	// Read as far as each reader goes, once: the readers stop at the first frame of another file.
 	const further = Arrays.isArray(outer) ? outer : runtime_replayable(outer);
-	const authors = runtime_narrowToLeaf(runtime_leavesAt(record.wrapper.slothlet, frame), frame, further);
+	const authors = runtime_narrowToLeaf(runtime_leavesAt(record.wrapper.____slothlet, frame), frame, further);
 	// No leaf was built from the file: a helper file's own code is the code of the modules importing the helper.
 	if (!authors.length) return runtime_helperAnswer(record, frame);
 	// A leaf's own exported function, entered as it is: a call of that leaf's node by whoever runs it.
@@ -4162,10 +4165,10 @@ function runtime_fileModuleOf(leaves) {
 	if (modulePath === null || !ArrayMethods.every(paths, (path) => StringMethods.startsWith(path, modulePath + "."))) return leaves;
 	// Leaves a restart replaced are not stood for by the rebuilt tree's node at their module's path: the code is theirs,
 	// and has no standing (see runtime_taggedLeavesAtFile).
-	if (leaves[0].slothlet.handlers?.apiManager?.isRestartReplaced?.(leaves[0])) return leaves;
-	const node = moduleNodeResolver(leaves[0].slothlet, modulePath);
-	const standing = node && WeakSetMethods.has(trustedRootOwn.genuineWrappers, node) && node.slothlet === leaves[0].slothlet;
-	return standing && (!runtime_isGone(node) || !runtime_checksPermissions(node.slothlet)) ? [node] : leaves;
+	if (leaves[0].____slothlet.handlers?.apiManager?.isRestartReplaced?.(leaves[0])) return leaves;
+	const node = moduleNodeResolver(leaves[0].____slothlet, modulePath);
+	const standing = node && WeakSetMethods.has(trustedRootOwn.genuineWrappers, node) && node.____slothlet === leaves[0].____slothlet;
+	return standing && (!runtime_isGone(node) || !runtime_checksPermissions(node.____slothlet)) ? [node] : leaves;
 }
 
 /**
@@ -4314,7 +4317,7 @@ function frameFamilyOf(entry) {
  * @private
  */
 function runtime_builtUnder(wrapper) {
-	return wrapper.____slothletInternal.builtUnder ?? wrapper.slothlet.instanceID;
+	return wrapper.____slothletInternal.builtUnder ?? wrapper.____slothlet.instanceID;
 }
 
 /**
@@ -4380,7 +4383,7 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
 		// No call says who runs it: the leaves whose code is on the stack do (a module running the code from a timer it
 		// reached without slothlet's store or pin). Only read where the frames are (`provenance`), and never inside a
 		// flow slothlet pinned to the host.
-		if (identity?.unresolved || !slothlet || !runtime_guardsForeignCode({ wrapper: { slothlet } })) return null;
+		if (identity?.unresolved || !slothlet || !runtime_guardsForeignCode({ wrapper: { ____slothlet: slothlet } })) return null;
 		if (typeof contextManager.isAmbient === "function" && !contextManager.isAmbient(instanceID)) return null;
 		const callers = runtime_outerCallers(runtime_captureFrames(32), -1, slothlet);
 		return callers.length ? Reflect.apply(combineCeilings, undefined, callers) : null;
@@ -4404,7 +4407,7 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
  * @internal
  */
 export function handsOutAsModule(wrapper) {
-	const slothlet = wrapper?.slothlet;
+	const slothlet = wrapper?.____slothlet;
 	return slothlet?.config?.permissions?.caller?.attribution !== "fast" && slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
 }
 
@@ -4417,7 +4420,7 @@ export function handsOutAsModule(wrapper) {
  * @internal
  */
 export function attributesResults(wrapper) {
-	return wrapper?.slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
+	return wrapper?.____slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
 }
 
 /**
@@ -4677,7 +4680,7 @@ function runningOutsideFlow(instanceID, owners, making = false) {
 	if (answer.own === true) return { outside: false, clean: answer.clean, found: answer.found };
 	// The leaf the code running is, read as code run while no call runs is read.
 	const definer = runtime_definerAt(runtime_captureFrames(24), instanceID);
-	return { outside: true, reader: definer?.wrapper?.slothlet === slothlet ? definer.wrapper : null, begun: answer.begun === true };
+	return { outside: true, reader: definer?.wrapper?.____slothlet === slothlet ? definer.wrapper : null, begun: answer.begun === true };
 }
 
 /**
@@ -4800,7 +4803,7 @@ function runtime_definerAt(frames, running) {
  */
 function runtime_importedUnder(wrapper, location) {
 	// The loader of the node's own tree: a run that rebuilt its copy imported the files under queries of its own.
-	const slothlet = wrapper.slothlet;
+	const slothlet = wrapper.____slothlet;
 	const loader = typeof slothlet?._nodeLoader === "function" ? slothlet._nodeLoader(wrapper) : slothlet?.processors?.loader;
 	if (typeof loader?.importedUnderQuery !== "function") return true;
 	const at = StringMethods.indexOf(location, "?");
@@ -4920,14 +4923,14 @@ function runtime_isUntaggedCopy(frame) {
  */
 function runtime_holdDetachedJob(definer, frames) {
 	if (!definer?.callers) return definer;
-	const slothlet = (definer.wrapper ?? definer.leaves[0]).slothlet;
+	const slothlet = (definer.wrapper ?? definer.leaves[0]).____slothlet;
 	// Only a runtime that says it cannot carry a call into a flow it started (the live runtime) needs it.
 	if (slothlet?.contextManager?.carriesFlowCaller !== false || !runtime_checksPermissions(slothlet)) return definer;
 	// The module call that started the flow, where the runtime could record it (Node's promise hooks): it holds the
 	// flow whoever awaits it, as the async runtime's store does.
 	const starter = slothlet.contextManager.runningFlowStarter?.() ?? null;
 	const started =
-		starter && WeakSetMethods.has(trustedRootOwn.genuineWrappers, starter.wrapper) && starter.wrapper.slothlet === slothlet
+		starter && WeakSetMethods.has(trustedRootOwn.genuineWrappers, starter.wrapper) && starter.wrapper.____slothlet === slothlet
 			? concatLists([starter.wrapper], ceilingMembers(starter.ceiling ?? null))
 			: [];
 	const letGo = runtime_jobLetGo(frames, slothlet);
@@ -5106,7 +5109,7 @@ function runtime_helperImporters(helper) {
  * @private
  */
 function runtime_importsHelper(helper, leaves) {
-	if (leaves[0]?.slothlet !== helper.slothlet) return false;
+	if (leaves[0]?.____slothlet !== helper.slothlet) return false;
 	const importers = runtime_helperImporters(helper);
 	if (SetMethods.size(importers) === 1) return true;
 	const mount = helper.importer?.mount ?? null;
@@ -5149,7 +5152,7 @@ function isLeafFileFunction(fn, leaves) {
 		const leaf = ofList[ofIndex];
 		const internal = leaf?.____slothletInternal;
 		const filePath = internal?.filePath;
-		const slothlet = leaf?.slothlet;
+		const slothlet = leaf?.____slothlet;
 		if (typeof filePath !== "string" || !slothlet) continue;
 		const texts = [];
 		const locations = setFrom([toComparablePath(filePath), runtime_realComparablePath(filePath)]);
@@ -5181,7 +5184,7 @@ function isLeafFileFunction(fn, leaves) {
 	// The same text in a helper file of the instance: the function may be the helper's.
 	for (let ofIndex = 0, ofList = leaves; ofIndex < ofList.length; ofIndex++) {
 		const leaf = ofList[ofIndex];
-		const slothlet = leaf.slothlet;
+		const slothlet = leaf.____slothlet;
 		const family = slothlet?.instanceID;
 		if (!family) continue;
 		for (const file of setValues(runtime_importGraphEntry(family).files)) {
@@ -5250,7 +5253,7 @@ function runtime_leafOfHelper(helper) {
  * @private
  */
 function runtime_helperAnswer(record, frame) {
-	const helper = runtime_helperOwner(frame, record.wrapper.slothlet);
+	const helper = runtime_helperOwner(frame, record.wrapper.____slothlet);
 	if (!helper) return null;
 	const unpacked2 = runtime_helperModules(helper),
 		first = unpacked2[0],
@@ -5306,7 +5309,7 @@ function runtime_anyInstanceChecks() {
  * @private
  */
 function runtime_guardsForeignCode(record) {
-	const slothlet = record?.wrapper?.slothlet;
+	const slothlet = record?.wrapper?.____slothlet;
 	return Boolean(slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.caller?.provenance !== false);
 }
 
@@ -5336,7 +5339,7 @@ const LEAF_SOURCE_FILES = new WeakMap();
  */
 function registerLeafFile(wrapper, at = undefined) {
 	const filePath = at ?? wrapper?.____slothletInternal?.filePath;
-	const slothlet = wrapper?.slothlet;
+	const slothlet = wrapper?.____slothlet;
 	if (!filePath || !slothlet || typeof WeakRef !== "function") return;
 	if (
 		slothlet.instanceID &&
@@ -5406,7 +5409,7 @@ function runtime_replacedCopyLeaves(slothlet, path, mount) {
 			if (
 				!node ||
 				!WeakSetMethods.has(trustedRootOwn.genuineWrappers, node) ||
-				node.slothlet !== slothlet ||
+				node.____slothlet !== slothlet ||
 				runtime_isGone(node) ||
 				runtime_builtUnder(node) !== current
 			)
@@ -5526,7 +5529,7 @@ function runtime_browserLeafFileCopyOf(frame) {
 		if (!leaves.length) continue;
 		const tagged = ArrayMethods.every(leaves, (wrapper) => {
 			const filePath = wrapper.____slothletInternal?.filePath;
-			const urls = wrapper.slothlet?.processors?.loader?.importedLocationsFor?.(filePath);
+			const urls = wrapper.____slothlet?.processors?.loader?.importedLocationsFor?.(filePath);
 			return (
 				urls != null &&
 				SetMethods.size(urls) > 0 &&
@@ -6101,7 +6104,7 @@ const REFUSED_SUPPLIER = Objects.freeze({ unaccounted: true, refused: true });
 function runtime_supplierAnswer(record, supplier) {
 	// By default the supplier is held to the leaf its code is running inside; `permissions.caller.ceiling: "chain"` carries
 	// every call it was handed through, and the ceilings they carried, as well.
-	if (record.wrapper.slothlet?.config?.permissions?.caller?.ceiling !== "chain")
+	if (record.wrapper.____slothlet?.config?.permissions?.caller?.ceiling !== "chain")
 		return { wrapper: supplier.currentWrapper, ceiling: record.wrapper };
 	const parts = [supplier.record.ceiling];
 	for (let current = record, depth = 0; current && current !== supplier.record && depth < MAX_CHAIN; current = current.parent, depth++) {

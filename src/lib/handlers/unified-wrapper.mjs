@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:04-08:00 (1795641844)
+ *	@Last modified time: 2026-11-25T16:05:40-08:00 (1795651540)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -297,8 +297,8 @@ setHostPrototypeCheck(
 	(owner, value) =>
 		value !== null &&
 		typeof value === "object" &&
-		Boolean(owner?.slothlet) &&
-		knownPrototype(owner.slothlet, behindMemberView(value)) !== undefined
+		Boolean(owner?.____slothlet) &&
+		knownPrototype(owner.____slothlet, behindMemberView(value)) !== undefined
 );
 
 setHandedOutCheck(
@@ -400,7 +400,7 @@ setCloneNodeReader((value) => {
 	// node or view the caller holds; off, the platform clones it as it is.
 	const data = layerUnderlying(impl);
 	if (holdsSlottedData(data)) {
-		return wrapper.slothlet.handlers?.permissionManager?.isEnabled?.() ? { slots: data, members: value } : { value: data };
+		return wrapper.____slothlet.handlers?.permissionManager?.isEnabled?.() ? { slots: data, members: value } : { value: data };
 	}
 	return { list: false };
 });
@@ -553,7 +553,7 @@ export function hasThenMember(value) {
  * @internal
  *
  * @example
- * throw thenableExportError(this.SlothletError, "session");
+ * throw thenableExportError(this.____SlothletError, "session");
  */
 export function thenableExportError(SlothletError, location) {
 	return new SlothletError("MODULE_THENABLE_EXPORT", { location });
@@ -1125,7 +1125,7 @@ class UnifiedWrapper extends TrapsLayer(
 	 * to access slothlet.contextManager, slothlet.instanceID, and slothlet.handlers.ownership.
 	 *
 	 * @example
-	 * const wrapper = new UnifiedWrapper(this.slothlet, {
+	 * const wrapper = new UnifiedWrapper(this.____slothlet, {
 	 * 	mode: "lazy",
 	 * 	apiPath: "math",
 	 * 	initialImpl: null,
@@ -1293,7 +1293,7 @@ class UnifiedWrapper extends TrapsLayer(
 		// CALLER'S OWN OBJECT REFERENCE (and a concurrently-materializing sibling wrapper sharing a
 		// cached module) from ___adoptImplChildren's destructive `delete impl[key]` step once a
 		// child is adopted. Without it, mounting a caller-owned plain object via api.add() would
-		// permanently strip its own keys the first time it's adopted. `_applyNewImpl` (used by
+		// permanently strip its own keys the first time it's adopted. `___applyNewImpl` (used by
 		// `add()`'s ___setImpl path and reload/materialize re-application) still unconditionally
 		// clones via `_cloneImpl` — that call site is untouched by this change.
 		//
@@ -1302,7 +1302,7 @@ class UnifiedWrapper extends TrapsLayer(
 		// (e.g. a `net.Socket` inside `{ socket, ping }` mounted via api.add()), whose own nested
 		// wrapper is built by ___createChildWrapper calling back into THIS constructor with the
 		// child as initialImpl. It does NOT cover an EventEmitter mounted directly as api.add()'s
-		// own top-level leaf — that value is applied via ___setImpl → _applyNewImpl, which still
+		// own top-level leaf — that value is applied via ___setImpl → ___applyNewImpl, which still
 		// unconditionally clones (see its own comment above). Cloning a real EventEmitter's own
 		// descriptors produces a structurally different top-level object; even though nested state
 		// (e.g. `_events`) survives via the shallow copy, native methods that check the exact
@@ -1361,7 +1361,7 @@ class UnifiedWrapper extends TrapsLayer(
 			resolveWrapper(initialImpl) === null &&
 			hasThenMember(initialImpl)
 		) {
-			throw thenableExportError(this.SlothletError, apiPath);
+			throw thenableExportError(this.____SlothletError, apiPath);
 		}
 
 		if (initialImpl !== null && !deferChildAdopt) {
@@ -1371,7 +1371,7 @@ class UnifiedWrapper extends TrapsLayer(
 				apiPath &&
 				(apiPath === "config" || StringMethods.startsWith(apiPath, "config."))
 			) {
-				this.slothlet.debug("wrapper", {
+				this.____slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_IMPL_KEYS",
 					apiPath,
 					keyCount: implKeys.length,
@@ -1385,7 +1385,7 @@ class UnifiedWrapper extends TrapsLayer(
 				(apiPath === "config" || StringMethods.startsWith(apiPath, "config."))
 			) {
 				const childKeys = filterList(Objects.keys(this), (k) => !isFrameworkReservedKey(k));
-				this.slothlet.debug("wrapper", {
+				this.____slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_AFTER_ADOPT",
 					apiPath,
 					childCount: childKeys.length,
@@ -1419,7 +1419,7 @@ class UnifiedWrapper extends TrapsLayer(
 						});
 					},
 					undefined,
-					this.clock
+					this.____clock
 				);
 			}
 		}
@@ -1437,7 +1437,7 @@ class UnifiedWrapper extends TrapsLayer(
 	 * @internal
 	 */
 	____inspectCustom(____depth, ____options, ____inspect) {
-		// When proxyTarget === wrapper (non-callable), the prototype chain check in createProxy()
+		// When proxyTarget === wrapper (non-callable), the prototype chain check in ___createProxy()
 		// finds this method and skips installing the closure own-property. Node then calls this
 		// prototype method with `this` = proxy, where ____slothletInternal is blocked by getTrap.
 		// Resolve the real wrapper instance via the proxy registry to handle that case.
@@ -1519,7 +1519,7 @@ export function isClassInstance(value) {
 
 /**
  * Resolves a value to its backing UnifiedWrapper instance.
- * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
+ * Accepts a proxy registered via ___createProxy() or a raw UnifiedWrapper instance.
  * Returns null for any other value.
  *
  * @param {unknown} value - Value to resolve
@@ -1531,7 +1531,7 @@ export function isClassInstance(value) {
  */
 function resolveWrapper(value) {
 	if (!value) return null;
-	// Check registry first - handles all proxies created by createProxy().
+	// Check registry first - handles all proxies created by ___createProxy().
 	// A Proxy wrapping a UnifiedWrapper target passes instanceof UnifiedWrapper (via prototype
 	// chain delegation), but the getTrap blocks ____slothletInternal, so registry must come first.
 	const registered = registeredWrapper(value);

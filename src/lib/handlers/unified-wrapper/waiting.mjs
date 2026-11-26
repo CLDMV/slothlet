@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:04-08:00 (1795641844)
+ *	@Last modified time: 2026-11-25T16:05:40-08:00 (1795651540)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -189,7 +189,7 @@ function pruneRefusedChanges(refused, dropped = null) {
  * @private
  */
 function dropRefusedChanges(wrapper) {
-	const refused = WeakMapMethods.get(REFUSED_CHANGES, wrapper.slothlet);
+	const refused = WeakMapMethods.get(REFUSED_CHANGES, wrapper.____slothlet);
 	if (!refused?.length) return;
 	pruneRefusedChanges(refused, wrapper);
 }
@@ -218,7 +218,7 @@ function takeRefusalAt(slothlet, path) {
  * @private
  */
 function takeRefusedChange(wrapper, chain) {
-	return takeRefusalAt(wrapper.slothlet, standInPath(wrapper, chain));
+	return takeRefusalAt(wrapper.____slothlet, standInPath(wrapper, chain));
 }
 
 /**
@@ -333,7 +333,7 @@ const RESTART_FORWARD_TRAPS = {
 function standInNode(wrapper, propChain) {
 	const internal = wrapper.____slothletInternal;
 	if (internal.invalid || !internal.state.materialized) return STAND_IN_UNLOADED;
-	let node = wrapper.createProxy();
+	let node = wrapper.___createProxy();
 	for (let ofIndex = 0, ofList = propChain; ofIndex < ofList.length; ofIndex++) {
 		const key = ofList[ofIndex];
 		if (node === null || node === undefined) return undefined;
@@ -388,7 +388,7 @@ function lockAsStandIn(node, target) {
  * @private
  */
 function makeStandInChange(wrapper, change, replayed, holders) {
-	let node = wrapper.createProxy();
+	let node = wrapper.___createProxy();
 	for (let ofIndex = 0, ofList = change.chain; ofIndex < ofList.length; ofIndex++) {
 		const key = ofList[ofIndex];
 		node = node[key];
@@ -531,8 +531,8 @@ export function WaitingLayer(Base) {
 				// a fresh object: in live runtime the context store is mutated as the stack
 				// unwinds, so the store reference itself cannot be held. Null when created
 				// outside a module.
-				const __readGateStore = wrapper.slothlet.contextManager?.tryGetContext?.();
-				const __liveReadIdentity = __readGateStore ? wrapper.slothlet.contextManager?.getCallerIdentity?.() : null;
+				const __readGateStore = wrapper.____slothlet.contextManager?.tryGetContext?.();
+				const __liveReadIdentity = __readGateStore ? wrapper.____slothlet.contextManager?.getCallerIdentity?.() : null;
 				// A held view reading through this node reads for its reader as well as for whoever is reading (see
 				// heldStandInRead): the reader is who the read is made as, and a module reading through it a call the reader's
 				// standing has to fit within. A read no one could be found making stays no one's.
@@ -636,7 +636,7 @@ export function WaitingLayer(Base) {
 				const queuedMember = (prop) => {
 					const pending = wrapper.____slothletInternal.pendingChanges;
 					if (!pending) return null;
-					const reader = changeAuthor(wrapper.slothlet.contextManager.getCallerIdentity(wrapper.slothlet.instanceID));
+					const reader = changeAuthor(wrapper.____slothlet.contextManager.getCallerIdentity(wrapper.____slothlet.instanceID));
 					let member = null;
 					for (let i = 0; i < pending.length; i++) {
 						const change = pending[i];
@@ -680,7 +680,7 @@ export function WaitingLayer(Base) {
 						if (Objects.isFrozen(target)) return false;
 						// A callable `then` would make the node awaitable (#571): refused at once, as a loaded node refuses it.
 						if (prop === "then" && isAwaitableThen({ value })) {
-							throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(nodePath()) });
+							throw new wrapper.____SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(nodePath()) });
 						}
 						// A member defined fixed through the stand-in (below) takes no write, on the stand-in or the node.
 						if (isFixedReadOnly(target, prop)) {
@@ -695,7 +695,7 @@ export function WaitingLayer(Base) {
 						if (absorbed !== undefined) return absorbed;
 						// A callable `then` would make the node awaitable (#571): refused at once and first, as a loaded node refuses it.
 						if (prop === "then" && isAwaitableThen(descriptor)) {
-							throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(nodePath()) });
+							throw new wrapper.____SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(nodePath()) });
 						}
 						if (!Reflect.isExtensible(target)) {
 							// Freezing or sealing the stand-in fixes the members its target holds (its own `name` and `length`) once it
@@ -781,7 +781,7 @@ export function WaitingLayer(Base) {
 							return (onFulfilled, onRejected) => {
 								// Read for a run: what the read settles with is handed to it as the run is handed a value it reads
 								// (see helpers/run-snapshot), not as the instance holds it now.
-								const runSnap = anyRunOpen() ? (runningRecord(wrapper.slothlet)?.snap ?? null) : null;
+								const runSnap = anyRunOpen() ? (runningRecord(wrapper.____slothlet)?.snap ?? null) : null;
 								const waitingProxy_thenResolve = async () => {
 									// Ensure materialization completes
 									if (!wrapper.____slothletInternal.state.materialized) {
@@ -910,7 +910,7 @@ export function WaitingLayer(Base) {
 										current.____slothletInternal.impl &&
 										typeof current.____slothletInternal.impl === "object" &&
 										util.types.isProxy(current.____slothletInternal.impl) &&
-										!(__readGateCaller?.currentWrapper && wrapper.slothlet.handlers?.permissionManager?.isEnabled())
+										!(__readGateCaller?.currentWrapper && wrapper.____slothlet.handlers?.permissionManager?.isEnabled())
 									) {
 										return current.____slothletInternal.impl;
 									}
@@ -947,7 +947,7 @@ export function WaitingLayer(Base) {
 									// A module awaiting a callable node gets the node, as it does once the node has loaded, and never the
 									// function behind it: that function carries no gate, so calling it would skip the node's call check
 									// (#632). The host, which no rule gates, still gets the function itself.
-									const __permissionManager = wrapper.slothlet.handlers?.permissionManager;
+									const __permissionManager = wrapper.____slothlet.handlers?.permissionManager;
 									const callableReadByModule =
 										typeof finalImpl === "function" &&
 										Boolean(__readGateCaller?.currentWrapper) &&
@@ -965,7 +965,7 @@ export function WaitingLayer(Base) {
 										// gates as bindCapturedIdentity: nothing to enforce without a permission
 										// manager, and the capture escape hatch is honoured.
 										const __capturedReader = __readGateCaller?.currentWrapper ?? null;
-										const __pm = wrapper.slothlet.handlers?.permissionManager;
+										const __pm = wrapper.____slothlet.handlers?.permissionManager;
 										if (__capturedReader && __pm && __pm.isEnabled() && __pm.isCaptureEnabled?.() !== false) {
 											return capturedView(resolvedProxy, __capturedReader, true, __readGateCaller.ceiling ?? null);
 										}
@@ -1045,7 +1045,7 @@ export function WaitingLayer(Base) {
 									if (current === null || current === undefined) return undefined;
 									current = current[chainProp];
 								}
-								return inspectSafe(current, [], wrapper.___inspectReaderIsModule(), wrapper.slothlet);
+								return inspectSafe(current, [], wrapper.___inspectReaderIsModule(), wrapper.____slothlet);
 							}
 							// `impl` is always non-null when `state.materialized` is true; `materialized=true && !impl` is a structurally impossible state.
 							/* v8 ignore next */
@@ -1197,7 +1197,7 @@ export function WaitingLayer(Base) {
 						// These properties should be accessible immediately without waiting for full materialization
 						const isInternal = isFrameworkReservedKey(prop);
 						if (!isInternal && hasOwn(wrapper, prop)) {
-							wrapper.slothlet.debug("wrapper", {
+							wrapper.____slothlet.debug("wrapper", {
 								key: "DEBUG_MODE_WAITING_GET_PREMATURE",
 								apiPath: wrapper.____slothletInternal.apiPath,
 								prop
@@ -1217,14 +1217,14 @@ export function WaitingLayer(Base) {
 							!wrapper.____slothletInternal.state.materialized &&
 							!wrapper.____slothletInternal.state.inFlight
 						) {
-							wrapper.slothlet.debug("wrapper", {
+							wrapper.____slothlet.debug("wrapper", {
 								key: "DEBUG_MODE_WAITING_GET_IMMEDIATE_MAT",
 								apiPath: wrapper.____slothletInternal.apiPath,
 								prop
 							});
 							// Trigger materialization NOW (async but we'll check after)
 							PromiseMethods.catch(wrapper.___materialize(), (err) => {
-								wrapper.slothlet.debug("wrapper", {
+								wrapper.____slothlet.debug("wrapper", {
 									key: "DEBUG_MODE_WAITING_GET_IMMEDIATE_MAT_ERROR",
 									apiPath: wrapper.apiPath,
 									error: err.message
@@ -1234,7 +1234,7 @@ export function WaitingLayer(Base) {
 							// ___adoptImplChildren runs synchronously within ___materialize before any awaits
 							const isInternal = isFrameworkReservedKey(prop);
 							if (!isInternal && hasOwn(wrapper, prop)) {
-								wrapper.slothlet.debug("wrapper", {
+								wrapper.____slothlet.debug("wrapper", {
 									key: "DEBUG_MODE_WAITING_GET_IMMEDIATE_MAT_SUCCESS",
 									apiPath: wrapper.____slothletInternal.apiPath,
 									prop
@@ -1260,7 +1260,7 @@ export function WaitingLayer(Base) {
 						// As get: a kept node's access offered to a stand-in is dropped first (#661).
 						takeCapturedAccess(wrapper);
 						// Called from a run: a built-in the chain ends on is the run's own copy of it (see helpers/run-snapshot).
-						const ___runSnap = anyRunOpen() ? (runningRecord(wrapper.slothlet)?.snap ?? null) : null;
+						const ___runSnap = anyRunOpen() ? (runningRecord(wrapper.____slothlet)?.snap ?? null) : null;
 						// Capture caller context synchronously before any await.
 						// In LAZY_LIVE mode, the outer runInContext's finally block restores
 						// context before this Promise settles, losing caller identity.
@@ -1274,7 +1274,7 @@ export function WaitingLayer(Base) {
 						// proxy cache is keyed by that reader, so a snapshot is never shared across modules.
 						// Scoped to this instance, as every other identity read is (#592): with another instance in flight
 						// an unscoped read could answer for that one.
-						const ___liveIdentity = wrapper.slothlet.contextManager?.getCallerIdentity?.(wrapper.instanceID);
+						const ___liveIdentity = wrapper.____slothlet.contextManager?.getCallerIdentity?.(wrapper.____instanceID);
 						const ___liveCallerWrapper = ___liveIdentity?.currentWrapper ?? null;
 						// The call the invoking code ran inside, when that code was supplied to it (#597); travels with the
 						// identity reinstated below so it is enforced there too.
@@ -1282,8 +1282,8 @@ export function WaitingLayer(Base) {
 						// The store the call was made in — a `run()` / `scope()` store of this instance when the call
 						// came from inside one — so a deferred host invocation keeps that flow's context.
 						const ___invocationStoreID =
-							wrapper.slothlet.contextManager?.tryGetContext?.(wrapper.instanceID)?.instanceID ?? wrapper.instanceID;
-						const ___capture = wrapper.slothlet.handlers?.permissionManager?.isCaptureEnabled() !== false;
+							wrapper.____slothlet.contextManager?.tryGetContext?.(wrapper.____instanceID)?.instanceID ?? wrapper.____instanceID;
+						const ___capture = wrapper.____slothlet.handlers?.permissionManager?.isCaptureEnabled() !== false;
 						const ___creationCallerWrapper = ___capture ? (__readGateCaller?.currentWrapper ?? null) : null;
 						const ___creationCeiling = ___creationCallerWrapper ? (__readGateCaller?.ceiling ?? null) : null;
 						// Code a module handed out, run while no call runs or no call accounts for it, makes the call as its definer,
@@ -1292,14 +1292,14 @@ export function WaitingLayer(Base) {
 						const ___capturedCallerWrapper =
 							___liveCallerWrapper ??
 							___creationCallerWrapper ??
-							(___capture ? hostRunDefiner(wrapper.slothlet, true, ___definerRead) : null);
+							(___capture ? hostRunDefiner(wrapper.____slothlet, true, ___definerRead) : null);
 						// A node read by such code and called later by it: the code making the call is read now, while its frames are
 						// on the stack, as the gate reads them when the call is made at once (eager mode, or a loaded node). The
 						// modules further out on the stack, and every other module importing a helper whose code it is, are held to
 						// as well; deciding after the load, with those frames gone, would drop them (#691).
 						const ___callingCode =
 							!___liveCallerWrapper && ___creationCallerWrapper && ___capture
-								? hostRunDefiner(wrapper.slothlet, true, ___definerRead)
+								? hostRunDefiner(wrapper.____slothlet, true, ___definerRead)
 								: null;
 						const ___capturedCeiling = ___liveCallerWrapper
 							? ___liveCeiling
@@ -1317,16 +1317,16 @@ export function WaitingLayer(Base) {
 						if (
 							___liveIdentity?.unresolved &&
 							(!___liveIdentity.unaccounted || !___capturedCallerWrapper) &&
-							wrapper.slothlet.handlers?.permissionManager?.isEnabled?.()
+							wrapper.____slothlet.handlers?.permissionManager?.isEnabled?.()
 						) {
 							const ___deniedPath = ArrayMethods.join(
 								filterList(concatLists([wrapper.____slothletInternal.apiPath], mapList(propChain, String)), Boolean),
 								"."
 							);
-							throw new wrapper.slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(___deniedPath) });
+							throw new wrapper.____slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(___deniedPath) });
 						}
 
-						wrapper.slothlet.debug("wrapper", {
+						wrapper.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WAITING_APPLY_ENTRY",
 							apiPath: wrapper.____slothletInternal.apiPath,
 							propChain: ArrayMethods.join(propChain, ","),
@@ -1342,12 +1342,12 @@ export function WaitingLayer(Base) {
 							!wrapper.____slothletInternal.state.materialized &&
 							!wrapper.____slothletInternal.state.inFlight
 						) {
-							wrapper.slothlet.debug("wrapper", {
+							wrapper.____slothlet.debug("wrapper", {
 								key: "DEBUG_MODE_WAITING_APPLY_MATERIALIZE",
 								apiPath: wrapper.____slothletInternal.apiPath
 							});
 							await wrapper.___materialize();
-							wrapper.slothlet.debug("wrapper", {
+							wrapper.____slothlet.debug("wrapper", {
 								key: "DEBUG_MODE_WAITING_APPLY_MATERIALIZED",
 								apiPath: wrapper.____slothletInternal.apiPath
 							});
@@ -1371,18 +1371,18 @@ export function WaitingLayer(Base) {
 							/* v8 ignore stop */
 						}
 
-						wrapper.slothlet.debug("wrapper", {
+						wrapper.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WAITING_APPLY_START_WALK",
 							apiPath: wrapper.____slothletInternal.apiPath,
 							propChain: ArrayMethods.join(propChain, ",")
 						});
-						let current = wrapper.createProxy();
+						let current = wrapper.___createProxy();
 						let lastWrapper = wrapper;
 						let lastObject = null; // Track the parent object for `this` binding
 
 						for (let ofIndex = 0, ofList = propChain; ofIndex < ofList.length; ofIndex++) {
 							const prop = ofList[ofIndex];
-							wrapper.slothlet.debug("wrapper", {
+							wrapper.____slothlet.debug("wrapper", {
 								key: "DEBUG_MODE_WAITING_APPLY_WALK",
 								prop: String(prop),
 								typeOf: typeof current,
@@ -1424,7 +1424,7 @@ export function WaitingLayer(Base) {
 								) {
 									return undefined;
 								}
-								throw new wrapper.slothlet.SlothletError("CHAIN_ACCESS_UNDEFINED", {
+								throw new wrapper.____slothlet.SlothletError("CHAIN_ACCESS_UNDEFINED", {
 									path: chainPath,
 									chain,
 									prop: String(prop)
@@ -1448,13 +1448,13 @@ export function WaitingLayer(Base) {
 									while (!currentWrapper.____slothletInternal.state.materialized) {
 										const nextState = currentWrapper.____slothletInternal.state;
 										if (!nextState.inFlight && !nextState.materialized) {
-											throw new wrapper.slothlet.SlothletError("CHAIN_MATERIALIZE_FAILED", {
+											throw new wrapper.____slothlet.SlothletError("CHAIN_MATERIALIZE_FAILED", {
 												path: chainPath,
 												chain,
 												prop: String(prop)
 											});
 										}
-										await new Promise((resolve) => scheduleMacrotask(resolve, undefined, wrapper.clock));
+										await new Promise((resolve) => scheduleMacrotask(resolve, undefined, wrapper.____clock));
 									}
 									/* v8 ignore stop */
 								}
@@ -1483,12 +1483,12 @@ export function WaitingLayer(Base) {
 									// A built-in whose method the chain is about to call on it as itself is saved first for the runs open, as
 									// one handed out as itself is (see helpers/run-snapshot).
 									if (anyRunOpen() && typeof lastObject === "object" && builtinKind(lastObject) !== null)
-										checkpointHandout(wrapper.slothlet, lastObject);
+										checkpointHandout(wrapper.____slothlet, lastObject);
 									// An accessor or a Proxy of the module's runs as that module (#597).
 									current = currentWrapper.___readImplMember(prop);
 									// A built-in handed out as itself is saved first for the runs open (see helpers/run-snapshot).
 									if (anyRunOpen() && current !== null && typeof current === "object" && builtinKind(current) !== null)
-										checkpointHandout(wrapper.slothlet, current);
+										checkpointHandout(wrapper.____slothlet, current);
 									continue;
 								}
 							}
@@ -1501,7 +1501,7 @@ export function WaitingLayer(Base) {
 						const refusedChange = takeRefusedChange(wrapper, propChain);
 						if (refusedChange) throw refusedChange;
 
-						wrapper.slothlet.debug("wrapper", {
+						wrapper.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WAITING_APPLY",
 							apiPath: wrapper.____slothletInternal.apiPath,
 							propChain: ArrayMethods.join(propChain, ","),
@@ -1570,10 +1570,10 @@ export function WaitingLayer(Base) {
 							// Use the captured caller + runInContext (with the explicit instanceID)
 							// to re-establish context properly. This is multi-instance safe because
 							// runInContext looks up the store by instanceID, not currentInstanceID.
-							if (___capturedCallerWrapper && wrapper.slothlet.contextManager) {
+							if (___capturedCallerWrapper && wrapper.____slothlet.contextManager) {
 								const ___instanceStore =
-									wrapper.slothlet.contextManager.instances instanceof Map
-										? MapMethods.get(wrapper.slothlet.contextManager.instances, wrapper.instanceID)
+									wrapper.____slothlet.contextManager.instances instanceof Map
+										? MapMethods.get(wrapper.____slothlet.contextManager.instances, wrapper.____instanceID)
 										: undefined;
 								// False path (store missing or currentWrapper already set) only occurs in
 								// re-entrant scenarios that are not exercised by the test suite.
@@ -1581,8 +1581,8 @@ export function WaitingLayer(Base) {
 								if (___instanceStore && !___instanceStore.currentWrapper) {
 									// rawErrors: a leaf's own throw is application data — it must reach the caller
 									// unchanged (an async leaf's rejection already does; #252).
-									return wrapper.slothlet.contextManager.runInContext(
-										wrapper.instanceID,
+									return wrapper.____slothlet.contextManager.runInContext(
+										wrapper.____instanceID,
 										() => ___invokeChainEnd(current, lastObject),
 										null,
 										[],
@@ -1605,9 +1605,9 @@ export function WaitingLayer(Base) {
 							if (
 								!___capturedCallerWrapper &&
 								!___liveIdentity?.unresolved &&
-								typeof wrapper.slothlet.contextManager?.runRegisteredAsHost === "function"
+								typeof wrapper.____slothlet.contextManager?.runRegisteredAsHost === "function"
 							) {
-								return wrapper.slothlet.contextManager.runRegisteredAsHost(
+								return wrapper.____slothlet.contextManager.runRegisteredAsHost(
 									___invocationStoreID,
 									() => ___invokeChainEnd(current, lastObject),
 									null,
@@ -1615,8 +1615,8 @@ export function WaitingLayer(Base) {
 								);
 							}
 							const ___identityStore = ___capturedCallerWrapper
-								? wrapper.slothlet.contextManager?.instances instanceof Map
-									? MapMethods.get(wrapper.slothlet.contextManager.instances, wrapper.instanceID)
+								? wrapper.____slothlet.contextManager?.instances instanceof Map
+									? MapMethods.get(wrapper.____slothlet.contextManager.instances, wrapper.____instanceID)
 									: undefined
 								: null;
 							if (!___identityStore) return ___invokeChainEnd(current, lastObject);
@@ -1647,13 +1647,13 @@ export function WaitingLayer(Base) {
 						// If current is undefined/null after traversing the chain, throw an error
 						// The property doesn't exist after materialization
 						if (current === undefined || current === null) {
-							throw new wrapper.slothlet.SlothletError("CHAIN_NOT_CALLABLE", {
+							throw new wrapper.____slothlet.SlothletError("CHAIN_NOT_CALLABLE", {
 								path: chainPath,
 								chain
 							});
 						}
 
-						throw new wrapper.slothlet.SlothletError("CHAIN_NOT_CALLABLE", {
+						throw new wrapper.____slothlet.SlothletError("CHAIN_NOT_CALLABLE", {
 							path: chainPath,
 							chain
 						});
@@ -1667,7 +1667,7 @@ export function WaitingLayer(Base) {
 								filterList(concatLists([wrapper.____slothletInternal.apiPath], mapList(propChain, String)), Boolean),
 								"."
 							);
-							throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { path: segmentsOf(apiPath) });
+							throw new wrapper.____SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { path: segmentsOf(apiPath) });
 						}
 						return waitingHandler.apply(target, undefined, args, (fn) => Reflect.construct(fn, args, fn));
 					},
@@ -1734,7 +1734,7 @@ export function WaitingLayer(Base) {
 			___captureChange(change) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/waiting", import.meta.url);
 				const wrapper = this;
-				const { contextManager, instanceID } = wrapper.slothlet;
+				const { contextManager, instanceID } = wrapper.____slothlet;
 				const identity = contextManager.getCallerIdentity(instanceID);
 				const writer = identity?.unresolved ? null : (identity?.currentWrapper ?? null);
 				// The flow it was made in goes with it, so a setter it runs reads that flow's context, not the loader's.
@@ -1755,7 +1755,7 @@ export function WaitingLayer(Base) {
 			___makeQueuedChange(change, generation) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/waiting", import.meta.url);
 				const wrapper = this;
-				const { contextManager, instanceID } = wrapper.slothlet;
+				const { contextManager, instanceID } = wrapper.____slothlet;
 				// A change moved down from a node above keeps the nodes it was queued on before: one replaced while it loaded
 				// makes the refusal no longer anyone's.
 				const holders = concatLists(change.holders ?? [], [{ owner: wrapper, generation }]);
@@ -1776,12 +1776,12 @@ export function WaitingLayer(Base) {
 				} catch (error) {
 					const apiPath = standInPath(wrapper, change.chain);
 					const operation = change.op === "lock" ? "preventExtensions" : change.op;
-					new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { path: segmentsOf(apiPath), operation }, { cause: error });
-					const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { path: segmentsOf(apiPath), operation }, { cause: error });
-					if (!WeakMapMethods.has(REFUSED_CHANGES, wrapper.slothlet)) WeakMapMethods.set(REFUSED_CHANGES, wrapper.slothlet, []);
+					new wrapper.____SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { path: segmentsOf(apiPath), operation }, { cause: error });
+					const refused = new wrapper.____SlothletError("LAZY_WRITE_REFUSED", { path: segmentsOf(apiPath), operation }, { cause: error });
+					if (!WeakMapMethods.has(REFUSED_CHANGES, wrapper.____slothlet)) WeakMapMethods.set(REFUSED_CHANGES, wrapper.____slothlet, []);
 					// Recorded for the nodes the loads were for: one replaced while it loaded (reloaded, or rebuilt away) does not
 					// hand the refusal to the node that took its place.
-					listPush(WeakMapMethods.get(REFUSED_CHANGES, wrapper.slothlet), { path: apiPath, error: refused, holders });
+					listPush(WeakMapMethods.get(REFUSED_CHANGES, wrapper.____slothlet), { path: apiPath, error: refused, holders });
 				}
 			}
 
@@ -1802,8 +1802,9 @@ export function WaitingLayer(Base) {
 				// A replayed change that moves down to a node further down keeps the nodes it was queued on before.
 				if (replayHolders) captured.holders = replayHolders;
 				listPush(wrapper.____slothletInternal.pendingChanges, captured);
-				if (!WeakMapMethods.has(PENDING_CHANGES, wrapper.slothlet)) WeakMapMethods.set(PENDING_CHANGES, wrapper.slothlet, new Set());
-				SetMethods.add(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
+				if (!WeakMapMethods.has(PENDING_CHANGES, wrapper.____slothlet))
+					WeakMapMethods.set(PENDING_CHANGES, wrapper.____slothlet, new Set());
+				SetMethods.add(WeakMapMethods.get(PENDING_CHANGES, wrapper.____slothlet), wrapper);
 			}
 
 			/**

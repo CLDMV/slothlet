@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:12:59-08:00 (1795486379)
+ *	@Last modified time: 2026-11-25T16:05:37-08:00 (1795651537)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1603,7 +1603,7 @@ export class LiveContextManager {
 		const starter = this.#runningStarter;
 		if (!starter || !identity.currentWrapper || identity.unresolved) return identity;
 		const wrapper = starter.wrapper;
-		if (wrapper === identity.currentWrapper || wrapper?.slothlet !== identity.currentWrapper.slothlet) return identity;
+		if (wrapper === identity.currentWrapper || wrapper?.____slothlet !== identity.currentWrapper.____slothlet) return identity;
 		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, wrapper)) return identity;
 		// The starter is the call itself or a call it runs under: already held to.
 		for (let current = record, depth = 0; current && depth < 64; current = current.parent, depth++)
@@ -3209,7 +3209,7 @@ export class LiveContextManager {
 					parent:
 						entryIdentity.record ??
 						(entryCaller ? { wrapper: entryCaller, parent: null, flagged: false, ceiling: entryIdentity.ceiling ?? null } : null),
-					flagged: madeCode || carriesCallerCode(thisArg, args, currentWrapper.slothlet),
+					flagged: madeCode || carriesCallerCode(thisArg, args, currentWrapper.____slothlet),
 					// Handed a function to run, which may pick up after an `await` with nothing of the call on the stack (#917).
 					handed: Arrays.isArray(args) && ArrayMethods.some(args, (arg) => typeof arg === "function"),
 					ceiling,

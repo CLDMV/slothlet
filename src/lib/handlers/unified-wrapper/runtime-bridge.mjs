@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:03-08:00 (1795641843)
+ *	@Last modified time: 2026-11-25T16:05:39-08:00 (1795651539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -228,7 +228,7 @@ function contextReadAsDefiner(contextProxy, prop) {
 	const definer = frameDefiner();
 	if (definer === null || definer.unplaced) return undefined;
 	const leaf = definer.wrapper ?? definer.leaves[0];
-	const slothlet = leaf?.slothlet;
+	const slothlet = leaf?.____slothlet;
 	if (slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.caller?.provenance === false) return undefined;
 	const contextManager = slothlet?.contextManager;
 	const instanceID = contextManager?.runInContext ? makerInstanceID(slothlet) : null;

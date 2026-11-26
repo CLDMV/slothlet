@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:03-08:00 (1795641843)
+ *	@Last modified time: 2026-11-25T16:05:40-08:00 (1795651540)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -433,7 +433,7 @@ function selfIsMethodNode(thisArg, method) {
 	if (!WeakMapMethods.has(SELF_VIEW_NODES, thisArg)) return false;
 	const node = WeakMapMethods.get(SELF_VIEW_NODES, thisArg);
 	const owner = resolveWrapper(node) ?? WeakMapMethods.get(capturedViewChildren, node) ?? null;
-	if (owner === null || owner.slothlet !== method.slothlet) return false;
+	if (owner === null || owner.____slothlet !== method.____slothlet) return false;
 	const methodPath = String(method.____slothletInternal.apiPath);
 	const dot = StringMethods.lastIndexOf(methodPath, ".");
 	if (dot < 0) return false;
@@ -1257,7 +1257,7 @@ function selfMemberView(value, reader, slothlet, parts, through) {
 			if (handle)
 				for (let actIndex = 0; actIndex < ACTING_FOR.length; actIndex++) {
 					const actor = ACTING_FOR[actIndex];
-					if (actor !== accessor && actor.slothlet === slothlet) assertReaderWrite(slothlet, actor, accessor, target);
+					if (actor !== accessor && actor.____slothlet === slothlet) assertReaderWrite(slothlet, actor, accessor, target);
 				}
 			const writer = selfRootWriter(slothlet, accessor, target);
 			// The view's reader first: the write goes through its view, so a refusal of its own is the answer, whatever the
@@ -1518,7 +1518,7 @@ function selfView(node, reader, from = null, access = null) {
 	const inner = dispatch ? null : (resolveWrapper(node) ?? WeakMapMethods.get(capturedViewChildren, node) ?? null);
 	// Any other value another module hands on reaches the reader through the class prototype guard.
 	if (inner === null && dispatch === null) {
-		if (reader === undefined && from?.slothlet) reader = selfReader(from.slothlet, access);
+		if (reader === undefined && from?.____slothlet) reader = selfReader(from.____slothlet, access);
 		if (from === null) {
 			// Handed on by no known module (the host's own value in a hook's arguments, say), it is handed on as it is,
 			// unless a module's call returned it to the host.
@@ -1527,7 +1527,7 @@ function selfView(node, reader, from = null, access = null) {
 		}
 		return crossTo(node, reader, null, from);
 	}
-	const slothlet = dispatch ? dispatch.slothlet : inner.slothlet;
+	const slothlet = dispatch ? dispatch.slothlet : inner.____slothlet;
 	if (reader === undefined) reader = selfReader(slothlet, access);
 	let byReader = WeakMapMethods.get(SELF_VIEWS, node);
 	if (!byReader) {
@@ -2070,7 +2070,7 @@ function argumentSource(value, caller, called) {
 	if (creator) return creator;
 	const origin = WeakMapMethods.get(CROSSING_ORIGINS, value);
 	if (origin) return origin.wrapper;
-	if (called?.____slothletInternal && called.slothlet && WeakMapMethods.has(makerOf(called).made, value)) return called;
+	if (called?.____slothletInternal && called.____slothlet && WeakMapMethods.has(makerOf(called).made, value)) return called;
 	return caller;
 }
 
@@ -2290,14 +2290,14 @@ function selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, hostFlowIn
 	// running in a script that is not the file's, are refused there.
 	if (hostFlowInstanceID !== null && definer.unplaced && !definer.shared && !definer.foreign) return null;
 	if (loadingInstanceID !== null) {
-		const owner = (definer.wrapper ?? definer.leaves?.[0])?.slothlet;
-		if (!owner || owner.instanceID === loadingInstanceID) return null;
+		const owner = (definer.wrapper ?? definer.leaves?.[0])?.____slothlet;
+		if (!owner || owner.____instanceID === loadingInstanceID) return null;
 	}
 	const target = typeof prop === "symbol" ? String(SymbolMethods.description(prop) ?? "") : String(prop);
 	if (definer.unplaced) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(target) });
 	// Several leaves and none the file's own node: the file's module path is the identity, and no node answers for it.
 	// With the permission system off nothing is checked: any of them gives the code its context (#726).
-	if (definer.leaves && !definer.leaves[0].slothlet?.handlers?.permissionManager?.isEnabled?.()) definer.wrapper = definer.leaves[0];
+	if (definer.leaves && !definer.leaves[0].____slothlet?.handlers?.permissionManager?.isEnabled?.()) definer.wrapper = definer.leaves[0];
 	else if (definer.leaves) {
 		const paths = mapList(definer.leaves, (leaf) => splitText(String(leaf.____slothletInternal.apiPath ?? ""), "."));
 		const common = [];
@@ -2306,22 +2306,22 @@ function selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, hostFlowIn
 		throw new SlothletError("PERMISSION_DENIED", { caller: ArrayMethods.join(common, ".") || null, target: segmentsOf(target) });
 	}
 	const leaf = definer.wrapper;
-	const checks = Boolean(leaf.slothlet?.handlers?.permissionManager?.isEnabled?.());
+	const checks = Boolean(leaf.____slothlet?.handlers?.permissionManager?.isEnabled?.());
 	// With `provenance` off no code is told by its frames: it runs under its caller, and the host's code has no `self`.
-	if (checks && leaf.slothlet.config?.permissions?.caller?.provenance === false) return null;
+	if (checks && leaf.____slothlet.config?.permissions?.caller?.provenance === false) return null;
 	// With `references.capture` off a node read here would carry no reader, and a call through it, made while no call
 	// runs, would be taken for the host's: such code gets no `self`, as before it could be read as its definer at all.
-	if (checks && leaf.slothlet.config?.permissions?.caller?.capture === false) return null;
-	const contextManager = leaf.slothlet?.contextManager;
+	if (checks && leaf.____slothlet.config?.permissions?.caller?.capture === false) return null;
+	const contextManager = leaf.____slothlet?.contextManager;
 	// Calls are in flight and the live runtime cannot tell which of them runs this code (two api paths of one module
 	// resuming in a file they share), or that it is none of them: the caller is unknown, so the read is refused. Its
 	// definer is not read as the caller, and nor is the host. Only code no call accounts for is read by its frames.
 	if (checks) {
-		const identity = contextManager?.getCallerIdentity?.(leaf.slothlet.instanceID);
+		const identity = contextManager?.getCallerIdentity?.(leaf.____slothlet.instanceID);
 		if (identity?.unresolved && !identity.unaccounted)
 			throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(target) });
 	}
-	const instanceID = contextManager?.runInContext ? makerInstanceID(leaf.slothlet) : null;
+	const instanceID = contextManager?.runInContext ? makerInstanceID(leaf.____slothlet) : null;
 	if (instanceID === null) return null;
 	const read =
 		use === null
@@ -2355,7 +2355,7 @@ function selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, hostFlowIn
  * @private
  */
 function permissionsOn(wrapper) {
-	return wrapper?.slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
+	return wrapper?.____slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
 }
 
 /**
@@ -2420,7 +2420,7 @@ const PROTOTYPE_PATHS = new WeakMap();
 function sameModule(a, b) {
 	if (a === b) return true;
 	const left = moduleKey(a);
-	return left !== null && left === moduleKey(b) && a.slothlet === b.slothlet;
+	return left !== null && left === moduleKey(b) && a.____slothlet === b.____slothlet;
 }
 
 /**
@@ -2580,7 +2580,7 @@ const FUNCTION_OWN_KEYS = setFrom(["name", "length", "prototype", "arguments", "
  */
 function callAsDefiner(target, call) {
 	return () => {
-		const slothlet = target.slothlet;
+		const slothlet = target.____slothlet;
 		// A caller identity already handed to the call (one resolved before an await) stands.
 		const resolved = rulesShared.handedEntry !== null && rulesShared.handedEntry.wrapper === target ? null : {};
 		const held = {};
@@ -2616,8 +2616,8 @@ function callAsDefiner(target, call) {
 function closedPrototypeHandle(wrapper, prototype) {
 	const found = wrapper.___instancePrototypeSite();
 	if (found === undefined || found.prototype !== prototype) return wrapper.___emitterPrototypeHandle(prototype);
-	recordPrototypePath(wrapper.slothlet, prototype, found.site);
-	return prototypeHandleOf(wrapper.slothlet, prototype);
+	recordPrototypePath(wrapper.____slothlet, prototype, found.site);
+	return prototypeHandleOf(wrapper.____slothlet, prototype);
 }
 
 /**
@@ -2738,7 +2738,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 	// A change made through the view with no standing of its own is the reader's.
 	const refuseWithoutStanding = (prop) => {
 		if (VOUCHED_CHANGE === view) return;
-		refuseWriteWithoutStanding(inner.slothlet, inner, capturedCaller, prop);
+		refuseWriteWithoutStanding(inner.____slothlet, inner, capturedCaller, prop);
 	};
 
 	// The view stands over a shadow, never the child (#655): a member the child holds fixed (a frozen node's, a
@@ -2831,7 +2831,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 		if (value !== undefined && isMember && isTerminalData(value)) {
 			// Terminal data read off a captured namespace: gate it against the module that captured
 			// it, using the same override the lazy waiting-proxy resolver uses for its own snapshot.
-			const context = inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+			const context = inner.____slothlet.contextManager?.tryGetContext?.()?.context ?? null;
 			enforceRead(inner, prop, value, { currentWrapper: capturedCaller, ceiling, context });
 			if (value === resolved) return resolved;
 		}
@@ -2842,7 +2842,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 			return (...args) =>
 				serialize(
 					[
-						{ currentWrapper: capturedCaller, ceiling, context: inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null },
+						{ currentWrapper: capturedCaller, ceiling, context: inner.____slothlet.contextManager?.tryGetContext?.()?.context ?? null },
 						undefined
 					],
 					view,
@@ -2927,7 +2927,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 		else {
 			// Fixed for this view's reader: the object itself to code nothing could refuse an access through it, the handle
 			// to any other.
-			Reflect.setPrototypeOf(shadow, prototypeForHolder(inner.slothlet, capturedCaller, closedPrototypeHandle(inner, behindProto)));
+			Reflect.setPrototypeOf(shadow, prototypeForHolder(inner.____slothlet, capturedCaller, closedPrototypeHandle(inner, behindProto)));
 		}
 		Reflect.preventExtensions(shadow);
 	};
@@ -3127,10 +3127,10 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
  * @private
  */
 function capturedReader(wrapper) {
-	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	const permissionManager = wrapper.____slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return null;
 	if (permissionManager.isCaptureEnabled?.() === false) return null;
-	const identity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
+	const identity = wrapper.____slothlet.contextManager?.getCallerIdentity?.();
 	return identity?.currentWrapper ? { wrapper: identity.currentWrapper, ceiling: identity.ceiling ?? null } : null;
 }
 
@@ -3415,10 +3415,10 @@ export function ViewsLayer(Base) {
 			___liveEntry() {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/views", import.meta.url);
 				const wrapper = this;
-				const contextManager = wrapper.slothlet.contextManager;
-				const identity = contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID);
+				const contextManager = wrapper.____slothlet.contextManager;
+				const identity = contextManager?.getCallerIdentity?.(wrapper.____slothlet.instanceID);
 				if (!identity) return null;
-				return { store: contextManager.tryGetContext?.(wrapper.slothlet.instanceID) ?? null, identity };
+				return { store: contextManager.tryGetContext?.(wrapper.____slothlet.instanceID) ?? null, identity };
 			}
 		}
 	);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
+ *	@Last modified time: 2026-11-25T16:05:39-08:00 (1795651539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -182,8 +182,8 @@ function rootGate(slothlet) {
 	let gate = WeakMapMethods.get(ROOT_GATES, slothlet);
 	if (gate === undefined) {
 		gate = {
-			slothlet,
-			SlothletError: slothlet.SlothletError,
+			____slothlet: slothlet,
+			____SlothletError: slothlet.SlothletError,
 			____slothletInternal: {
 				apiPath: "",
 				filePath: null,
@@ -548,7 +548,7 @@ function rootMemberNode(slothlet, prop, value) {
 		isCallable: typeof value === "function"
 	});
 	node.___setImpl(value, null);
-	return node.createProxy();
+	return node.___createProxy();
 }
 
 /**

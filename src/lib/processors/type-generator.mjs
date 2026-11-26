@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
+ *	@Last modified time: 2026-11-25T16:05:46-08:00 (1795651546)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -168,7 +168,7 @@ function findInstance(api) {
 		const key = ofList[ofIndex];
 		if (SetMethods.has(FRAMEWORK_ROOT_KEYS, key)) continue;
 		const wrapper = resolveWrapper(api[key]);
-		if (wrapper?.slothlet) return wrapper.slothlet;
+		if (wrapper?.____slothlet) return wrapper.____slothlet;
 	}
 	return null;
 }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:44:15-08:00 (1795643055)
+ *	@Last modified time: 2026-11-25T16:05:37-08:00 (1795651537)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -709,7 +709,7 @@ export class ApiManager extends ComponentBase {
 				const container = current;
 				this.#beforeRootChange(container);
 				frameworkWrite(container, () => {
-					container[part] = containerWrapper.createProxy();
+					container[part] = containerWrapper.___createProxy();
 				});
 				// The node as placed, not a module's view of it (#625).
 				current = readApiMember(container, part);
@@ -845,7 +845,7 @@ export class ApiManager extends ComponentBase {
 				sourceFolder: callerSourceFolder
 			});
 			wrapper.___setImpl(value, callerModuleID);
-			stored = wrapper.createProxy();
+			stored = wrapper.___createProxy();
 		}
 
 		// A full-isolation run's `self` keeps the write in the run's own record, once every check above has passed (see
@@ -1748,11 +1748,11 @@ export class ApiManager extends ComponentBase {
 	 */
 	isRemovedCaller(callerWrapper) {
 		// A node removed from the tree, its module still mounted elsewhere (a node of the base tree), is gone all the same.
-		if (callerWrapper?.____slothletInternal?.removed === true && callerWrapper.slothlet === this.slothlet) return true;
-		if (callerWrapper?.slothlet === this.slothlet && this.isRestartReplaced(callerWrapper)) return true;
+		if (callerWrapper?.____slothletInternal?.removed === true && callerWrapper.____slothlet === this.slothlet) return true;
+		if (callerWrapper?.____slothlet === this.slothlet && this.isRestartReplaced(callerWrapper)) return true;
 		if (!callerWrapper?.____slothletInternal?.moduleID) return false;
 		// Code of another instance is not this instance's to judge: this instance holds no record of its module.
-		if (callerWrapper.slothlet !== this.slothlet) return false;
+		if (callerWrapper.____slothlet !== this.slothlet) return false;
 		return this.#ownedRoot(callerWrapper) === null;
 	}
 
@@ -2018,7 +2018,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Merge child wrappers from next to existing based on collision mode
-		// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
+		// IMPORTANT: _childCache should contain PROXIES (from ___createProxy()), not raw wrappers
 		// syncWrapper's collisionMode is always "replace" in tests; the merge else-if branch (arm1) is unreachable.
 		// Set true only when existingWrapper's impl is explicitly cleared to null below, pending a
 		// future materialization — the ONE case where the shared bookkeeping after this if/else-if/else
@@ -2406,7 +2406,7 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 *
 	 * @description
-	 * `createProxy()` can kick off a wrapper's `___materialize()` in the background before
+	 * `___createProxy()` can kick off a wrapper's `___materialize()` in the background before
 	 * `setValueAtPath()`'s collision decision is even known. When that decision rejects the
 	 * candidate, `revertSpeculativeSubtree()` correctly undoes ownership/raw-capture state
 	 * immediately — but the in-flight materialization is a separate, already-running async
@@ -4302,7 +4302,7 @@ export class ApiManager extends ComponentBase {
 					// Set apiToMerge as the impl (function or object)
 					containerWrapper.___setImpl(apiToMerge, moduleID);
 					// Replace apiToMerge with the wrapped proxy
-					apiToMerge = containerWrapper.createProxy();
+					apiToMerge = containerWrapper.___createProxy();
 				}
 
 				const result1 = await this.setValueAtPath(this.slothlet.api, effectiveParts, apiToMerge, {
@@ -7372,7 +7372,7 @@ export class ApiManager extends ComponentBase {
 					sourceFolder: resolvedFolderPath
 				});
 				containerWrapper.___setImpl(implForContainer, moduleID);
-				const apiToSet = containerWrapper.createProxy();
+				const apiToSet = containerWrapper.___createProxy();
 
 				// Set at endpoint path
 				await this.setValueAtPath(this.slothlet.api, parts, apiToSet, {

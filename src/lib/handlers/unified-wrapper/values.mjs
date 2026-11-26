@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:03-08:00 (1795641843)
+ *	@Last modified time: 2026-11-25T16:05:40-08:00 (1795651540)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1909,7 +1909,7 @@ function holdsSlottedData(value) {
  */
 function isOwnOrigin(value, reader) {
 	const origin = WeakMapMethods.get(CROSSING_ORIGINS, value);
-	if (origin === undefined || origin.slothlet !== reader?.slothlet || origin.module !== moduleKey(reader)) return false;
+	if (origin === undefined || origin.slothlet !== reader?.____slothlet || origin.module !== moduleKey(reader)) return false;
 	// Modules of one id with a deny rule between them are not each other's.
 	return asOneModule(origin.slothlet, origin.wrapper, reader);
 }
@@ -2020,7 +2020,7 @@ function answersWithModuleCode(value) {
  * @private
  */
 function isReadRedacted(wrapper, prop, kept = null, access = null, listing = false) {
-	const pm = wrapper.slothlet.handlers?.permissionManager;
+	const pm = wrapper.____slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
 	// A function's own `name` and `length` are never withheld (see isBuiltinFunctionMember).
 	if (isBuiltinFunctionMember(wrapper, prop)) return false;
@@ -2364,7 +2364,10 @@ function inspectShown(wrapper, args, forModule = wrapper.___inspectReaderIsModul
 	// A function the node composed its members onto is a layer, which `util.inspect` would show as its bare shell: it is
 	// shown by its form and members, as to a module.
 	const layered = isCompositionLayer(internal.impl) && typeof internal.impl === "function";
-	if (!layered && (!forModule || !memberHoldsCode(internal.impl, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet))))
+	if (
+		!layered &&
+		(!forModule || !memberHoldsCode(internal.impl, searchDepth(wrapper.____slothlet) + 1, searchBudget(wrapper.____slothlet)))
+	)
 		return internal.impl;
 	// The node's own members, read through it as the module reading them may.
 	if (typeof internal.impl !== "function") return wrapper.___inspectMembers();
@@ -2398,7 +2401,7 @@ function inspectSafe(value, args, forModule, slothlet) {
  * @description
  * An array member's target is an empty array shell the wrapper owns (#603, #609), and Node inspects a
  * Proxy's target directly, so the shell's hook shows the module's current array. Every target is
- * created extensible by the wrapper, so no extensibility guard is needed. Shared by createProxy() and
+ * created extensible by the wrapper, so no extensibility guard is needed. Shared by ___createProxy() and
  * the callable-proxy upgrade (#533).
  *
  * @param {UnifiedWrapper} wrapper - The wrapper the target belongs to.
@@ -2464,7 +2467,7 @@ function deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept) {
 	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
 	const beneath = readGateDecision(wrapper, probePath, callerOverride, kept);
 	if (beneath.allowed) return false;
-	return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
+	return !wrapper.____slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
 }
 
 /**
@@ -2648,7 +2651,7 @@ export function ValuesLayer(Base) {
 				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
 				const wrapper = this;
 				const internal = wrapper.____slothletInternal;
-				const slothlet = wrapper.slothlet;
+				const slothlet = wrapper.____slothlet;
 				const handlers = slothlet.handlers;
 				const system = handlers?.metadata?.getSystemMetadata?.(wrapper) ?? null;
 				const lazy = internal.mode === "lazy";
@@ -2726,7 +2729,7 @@ export function ValuesLayer(Base) {
 			___markAssignedData(value) {
 				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
 				const wrapper = this;
-				if (value === null || typeof value !== "object" || wrapper.slothlet?.____buildDepth > 0) return;
+				if (value === null || typeof value !== "object" || wrapper.____slothlet?.____buildDepth > 0) return;
 				if (util.types.isProxy(value) || resolveWrapper(value) !== null || isTerminalData(value)) return;
 				WeakSetMethods.add(ASSIGNED_DATA, value);
 			}
@@ -2886,7 +2889,7 @@ export function ValuesLayer(Base) {
 			___redactToJSONResult(result, path, readers, kept) {
 				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
 				const wrapper = this;
-				const pm = wrapper.slothlet.handlers?.permissionManager;
+				const pm = wrapper.____slothlet.handlers?.permissionManager;
 				if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return result;
 				let redacted = result;
 				for (let ofIndex = 0, ofList = readers; ofIndex < ofList.length; ofIndex++) {
@@ -2938,7 +2941,7 @@ export function ValuesLayer(Base) {
 			___inspectReaderIsModule() {
 				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
 				const wrapper = this;
-				const identity = wrapper.slothlet?.contextManager?.getCallerIdentity?.(wrapper.slothlet.instanceID);
+				const identity = wrapper.____slothlet?.contextManager?.getCallerIdentity?.(wrapper.____slothlet.instanceID);
 				return Boolean(identity?.currentWrapper || identity?.unresolved);
 			}
 		}

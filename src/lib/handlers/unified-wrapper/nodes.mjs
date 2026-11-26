@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
+ *	@Last modified time: 2026-11-25T16:05:39-08:00 (1795651539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -450,7 +450,7 @@ function moduleObjectFor(wrapper, value, asMember) {
 	if (root === null || typeof root !== "object" || Arrays.isArray(root) || util.types.isProxy(root)) return null;
 	const prototype = Reflect.getPrototypeOf(root);
 	if (prototype !== null && prototype !== Objects.prototype) return null;
-	const ownership = wrapper.slothlet?.handlers?.ownership;
+	const ownership = wrapper.____slothlet?.handlers?.ownership;
 	const filePath = wrapper.____slothletInternal.filePath;
 	if (!ownership || !filePath) return null;
 	if (ownership.resolveExportPath(filePath, root) || (asMember && !ownership.resolveMemberExportPaths(filePath, root))) {
@@ -550,7 +550,7 @@ function followModuleObject(wrapper, target, prop, integrity = true) {
 	if (
 		internal.followingModule ||
 		internal.integritySyncing ||
-		wrapper.slothlet.____buildDepth > 0 ||
+		wrapper.____slothlet.____buildDepth > 0 ||
 		MapMethods.has(FRAMEWORK_WRITES, wrapper)
 	)
 		return;
@@ -641,7 +641,7 @@ const nodesShared = {
  * @private
  */
 function makerOf(wrapper) {
-	const slothlet = wrapper.slothlet;
+	const slothlet = wrapper.____slothlet;
 	let makers = WeakMapMethods.get(MAKERS, slothlet);
 	if (!makers) WeakMapMethods.set(MAKERS, slothlet, (makers = { byID: new Map(), byWrapper: new WeakMap() }));
 	const moduleID = wrapper.____slothletInternal?.moduleID;
@@ -806,7 +806,7 @@ function prototypeClassNode(slothlet, prototype) {
  */
 function prototypeForReader(wrapper, prototype, prop) {
 	if (prototype === null || typeof prototype !== "object") return prototype;
-	const slothlet = wrapper.slothlet;
+	const slothlet = wrapper.____slothlet;
 	// The site is kept per node, so recording it costs no path built per read, with the permission system on or off.
 	const site = prototypeSiteOf(wrapper, prop);
 	recordPrototypePath(slothlet, prototype, site);
@@ -1184,7 +1184,7 @@ function nodeInCycle(wrapper, member, walkUp = true) {
 	// registerLeafFunction), the function a call of the node runs. In plain JS that function is a member of
 	// the object, `obj.default !== obj`: the node stands for the object, so the function is no reference back to it.
 	if (owner !== undefined && implDefault(owner.____slothletInternal.impl) === value) owner = undefined;
-	if (owner !== undefined && owner.slothlet === wrapper.slothlet && !owner.____slothletInternal.invalid) {
+	if (owner !== undefined && owner.____slothlet === wrapper.____slothlet && !owner.____slothletInternal.invalid) {
 		const at = String(owner.____slothletInternal.apiPath ?? "");
 		if (at === path) return wrapper;
 		if (!walkUp && at !== "" && StringMethods.startsWith(path, `${at}.`)) return owner;
@@ -1192,7 +1192,7 @@ function nodeInCycle(wrapper, member, walkUp = true) {
 	if (!walkUp) return null;
 	const segments = splitText(path, ".");
 	for (let depth = segments.length - 1; depth > 0; depth--) {
-		const node = nodeAtPath(wrapper.slothlet, ArrayMethods.join(copyList(segments, 0, depth), "."));
+		const node = nodeAtPath(wrapper.____slothlet, ArrayMethods.join(copyList(segments, 0, depth), "."));
 		if (node !== null && (ownFunction(node) || (owner !== undefined && node === owner))) return node;
 	}
 	return null;
@@ -1669,7 +1669,7 @@ export function NodesLayer(Base) {
 				if (
 					internal.followingModule ||
 					internal.integritySyncing ||
-					wrapper.slothlet.____buildDepth > 0 ||
+					wrapper.____slothlet.____buildDepth > 0 ||
 					MapMethods.has(FRAMEWORK_WRITES, wrapper)
 				)
 					return;
@@ -1704,7 +1704,7 @@ export function NodesLayer(Base) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
 				const wrapper = this;
 				if (prototype === null || typeof prototype !== "object") return prototype;
-				if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext) return prototype;
+				if (!wrapper?.____slothlet?.instanceID || !wrapper.____slothlet.contextManager?.runInContext) return prototype;
 				WeakSetMethods.add(makerOf(wrapper).exposed, prototype);
 				return prototype;
 			}
@@ -1747,7 +1747,7 @@ export function NodesLayer(Base) {
 			___emitterPrototypeHandle(prototype) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
 				const wrapper = this;
-				const slothlet = wrapper.slothlet;
+				const slothlet = wrapper.____slothlet;
 				const site = prototypeSiteOf(wrapper, null);
 				recordPrototypePath(slothlet, prototype, site);
 				return prototypeHandleOf(slothlet, prototype);
@@ -1839,7 +1839,7 @@ export function NodesLayer(Base) {
 				const wrapper = this;
 				const instanceClass = wrapper.___heldInstanceClass();
 				if (instanceClass === null) return null;
-				return nodeRefOf(FUNCTION_NODES, wrapper.slothlet, instanceClass) !== undefined ? instanceClass : null;
+				return nodeRefOf(FUNCTION_NODES, wrapper.____slothlet, instanceClass) !== undefined ? instanceClass : null;
 			}
 
 			/**
@@ -1857,7 +1857,7 @@ export function NodesLayer(Base) {
 				const internal = wrapper.____slothletInternal;
 				const exported = wrapper.___exportedInstanceClass();
 				if (exported !== null)
-					return WeakRefMethods.deref(WeakMapMethods.get(WeakMapMethods.get(FUNCTION_NODES, wrapper.slothlet), exported));
+					return WeakRefMethods.deref(WeakMapMethods.get(WeakMapMethods.get(FUNCTION_NODES, wrapper.____slothlet), exported));
 				if (internal.deferChildAdopt || (EventEmitter && inherits(internal.impl, EventEmitter))) return null;
 				return instanceClassNode(wrapper);
 			}

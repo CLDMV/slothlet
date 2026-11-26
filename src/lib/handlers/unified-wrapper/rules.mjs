@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
+ *	@Last modified time: 2026-11-25T16:05:39-08:00 (1795651539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -289,7 +289,7 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
  * @internal
  *
  * @example
- * registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
+ * registerFrameworkMember(slothletNamespace, this.____slothlet, "slothlet");
  */
 function registerFrameworkMember(member, slothlet, name) {
 	if (member !== null && (typeof member === "object" || typeof member === "function")) {
@@ -531,7 +531,7 @@ const NO_STORED_VALUE = Symbol("slothlet.noStoredValue");
 function placingTrap(wrapper, trap, valueOf) {
 	return (...args) => {
 		const prop = args[1];
-		const slothlet = wrapper.slothlet;
+		const slothlet = wrapper.____slothlet;
 		if (
 			typeof prop !== "string" ||
 			isFrameworkReservedKey(prop) ||
@@ -609,7 +609,7 @@ function assertOwnedWrite(wrapper, prop) {
  * @private
  */
 function assertOwnedWriteAt(wrapper, parts) {
-	const slothlet = wrapper.slothlet;
+	const slothlet = wrapper.____slothlet;
 	if (!slothlet.handlers.apiManager.writeChecked(parts)) return;
 	// The executing call's identity, never the store's own caller field: under the live runtime that field
 	// names whichever call entered last, which is not who is running once calls overlap.
@@ -617,7 +617,7 @@ function assertOwnedWriteAt(wrapper, parts) {
 	// Code the live runtime cannot attribute to one of several suspended calls is module code with no
 	// owner to check against: refused, rather than handed the host's standing.
 	if (identity?.unresolved) {
-		throw new wrapper.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
+		throw new wrapper.____SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 	}
 	const caller = identity?.currentWrapper;
 	if (!caller) return;
@@ -630,7 +630,7 @@ function assertOwnedWriteAt(wrapper, parts) {
 	// write for that module too, which has to be allowed it.
 	for (let actIndex = 0; actIndex < ACTING_FOR.length; actIndex++) {
 		const actor = ACTING_FOR[actIndex];
-		if (actor !== caller && actor.slothlet === slothlet) assertReaderWrite(slothlet, actor, caller, parts);
+		if (actor !== caller && actor.____slothlet === slothlet) assertReaderWrite(slothlet, actor, caller, parts);
 	}
 }
 
@@ -772,9 +772,9 @@ function accessIdentity(access, contextManager, instanceID) {
  */
 function accessEntry(access, wrapper) {
 	if (access === null || access.done) return null;
-	const contextManager = wrapper.slothlet.contextManager;
+	const contextManager = wrapper.____slothlet.contextManager;
 	if (!contextManager?.tryGetContext || !contextManager.getCallerIdentity) return null;
-	const instanceID = wrapper.slothlet.instanceID;
+	const instanceID = wrapper.____slothlet.instanceID;
 	const identity = accessIdentity(access, contextManager, instanceID);
 	if (access.manager !== contextManager || access.identity !== identity) return null;
 	const store = contextManager.tryGetContext(instanceID);
@@ -870,14 +870,14 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
 	// are singletons shared by every instance, so an outer instance mid-call (e.g. a leaf booting a
 	// second `slothlet()`) would otherwise be seen as this instance's caller and enforced against
 	// this instance's rules — a cross-instance contamination the isolation contract forbids (#290).
-	const ownInstanceID = wrapper.slothlet.instanceID;
+	const ownInstanceID = wrapper.____slothlet.instanceID;
 	// A caller identity resolved earlier in this same call, before an await that would lose it (see
 	// applyWithEntry), is taken as it was resolved.
 	const ctx = preResolved
 		? preResolved.store
 		: ctxOverride !== undefined
 			? ctxOverride
-			: wrapper.slothlet.contextManager?.tryGetContext?.(ownInstanceID);
+			: wrapper.____slothlet.contextManager?.tryGetContext?.(ownInstanceID);
 	// Ask the context manager who is calling rather than reading the store's `currentWrapper`.
 	// Under the live runtime that field is a single slot shared by every in-flight call, so a call
 	// resuming from an `await` can read another module's identity; the manager disambiguates. An
@@ -886,7 +886,7 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
 		? preResolved.identity
 		: ctxOverride !== undefined
 			? ctxOverride
-			: wrapper.slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
+			: wrapper.____slothlet.contextManager?.getCallerIdentity?.(ownInstanceID);
 	// Identity was ambiguous and could not be attributed. Deny outright — falling through to the
 	// absent-caller branch below would hand it the host-initiated exemption, which is precisely
 	// the privilege it must not inherit. This is context-live's ambiguous answer: two api paths of one
@@ -907,15 +907,15 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
 		// (async mode outside a call, `ctx` null) fall back to the instance's base store.
 		// A run's store put back for work the run left behind stands for the instance's own: the work keeps the run's
 		// context, never the run's standing (see `reopenFlowStore` in context-live).
-		const instances = wrapper.slothlet.contextManager?.instances;
+		const instances = wrapper.____slothlet.contextManager?.instances;
 		const store =
 			ctx && ctx[trustedRootOwn.REOPENED_FLOW] !== true
 				? ctx
 				: instances
-					? MapMethods.get(instances, wrapper.slothlet.instanceID)
+					? MapMethods.get(instances, wrapper.____slothlet.instanceID)
 					: undefined;
 		if (store && store[trustedRootOwn.TRUSTED_ROOT] === true) return { verdict: "allow", identity, ctx };
-		if (wrapper.slothlet.config?.permissions?.caller?.anonymous) return { verdict: "allow", identity, ctx };
+		if (wrapper.____slothlet.config?.permissions?.caller?.anonymous) return { verdict: "allow", identity, ctx };
 		return { verdict: "deny", identity, ctx };
 	}
 	// A caller identity is present but not a genuine wrapper — a forged object. Fail closed.
@@ -948,11 +948,11 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
  * enforceNodeReportRead(inner, "d.fn", { currentWrapper: reader, ceiling: null, context });
  */
 function enforceNodeReportRead(wrapper, nodePath, callerOverride) {
-	const pm = wrapper.slothlet.handlers?.permissionManager;
+	const pm = wrapper.____slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
 	const decision = readGateDecision(wrapper, nodePath, callerOverride);
 	if (decision.allowed) return;
-	throw new wrapper.SlothletError("PERMISSION_DENIED", {
+	throw new wrapper.____SlothletError("PERMISSION_DENIED", {
 		caller: decision.caller,
 		target: segmentsOf(nodePath)
 	});
@@ -987,7 +987,7 @@ function enforceNodeReportRead(wrapper, nodePath, callerOverride) {
  * @private
  */
 function enforceRead(wrapper, prop, resolvedValue, callerOverride, kept = null, access = null) {
-	const pm = wrapper.slothlet.handlers?.permissionManager;
+	const pm = wrapper.____slothlet.handlers?.permissionManager;
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
 	if (!isTerminalData(resolvedValue)) return;
@@ -997,7 +997,7 @@ function enforceRead(wrapper, prop, resolvedValue, callerOverride, kept = null, 
 	const targetPath = memberPathOf(wrapper, prop);
 	const decision = readGateDecision(wrapper, targetPath, callerOverride, kept, access);
 	if (decision.allowed) return;
-	throw new wrapper.SlothletError("PERMISSION_DENIED", {
+	throw new wrapper.____SlothletError("PERMISSION_DENIED", {
 		caller: decision.caller,
 		target: segmentsOf(targetPath)
 	});
@@ -1047,7 +1047,7 @@ function readGateDecision(wrapper, targetPath, callerOverride, kept = null, acce
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
 		// enforcement so the `permissions.private.host` policy applies and is audited (#260).
-		const hostPm = wrapper.slothlet.handlers.permissionManager;
+		const hostPm = wrapper.____slothlet.handlers.permissionManager;
 		if (
 			hostPm.isPrivateTarget?.(targetPath) &&
 			!hostPm.enforceAccess(null, targetPath, null, wrapper.____slothletInternal.filePath, null)
@@ -1059,7 +1059,7 @@ function readGateDecision(wrapper, targetPath, callerOverride, kept = null, acce
 	if (decision.verdict === "deny") return { allowed: false, caller: null };
 	const { callerWrapper, ceilings, ctx } = decision;
 	// Code of a module that is gone is allowed no call: the rules naming its old path are another module's now (#625).
-	if (wrapper.slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) {
+	if (wrapper.____slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) {
 		return { allowed: false, caller: String(callerWrapper.____slothletInternal.apiPath ?? "") };
 	}
 	let verdict = readGateFor(wrapper, targetPath, callerWrapper, ctx, operation);
@@ -1093,7 +1093,7 @@ function readGateFor(wrapper, targetPath, callerWrapper, ctx, operation = "read"
 	// `ctx.context ?? null` — the `?? null` fallback is defensive; the contextManager
 	// always supplies a `.context` (at minimum `{}`), so the null branch is unreachable
 	// in practice, parallel to the v8-ignored defensives above.
-	const allowed = wrapper.slothlet.handlers.permissionManager.enforceAccess(
+	const allowed = wrapper.____slothlet.handlers.permissionManager.enforceAccess(
 		callerPath,
 		targetPath,
 		callerFilePath,
@@ -1101,7 +1101,7 @@ function readGateFor(wrapper, targetPath, callerWrapper, ctx, operation = "read"
 		/* v8 ignore next */
 		ctx.context ?? null,
 		null,
-		operation === "read" ? dataReadOptions(wrapper.slothlet) : null
+		operation === "read" ? dataReadOptions(wrapper.____slothlet) : null
 	);
 	return { allowed, caller: callerPath };
 }
@@ -1148,9 +1148,9 @@ function readOnBehalf(reader, read) {
  * @private
  */
 function enforceCodeMember(wrapper, value, kept = null) {
-	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	const permissionManager = wrapper.____slothlet.handlers?.permissionManager;
 	if (!permissionManager?.isEnabled()) return;
-	if (!memberHoldsCode(value, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet))) return;
+	if (!memberHoldsCode(value, searchDepth(wrapper.____slothlet) + 1, searchBudget(wrapper.____slothlet))) return;
 	if (accessorReader === undefined) enforcePermission(wrapper, [], false, kept);
 	else if (accessorReader?.currentWrapper) wrapper.___enforceAccessorReader(accessorReader, []);
 }
@@ -1229,7 +1229,7 @@ function hostRunDefiner(slothlet, unaccounted = false, resolved = null, held = r
 	// theirs running in a script that is not the file's: it names some module's file, so it is not run as the host's.
 	if (definer?.shared || definer?.foreign) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("self") });
 	const leaf = definer?.wrapper;
-	if (!leaf || leaf.slothlet !== slothlet) return null;
+	if (!leaf || leaf.____slothlet !== slothlet) return null;
 	// The others the code is held to as well: the leaves further out on the stack, and, for a helper file's own code,
 	// every other module importing the helper.
 	if (held && definer.callers?.length) held.ceiling = Reflect.apply(combineCeilings, undefined, definer.callers);
@@ -1273,7 +1273,7 @@ function gateLeafCopy(slothlet, original, args, thisArg, ownToo = false) {
 	if (typeof original !== "function" || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return;
 	const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, original);
 	if (leaf !== undefined) {
-		if (ownToo && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === slothlet)
+		if (ownToo && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.____slothlet === slothlet)
 			enforcePermission(leaf, args, false, null, null, null, thisArg);
 		return;
 	}
@@ -1321,14 +1321,14 @@ function contextRead(ctx, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const reader = ctx?.currentWrapper;
 	const isModule = Boolean(reader?.____slothletInternal) && WeakSetMethods.has(trustedRootOwn.genuineWrappers, reader);
-	if (WeakMapMethods.has(CROSSINGS, value)) return isModule ? crossTo(value, reader, reader.slothlet, null) : uncross(value);
+	if (WeakMapMethods.has(CROSSINGS, value)) return isModule ? crossTo(value, reader, reader.____slothlet, null) : uncross(value);
 	if (!isModule) return value;
 	const writer = WeakMapMethods.get(CONTEXT_WRITERS, value);
 	if (writer === undefined) {
 		if (!isSlothletValue(value)) WeakSetMethods.add(CONTEXT_HOST_VALUES, value);
 		return value;
 	}
-	return crossTo(value, reader, reader.slothlet, writer);
+	return crossTo(value, reader, reader.____slothlet, writer);
 }
 
 /**
@@ -1449,14 +1449,14 @@ function readsNothingBeneath(wrapper, targetPath, callerOverride, kept = null, a
 	// object written to the api after it was built is data too, and so is a plain object or array no node stands for
 	// yet, which only data holds (#826).
 	const memberNode =
-		nodeAtPath(wrapper.slothlet, targetPath) ?? (member !== null && typeof member === "object" ? resolveWrapper(member) : null);
+		nodeAtPath(wrapper.____slothlet, targetPath) ?? (member !== null && typeof member === "object" ? resolveWrapper(member) : null);
 	const unwrappedData = memberNode === null && (holdsAssignedData(wrapper) || isPlainData(member));
 	if (!isDataMemberNode(memberNode) && !unwrappedData) return false;
 	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
 	const beneath = readGateDecision(wrapper, probePath, callerOverride, kept, access);
 	if (beneath.allowed) return false;
 	// A more specific allow beneath the member lets what it names through, so the member is listed with just that.
-	return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
+	return !wrapper.____slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
 }
 
 /**
@@ -1538,8 +1538,8 @@ function arrayKeyHolder(impl, prop) {
  * @private
  */
 function refuseRemovedCaller(wrapper, callerWrapper, targetPath) {
-	if (!wrapper.slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) return;
-	throw new wrapper.SlothletError("PERMISSION_DENIED", {
+	if (!wrapper.____slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) return;
+	throw new wrapper.____SlothletError("PERMISSION_DENIED", {
 		caller: String(callerWrapper.____slothletInternal.apiPath ?? ""),
 		target: segmentsOf(targetPath)
 	});
@@ -1575,7 +1575,7 @@ function refuseRemovedCaller(wrapper, callerWrapper, targetPath) {
  * @private
  */
 function enforcePermission(wrapper, callArgs, promote = false, kept = null, resolved = null, preResolved = null, thisArg = undefined) {
-	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	const permissionManager = wrapper.____slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return;
 
 	const targetPath = wrapper.____slothletInternal.apiPath;
@@ -1598,12 +1598,12 @@ function enforcePermission(wrapper, callArgs, promote = false, kept = null, reso
 			permissionManager.isPrivateTarget?.(targetPath) &&
 			!permissionManager.enforceAccess(null, targetPath, null, wrapper.____slothletInternal.filePath, null, callMeta)
 		) {
-			throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(targetPath) });
+			throw new wrapper.____SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(targetPath) });
 		}
 		return;
 	}
 	if (decision.verdict === "deny") {
-		throw new wrapper.SlothletError("PERMISSION_DENIED", {
+		throw new wrapper.____SlothletError("PERMISSION_DENIED", {
 			caller: null,
 			target: segmentsOf(targetPath)
 		});
@@ -1614,7 +1614,7 @@ function enforcePermission(wrapper, callArgs, promote = false, kept = null, reso
 	const runtimeContext = ctx?.context ?? null;
 	// A leaf's own function handed over as a value (imported raw from its file) is gated for the caller as though
 	// it had called it through `self` (#597): the call it is handed to would otherwise run it with its own rights.
-	const handed = handedLeafFunctions(thisArg, callArgs, wrapper.slothlet);
+	const handed = handedLeafFunctions(thisArg, callArgs, wrapper.____slothlet);
 	if (handed) {
 		for (let h = 0; h < handed.length; h++) {
 			const leaf = handed[h];
@@ -1678,7 +1678,7 @@ function enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, ru
 	}
 
 	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, enforceOptions)) {
-		throw new wrapper.SlothletError("PERMISSION_DENIED", {
+		throw new wrapper.____SlothletError("PERMISSION_DENIED", {
 			caller: callerPath,
 			target: segmentsOf(targetPath)
 		});
@@ -1752,7 +1752,7 @@ function implDefault(impl) {
 function readAsReader(wrapper, prop, value, reader) {
 	if (!reader || value === undefined) return value;
 	if (isTerminalData(value)) {
-		const context = wrapper.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+		const context = wrapper.____slothlet.contextManager?.tryGetContext?.()?.context ?? null;
 		enforceRead(wrapper, prop, value, { currentWrapper: reader.wrapper, ceiling: reader.ceiling, context });
 		return value;
 	}
@@ -1781,7 +1781,7 @@ function readAsReader(wrapper, prop, value, reader) {
 function bindCapturedIdentity(wrapper, prop, value, access = null) {
 	if (typeof prop !== "string" && typeof prop !== "symbol") return value;
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	const permissionManager = wrapper.____slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled()) return value;
 	// Checked before anything costlier. The escape hatch exists for compatibility rather than cost: code
 	// written against earlier versions may stash an api reference inside a module and call it from host
@@ -1813,7 +1813,7 @@ function bindCapturedIdentity(wrapper, prop, value, access = null) {
 	)
 		return value;
 
-	const capturedIdentity = accessIdentity(access, wrapper.slothlet.contextManager);
+	const capturedIdentity = accessIdentity(access, wrapper.____slothlet.contextManager);
 	const capturedCaller = capturedIdentity?.currentWrapper;
 	if (!capturedCaller) return value;
 	// A reader that is code supplied to another call keeps that call as its ceiling, so the reference cannot
@@ -2186,9 +2186,9 @@ export function RulesLayer(Base) {
 			___runAccessor(accessor, thisArg, args, attribute = true) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
 				const wrapper = this;
-				const contextManager = wrapper.slothlet.contextManager;
-				if (!contextManager?.runInContext || !wrapper.slothlet.instanceID) return Reflect.apply(accessor, thisArg, args);
-				const reader = accessorReader !== undefined ? accessorReader : contextManager.getCallerIdentity?.(wrapper.slothlet.instanceID);
+				const contextManager = wrapper.____slothlet.contextManager;
+				if (!contextManager?.runInContext || !wrapper.____slothlet.instanceID) return Reflect.apply(accessor, thisArg, args);
+				const reader = accessorReader !== undefined ? accessorReader : contextManager.getCallerIdentity?.(wrapper.____slothlet.instanceID);
 				// Code no call accounts for reads only through a node a module kept, as that module (#661).
 				let kept = null;
 				if (accessorReader === undefined && reader?.unresolved && reader.unaccounted) {
@@ -2198,7 +2198,10 @@ export function RulesLayer(Base) {
 					} else kept = takeCapturedAccess(wrapper);
 				}
 				if (reader?.unresolved && !kept) {
-					throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(wrapper.____slothletInternal.apiPath) });
+					throw new wrapper.____SlothletError("PERMISSION_DENIED", {
+						caller: null,
+						target: segmentsOf(wrapper.____slothletInternal.apiPath)
+					});
 				}
 				// Running it is calling the module's code, so the reader has to be allowed to call the node, as a call through
 				// `self` is checked (a reader completed on behalf of is checked as that reader).
@@ -2220,7 +2223,7 @@ export function RulesLayer(Base) {
 			___enforceAccessorReader(reader, args) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
 				const wrapper = this;
-				const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+				const permissionManager = wrapper.____slothlet.handlers?.permissionManager;
 				if (!permissionManager?.isEnabled()) return;
 				const targetPath = wrapper.____slothletInternal.apiPath;
 				const runtimeContext = reader.context ?? null;
@@ -2349,7 +2352,7 @@ export function RulesLayer(Base) {
 				const targetPath = wrapper.____slothletInternal.apiPath;
 				const decision = readGateDecision(wrapper, targetPath, undefined, kept, access, pinned);
 				if (decision.allowed) return;
-				throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: segmentsOf(targetPath) });
+				throw new wrapper.____SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: segmentsOf(targetPath) });
 			}
 
 			/**
@@ -2441,7 +2444,7 @@ export function RulesLayer(Base) {
 							PRINCIPAL_GRACE
 						)
 					) {
-						throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
+						throw new wrapper.____SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
 					}
 				});
 			}
@@ -2520,7 +2523,7 @@ export function RulesLayer(Base) {
 			___enforceCapturedCaller(capturedCaller, targetPathOverride, callArgs, promote = false) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/rules", import.meta.url);
 				const wrapper = this;
-				const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+				const permissionManager = wrapper.____slothlet.handlers?.permissionManager;
 				/* v8 ignore next -- a view is only ever built while permissions are enabled, so this cannot be hit
 				   unless enforcement is torn down between the read and the call; harmless either way. */
 				if (!permissionManager || !permissionManager.isEnabled()) return;
@@ -2535,7 +2538,7 @@ export function RulesLayer(Base) {
 				const callerFilePath = capturedCaller.____slothletInternal?.filePath ?? null;
 				const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
 				/* v8 ignore stop */
-				const runtimeContext = wrapper.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+				const runtimeContext = wrapper.____slothlet.contextManager?.tryGetContext?.()?.context ?? null;
 				// #455: same resource-scoped gate metadata as the direct-call path.
 				const callMeta = { args: callArgs, target: targetPath };
 
@@ -2558,7 +2561,7 @@ export function RulesLayer(Base) {
 				if (
 					!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, enforceOptions)
 				) {
-					throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
+					throw new wrapper.____SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
 				}
 			}
 
@@ -2587,7 +2590,7 @@ export function RulesLayer(Base) {
 				const apiPath = wrapper.____slothletInternal.apiPath;
 				const segments = concatLists(apiPath ? splitText(String(apiPath), ".") : [], mapList(propChain, String));
 				const fail = () => {
-					throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { path: segmentsOf(ArrayMethods.join(segments, ".")) });
+					throw new wrapper.____SlothletError("RESTART_REFERENCE_UNRESOLVED", { path: segmentsOf(ArrayMethods.join(segments, ".")) });
 				};
 				// The tree of the code reading the node: the instance's, or the run's own (#876).
 				const slothlet = wrapper.____slothlet;

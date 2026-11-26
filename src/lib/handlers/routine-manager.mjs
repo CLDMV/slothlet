@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:15:38-08:00 (1794978938)
+ *	@Last modified time: 2026-11-25T16:05:38-08:00 (1795651538)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -837,7 +837,7 @@ export class RoutineManager extends ComponentBase {
 	 * @example
 	 * const priorEntry = routineManager.snapshotRawEntry("thing.initialize", moduleID);
 	 * const wrapper = new UnifiedWrapper(...);
-	 * const assigned = assignToApiPath(targetApi, "thing", wrapper.createProxy(), {...});
+	 * const assigned = assignToApiPath(targetApi, "thing", wrapper.___createProxy(), {...});
 	 * if (!assigned) routineManager.revertRawEntry("thing.initialize", moduleID, priorEntry);
 	 */
 	snapshotRawEntry(apiPath, moduleID) {

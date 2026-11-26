@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T16:05:38-08:00 (1795651538)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,6 +34,7 @@
  * @internal
  */
 import { ComponentBase } from "#factories/component-base";
+import { DEFAULT_CLOCK } from "#helpers/clock";
 import { listPush, Objects, Reflect, WeakMap, WeakMapMethods, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
 import { ownBindingsRefusal } from "#helpers/instance-imports";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
@@ -65,10 +66,84 @@ function refusal() {
 
 /**
  * The base of the wrapper's class chain.
- * @extends ComponentBase
  * @internal
+ *
+ * @description
+ * An api node keeps a module's members as its own properties, so a member can take any name that is not the
+ * framework's (`___` / `____`, see `isFrameworkName()` in `#helpers/reserved-keys`). Everything the wrapper reads of its
+ * own state is therefore under such a name: the instance (`____slothlet`), its config, clock, id and error classes.
+ * The base does not extend `ComponentBase`, whose accessors (`slothlet`, `clock`, `instanceID`, …) are legal member
+ * names, so none of them is on the chain for framework code to reach by mistake.
  */
-export class WrapperBase extends ComponentBase {
+export class WrapperBase {
+	/**
+	 * The slothlet instance the node belongs to. A private field, so it is never an own property a Proxy invariant
+	 * would make the get trap answer.
+	 * @type {object}
+	 */
+	#slothlet;
+
+	/**
+	 * Complete set of property names reserved by the slothlet framework (`ComponentBase.INTERNAL_KEYS`).
+	 * @type {Set<string>}
+	 */
+	static INTERNAL_KEYS = ComponentBase.INTERNAL_KEYS;
+
+	/**
+	 * @param {object} slothlet - The slothlet instance.
+	 */
+	constructor(slothlet) {
+		this.#slothlet = slothlet;
+	}
+
+	/**
+	 * The slothlet instance.
+	 * @returns {object} The instance.
+	 */
+	get ____slothlet() {
+		return this.#slothlet;
+	}
+
+	/**
+	 * The instance's configuration.
+	 * @returns {object} The configuration.
+	 */
+	get ____config() {
+		return this.#slothlet.config;
+	}
+
+	/**
+	 * The instance's clock, or the one slothlet loaded with for an instance (a test's stand-in) that has none.
+	 * @returns {import("#helpers/clock").Clock} The clock.
+	 */
+	get ____clock() {
+		return this.#slothlet.clock ?? DEFAULT_CLOCK;
+	}
+
+	/**
+	 * The instance's id.
+	 * @returns {string} The id.
+	 */
+	get ____instanceID() {
+		return this.#slothlet.instanceID;
+	}
+
+	/**
+	 * The instance's `SlothletError` class.
+	 * @returns {Function} The class.
+	 */
+	get ____SlothletError() {
+		return this.#slothlet.SlothletError;
+	}
+
+	/**
+	 * The instance's `SlothletWarning` class.
+	 * @returns {Function} The class.
+	 */
+	get ____SlothletWarning() {
+		return this.#slothlet.SlothletWarning;
+	}
+
 	/**
 	 * Put a layer's shared entries in the method table, under its group. Only before the chain is registered, and
 	 * never over an entry already there.

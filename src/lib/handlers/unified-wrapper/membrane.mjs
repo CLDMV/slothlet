@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
+ *	@Last modified time: 2026-11-25T16:05:39-08:00 (1795651539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -291,11 +291,11 @@ function givenAsIs(value) {
  */
 function givenReadDecision(record, prop, target = memberPathOf(record.gate, prop)) {
 	const { gate, reader } = record;
-	const pm = gate.slothlet.handlers?.permissionManager;
+	const pm = gate.____slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return { allowed: true, caller: null, target };
 	const live = readGateDecision(gate, target, undefined);
 	if (!live.allowed || live.caller !== null || !reader?.____slothletInternal) return { ...live, target };
-	if (gate.slothlet.handlers.apiManager.isRemovedCaller(reader)) {
+	if (gate.____slothlet.handlers.apiManager.isRemovedCaller(reader)) {
 		return { allowed: false, caller: String(reader.____slothletInternal.apiPath ?? ""), target };
 	}
 	return { ...readGateFor(gate, target, reader, { context: null }), target };
@@ -320,7 +320,7 @@ function givenReadsNothingBeneath(record, prop) {
 	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
 	const beneath = givenReadDecision(record, prop, probePath);
 	if (beneath.allowed) return false;
-	return !record.gate.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
+	return !record.gate.____slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
 }
 
 /**
@@ -366,7 +366,7 @@ function givenMember(record, prop, value) {
 	if (isTerminalData(value)) {
 		const decision = givenReadDecision(record, prop);
 		if (!decision.allowed)
-			throw new record.gate.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: segmentsOf(decision.target) });
+			throw new record.gate.____SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: segmentsOf(decision.target) });
 		return value;
 	}
 	if (givenAsIs(value)) return value;
@@ -379,8 +379,8 @@ function givenMember(record, prop, value) {
 	if (held !== undefined && held.value === value) return held.view;
 	const gate = record.gate;
 	const beneath = {
-		slothlet: gate.slothlet,
-		SlothletError: gate.SlothletError,
+		____slothlet: gate.____slothlet,
+		____SlothletError: gate.____SlothletError,
 		____slothletInternal: { apiPath: memberPathOf(gate, prop), filePath: gate.____slothletInternal.filePath ?? null, impl: value }
 	};
 	const view = givenView(beneath, null, value, record.reader, record.assertWrite);
@@ -715,7 +715,7 @@ function dataHoldsLeafFunction(slothlet, value, depth, budget) {
 				if (util.types.isProxy(member)) continue;
 				const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, member);
 				if (
-					(leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === slothlet) ||
+					(leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.____slothlet === slothlet) ||
 					leafOfCopy(slothlet, member) !== null
 				)
 					return true;
@@ -853,7 +853,7 @@ function handOutValue(maker, owner, value) {
 	if (handedRecord?.reader === SEALED_SHELL_READER || handedRecord?.reader === PROTOTYPE_HANDLE_READER) return value;
 	// A prototype of a module's class, however the module holds it, is handed out for a holder not known yet: a view
 	// deciding each write when it is made, which a holder reading it through `self` gets as reading it would (#667).
-	const prototype = typeof value === "object" ? prototypeHandedTo(value, SEALED_SHELL_READER, owner.slothlet) : value;
+	const prototype = typeof value === "object" ? prototypeHandedTo(value, SEALED_SHELL_READER, owner.____slothlet) : value;
 	if (prototype !== value) return prototype;
 	if (isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value) || isSharedValue(value) || WeakSetMethods.has(maker.handedIn, value))
 		return value;
@@ -887,7 +887,7 @@ function handOutValue(maker, owner, value) {
 			// holds a copy of the function, whose stand-in below is checked as a call of the node each time it runs (see
 			// gateLeafCopy).
 			const node =
-				leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === owner.slothlet
+				leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.____slothlet === owner.____slothlet
 					? leaf.____slothletInternal.proxy
 					: null;
 			if (node && typeof node === "function") return node;
@@ -901,17 +901,18 @@ function handOutValue(maker, owner, value) {
 		// Only a value that is itself code is a stand-in: data — plain objects and arrays, the language's and Node's own
 		// objects — passes as itself however deep it nests, unsearched, and code nested in it is told by its frames when
 		// it runs (#726).
-		if (owner.slothlet?.config?.permissions?.caller?.provenance !== false) {
+		if (owner.____slothlet?.config?.permissions?.caller?.provenance !== false) {
 			if (!isCodeObject(value)) {
 				// Data holding a node's own function, or a module's copy of it, is handed out as a view, so a call of the
 				// function read from it is the node's call (see gateLeafCopy) and not a call of the bare function.
-				if (!dataHoldsLeafFunction(owner.slothlet, value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
+				if (!dataHoldsLeafFunction(owner.____slothlet, value, searchDepth(owner.____slothlet), searchBudget(owner.____slothlet)))
+					return value;
 			}
 			return membrane(maker, owner, value);
 		}
 		// With `provenance` off no frames are read, so nothing would tell code nested in data from its caller's: the
 		// value is searched instead, as far as the code search reaches, and one holding code is handed out as the module's.
-		if (!holdsCode(value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
+		if (!holdsCode(value, searchDepth(owner.____slothlet), searchBudget(owner.____slothlet))) return value;
 		return membrane(maker, owner, value);
 	} catch {
 		// A value that refuses to be described is handed out as it is.
@@ -981,12 +982,12 @@ function instanceReadMayRefuse(slothlet, reader, value) {
 function attributeResultTo(owner, value, callerIsHost, caller) {
 	if (callerIsHost && typeof value === "object") {
 		const behind = behindMemberView(value);
-		if (knownPrototype(owner.slothlet, behind) !== undefined) return behind;
+		if (knownPrototype(owner.____slothlet, behind) !== undefined) return behind;
 	}
 	const toModule = !callerIsHost && Boolean(caller?.____slothletInternal);
 	// A crossing view the module was handed and hands back stands for another module's value: the host gets that value,
 	// a module gets it as the guard decides for it.
-	if (WeakMapMethods.has(CROSSINGS, value)) return toModule ? crossTo(value, caller, owner.slothlet, owner) : uncross(value);
+	if (WeakMapMethods.has(CROSSINGS, value)) return toModule ? crossTo(value, caller, owner.____slothlet, owner) : uncross(value);
 	let handed = value;
 	if (!handsOutAsModule(owner)) {
 		if (!permissionsOn(owner)) return value;
@@ -995,12 +996,12 @@ function attributeResultTo(owner, value, callerIsHost, caller) {
 		if (util.types.isProxy(value)) handed = WeakMapMethods.get(makerOf(owner).made, value) ?? value;
 		// An instance whose `constructor` is a function an api node stands for, whose members the rules could refuse the
 		// module it reaches, is the module's, as under `"precise"`: its `constructor` is then that node.
-		else if (toModule && typeof value === "object" && instanceReadMayRefuse(owner.slothlet, caller, value))
+		else if (toModule && typeof value === "object" && instanceReadMayRefuse(owner.____slothlet, caller, value))
 			handed = handOut(makerOf(owner), owner, value);
 	} else handed = handOut(makerOf(owner), owner, value);
 	// What a module's call hands another module, a stand-in of its code included, reaches it through the class prototype
 	// guard.
-	if (toModule) return crossTo(handed, caller, owner.slothlet, owner);
+	if (toModule) return crossTo(handed, caller, owner.____slothlet, owner);
 	// The host holds it as it is; where it came from is kept for when the host hands it on.
 	if (permissionsOn(owner) && !WeakMapMethods.has(HOST_HANDED, handed) && !isShared(handed)) {
 		WeakMapMethods.set(HOST_HANDED, handed, owner);
@@ -1025,7 +1026,7 @@ function attributeResultTo(owner, value, callerIsHost, caller) {
  */
 function attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
+	if (!owner?.____slothlet?.instanceID || !owner.____slothlet.contextManager?.runInContext) return value;
 	const previous = handOutReceiver;
 	handOutReceiver = !callerIsHost && caller?.____slothletInternal ? receiver : null;
 	try {
@@ -1048,11 +1049,11 @@ function attributeResult(owner, value, callerIsHost = false, caller = null, rece
  * @private
  */
 function leafFunctionHandedIn(maker, owner, value) {
-	const slothlet = owner?.slothlet ?? maker?.owner?.slothlet;
+	const slothlet = owner?.____slothlet ?? maker?.owner?.____slothlet;
 	if (!slothlet?.handlers?.permissionManager?.isEnabled?.() || util.types.isProxy(value)) return null;
 	const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
 	if (leaf !== undefined) {
-		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) || leaf.slothlet !== slothlet || makerOf(leaf) === maker) return null;
+		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) || leaf.____slothlet !== slothlet || makerOf(leaf) === maker) return null;
 		const node = leaf.____slothletInternal.proxy;
 		return typeof node === "function" ? node : null;
 	}
@@ -1101,7 +1102,7 @@ function handIn(maker, value, owner = maker.owner) {
 		if (asNode !== null) return asNode;
 	}
 	// A prototype of a module's, or plain data holding one, reaches this one as reading it would (#667).
-	const carried = carryTo(value, owner, owner?.slothlet ?? null);
+	const carried = carryTo(value, owner, owner?.____slothlet ?? null);
 	if (carried !== value) return carried;
 	WeakSetMethods.add(maker.handedIn, value);
 	return inboundView(maker, value, owner);
@@ -1179,7 +1180,7 @@ function inboundView(maker, value, owner = maker.owner) {
 	const existing = views == null ? undefined : WeakMapMethods.get(views, value);
 	if (existing) return existing;
 	try {
-		if (!holdsOwnStandIn(maker, value, searchDepth(owner?.slothlet), searchBudget(owner?.slothlet))) return value;
+		if (!holdsOwnStandIn(maker, value, searchDepth(owner?.____slothlet), searchBudget(owner?.____slothlet))) return value;
 	} catch {
 		return value;
 	}
@@ -1389,15 +1390,15 @@ function membrane(maker, owner, original, asNode = false, made = maker.made) {
 		if (prototype === null || typeof prototype !== "object" || util.types.isProxy(prototype)) return out(prototype);
 		const owned = classOf(prototype);
 		// While the permission system is on, it is checked for whoever writes through it (the class prototype guard).
-		if (!owned || WeakMapMethods.has(maker.made, owned)) return atClassSite(owner.slothlet, out(prototype));
+		if (!owned || WeakMapMethods.has(maker.made, owned)) return atClassSite(owner.____slothlet, out(prototype));
 		// One handed to the module (a subclass's, constructed for) is not the module's. An instance reports one prototype:
 		// the handle at its class's own name (#667), as an instance a node holds does.
 		if (WeakSetMethods.has(maker.handedIn, prototype)) return prototype;
 		// The prototype of a class a node exports is what reading the class's `prototype` gives the code asking, decided
 		// for that file: another file of the module may be refused what the class holds (a deny on its member).
-		if (knownPrototype(owner.slothlet, prototype) !== undefined)
-			return atClassSite(owner.slothlet, prototypeHandedTo(prototype, reader, owner.slothlet));
-		return atClassSite(owner.slothlet, crossTo(prototype, reader, owner.slothlet, owner));
+		if (knownPrototype(owner.____slothlet, prototype) !== undefined)
+			return atClassSite(owner.____slothlet, prototypeHandedTo(prototype, reader, owner.____slothlet));
+		return atClassSite(owner.____slothlet, crossTo(prototype, reader, owner.____slothlet, owner));
 	};
 	/** A descriptor of the original's, as the stand-in reports it. */
 	const reported = (descriptor, holderIsMade = true) => {
@@ -1474,7 +1475,7 @@ function membrane(maker, owner, original, asNode = false, made = maker.made) {
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
 				// One an api node stands for is that node, whose members are read under its own rules.
 				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !WeakMapMethods.has(maker.made, value))
-					return frontingNodeNow(owner.slothlet, value) ?? crossTo(value, SEALED_SHELL_READER, owner.slothlet, owner);
+					return frontingNodeNow(owner.____slothlet, value) ?? crossTo(value, SEALED_SHELL_READER, owner.____slothlet, owner);
 				if ((value === functionToString || isFunctionSourcePatch(value)) && isFunction) {
 					let source = WeakMapMethods.get(SOURCES, original);
 					if (!source) {
@@ -1512,12 +1513,12 @@ function membrane(maker, owner, original, asNode = false, made = maker.made) {
 	const handler = {
 		apply: (_shadow, thisArg, args) => {
 			const receiver = receiverOf(thisArg);
-			gateLeafCopy(owner.slothlet, original, args, receiver);
+			gateLeafCopy(owner.____slothlet, original, args, receiver);
 			const handed = handInAll(maker, args);
 			return runAsMaker(owner, original, receiver, handed, true, asNode, callOrigin(standIn, receiver));
 		},
 		construct: (_shadow, args, newTarget) => {
-			gateLeafCopy(owner.slothlet, original, args, undefined);
+			gateLeafCopy(owner.____slothlet, original, args, undefined);
 			const target = newTarget === standIn ? original : handIn(maker, newTarget);
 			// A subclass's prototype is the subclass's, never the module's.
 			if (target !== original && typeof target === "function") {
@@ -1537,7 +1538,7 @@ function membrane(maker, owner, original, asNode = false, made = maker.made) {
 			const own = Reflect.getOwnPropertyDescriptor(original, prop);
 			if (own && !own.configurable) sync(prop, reported(own));
 			// A private member the instance inherits from a module's prototype is read as through that prototype.
-			inheritedPrivate(owner.slothlet, original, prop)?.refusePrivate(prop);
+			inheritedPrivate(owner.____slothlet, original, prop)?.refusePrivate(prop);
 			return fixedValue(prop, slotMethod(read(prop, from), null));
 		},
 		set: (_shadow, prop, value, receiver) => {
@@ -1548,7 +1549,7 @@ function membrane(maker, owner, original, asNode = false, made = maker.made) {
 			return done;
 		},
 		has: (_shadow, prop) => {
-			if (inheritedPrivate(owner.slothlet, original, prop)?.privateHidden(prop)) return false;
+			if (inheritedPrivate(owner.____slothlet, original, prop)?.privateHidden(prop)) return false;
 			return exec(() => Reflect.has(original, prop));
 		},
 		deleteProperty: (_shadow, prop) => {
@@ -1598,7 +1599,7 @@ function membrane(maker, owner, original, asNode = false, made = maker.made) {
 			// Reported to the code asking, as reading the class's `prototype` hands it to that code.
 			return prototypeOut(
 				exec(() => Reflect.getPrototypeOf(original)),
-				selfReader(owner.slothlet)
+				selfReader(owner.____slothlet)
 			);
 		},
 		setPrototypeOf: (_shadow, prototype) => {
@@ -1643,7 +1644,7 @@ function kindStandIn(maker, owner, original, made = maker.made) {
 	if (existing) return existing;
 	const run = (thisArg, args) => {
 		const receiver = handIn(maker, thisArg);
-		gateLeafCopy(owner.slothlet, original, args, receiver);
+		gateLeafCopy(owner.____slothlet, original, args, receiver);
 		const handed = handInAll(maker, args);
 		return runAsMaker(owner, original, receiver, handed, true, false, callOrigin(standIn, receiver));
 	};
@@ -1954,7 +1955,7 @@ const CROSSED_PROTOTYPE_PATHS = new WeakMap();
  * @private
  */
 function hasMaker(wrapper) {
-	const makers = WeakMapMethods.get(MAKERS, wrapper.slothlet);
+	const makers = WeakMapMethods.get(MAKERS, wrapper.____slothlet);
 	if (!makers) return false;
 	const moduleID = wrapper.____slothletInternal?.moduleID;
 	return moduleID ? MapMethods.has(makers.byID, moduleID) : WeakMapMethods.has(makers.byWrapper, wrapper);
@@ -1969,8 +1970,8 @@ function hasMaker(wrapper) {
  * @private
  */
 function crossKey(reader) {
-	if (!reader?.____slothletInternal || !reader.slothlet) return reader;
-	if (!hasMaker(reader) && reader.slothlet.handlers?.apiManager?.isRemovedCaller?.(reader) === true) return reader;
+	if (!reader?.____slothletInternal || !reader.____slothlet) return reader;
+	if (!hasMaker(reader) && reader.____slothlet.handlers?.apiManager?.isRemovedCaller?.(reader) === true) return reader;
 	return viewGroup(reader);
 }
 
@@ -1987,7 +1988,7 @@ function crossKey(reader) {
 function viewGroup(reader) {
 	const maker = makerOf(reader);
 	if (maker.owner === reader) return maker;
-	const permissionManager = reader.slothlet.handlers?.permissionManager;
+	const permissionManager = reader.____slothlet.handlers?.permissionManager;
 	if (!permissionManager) return maker;
 	const rulesOf = (wrapper) => permissionManager.writeRulesFor(String(wrapper.____slothletInternal?.apiPath ?? ""));
 	const mine = rulesOf(reader);
@@ -2011,7 +2012,7 @@ function recordOrigin(value, wrapper) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function") || WeakMapMethods.has(CROSSINGS, value)) return;
 	if (WeakMapMethods.has(CROSSING_ORIGINS, value) || isSlothletValue(value)) return;
 	const module = moduleKey(wrapper);
-	if (module !== null) WeakMapMethods.set(CROSSING_ORIGINS, value, { slothlet: wrapper.slothlet, module, wrapper });
+	if (module !== null) WeakMapMethods.set(CROSSING_ORIGINS, value, { slothlet: wrapper.____slothlet, module, wrapper });
 }
 
 /**
@@ -2045,7 +2046,7 @@ function writtenPrototypeFor(prototype, reader, slothlet, from) {
 	// folder share a module, and the one standing for it may hold what a rule refuses this one. A file a write rule
 	// keeps apart from the one standing for its module gets a view of its own, so a write through it that another
 	// module's code makes (a bound built-in it hands on) is still held to what the file may write.
-	let standing = reader?.____slothletInternal && reader.slothlet ? viewGroup(reader).owner : reader;
+	let standing = reader?.____slothletInternal && reader.____slothlet ? viewGroup(reader).owner : reader;
 	if (standing !== reader && !asOneModule(slothlet, standing, reader)) standing = reader;
 	if (knownPrototype(slothlet, prototype) !== undefined) return prototypeHandedTo(prototype, reader, slothlet);
 	let site = WeakMapMethods.get(CROSSED_PROTOTYPE_PATHS, prototype);
@@ -2199,7 +2200,7 @@ function viewedForHander(value, from) {
 	if (runsForHander(value, from)) return true;
 	if (value === null || typeof value !== "object" || !from?.____slothletInternal || !isCarrier(value)) return false;
 	try {
-		return carriesHanded(value, from, searchDepth(from.slothlet), searchBudget(from.slothlet));
+		return carriesHanded(value, from, searchDepth(from.____slothlet), searchBudget(from.____slothlet));
 	} catch {
 		// A value that refuses to be described is viewed.
 		return true;
@@ -2435,7 +2436,7 @@ function crossTo(value, reader, slothlet, from = null) {
 	// an access through it, the host among them, gets the object behind it.
 	if (isPrototypeHandle(value)) return prototypeForHolder(slothlet, reader, value);
 	if (reader === null || reader === undefined || reader === HOST_READER) return value;
-	slothlet ??= reader?.slothlet ?? from?.slothlet ?? null;
+	slothlet ??= reader?.____slothlet ?? from?.____slothlet ?? null;
 	if (!guardOn(slothlet)) return value;
 	const isModule = Boolean(reader.____slothletInternal);
 	// A class instance a node holds, handed back by one of its own methods, stands for its node (#625): the reader gets
@@ -3169,7 +3170,7 @@ let built = false;
  * @private
  */
 function instanceHoldsReads(wrapper) {
-	const slothlet = wrapper.slothlet;
+	const slothlet = wrapper.____slothlet;
 	const permissionManager = slothlet.handlers?.permissionManager;
 	if (!permissionManager?.isEnabled?.()) return false;
 	const reader = selfModuleReader(slothlet);
@@ -3320,7 +3321,7 @@ export function MembraneLayer(Base) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
 				const wrapper = this;
 				if (givenAsIs(prototype)) return prototype;
-				const slothlet = wrapper.slothlet;
+				const slothlet = wrapper.____slothlet;
 				if (!slothlet?.handlers?.permissionManager?.isEnabled()) return prototype;
 				const reader = selfModuleReader(slothlet) ?? kept?.reader ?? null;
 				if (reader === null || reader === HOST_READER) return prototype;
@@ -3342,7 +3343,7 @@ export function MembraneLayer(Base) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
 				const wrapper = this;
 
-				if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext)
+				if (!wrapper?.____slothlet?.instanceID || !wrapper.____slothlet.contextManager?.runInContext)
 					return Reflect.construct(constructor, args, newTarget);
 				if (!handsOutAsModule(wrapper)) {
 					const instance = Reflect.construct(constructor, args, newTarget);
@@ -3383,7 +3384,7 @@ export function MembraneLayer(Base) {
 			___crossArgumentsFrom(args, caller) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
 				const wrapper = this;
-				const slothlet = wrapper?.slothlet;
+				const slothlet = wrapper?.____slothlet;
 				if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
 				if (caller !== null && asOneModule(slothlet, caller, wrapper)) return args;
 				let result = args;
@@ -3431,7 +3432,7 @@ export function MembraneLayer(Base) {
 			___ownArguments(args) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
 				const wrapper = this;
-				if (!args?.length || !wrapper?.slothlet?.instanceID || !handsOutAsModule(wrapper)) return args;
+				if (!args?.length || !wrapper?.____slothlet?.instanceID || !handsOutAsModule(wrapper)) return args;
 				return handInAll(makerOf(wrapper), args, wrapper);
 			}
 
@@ -3454,7 +3455,7 @@ export function MembraneLayer(Base) {
 				// own view of it (see givenView).
 				if (prototypeGiven(wrapper)) return wrapper.___givenPrototypeFor(prototype);
 				if (typeof prototype !== "function") {
-					return memberHoldsCode(prototype, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)) ? null : prototype;
+					return memberHoldsCode(prototype, searchDepth(wrapper.____slothlet) + 1, searchBudget(wrapper.____slothlet)) ? null : prototype;
 				}
 				return wrapper.___functionNodeFor(prototype) ?? null;
 			}
@@ -3470,11 +3471,11 @@ export function MembraneLayer(Base) {
 			___functionNodeFor(fn) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
 				const wrapper = this;
-				const node = nodeRefOf(FUNCTION_NODES, wrapper.slothlet, fn);
+				const node = nodeRefOf(FUNCTION_NODES, wrapper.____slothlet, fn);
 				if (node === undefined) return undefined;
-				const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+				const permissionManager = wrapper.____slothlet.handlers?.permissionManager;
 				if (!permissionManager?.isEnabled() || permissionManager.isCaptureEnabled?.() === false) return node;
-				const identity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
+				const identity = wrapper.____slothlet.contextManager?.getCallerIdentity?.();
 				return identity?.currentWrapper ? capturedView(node, identity.currentWrapper, true, identity.ceiling ?? null) : node;
 			}
 		}

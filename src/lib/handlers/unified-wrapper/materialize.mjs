@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
+ *	@Last modified time: 2026-11-25T16:05:39-08:00 (1795651539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -183,7 +183,7 @@ function implToAdopt(wrapper, impl) {
 	if (!isModuleProxy(impl)) return impl;
 	// A node's own Proxy export is a member of the node, not a value handed out: under either attribution its traps run
 	// as a call of the node, while the permission system is on (#726).
-	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !permissionsOn(wrapper)) return impl;
+	if (!wrapper?.____slothlet?.instanceID || !wrapper.____slothlet.contextManager?.runInContext || !permissionsOn(wrapper)) return impl;
 	// A layer the build laid over the module's Proxy is laid over its stand-in instead, holding what it held.
 	if (isCompositionLayer(impl)) return layerOnto(impl, implToAdopt(wrapper, layerUnderlying(impl)));
 	return membrane(makerOf(wrapper), wrapper, impl, true);
@@ -277,9 +277,9 @@ function replayStandInChanges(wrapper, generation) {
 	const pending = wrapper.____slothletInternal.pendingChanges;
 	if (!pending) return;
 	wrapper.____slothletInternal.pendingChanges = null;
-	WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet) == null
+	WeakMapMethods.get(PENDING_CHANGES, wrapper.____slothlet) == null
 		? undefined
-		: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
+		: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, wrapper.____slothlet), wrapper);
 	for (let i = 0; i < pending.length; i++) wrapper.___makeQueuedChange(pending[i], generation);
 }
 
@@ -292,12 +292,12 @@ function replayStandInChanges(wrapper, generation) {
  * @private
  */
 function checkpointLoaded(wrapper) {
-	const slothlet = wrapper.slothlet;
+	const slothlet = wrapper.____slothlet;
 	const domain = domainOf(slothlet);
 	if (!runsOpen(domain)) return;
 	const seen = new Set();
 	const walk = (node) => {
-		if (SetMethods.has(seen, node) || node.slothlet !== slothlet) return;
+		if (SetMethods.has(seen, node) || node.____slothlet !== slothlet) return;
 		SetMethods.add(seen, node);
 		const internal = node.____slothletInternal;
 		if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return;
@@ -585,7 +585,7 @@ export function MaterializeLayer(Base) {
 				});
 				node.____slothletInternal.sourceValue = value;
 				node.____slothletInternal.moduleObject = impl !== value ? moduleObjectFor(node, value, true) : null;
-				return node.createProxy();
+				return node.___createProxy();
 			}
 
 			/**
@@ -764,10 +764,10 @@ export function MaterializeLayer(Base) {
 			 *   wrappers regardless of mode (used by ___setImpl to preserve live references).
 			 * @private
 			 */
-			_applyNewImpl(newImpl, forceReuseChildren = false) {
+			___applyNewImpl(newImpl, forceReuseChildren = false) {
 				// Refresh the impl's module origin (#484) from the value as exported, before it is cloned. A new
 				// impl that is not a known export of this wrapper's file keeps the origin already recorded.
-				const originIndex = this.slothlet.handlers?.ownership;
+				const originIndex = this.____slothlet.handlers?.ownership;
 				const newExportPath = originIndex?.resolveExportPath(this.____slothletInternal.filePath, newImpl) ?? null;
 				if (newExportPath) {
 					this.____slothletInternal.exportPath = newExportPath;
@@ -829,7 +829,7 @@ export function MaterializeLayer(Base) {
 				/* v8 ignore next */
 				if (!this.____slothletInternal.filePath && this.____slothletInternal.impl && this.____slothletInternal.impl.____filePath) {
 					this.____slothletInternal.filePath = this.____slothletInternal.impl.____filePath;
-					this.slothlet.debug("wrapper", {
+					this.____slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_APPLY_IMPL_UPDATE_PATH",
 						apiPath: this.____slothletInternal.apiPath,
 						filePath: this.____slothletInternal.filePath
@@ -881,7 +881,7 @@ export function MaterializeLayer(Base) {
 				// The module(s) that built this namespace record the wrapper itself as their value; pin that to the
 				// impl they actually supplied (their function, or their plain namespace), so removing the incoming
 				// module reverts to it.
-				this.slothlet.handlers.ownership.pinLiveEntries(internal.apiPath, this, internal.impl, resolveWrapper);
+				this.____slothlet.handlers.ownership.pinLiveEntries(internal.apiPath, this, internal.impl, resolveWrapper);
 				internal.impl = implToAdopt(this, impl);
 				fillPrototype(this);
 				registerLeafFunction(this, internal.impl);
@@ -967,7 +967,7 @@ export function MaterializeLayer(Base) {
 				internal.lazyProxyTraps = null;
 				internal.isCallableLocked = true;
 
-				// The value gets a shell of its own, as createProxy() builds it: an array shell for an array (#603,
+				// The value gets a shell of its own, as ___createProxy() builds it: an array shell for an array (#603,
 				// #609), an empty object otherwise.
 				const target = Arrays.isArray(internal.impl) ? [] : Objects.create(null);
 				defineProxyInspect(wrapper, target);
@@ -976,7 +976,7 @@ export function MaterializeLayer(Base) {
 				internal.proxy = newProxy;
 				if (Arrays.isArray(target)) adoptArrayIntegrity(wrapper);
 				registerProxy(newProxy, wrapper);
-				// Like a non-callable proxy createProxy() builds, an object-shell node can still become callable.
+				// Like a non-callable proxy ___createProxy() builds, an object-shell node can still become callable.
 				if (!Arrays.isArray(target)) {
 					internal.proxyHandler = handler;
 					internal.proxyTraps = traps;
@@ -1073,7 +1073,7 @@ export function MaterializeLayer(Base) {
 				const segments = splitText(String(this.____slothletInternal.apiPath), ".");
 				const key = segments[segments.length - 1];
 				let holder = null;
-				let node = this.slothlet.api;
+				let node = this.____slothlet.api;
 				for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
 					const segment = ofList[ofIndex];
 					// Raw wrappers hold their children as own data properties, so this read runs no trap.
@@ -1086,7 +1086,7 @@ export function MaterializeLayer(Base) {
 
 			/**
 			 * Set new implementation and adopt children.
-			 * Delegates core impl work to _applyNewImpl, then emits lifecycle events
+			 * Delegates core impl work to ___applyNewImpl, then emits lifecycle events
 			 * and updates materialization state.
 			 *
 			 * @param {*} newImpl - New implementation
@@ -1107,7 +1107,7 @@ export function MaterializeLayer(Base) {
 				// Debug block only fires when wrapperDebugEnabled AND apiPath === "string"; neither condition is met in tests.
 				/* v8 ignore start */
 				if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
-					this.slothlet.debug("wrapper", {
+					this.____slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_SETIMPL_CALLED",
 						apiPath: this.____slothletInternal.apiPath,
 						// newImpl is always a valid object when ___setImpl is called; {} fallback is unreachable.
@@ -1125,14 +1125,14 @@ export function MaterializeLayer(Base) {
 				const priorAdoptOwner = this.____slothletInternal.adoptOwner;
 				if (attributeChildren && moduleID) this.____slothletInternal.adoptOwner = moduleID;
 				try {
-					this._applyNewImpl(newImpl, forceReuseChildren);
+					this.___applyNewImpl(newImpl, forceReuseChildren);
 				} finally {
 					this.____slothletInternal.adoptOwner = priorAdoptOwner;
 				}
 
 				// Emit impl:changed event for lifecycle management
-				if (newImpl && this.slothlet.handlers?.lifecycle) {
-					const wrapperMetadata = this.slothlet.handlers.metadata.getSystemMetadata(this);
+				if (newImpl && this.____slothlet.handlers?.lifecycle) {
+					const wrapperMetadata = this.____slothlet.handlers.metadata.getSystemMetadata(this);
 					// Use provided moduleID (for replacements) or extract from metadata. Every ___setImpl
 					// caller now passes a string moduleID (or null) — the stale-signature caller that passed
 					// the slothlet instance was fixed in #274 (a7a711f), so the former object-coercion guard
@@ -1142,7 +1142,7 @@ export function MaterializeLayer(Base) {
 					// INTERNAL impl:changed contribution event (#398) — see the impl:created emit above and
 					// slothlet.mjs's ownership subscriber, which re-emits the public post-placement impl:changed
 					// (wrapped callable, no raw impl) once the reassignment is placed. No raw `impl` here.
-					this.slothlet.handlers.lifecycle.emitInternal("impl:changed", {
+					this.____slothlet.handlers.lifecycle.emitInternal("impl:changed", {
 						apiPath: this.____slothletInternal.apiPath,
 						wrapper: Objects.freeze({ ____impl: this.____slothletInternal.impl }),
 						____wrapperRef: this,
@@ -1180,7 +1180,7 @@ export function MaterializeLayer(Base) {
 				// The node is about to be another; the refusals of changes made on the old one are not its own (#653).
 				this.____slothletInternal.changeGeneration++;
 				dropRefusedChanges(this);
-				this.slothlet.debug("wrapper", {
+				this.____slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_RESETLAZY_CALLED",
 					apiPath: this.____slothletInternal.apiPath,
 					hadImpl: this.____slothletInternal.impl !== null,
@@ -1236,7 +1236,7 @@ export function MaterializeLayer(Base) {
 				// by GC-reachable context objects are dropped along with their cached proxies.
 				this.____slothletInternal.waitingProxyCacheByContext = new WeakMap();
 
-				this.slothlet.debug("wrapper", {
+				this.____slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_RESETLAZY_COMPLETE",
 					apiPath: this.____slothletInternal.apiPath
 				});
@@ -1262,7 +1262,7 @@ export function MaterializeLayer(Base) {
 				// If materialization is already in progress, return the existing promise
 				// This allows multiple callers to await the same materialization without polling
 				if (this.____slothletInternal.materializationPromise) {
-					this.slothlet.debug("wrapper", {
+					this.____slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_MATERIALIZE_AWAIT",
 						apiPath: this.____slothletInternal.apiPath
 					});
@@ -1272,7 +1272,7 @@ export function MaterializeLayer(Base) {
 				// Debug block only fires when apiPath === "string" (literal), which never occurs in practice.
 				/* v8 ignore next */
 				if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.apiPath === "string") {
-					this.slothlet.debug("wrapper", {
+					this.____slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_MATERIALIZE_START",
 						apiPath: this.apiPath
 					});
@@ -1283,7 +1283,7 @@ export function MaterializeLayer(Base) {
 				// the module's top level, and its exports' getters and Proxy traps as slothlet reads them, are the module's own code,
 				// never run inside that call (#726). Under the async runtime the caller's flow would otherwise carry into the load.
 				this.____slothletInternal.materializationPromise = loadApart(
-					this.slothlet,
+					this.____slothlet,
 					async () => {
 						this.____slothletInternal.state.inFlight = true;
 						// The node this load is for: a reload that replaces it while it loads moves the generation on (#653).
@@ -1292,7 +1292,7 @@ export function MaterializeLayer(Base) {
 						try {
 							if (this.____slothletInternal.materializeFunc) {
 								if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
-									this.slothlet.debug("wrapper", {
+									this.____slothlet.debug("wrapper", {
 										key: "DEBUG_MODE_MATERIALIZE_CALLING_FUNC",
 										apiPath: this.____slothletInternal.apiPath
 									});
@@ -1310,7 +1310,7 @@ export function MaterializeLayer(Base) {
 										UnifiedWrapper._uncountUnappliedImpl(value);
 										return false;
 									}
-									this._applyNewImpl(value);
+									this.___applyNewImpl(value);
 									return true;
 								};
 								// The wrapper itself goes along: a reload hands this materializer to an existing wrapper, so the
@@ -1326,7 +1326,7 @@ export function MaterializeLayer(Base) {
 
 								// If materializeFunc didn't call setter, set ____impl from return value
 								if (!this.____slothletInternal.impl) {
-									this._applyNewImpl(result);
+									this.___applyNewImpl(result);
 								}
 
 								this.____slothletInternal.state.materialized = true;
@@ -1334,7 +1334,7 @@ export function MaterializeLayer(Base) {
 								// built with is (#754): a callable folder's own function joins the routines that name it. Eager reports
 								// it through the construction's impl:created; a lazy construction had no value yet.
 								this.___reportLoadedContribution();
-								// A module whose value is null loads as null; _applyNewImpl() leaves null alone because a node
+								// A module whose value is null loads as null; ___applyNewImpl() leaves null alone because a node
 								// being cleared passes through it too.
 								// So does one whose value is undefined, and its read answers that null or undefined, as the plain
 								// module's `default` does (#792).
@@ -1351,7 +1351,7 @@ export function MaterializeLayer(Base) {
 								replayStandInChanges(this, changeGeneration);
 
 								if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
-									this.slothlet.debug("wrapper", {
+									this.____slothlet.debug("wrapper", {
 										key: "DEBUG_MODE_MATERIALIZE_COMPLETE",
 										apiPath: this.____slothletInternal.apiPath,
 										resultType: typeof result,
@@ -1365,7 +1365,7 @@ export function MaterializeLayer(Base) {
 							// Debug block only fires when apiPath === "string" (literal), which never occurs in test environments.
 							/* v8 ignore next */
 							if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
-								this.slothlet.debug("wrapper", {
+								this.____slothlet.debug("wrapper", {
 									key: "DEBUG_MODE_MATERIALIZE_ERROR",
 									apiPath: this.____slothletInternal.apiPath,
 									error: error.message
@@ -1376,9 +1376,9 @@ export function MaterializeLayer(Base) {
 							// Changes queued for a node that did not load are dropped with it: what failed the load fails the awaits (#653).
 							if (!this.____slothletInternal.state.materialized) {
 								this.____slothletInternal.pendingChanges = null;
-								WeakMapMethods.get(PENDING_CHANGES, this.slothlet) == null
+								WeakMapMethods.get(PENDING_CHANGES, this.____slothlet) == null
 									? undefined
-									: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, this.slothlet), this);
+									: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, this.____slothlet), this);
 							}
 							// CRITICAL: Always clear inFlight flag and promise reference
 							this.____slothletInternal.state.inFlight = false;
@@ -1406,7 +1406,7 @@ export function MaterializeLayer(Base) {
 			 */
 			___reportLoadedContribution() {
 				const internal = this.____slothletInternal;
-				const routineManager = this.slothlet.handlers?.routineManager;
+				const routineManager = this.____slothlet.handlers?.routineManager;
 				if (!internal.filePath || !routineManager) return;
 				routineManager.onImplCreated({
 					apiPath: internal.apiPath,
@@ -1493,7 +1493,7 @@ export function MaterializeLayer(Base) {
 			 */
 			___trackLazyLoad(event) {
 				const internal = this.____slothletInternal;
-				const slothlet = this.slothlet;
+				const slothlet = this.____slothlet;
 				if (internal.epoch !== (slothlet._buildEpoch ?? 0) || internal.lazyTally !== slothlet._lazyTally) return;
 				const tracked = internal.lazyCount;
 				if (event === "register") {
@@ -1593,9 +1593,9 @@ export function MaterializeLayer(Base) {
 				this.___trackLazyLoad("discard");
 				// Nor takes the changes queued for it, and the refusals of those made on it go with it (#653).
 				this.____slothletInternal.pendingChanges = null;
-				WeakMapMethods.get(PENDING_CHANGES, this.slothlet) == null
+				WeakMapMethods.get(PENDING_CHANGES, this.____slothlet) == null
 					? undefined
-					: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, this.slothlet), this);
+					: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, this.____slothlet), this);
 				this.____slothletInternal.changeGeneration++;
 				dropRefusedChanges(this);
 				this.____slothletInternal.invalid = true;
@@ -1647,7 +1647,7 @@ export function MaterializeLayer(Base) {
 			 */
 			___adoptImplChildren(forceReuseChildren = false) {
 				const preExistingKeys = filterList(Objects.keys(this), (k) => !isFrameworkReservedKey(k));
-				this.slothlet.debug("wrapper", {
+				this.____slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_ADOPT_START",
 					apiPath: this.____slothletInternal.apiPath,
 					// Every wrapper is assigned a unique id at construction; "no-id" fallback is unreachable.
@@ -1682,7 +1682,7 @@ export function MaterializeLayer(Base) {
 				// materializer refuses one only where it would await it. A slothlet wrapper is not a module's
 				// value: an unloaded one answers `then` through its waiting proxy.
 				if (resolveWrapper(this.____slothletInternal.impl) === null && hasThenMember(this.____slothletInternal.impl)) {
-					throw thenableExportError(this.SlothletError, this.____slothletInternal.apiPath);
+					throw thenableExportError(this.____SlothletError, this.____slothletInternal.apiPath);
 				}
 
 				// If impl is a native Proxy (e.g., a version dispatcher), skip adoption entirely.
@@ -1699,7 +1699,7 @@ export function MaterializeLayer(Base) {
 
 				// Arrays are transparent data leaves, not namespaces to compose. Adopting their indices as
 				// child wrappers would rebuild them as array-likes ({0,1,length:0}, Array.isArray false) and
-				// drop primitive members. Leave the array impl intact; createProxy gives it an array target
+				// drop primitive members. Leave the array impl intact; ___createProxy gives it an array target
 				// and getTrap delegates reads to it, so the wrapper stays opaque/faithful to the outside.
 				if (Arrays.isArray(this.____slothletInternal.impl)) return;
 
@@ -1761,7 +1761,7 @@ export function MaterializeLayer(Base) {
 				const storedCollisionMode = this.____slothletInternal.state.collisionMode; // Set during collision in api-assignment.mjs
 				const isMergeScenario = storedCollisionMode !== "replace" && existingKeys.length > 0;
 
-				this.slothlet.debug("wrapper", {
+				this.____slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_ADOPT",
 					apiPath: this.____slothletInternal.apiPath,
 					mode: this.____slothletInternal.mode,
@@ -1775,7 +1775,7 @@ export function MaterializeLayer(Base) {
 				// reused during adoption to preserve proxy identity (reference stability across reload).
 				const savedChildren = new Map();
 				if (storedCollisionMode === "replace" && existingKeys.length > 0) {
-					this.slothlet.debug("wrapper", {
+					this.____slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_ADOPT_REPLACE_CLEARING",
 						count: existingKeys.length
 					});
@@ -1857,7 +1857,7 @@ export function MaterializeLayer(Base) {
 					// Schema `if`/`then`/`else`) is an ordinary member. It runs before the non-enumerable skip
 					// below, which would otherwise pass a class's static `then`.
 					if (key === "then" && isAwaitableThen(descriptor)) {
-						throw thenableExportError(this.SlothletError, `${this.____slothletInternal.apiPath}.then`);
+						throw thenableExportError(this.____SlothletError, `${this.____slothletInternal.apiPath}.then`);
 					}
 					// A function's non-enumerable own properties are its own surface, not child endpoints — the
 					// same rule the get trap applies (#304). Beyond `length`/`name`/`prototype` (skipped above),
@@ -1901,7 +1901,7 @@ export function MaterializeLayer(Base) {
 					// Symbol keys are not used as API module names in practice.
 					/* v8 ignore next */
 					if (typeof key !== "symbol") {
-						this.slothlet.debug("wrapper", {
+						this.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_ADOPT_PROCESS",
 							apiPath: this.____slothletInternal.apiPath,
 							propKey: key,
@@ -1919,7 +1919,7 @@ export function MaterializeLayer(Base) {
 						// Symbol keys are not used as API module names in practice.
 						/* v8 ignore next */
 						if (typeof key !== "symbol") {
-							this.slothlet.debug("wrapper", {
+							this.____slothlet.debug("wrapper", {
 								key: "DEBUG_MODE_ADOPT_CHECK",
 								apiPath: this.____slothletInternal.apiPath,
 								propKey: key,
@@ -1940,7 +1940,7 @@ export function MaterializeLayer(Base) {
 							// Symbol keys are not used as API module names in practice.
 							/* v8 ignore next */
 							if (typeof key !== "symbol") {
-								this.slothlet.debug("wrapper", {
+								this.____slothlet.debug("wrapper", {
 									key: "DEBUG_MODE_ADOPT_SKIP_COLLISION_MERGED",
 									apiPath: this.____slothletInternal.apiPath,
 									propKey: key
@@ -1959,7 +1959,7 @@ export function MaterializeLayer(Base) {
 						// Symbol keys are not used as API module names in practice.
 						/* v8 ignore next */
 						if (typeof key !== "symbol") {
-							this.slothlet.debug("wrapper", {
+							this.____slothlet.debug("wrapper", {
 								key: "DEBUG_MODE_ADOPT_ALLOW_NOT_COLLISION_MERGED",
 								apiPath: this.____slothletInternal.apiPath,
 								propKey: key
@@ -1973,7 +1973,7 @@ export function MaterializeLayer(Base) {
 					if (cycleNode !== null) {
 						Objects.defineProperty(this, key, {
 							__proto__: null,
-							value: cycleNode.createProxy(),
+							value: cycleNode.___createProxy(),
 							writable: false,
 							enumerable: true,
 							configurable: true
@@ -2040,7 +2040,7 @@ export function MaterializeLayer(Base) {
 							/* v8 ignore start */
 							if (rawImpl !== null && rawImpl !== undefined) {
 								// Same stale-signature fix as the sibling call below: pass the child's real owner
-								// (the parent's moduleID) and force child reuse, not `this.slothlet` (which the
+								// (the parent's moduleID) and force child reuse, not `this.____slothlet` (which the
 								// guard coerced to "[object Object]", registering a garbage ownership entry on the
 								// namespace children of every reloaded module).
 								resolveWrapper(existingChild).___setImpl(
@@ -2072,7 +2072,7 @@ export function MaterializeLayer(Base) {
 							wrapped = existingChild;
 						} else {
 							// ___setImpl's signature is (newImpl, moduleID, forceReuseChildren) — this call was
-							// written against an older shape and passed `this.slothlet` (the instance) as the
+							// written against an older shape and passed `this.____slothlet` (the instance) as the
 							// moduleID, whose String() coercion in the guard below became "[object Object]" and
 							// registered a garbage ownership entry on every reload. Pass the child's real owner
 							// (the parent's moduleID) and force child reuse — reference preservation is the intent
@@ -2090,7 +2090,7 @@ export function MaterializeLayer(Base) {
 						// Symbol keys are not used as API module names in practice.
 						/* v8 ignore next */
 						if (typeof key !== "symbol") {
-							this.slothlet.debug("wrapper", {
+							this.____slothlet.debug("wrapper", {
 								key: "DEBUG_MODE_ADOPT_REUSE_CHILD_WRAPPER",
 								apiPath: this.____slothletInternal.apiPath,
 								propKey: key
@@ -2100,7 +2100,7 @@ export function MaterializeLayer(Base) {
 						// No existing wrapper - create new one. Thread THIS wrapper's own deferChildAdopt
 						// through (mirrors every other ___createChildWrapper call site): without it, a
 						// primitive child adopted during an eager walk running against an already-deferred
-						// wrapper (e.g. _applyNewImpl reused-child reuse below) would always build a full
+						// wrapper (e.g. ___applyNewImpl reused-child reuse below) would always build a full
 						// nested wrapper regardless of deferChildAdopt, and the `wrapped === null` branch
 						// just below — which defines the live-forwarding accessor for exactly this case —
 						// would never fire (#340).
@@ -2111,7 +2111,7 @@ export function MaterializeLayer(Base) {
 						// Symbol keys are not used as API module names in practice.
 						/* v8 ignore next */
 						if (typeof key !== "symbol") {
-							this.slothlet.debug("wrapper", {
+							this.____slothlet.debug("wrapper", {
 								key: "DEBUG_MODE_ADOPT_WRAP",
 								apiPath: this.____slothletInternal.apiPath,
 								propKey: key,
@@ -2133,7 +2133,7 @@ export function MaterializeLayer(Base) {
 							// Symbol keys are not used as API module names in practice.
 							/* v8 ignore next */
 							if (typeof key !== "symbol") {
-								this.slothlet.debug("wrapper", {
+								this.____slothlet.debug("wrapper", {
 									key:
 										existingDescriptor && !existingDescriptor.configurable
 											? "DEBUG_MODE_ADOPT_SKIP_NON_CONFIGURABLE"
@@ -2146,7 +2146,7 @@ export function MaterializeLayer(Base) {
 							// Symbol keys are not used as API module names in practice.
 							/* v8 ignore next */
 							if (typeof key !== "symbol") {
-								this.slothlet.debug("wrapper", {
+								this.____slothlet.debug("wrapper", {
 									key: "DEBUG_MODE_ADOPT_DEFINE",
 									apiPath: this.____slothletInternal.apiPath,
 									propKey: key
@@ -2156,7 +2156,7 @@ export function MaterializeLayer(Base) {
 							// Symbol keys are not used as API module names in practice.
 							/* v8 ignore next */
 							if (typeof key !== "symbol") {
-								this.slothlet.debug("wrapper", {
+								this.____slothlet.debug("wrapper", {
 									key: "DEBUG_MODE_ADOPT_DEFINED",
 									apiPath: this.____slothletInternal.apiPath,
 									propKey: key
@@ -2180,7 +2180,7 @@ export function MaterializeLayer(Base) {
 						// desync the moment either side writes independently. Define a live forwarding
 						// accessor against the CURRENT impl instead (#340): reads/writes always resolve through
 						// `this.____slothletInternal.impl`, not a captured local, so this stays correct across an
-						// impl swap from reload/_applyNewImpl. Nothing to `delete` from impl — the accessor reads
+						// impl swap from reload/___applyNewImpl. Nothing to `delete` from impl — the accessor reads
 						// the live value from there, so impl must keep it.
 						//
 						// Scoped to a wrap-on-set-grafted subtree (`deferChildAdopt`) only: ORDINARY eager/lazy
@@ -2192,7 +2192,7 @@ export function MaterializeLayer(Base) {
 						// (`shop.limit`, `mod.plain`, `billing.internals.currency`, …), which reads
 						// `Object.getOwnPropertyDescriptor(...).value` to classify a leaf — undefined for an
 						// accessor. Keeping the original static-value shape for the non-deferred case avoids
-						// that regression while still covering whatever deferred/`_applyNewImpl`-reload
+						// that regression while still covering whatever deferred/`___applyNewImpl`-reload
 						// interaction this branch exists for.
 						Objects.defineProperty(this, key, {
 							__proto__: null,
@@ -2311,7 +2311,7 @@ export function MaterializeLayer(Base) {
 				// The losing function's reference to itself, or to a function further up, is the node that holds it now. A layer
 				// over the function hands it out bound to the function under it.
 				const cycle = (layerMethodOriginal(value) ?? value) === layerUnderlying(source) ? this : nodeInCycle(this, value);
-				if (cycle !== null) stored = cycle.createProxy();
+				if (cycle !== null) stored = cycle.___createProxy();
 				else if (
 					value !== null &&
 					(typeof value === "object" || typeof value === "function") &&
@@ -2377,7 +2377,7 @@ export function MaterializeLayer(Base) {
 				// Deferred wrap-on-set subtree (#340): a primitive bails to null here, the same signal the
 				// opaque-builtin case above gives. This path is only reachable via ___adoptImplChildren's
 				// EAGER wrapped-child walk running against an already-deferred wrapper (e.g. a collision's
-				// existing-child-reuse calling ___setImpl -> _applyNewImpl on it) — the deferred getTrap
+				// existing-child-reuse calling ___setImpl -> ___applyNewImpl on it) — the deferred getTrap
 				// read path never reaches this function for a primitive at all, since its own earlier
 				// terminal-value fast path already returns one directly. Without this bail, that eager walk
 				// would build a full nested wrapper for the primitive instead of returning null, so
@@ -2440,14 +2440,14 @@ export function MaterializeLayer(Base) {
 				if (!isChildLiveIdentity && childImpl && typeof childImpl === "object" && !Arrays.isArray(childImpl)) {
 					childImpl = copyForComposition(childImpl);
 					// Let an origin lookup against the clone resolve to the exported original (#484).
-					if (childImpl !== value) this.slothlet.handlers?.ownership?.noteClone(childImpl, value);
+					if (childImpl !== value) this.____slothlet.handlers?.ownership?.noteClone(childImpl, value);
 				}
 
 				// Get parent wrapper's metadata to inherit filePath and moduleID
-				const parentMetadata = this.slothlet.handlers?.metadata?.getSystemMetadata(this);
+				const parentMetadata = this.____slothlet.handlers?.metadata?.getSystemMetadata(this);
 
 				// Try to get child's actual filePath from its own metadata first (if already tagged during materialization)
-				const childExistingMetadata = this.slothlet.handlers?.metadata?.getSystemMetadata(value);
+				const childExistingMetadata = this.____slothlet.handlers?.metadata?.getSystemMetadata(value);
 				let childFilePath = childExistingMetadata?.filePath || null;
 				let childModuleId = null;
 
@@ -2456,7 +2456,7 @@ export function MaterializeLayer(Base) {
 					// Symbol keys are not used as API module names; this guard is unreachable in practice.
 					/* v8 ignore next */
 					const keyStr = typeof key === "symbol" ? String(key) : key;
-					this.slothlet.debug("wrapper", {
+					this.____slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_WRAP_CHILD_PATH_CHECK",
 						apiPath: this.apiPath,
 						propKey: keyStr,
@@ -2466,7 +2466,7 @@ export function MaterializeLayer(Base) {
 						parentFilePath: parentMetadata?.filePath
 					});
 					if (this.____slothletInternal.impl && this.____slothletInternal.impl.____childFilePaths) {
-						this.slothlet.debug("wrapper", {
+						this.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WRAP_CHILD_PATH_AVAILABLE",
 							keys: ArrayMethods.join(Objects.keys(this.____slothletInternal.impl.____childFilePaths), ","),
 							propKey: keyStr,
@@ -2481,7 +2481,7 @@ export function MaterializeLayer(Base) {
 						this.____slothletInternal.impl.____childFilePaths[key]
 					) {
 						childFilePath = this.____slothletInternal.impl.____childFilePaths[key];
-						this.slothlet.debug("wrapper", {
+						this.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WRAP_CHILD_PATH_USING",
 							childFilePath
 						});
@@ -2493,7 +2493,7 @@ export function MaterializeLayer(Base) {
 					) {
 						// Check pre-materialize mapping from collision merge
 						childFilePath = this.____slothletInternal.childFilePathsPreMaterialize[key];
-						this.slothlet.debug("wrapper", {
+						this.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WRAP_CHILD_PATH_PRE_MAT",
 							childFilePath
 						});
@@ -2501,7 +2501,7 @@ export function MaterializeLayer(Base) {
 					} else {
 						// Fall back to parent's filePath (will be directory path for lazy wrappers)
 						childFilePath = parentMetadata?.filePath || null;
-						this.slothlet.debug("wrapper", {
+						this.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WRAP_CHILD_PATH_FALLBACK",
 							childFilePath
 						});
@@ -2537,7 +2537,7 @@ export function MaterializeLayer(Base) {
 				// with that name, confirmed by value — the only route for a primitive such a namespace gathered
 				// from one of several files, which has no identity and no recorded per-key map.
 				const parentInternal = this.____slothletInternal;
-				const originIndex = this.slothlet.handlers?.ownership;
+				const originIndex = this.____slothlet.handlers?.ownership;
 				const sameFileAsParent = Boolean(childFilePath) && childFilePath === parentInternal.filePath;
 				const keyName = typeof key === "symbol" ? null : key;
 				let childExportPath = null;
@@ -2574,7 +2574,7 @@ export function MaterializeLayer(Base) {
 						: null;
 				let nestedWrapper;
 				try {
-					nestedWrapper = new UnifiedWrapper(this.slothlet, {
+					nestedWrapper = new UnifiedWrapper(this.____slothlet, {
 						mode: "eager",
 						// `apiPath` is always non-empty for nested wrappers; symbol keys are not used for API paths.
 						/* v8 ignore start */
@@ -2608,7 +2608,7 @@ export function MaterializeLayer(Base) {
 				nestedWrapper.____slothletInternal.moduleObject = childImpl !== value ? moduleObjectFor(nestedWrapper, value, true) : null;
 				// Return proxy to maintain consistency with external assignments
 				// Children are stored as proxies on wrapper, getTrap returns them as-is
-				return nestedWrapper.createProxy();
+				return nestedWrapper.___createProxy();
 			}
 
 			/**

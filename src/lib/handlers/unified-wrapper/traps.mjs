@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:24:03-08:00 (1795641843)
+ *	@Last modified time: 2026-11-25T16:05:39-08:00 (1795651539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -416,8 +416,8 @@ function frontsLiveValue(wrapper) {
 function runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, callArgs, api, ctx, entryIdentity = null) {
 	const internal = wrapper.____slothletInternal;
 	const path = internal.apiPath;
-	const contextManager = wrapper.slothlet.contextManager;
-	const instanceID = wrapper.slothlet.instanceID;
+	const contextManager = wrapper.____slothlet.contextManager;
+	const instanceID = wrapper.____slothlet.instanceID;
 
 	// Who is calling: the same resolution that makes `metadata.caller()` inside the target null —
 	// the target's execution store takes its caller from the wrapper active in THIS instance's flow
@@ -425,7 +425,7 @@ function runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, cal
 	const callerWrapper = contextManager.getCallerIdentity(instanceID)?.currentWrapper ?? null;
 	const entry = !callerWrapper;
 	// The same `caller` object a version dispatcher and a permission record get: { path, module, metadata, version }.
-	const caller = callerWrapper ? (wrapper.slothlet.handlers.versionManager?.buildCallerArg(callerWrapper) ?? null) : null;
+	const caller = callerWrapper ? (wrapper.____slothlet.handlers.versionManager?.buildCallerArg(callerWrapper) ?? null) : null;
 
 	// Only a pinned (module-registered) around hook runs under a different identity than the call, so
 	// only then is the call's own flow captured for its next() to restore.
@@ -444,17 +444,28 @@ function runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, cal
 	const onUnobserved = (source) => {
 		unobserved = source;
 	};
-	const functionSource = (error) => failureSource({ type: "function", at: wrapper.clock.now() }, wrapper.___readTargetFailure(error));
+	const functionSource = (error) => failureSource({ type: "function", at: wrapper.____clock.now() }, wrapper.___readTargetFailure(error));
 
 	const invokeTarget = (targetArgs) => {
 		const impl = internal.impl;
 		// rawErrors: a leaf's throw is application data — never re-typed (#252).
 		if (typeof impl === "function") {
-			return contextManager.runInContext(wrapper.instanceID, impl, thisArg, targetArgs, wrapper, true, false, null, entryIdentity, true);
+			return contextManager.runInContext(
+				wrapper.____instanceID,
+				impl,
+				thisArg,
+				targetArgs,
+				wrapper,
+				true,
+				false,
+				null,
+				entryIdentity,
+				true
+			);
 		}
 		if (impl && typeof impl === "object" && typeof impl.default === "function") {
 			return contextManager.runInContext(
-				wrapper.instanceID,
+				wrapper.____instanceID,
 				impl.default,
 				impl,
 				targetArgs,
@@ -466,7 +477,7 @@ function runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, cal
 				true
 			);
 		}
-		throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path: segmentsOf(path), received: typeof impl });
+		throw new wrapper.____SlothletError("API_PATH_NOT_CALLABLE", { path: segmentsOf(path), received: typeof impl });
 	};
 
 	// Observers, run once per call on the way out.
@@ -487,7 +498,7 @@ function runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, cal
 			hookManager.executeErrorHooks(path, originalError, recorded, callArgs, api, ctx);
 		}
 		hookManager.executeAlwaysHooks(path, callArgs, undefined, true, [originalError], api, ctx);
-		if (wrapper.slothlet.config?.hook?.errors === "suppress") return undefined;
+		if (wrapper.____slothlet.config?.hook?.errors === "suppress") return undefined;
 		throw error;
 	};
 
@@ -522,7 +533,7 @@ function runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, cal
 		);
 		// Same contract as a call promoted by an async before/after hook: a target declared `async`
 		// already hands its callers a Promise; a promoted synchronous one hands back a guarded one.
-		return promoted && !leafIsAsync ? guardPromotedResult(run, path, wrapper.SlothletError) : run;
+		return promoted && !leafIsAsync ? guardPromotedResult(run, path, wrapper.____SlothletError) : run;
 	}
 
 	const core = (coreArgs) => {
@@ -560,7 +571,7 @@ function runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, cal
 			// A hand-written thenable is reacted to as `await` would, its rejections recorded as the target's however
 			// its `then` delivers them (see HookManager#observeThenable).
 			return hookManager.observeThenable(result, afterReaction, recordAsTarget, () =>
-				onUnobserved({ type: "function", timestamp: wrapper.clock.now() })
+				onUnobserved({ type: "function", timestamp: wrapper.____clock.now() })
 			);
 		}
 		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
@@ -667,7 +678,7 @@ function defineOnSealedShell(wrapper, target, prop, descriptor) {
 			attributes.value = shellValue(wrapper, prop);
 			// A function node's own member holding the module's code is held as a stand-in every holder may be described
 			// (see pinnedCodeMember).
-			if (functionOf(impl) !== null && !hasOwn(wrapper, prop) && pinsAsCode(attributes.value, wrapper.slothlet))
+			if (functionOf(impl) !== null && !hasOwn(wrapper, prop) && pinsAsCode(attributes.value, wrapper.____slothlet))
 				attributes.value = pinnedCodeMember(wrapper, attributes.value);
 			if (mirrors) delete mirrored.value;
 		}
@@ -740,12 +751,12 @@ function writeModuleObject(wrapper, object, prop, value) {
  * @private
  */
 function pinReader(wrapper, access) {
-	const pm = wrapper.slothlet.handlers?.permissionManager;
+	const pm = wrapper.____slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return null;
 	const entry = accessEntry(access, wrapper);
 	if (entry) return entry;
-	const contextManager = wrapper.slothlet.contextManager;
-	const instanceID = wrapper.slothlet.instanceID;
+	const contextManager = wrapper.____slothlet.contextManager;
+	const instanceID = wrapper.____slothlet.instanceID;
 	return {
 		store: contextManager?.tryGetContext?.(instanceID),
 		identity: contextManager?.getCallerIdentity?.(instanceID)
@@ -771,7 +782,7 @@ function pinReader(wrapper, access) {
  */
 function gateDataNodeMember(wrapper, prop, kept, access) {
 	if (prop === "then" || isFrameworkReservedKey(prop)) return;
-	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	const permissionManager = wrapper.____slothlet.handlers?.permissionManager;
 	if (!permissionManager || !permissionManager.isEnabled() || !permissionManager.isReadGatingEnabled()) return;
 	const impl = wrapper.____slothletInternal.impl;
 	// A primitive a loaded node holds (a lazy folder kept before it loaded as one) is data like a built-in (#797).
@@ -808,7 +819,7 @@ function instanceClassPrototype(wrapper, kept = null) {
 	const classWrapper = resolveWrapper(classNode);
 	const prototype = Reflect.getPrototypeOf(wrapper.____slothletInternal.impl);
 	enforceCodeMember(classWrapper, prototype, kept);
-	return atClassSite(wrapper.slothlet, prototypeForReader(classWrapper, classWrapper.___exposePrototype(prototype), "prototype"));
+	return atClassSite(wrapper.____slothlet, prototypeForReader(classWrapper, classWrapper.___exposePrototype(prototype), "prototype"));
 }
 
 /**
@@ -861,9 +872,10 @@ function instanceShellPrototype(wrapper) {
 	const site = wrapper.___instancePrototypeSite();
 	if (site === undefined) return undefined;
 	const { prototype, checked } = site;
-	if (prototype === null || WeakSetMethods.has(INTRINSICS, prototype) || isSharedValue(prototype) || !wrapper.slothlet) return prototype;
-	recordPrototypePath(wrapper.slothlet, checked.___exposePrototype(prototype), site.site);
-	return prototypeHandleOf(wrapper.slothlet, prototype);
+	if (prototype === null || WeakSetMethods.has(INTRINSICS, prototype) || isSharedValue(prototype) || !wrapper.____slothlet)
+		return prototype;
+	recordPrototypePath(wrapper.____slothlet, checked.___exposePrototype(prototype), site.site);
+	return prototypeHandleOf(wrapper.____slothlet, prototype);
 }
 
 /**
@@ -878,9 +890,9 @@ function instanceShellPrototype(wrapper) {
  * @private
  */
 function sealedShellPrototype(wrapper, prototype) {
-	if (!wrapper.slothlet || WeakSetMethods.has(INTRINSICS, prototype) || isSharedValue(prototype)) return prototype;
-	recordPrototypePath(wrapper.slothlet, prototype, prototypeSiteOf(wrapper, null));
-	return prototypeHandleOf(wrapper.slothlet, prototype);
+	if (!wrapper.____slothlet || WeakSetMethods.has(INTRINSICS, prototype) || isSharedValue(prototype)) return prototype;
+	recordPrototypePath(wrapper.____slothlet, prototype, prototypeSiteOf(wrapper, null));
+	return prototypeHandleOf(wrapper.____slothlet, prototype);
 }
 
 /**
@@ -908,21 +920,21 @@ function recordLayerFront(slothlet, fn, node) {
  */
 function recordFunctionNode(wrapper) {
 	const { impl, proxy, filePath } = wrapper.____slothletInternal;
-	if (typeof impl !== "function" || !wrapper.slothlet) return;
+	if (typeof impl !== "function" || !wrapper.____slothlet) return;
 	// A function node built over a folder's or a mount's default function holds slothlet's layer over it: the function
 	// behind the layer is the one its `prototype.constructor` names, so it is fronted by this node too.
-	if (isCompositionLayer(impl)) recordLayerFront(wrapper.slothlet, layerUnderlying(impl), proxy);
+	if (isCompositionLayer(impl)) recordLayerFront(wrapper.____slothlet, layerUnderlying(impl), proxy);
 	// Only a function its file exports stands for it: a node built for one the module did not export (a class reached
 	// through an instance's members) is a member of that instance, not the class's own node.
-	if (!filePath || !wrapper.slothlet.handlers?.ownership?.resolveExportPath?.(filePath, impl)) return;
-	let byFunction = WeakMapMethods.get(FUNCTION_NODES, wrapper.slothlet);
-	if (!byFunction) WeakMapMethods.set(FUNCTION_NODES, wrapper.slothlet, (byFunction = new WeakMap()));
+	if (!filePath || !wrapper.____slothlet.handlers?.ownership?.resolveExportPath?.(filePath, impl)) return;
+	let byFunction = WeakMapMethods.get(FUNCTION_NODES, wrapper.____slothlet);
+	if (!byFunction) WeakMapMethods.set(FUNCTION_NODES, wrapper.____slothlet, (byFunction = new WeakMap()));
 	if ((WeakMapMethods.get(byFunction, impl) == null ? undefined : WeakRefMethods.deref(WeakMapMethods.get(byFunction, impl))) === undefined)
 		WeakMapMethods.set(byFunction, impl, new WeakRef(proxy));
-	WeakMapMethods.set(CLASS_INSTANCES, impl, new WeakRef(wrapper.slothlet));
+	WeakMapMethods.set(CLASS_INSTANCES, impl, new WeakRef(wrapper.____slothlet));
 	// Every node fronting it, for a class exported under more than one name (#667).
-	let everyFunction = WeakMapMethods.get(FUNCTION_NODE_SETS, wrapper.slothlet);
-	if (!everyFunction) WeakMapMethods.set(FUNCTION_NODE_SETS, wrapper.slothlet, (everyFunction = new WeakMap()));
+	let everyFunction = WeakMapMethods.get(FUNCTION_NODE_SETS, wrapper.____slothlet);
+	if (!everyFunction) WeakMapMethods.set(FUNCTION_NODE_SETS, wrapper.____slothlet, (everyFunction = new WeakMap()));
 	const live = filterList(WeakMapMethods.get(everyFunction, impl) ?? [], (ref) => WeakRefMethods.deref(ref) !== undefined);
 	if (!ArrayMethods.some(live, (ref) => WeakRefMethods.deref(ref) === proxy)) listPush(live, new WeakRef(proxy));
 	WeakMapMethods.set(everyFunction, impl, live);
@@ -938,11 +950,11 @@ function recordFunctionNode(wrapper) {
  */
 function markWritten(wrapper, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
-	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !handsOutAsModule(wrapper)) return;
+	if (!wrapper?.____slothlet?.instanceID || !wrapper.____slothlet.contextManager?.runInContext || !handsOutAsModule(wrapper)) return;
 	if (isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value)) return;
 	const maker = makerOf(wrapper);
 	if (WeakMapMethods.has(maker.made, value)) return;
-	const writer = wrapper.slothlet.contextManager.tryGetContext?.(wrapper.slothlet.instanceID)?.currentWrapper ?? null;
+	const writer = wrapper.____slothlet.contextManager.tryGetContext?.(wrapper.____slothlet.instanceID)?.currentWrapper ?? null;
 	if (writer && WeakSetMethods.has(trustedRootOwn.genuineWrappers, writer) && makerOf(writer) === maker) return;
 	WeakSetMethods.add(maker.handedIn, value);
 }
@@ -979,7 +991,7 @@ function prototypeOnSharedValue(wrapper) {
  * @private
  */
 function crossArguments(wrapper, args) {
-	const slothlet = wrapper?.slothlet;
+	const slothlet = wrapper?.____slothlet;
 	if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
 	return wrapper.___crossArgumentsFrom(args, callingModule(slothlet));
 }
@@ -1016,7 +1028,7 @@ function givenShellPrototype(wrapper, prototype) {
  * self.secret.holder.late.hidden; // read through the node at secret.holder.late.hidden, gated as any member
  */
 function definedValueNode(wrapper, target, prop, descriptor) {
-	if (!("value" in descriptor) || wrapper.slothlet.____buildDepth > 0) return null;
+	if (!("value" in descriptor) || wrapper.____slothlet.____buildDepth > 0) return null;
 	const value = descriptor.value;
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
 	if (util.types.isProxy(value) || resolveWrapper(value) !== null) return null;
@@ -1260,7 +1272,7 @@ export function TrapsLayer(Base) {
 			 * @returns {Proxy} Main proxy for API
 			 * @public
 			 */
-			createProxy() {
+			___createProxy() {
 				const wrapper = this;
 				if (wrapper.____slothletInternal.proxy) {
 					return wrapper.____slothletInternal.proxy;
@@ -1405,8 +1417,8 @@ export function TrapsLayer(Base) {
 
 					// Debug logging for collision scenarios. The entry is built only when a debug logger is set: without one
 					// `debug()` drops it, and building it reads nothing that runs code.
-					if ((prop === "power" || prop === "add") && this.slothlet.debugLogger) {
-						this.slothlet.debug("wrapper", {
+					if ((prop === "power" || prop === "add") && this.____slothlet.debugLogger) {
+						this.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_GET_START",
 							apiPath: wrapperInternal.apiPath,
 							prop: String(prop),
@@ -1607,7 +1619,7 @@ export function TrapsLayer(Base) {
 							const answered = wrapper.___readImplMember(prop);
 							if (answered === null || (typeof answered !== "object" && typeof answered !== "function")) return answered;
 							if (typeof answered !== "function") return wrapper.___createChildWrapper(prop, answered) ?? answered;
-							if (nodeRefOf(FUNCTION_NODES, wrapper.slothlet, answered) !== undefined) return wrapper.___functionNodeFor(answered);
+							if (nodeRefOf(FUNCTION_NODES, wrapper.____slothlet, answered) !== undefined) return wrapper.___functionNodeFor(answered);
 							return instanceClassNode(wrapper, answered) ?? answered;
 						}
 						// A namespace given another prototype reads its `constructor` from there, through the member read below.
@@ -1771,7 +1783,7 @@ export function TrapsLayer(Base) {
 							// as a member the reader may not read is.
 							const readMember = (holder, key) => {
 								try {
-									return { value: holder.createProxy()[key] };
+									return { value: holder.___createProxy()[key] };
 								} catch (error) {
 									if (error?.code === "PERMISSION_DENIED") return { withheld: true };
 									throw error;
@@ -1786,7 +1798,7 @@ export function TrapsLayer(Base) {
 							}
 							// The snapshot is rebuilt straight from the impl tree, so it bypasses the read
 							// gate on getTrap. Strip leaves this caller may not read before handing it over.
-							const pm = wrapper.slothlet.handlers?.permissionManager;
+							const pm = wrapper.____slothlet.handlers?.permissionManager;
 							if (pm && pm.isEnabled() && pm.isReadGatingEnabled()) {
 								let redacted = data;
 								for (let r = 0; r < readers.length; r++) {
@@ -1843,7 +1855,7 @@ export function TrapsLayer(Base) {
 					if (hasOwn(wrapper, prop)) {
 						// CRITICAL: In replace mode, check if property should exist at all
 						if (wrapperInternal.state.collisionMode === "replace" && (prop === "power" || prop === "add")) {
-							this.slothlet.debug("wrapper", {
+							this.____slothlet.debug("wrapper", {
 								key: "DEBUG_MODE_GET_CACHED_REPLACE",
 								apiPath: wrapper.apiPath,
 								prop: String(prop),
@@ -1854,7 +1866,7 @@ export function TrapsLayer(Base) {
 								)
 							});
 						}
-						this.slothlet.debug("wrapper", {
+						this.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_GET_CACHED",
 							apiPath: wrapperInternal.apiPath,
 							prop: String(prop),
@@ -1914,14 +1926,14 @@ export function TrapsLayer(Base) {
 						/* v8 ignore start */
 						if (hasOwn(wrapper, prop)) {
 							if (prop === "power" || prop === "add") {
-								this.slothlet.debug("wrapper", {
+								this.____slothlet.debug("wrapper", {
 									key: "DEBUG_MODE_GET_PROXYGET_ACCESSING",
 									prop,
 									wrapperId: wrapperInternal.id,
 									apiPath: wrapper.apiPath,
 									collisionMode: wrapperInternal.state.collisionMode || "none"
 								});
-								this.slothlet.debug("wrapper", {
+								this.____slothlet.debug("wrapper", {
 									key: "DEBUG_MODE_GET_PROXYGET_FOUND",
 									wrapperKeys: ArrayMethods.join(
 										filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k)),
@@ -1980,7 +1992,7 @@ export function TrapsLayer(Base) {
 							PromiseMethods.catch(wrapper.___materialize(), () => {});
 						}
 
-						this.slothlet.debug("wrapper", {
+						this.____slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_LAZY_GET_CREATE_WAITING_PROXY",
 							prop: String(prop),
 							// collisionMode is always set on lazily-materialized wrappers; the || "none" fallback is never reached.
@@ -2131,7 +2143,7 @@ export function TrapsLayer(Base) {
 					// A function member that is this node's own function, or an ancestor's, is that node, as in plain JS: it closes
 					// the cycle where a new node below would open another level on every read.
 					const cycle = nodeInCycle(wrapper, value);
-					if (cycle !== null) return cycle.createProxy();
+					if (cycle !== null) return cycle.___createProxy();
 
 					// An inherited member read before with the same value is the node made for it then (#913).
 					if (isInherited) {
@@ -2284,13 +2296,13 @@ export function TrapsLayer(Base) {
 					const ___entryIdentity = ___entry?.identity ? ___entry : null;
 
 					// Get hook manager if available
-					const hookManager = wrapper.slothlet.handlers?.hookManager;
+					const hookManager = wrapper.____slothlet.handlers?.hookManager;
 					// Early exit if hooks disabled globally or this is a hook API function
 					const hasHooks = hookManager && hookManager.enabled && !StringMethods.startsWith(wrapperInternal.apiPath, "slothlet.hook");
 
 					// Get api (bound API) and ctx (user context) for hooks
-					const api = wrapper.slothlet.boundApi;
-					const ctx = wrapper.slothlet.config?.context || {};
+					const api = wrapper.____slothlet.boundApi;
+					const ctx = wrapper.____slothlet.config?.context || {};
 
 					// Per-call dispatch strategy (#253): when any matching before/after handler is
 					// asynchronous, the whole call runs an asynchronous pipeline — before-chain awaited,
@@ -2353,9 +2365,9 @@ export function TrapsLayer(Base) {
 									// synchronous pipeline.
 									let raw;
 									if (typeof impl === "function") {
-										raw = wrapper.slothlet.contextManager
-											? wrapper.slothlet.contextManager.runInContext(
-													wrapper.instanceID,
+										raw = wrapper.____slothlet.contextManager
+											? wrapper.____slothlet.contextManager.runInContext(
+													wrapper.____instanceID,
 													impl,
 													effectiveThisArg,
 													args,
@@ -2368,9 +2380,9 @@ export function TrapsLayer(Base) {
 												)
 											: FunctionMethods.apply(impl, effectiveThisArg, args);
 									} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
-										raw = wrapper.slothlet.contextManager
-											? wrapper.slothlet.contextManager.runInContext(
-													wrapper.instanceID,
+										raw = wrapper.____slothlet.contextManager
+											? wrapper.____slothlet.contextManager.runInContext(
+													wrapper.____instanceID,
 													impl.default,
 													impl,
 													args,
@@ -2383,7 +2395,7 @@ export function TrapsLayer(Base) {
 												)
 											: FunctionMethods.apply(impl.default, impl, args);
 									} else {
-										throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path: segmentsOf(___path), received: typeof impl });
+										throw new wrapper.____SlothletError("API_PATH_NOT_CALLABLE", { path: segmentsOf(___path), received: typeof impl });
 									}
 									settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 								} catch (error) {
@@ -2396,11 +2408,11 @@ export function TrapsLayer(Base) {
 									// Reachable: an outer target that re-raises the inner call's marked original
 									// (rather than the context wrapper around it) lands here with the marker set.
 									if (!isHookProcessed(error)) {
-										const sourceInfo = failureSource({ type: "function", at: wrapper.clock.now() }, failure);
+										const sourceInfo = failureSource({ type: "function", at: wrapper.____clock.now() }, failure);
 										hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
 									}
 									hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
-									if (wrapper.slothlet.config?.hook?.errors === "suppress") return undefined;
+									if (wrapper.____slothlet.config?.hook?.errors === "suppress") return undefined;
 									throw error;
 								}
 
@@ -2423,7 +2435,7 @@ export function TrapsLayer(Base) {
 							// A genuinely-async target's callers already hold a Promise contract — hand the
 							// pipeline back plainly. A promoted SYNC target's callers contracted a value, so
 							// the returned Promise is guarded: awaiting works, value-coercion throws named.
-							return ___leafIsAsync ? ___promotedRun : guardPromotedResult(___promotedRun, ___path, wrapper.SlothletError);
+							return ___leafIsAsync ? ___promotedRun : guardPromotedResult(___promotedRun, ___path, wrapper.____SlothletError);
 						}
 					}
 
@@ -2479,11 +2491,11 @@ export function TrapsLayer(Base) {
 										const impl = wrapperInternal.impl;
 										try {
 											if (typeof impl === "function") {
-												if (wrapper.slothlet.contextManager) {
+												if (wrapper.____slothlet.contextManager) {
 													// rawErrors: a leaf's throw is application data — never re-typed (#252).
 													resolve(
-														wrapper.slothlet.contextManager.runInContext(
-															wrapper.instanceID,
+														wrapper.____slothlet.contextManager.runInContext(
+															wrapper.____instanceID,
 															impl,
 															effectiveThisArg,
 															args,
@@ -2503,7 +2515,7 @@ export function TrapsLayer(Base) {
 													// rawErrors: a leaf's throw is application data — never re-typed (#252).
 													resolve(
 														wrapper.contextManager.runInContext(
-															wrapper.instanceID,
+															wrapper.____instanceID,
 															impl.default,
 															impl,
 															args,
@@ -2520,7 +2532,7 @@ export function TrapsLayer(Base) {
 												}
 											} else {
 												reject(
-													new wrapper.slothlet.SlothletError("API_PATH_NOT_CALLABLE", {
+													new wrapper.____slothlet.SlothletError("API_PATH_NOT_CALLABLE", {
 														path: segmentsOf(wrapperInternal.apiPath),
 														received: typeof impl
 													})
@@ -2539,14 +2551,14 @@ export function TrapsLayer(Base) {
 									/* v8 ignore start */
 									if (!wrapperInternal.state.inFlight) {
 										reject(
-											new wrapper.slothlet.SlothletError("LAZY_MATERIALIZATION_FAILED", {
+											new wrapper.____slothlet.SlothletError("LAZY_MATERIALIZATION_FAILED", {
 												path: segmentsOf(wrapperInternal.apiPath)
 											})
 										);
 										return;
 										/* v8 ignore stop */
 									}
-									scheduleMacrotask(checkMaterialized, undefined, wrapper.clock);
+									scheduleMacrotask(checkMaterialized, undefined, wrapper.____clock);
 								};
 								checkMaterialized();
 							});
@@ -2556,10 +2568,10 @@ export function TrapsLayer(Base) {
 						const impl = wrapperInternal.impl;
 
 						if (typeof impl === "function") {
-							if (wrapper.slothlet.contextManager) {
+							if (wrapper.____slothlet.contextManager) {
 								// rawErrors: a leaf's throw is application data — never re-typed (#252).
-								result = wrapper.slothlet.contextManager.runInContext(
-									wrapper.instanceID,
+								result = wrapper.____slothlet.contextManager.runInContext(
+									wrapper.____instanceID,
 									impl,
 									effectiveThisArg,
 									args,
@@ -2574,10 +2586,10 @@ export function TrapsLayer(Base) {
 								result = FunctionMethods.apply(impl, effectiveThisArg, args);
 							}
 						} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
-							if (wrapper.slothlet.contextManager) {
+							if (wrapper.____slothlet.contextManager) {
 								// rawErrors: a leaf's throw is application data — never re-typed (#252).
-								result = wrapper.slothlet.contextManager.runInContext(
-									wrapper.instanceID,
+								result = wrapper.____slothlet.contextManager.runInContext(
+									wrapper.____instanceID,
 									impl.default,
 									impl,
 									args,
@@ -2592,7 +2604,7 @@ export function TrapsLayer(Base) {
 								result = FunctionMethods.apply(impl.default, impl, args);
 							}
 						} else {
-							throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", {
+							throw new wrapper.____SlothletError("API_PATH_NOT_CALLABLE", {
 								path: segmentsOf(wrapperInternal.apiPath),
 								received: typeof impl
 							});
@@ -2610,8 +2622,8 @@ export function TrapsLayer(Base) {
 							if (
 								enginePromise &&
 								!hasHooks &&
-								wrapper.slothlet.config?.hook?.errors !== "suppress" &&
-								wrapper.slothlet.contextManager?.ownsResult?.(result)
+								wrapper.____slothlet.config?.hook?.errors !== "suppress" &&
+								wrapper.____slothlet.contextManager?.ownsResult?.(result)
 							)
 								return result;
 							// Async result - attach hooks to Promise chain. A hand-written thenable is reacted to as `await`
@@ -2643,7 +2655,7 @@ export function TrapsLayer(Base) {
 										if (hasHooks) {
 											// A hook's failure, read from its record (see HookManager#failureOf), never in the caller's flow (#599).
 											const originalError = unwrapError(error);
-											const sourceInfo = failureSource({ type: "after", at: wrapper.clock.now() }, hookManager.failureOf(error));
+											const sourceInfo = failureSource({ type: "after", at: wrapper.____clock.now() }, hookManager.failureOf(error));
 											// The after chain reports its own hook's failure; this reports only what it did not.
 											if (!hookReported && !isHookProcessed(error)) {
 												hookManager.executeErrorHooks(wrapperInternal.apiPath, originalError, sourceInfo, args, api, ctx);
@@ -2652,7 +2664,7 @@ export function TrapsLayer(Base) {
 										}
 
 										// Check if errors should be suppressed
-										const suppressErrors = wrapper.slothlet.config?.hook?.errors === "suppress";
+										const suppressErrors = wrapper.____slothlet.config?.hook?.errors === "suppress";
 										if (suppressErrors) {
 											return undefined;
 										}
@@ -2666,7 +2678,7 @@ export function TrapsLayer(Base) {
 										const failure = wrapper.___readTargetFailure(error);
 										const originalError = failure.originalError();
 										if (!isHookProcessed(error)) {
-											const sourceInfo = failureSource({ type: "function", at: wrapper.clock.now() }, failure);
+											const sourceInfo = failureSource({ type: "function", at: wrapper.____clock.now() }, failure);
 											hookManager.executeErrorHooks(wrapperInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 										}
 										// Always hooks execute for rejected promises
@@ -2674,7 +2686,7 @@ export function TrapsLayer(Base) {
 									}
 
 									// Check if errors should be suppressed
-									const suppressErrors = wrapper.slothlet.config?.hook?.errors === "suppress";
+									const suppressErrors = wrapper.____slothlet.config?.hook?.errors === "suppress";
 									if (suppressErrors) {
 										return undefined;
 									}
@@ -2701,12 +2713,12 @@ export function TrapsLayer(Base) {
 						// always hooks then take the unwrapped error from what was read.
 						const targetFailure = hasHooks && !hookReported ? wrapper.___readTargetFailure(error) : null;
 						if (targetFailure && !isHookProcessed(error)) {
-							const sourceInfo = failureSource({ type: "function", at: wrapper.clock.now() }, targetFailure);
+							const sourceInfo = failureSource({ type: "function", at: wrapper.____clock.now() }, targetFailure);
 							hookManager.executeErrorHooks(wrapperInternal.apiPath, targetFailure.originalError(), sourceInfo, args, api, ctx);
 						}
 
 						// Check if errors should be suppressed
-						const suppressErrors = wrapper.slothlet.config?.hook?.errors === "suppress";
+						const suppressErrors = wrapper.____slothlet.config?.hook?.errors === "suppress";
 						if (suppressErrors) {
 							// Don't throw - return undefined after always hooks run
 							return undefined;
@@ -3021,7 +3033,7 @@ export function TrapsLayer(Base) {
 						}
 						// A member that is the node's own function, or an ancestor's, is described holding that node, as reading it gives.
 						const cycle = implDescriptor && "value" in implDescriptor ? nodeInCycle(wrapper, implDescriptor.value) : null;
-						if (cycle !== null) return virtualizeDescriptor({ __proto__: null, ...implDescriptor, value: cycle.createProxy() });
+						if (cycle !== null) return virtualizeDescriptor({ __proto__: null, ...implDescriptor, value: cycle.___createProxy() });
 						if (implDescriptor !== null) return virtualizeDescriptor(describeImplMember(wrapper, implDescriptor));
 					}
 
@@ -3221,7 +3233,7 @@ export function TrapsLayer(Base) {
 					// A callable `then` would make the node awaitable (#571), so assigning one is refused; a `then`
 					// holding data is an ordinary member and reads back.
 					if (prop === "then" && isAwaitableThen({ value })) {
-						throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
+						throw new wrapper.____SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
 					}
 					// A module writes only under the subtree it owns, below the top level of `self` as at it (#625). A
 					// framework-reserved key is the framework's own state: the built-in write rules keep modules off it.
@@ -3420,7 +3432,7 @@ export function TrapsLayer(Base) {
 						// (#746). The object refusing the write (a member it holds read-only) refuses it here, before the node
 						// changes. The framework's own writes (the build, a sibling file merged onto the node) change only the node:
 						// composing never changes a module's value.
-						const ownWrite = wrapper.slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper);
+						const ownWrite = wrapper.____slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper);
 						const moduleObject = ownWrite || runTreeNode ? null : moduleObjectOf(wrapper, prop);
 						if (moduleObject !== null && !writeModuleObject(wrapper, moduleObject, prop, value)) return false;
 						// A member defined read-only through the node takes no assignment, as on an object (#749).
@@ -3448,7 +3460,7 @@ export function TrapsLayer(Base) {
 						// the reloaded module's content into it. Skipped either way: primitives; opaque built-ins
 						// (___createChildWrapper returns null); native proxies and existing wrappers (never iterate
 						// a version dispatcher's traps — mirrors ___adoptImplChildren's proxy skip).
-						const inBuild = wrapper.slothlet.____buildDepth > 0;
+						const inBuild = wrapper.____slothlet.____buildDepth > 0;
 						const stored = inBuild ? value : wrapper.___wrapOnSet(prop, value);
 						Objects.defineProperty(wrapper, prop, {
 							__proto__: null,
@@ -3733,7 +3745,7 @@ export function TrapsLayer(Base) {
 					if (wrapper.____slothletInternal.mode === "lazy" && wrapper.____slothletInternal.state.inFlight) {
 						// A subclass's `super()` has to finish now, which nothing still loading can (#685).
 						if (newTarget !== wrapper.____slothletInternal.proxy) {
-							throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
+							throw new wrapper.____SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
 						}
 						// materializationPromise is always set when inFlight=true; Promise.resolve() guards
 						// the unreachable case where it is somehow absent due to corrupted internal state.
@@ -3743,7 +3755,7 @@ export function TrapsLayer(Base) {
 								// Materialization resolved without marking the wrapper as materialized —
 								// a defensive guard against corrupted internal state; unreachable in practice.
 								/* v8 ignore next */
-								throw new wrapper.slothlet.SlothletError("LAZY_MATERIALIZATION_FAILED", {
+								throw new wrapper.____slothlet.SlothletError("LAZY_MATERIALIZATION_FAILED", {
 									path: segmentsOf(wrapper.____slothletInternal.apiPath)
 								});
 							}
@@ -3755,7 +3767,7 @@ export function TrapsLayer(Base) {
 							if (impl && typeof impl === "object" && typeof impl.default === "function") {
 								return Reflect.construct(impl.default, args, impl.default);
 							}
-							throw new wrapper.slothlet.SlothletError("API_PATH_NOT_CALLABLE", {
+							throw new wrapper.____slothlet.SlothletError("API_PATH_NOT_CALLABLE", {
 								path: segmentsOf(wrapper.____slothletInternal.apiPath),
 								received: typeof impl
 							});
@@ -3782,7 +3794,7 @@ export function TrapsLayer(Base) {
 						return wrapper.___constructAsNode(impl.default, args, effectiveNewTarget);
 					}
 
-					throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", {
+					throw new wrapper.____SlothletError("API_PATH_NOT_CALLABLE", {
 						path: segmentsOf(wrapper.____slothletInternal.apiPath),
 						received: typeof impl
 					});
@@ -3872,12 +3884,12 @@ export function TrapsLayer(Base) {
 						if (!emitter) return prototype;
 						// A module allowed the emitter reads and calls through it, and a change made through it stays the owner's (#667).
 						return prototypeForHolder(
-							wrapper.slothlet,
-							selfModuleReader(wrapper.slothlet) ?? kept?.reader ?? null,
+							wrapper.____slothlet,
+							selfModuleReader(wrapper.____slothlet) ?? kept?.reader ?? null,
 							wrapper.___emitterPrototypeHandle(prototype)
 						);
 					}
-					while (memberHoldsCode(prototype, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)))
+					while (memberHoldsCode(prototype, searchDepth(wrapper.____slothlet) + 1, searchBudget(wrapper.____slothlet)))
 						prototype = Objects.getPrototypeOf(prototype);
 					return withheldPrototype(wrapper, prototype);
 				};
@@ -3989,7 +4001,7 @@ export function TrapsLayer(Base) {
 						// A built-in handed out as itself (a `Map`, a `Date`) is saved first for the runs open (see helpers/run-snapshot).
 						if (anyRunOpen() && value !== null && (typeof value === "object" || typeof value === "function")) {
 							const held = builtinBehind(value);
-							if (held !== null) checkpointHandout(wrapper.slothlet, held);
+							if (held !== null) checkpointHandout(wrapper.____slothlet, held);
 							// So is a class's prototype, which a module's code and the host change as itself.
 							else if (prop === "prototype") wrapper.___checkpointPrototypeHandout(wrapper.___wrapperClassPrototype());
 						}
@@ -4012,8 +4024,8 @@ export function TrapsLayer(Base) {
 							const result = applyTrap(target, thisArg, args);
 							if (result !== null && typeof result === "object") {
 								// What an async call settles with is saved before the caller has it, as what a call returns is.
-								if (util.types.isPromise(result)) return checkpointSettled(wrapper.slothlet, result);
-								checkpointHandout(wrapper.slothlet, result);
+								if (util.types.isPromise(result)) return checkpointSettled(wrapper.____slothlet, result);
+								checkpointHandout(wrapper.____slothlet, result);
 							}
 							return result;
 						}
@@ -4062,7 +4074,7 @@ export function TrapsLayer(Base) {
 						wrapper,
 						(target, prop, descriptor) => {
 							if (prop === "then" && isAwaitableThen(descriptor)) {
-								throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
+								throw new wrapper.____SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
 							}
 							// A definition that changes nothing (freezing an already frozen node) is no write (#667).
 							if (!Reflect.isExtensible(target) && isUnchangingDefinition(target, prop, descriptor)) return true;
@@ -4085,7 +4097,7 @@ export function TrapsLayer(Base) {
 								!MapMethods.has(FRAMEWORK_WRITES, wrapper) &&
 								wrapper.___definitionFixes(target, prop, descriptor)
 							) {
-								refuseFixedObjectDefinition(wrapper.slothlet, wrapper.____slothletInternal.apiPath, prop, descriptor.value);
+								refuseFixedObjectDefinition(wrapper.____slothlet, wrapper.____slothletInternal.apiPath, prop, descriptor.value);
 							}
 							// An object or function defined on the node is held as a node of its own, as one assigned to it is: what is
 							// read through it is gated at its own path and a write through it is held to its owner. The module's own
@@ -4217,7 +4229,7 @@ export function TrapsLayer(Base) {
 						// object refusing it refuses it here, before the node changes. Composing never changes a module's value, and
 						// neither does a node of a run's own tree, which shares the module's values with the instance: it closes itself.
 						const moduleObject =
-							wrapper.slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper) || inRunTree(wrapper)
+							wrapper.____slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper) || inRunTree(wrapper)
 								? null
 								: moduleObjectOf(wrapper);
 						if (moduleObject !== null && !Reflect.preventExtensions(moduleObject)) return false;

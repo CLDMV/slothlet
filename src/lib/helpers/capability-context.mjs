@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T11:20:17-08:00 (1795548017)
+ *	@Last modified time: 2026-11-25T16:05:41-08:00 (1795651541)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -748,7 +748,7 @@ function assertCapability(slothlet, name, route, moduleFile = null, filename = n
 		caller = writers === null || writers.length > 1 ? UNATTRIBUTED_READER : writers.length ? writers[0] : null;
 	} else {
 		const definer = frameDefiner(contextManager?.runningInstanceID?.() ?? null);
-		if (definer?.wrapper) caller = definer.wrapper.slothlet === slothlet ? definer.wrapper : null;
+		if (definer?.wrapper) caller = definer.wrapper.____slothlet === slothlet ? definer.wrapper : null;
 		else if (definer?.unplaced || definer?.leaves) caller = UNATTRIBUTED_READER;
 		// Code of a file of the instance's no node stands for yet (a file's top level as it first loads) or no leaf
 		// accounts for is the instance's, never the host's.
