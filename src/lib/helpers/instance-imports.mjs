@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T11:20:19-08:00 (1795548019)
+ *	@Last modified time: 2026-11-25T10:51:28-08:00 (1795632688)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,7 +29,7 @@
  * (#715), at any depth:
  *
  * - **Native Node** — {@link installInstanceImportHooks} registers a process-wide, in-thread resolve
- *   hook (`module.registerHooks()`, Node >= 22.15 — slothlet's engines floor) that copies the
+ *   hook (`module.registerHooks()`) that copies the
  *   importing module's instance parameter onto the child. Registered once per process; a no-op
  *   for every import whose parent carries no slothlet query.
  * - **Vite / vitest** — {@link slothletInstanceImports} is the same rule as a vite `resolveId`
@@ -492,7 +492,7 @@ function ownStackText(limit) {
 /**
  * The innermost module instance copy on the stack (see {@link TAGGED_FRAME}), read from the whole stack in V8's own
  * format: Node's loader frames between a module's `require()` and the resolve hook can run past a host's
- * `Error.stackTraceLimit` (Node 22's CommonJS loader puts more than ten there).
+ * `Error.stackTraceLimit` (Node's CommonJS loader can put more than ten there).
  * @returns {string|undefined} The module's copy, or undefined when none is on the stack.
  * @private
  */
@@ -551,7 +551,7 @@ const INSTANCE_FRAME = /\?[^\s():]*slothlet_instance=/;
 
 /**
  * Whether the resolution the resolve hook is answering is a `require()` loading the file, made by an instance's code:
- * Node's CommonJS loader (`Module._load`, `Function._load` on Node 22) is reached on the stack before the `require` function Node hands each module
+ * Node's CommonJS loader (`Module._load`) is reached on the stack before the `require` function Node hands each module
  * (a `require.resolve()` reaches that function first), and the `require` is made from an instance copy's URL, from one
  * of an instance's CommonJS files (the `require` Node hands that file), or while such a copy's code runs.
  * @param {string} parentURL - The requiring file's URL.
@@ -564,8 +564,7 @@ function isInstanceRequireLoad(parentURL, commonJSParent = false) {
 	let at = -1;
 	for (let i = 0; i < lines.length && at === -1; i++) {
 		if (StringMethods.includes(lines[i], "(node:internal/modules/helpers:")) return false;
-		// Node 22 names the loader's frame `Function._load`, later versions `Module._load`.
-		if (RegExpMethods.exec(/^\s*at (?:Module|Function)\._load \(node:/, lines[i]) !== null) at = i;
+		if (RegExpMethods.exec(/^\s*at Module\._load \(node:/, lines[i]) !== null) at = i;
 	}
 	if (at === -1) return false;
 	// The hook is answering that `require()` itself: between it and the loader's frame run only Node's own frames and
@@ -937,7 +936,7 @@ function isKeeper() {
  * `url.fileURLToPath` later does not run inside slothlet's loading. Read through `process.getBuiltinModule()`, so this
  * module has no static `node:` import (it is also loaded by browser bundles and by vite configs). Null where no Node
  * builtins are available (a browser bundle), where none of the code calling them runs.
- * @type {{module: {createRequire: Function, registerHooks: Function|undefined, Module: Function}, url: {fileURLToPath: Function, pathToFileURL: Function}, fs: {readFileSync: Function, realpathSync: Function}, nodeModule: object}|null}
+ * @type {{module: {createRequire: Function, registerHooks: Function|undefined}, url: {fileURLToPath: Function, pathToFileURL: Function}, fs: {readFileSync: Function, realpathSync: Function}, nodeModule: object}|null}
  * @private
  */
 const NODE = (() => {
@@ -947,7 +946,7 @@ const NODE = (() => {
 	const url = getBuiltinModule("node:url");
 	const fs = getBuiltinModule("node:fs");
 	return Objects.freeze({
-		module: Objects.freeze({ createRequire: nodeModule.createRequire, registerHooks: nodeModule.registerHooks, Module: nodeModule.Module }),
+		module: Objects.freeze({ createRequire: nodeModule.createRequire, registerHooks: nodeModule.registerHooks }),
 		url: Objects.freeze({ fileURLToPath: url.fileURLToPath, pathToFileURL: url.pathToFileURL }),
 		fs: Objects.freeze({ readFileSync: fs.readFileSync, realpathSync: fs.realpathSync }),
 		nodeModule
@@ -958,12 +957,12 @@ const NODE = (() => {
  * The members of a `node:module` this file calls when it registers its hooks: the ones taken at load (see
  * {@link NODE}) when it is the process's own, else the object's own (a caller's stand-in, under test).
  * @param {object} nodeModule - The `node:module` namespace or a stand-in.
- * @returns {{createRequire: Function, registerHooks: Function|undefined, Module: Function}} Its members.
+ * @returns {{createRequire: Function, registerHooks: Function|undefined}} Its members.
  * @private
  */
 function moduleMembers(nodeModule) {
 	if (NODE !== null && nodeModule === NODE.nodeModule) return NODE.module;
-	return { createRequire: nodeModule?.createRequire, registerHooks: nodeModule?.registerHooks, Module: nodeModule?.Module };
+	return { createRequire: nodeModule?.createRequire, registerHooks: nodeModule?.registerHooks };
 }
 
 /**
@@ -3838,8 +3837,7 @@ function requireCJSFromRunner(filePath, instanceID) {
 }
 
 /**
- * Whether a resolve/load context's conditions include `name` (an array on the import path; a Set on
- * Node 22's require path).
+ * Whether a resolve/load context's conditions include `name` (an array; a Set is accepted as well).
  * @param {Iterable<string>|undefined} conditions - The context's conditions.
  * @param {string} name - The condition.
  * @returns {boolean} True when present.
@@ -4415,10 +4413,11 @@ function applyToResult(specifier, context, result) {
  * The resolve hook copies a leaf's instance query onto its relative imports and marks relative
  * `require()`s made inside an instance scope; the load hook serves the cross-module-system cases
  * (#534) and passes every unmarked URL straight through.
- * Uses the synchronous in-thread `module.registerHooks()` (Node >= 22.15 / 23.5, slothlet's engines
- * floor). The off-thread `module.register()` is deliberately not used: it adds a cross-thread round
+ * Uses the synchronous in-thread `module.registerHooks()`, which Node asks for a `require()`, a
+ * `require.resolve()` and an `import` alike. The off-thread `module.register()` is deliberately not used: it adds a cross-thread round
  * trip to every import in the process and reorders module evaluation enough to break leaves that
- * start a fire-and-forget runtime import. A host without `registerHooks()` is left untouched.
+ * start a fire-and-forget runtime import. A host without `registerHooks()` (a stand-in `node:module`) is left
+ * untouched.
  * @param {object} nodeModule - The `node:module` namespace.
  * @param {object} [registry=globalThis] - The global object in production. Any other object is a registry of the
  *   caller's own: this copy's hooks are then registered on `nodeModule` once per registry, whichever copy keeps the
@@ -4445,58 +4444,7 @@ function installInstanceImportHooks(nodeModule, registry = globalThis) {
 	if (typeof registerHooks !== "function") return false;
 	Reflect.apply(registerHooks, nodeModule, [HOOKS]);
 	HOOKED = true;
-	holdRequireResolve(nodeModule);
 	return true;
-}
-
-/**
- * The path a probe `require.resolve()` names while {@link holdRequireResolve} checks whether Node asks the resolve hook
- * for one, and whether the hook was asked.
- * @type {{path: ?string, seen: boolean}}
- * @private
- */
-const RESOLVE_PROBE = { path: null, seen: false };
-
-/**
- * Hold a `require.resolve()` to the rule of {@link refuseInternalImport} where Node does not ask the resolve hook for
- * one: Node 22 runs the hooks `module.registerHooks()` registers for a `require()` alone, later versions for a
- * `require.resolve()` too. There, Node's own CommonJS resolution (`Module._resolveFilename`, which every
- * `require.resolve()` reaches) is wrapped: a module's code naming one of slothlet's own files is refused, as the hook
- * refuses it elsewhere. A resolution the hook is answering is left to the hook, and one Node already asks the hook for
- * is not wrapped at all.
- * @param {object} nodeModule - The `node:module` namespace.
- * @returns {void}
- * @private
- */
-function holdRequireResolve(nodeModule) {
-	const { Module, createRequire } = moduleMembers(nodeModule);
-	// Node's loader state, patched on purpose: read as it is now.
-	const original = Module?._resolveFilename;
-	/* v8 ignore next -- defensive: every Node with `registerHooks()` has both; a stand-in `node:module` may not. */
-	if (typeof original !== "function" || typeof createRequire !== "function") return;
-	const { fileURLToPath, pathToFileURL } = NODE.url;
-	const own = fileURLToPath(import.meta.url);
-	RESOLVE_PROBE.path = own;
-	try {
-		createRequire(import.meta.url).resolve(own);
-	} finally {
-		RESOLVE_PROBE.path = null;
-	}
-	if (RESOLVE_PROBE.seen) return;
-	/* v8 ignore start -- runs on Node 22 only, whose hooks are not asked for a `require.resolve()`; the coverage run uses a later Node (the Node 22 CI leg runs it through isolation/internal-imports). */
-	Module._resolveFilename = function _resolveFilename(request, parent) {
-		const filename = Reflect.apply(original, this, arguments);
-		if (typeof filename === "string" && isSlothletInternal(filename)) {
-			const parentURL = typeof parent?.filename === "string" ? pathToFileURL(parent.filename).href : undefined;
-			if (isModuleImport(parentURL, ["require"])) throw importRefusal(request, filename);
-		}
-		if (typeof filename === "string" && isLeafFile(filename)) {
-			const parentURL = typeof parent?.filename === "string" ? pathToFileURL(parent.filename).href : undefined;
-			refuseLeafImport({ parentURL, conditions: ["require"] }, { url: pathToFileURL(filename).href });
-		}
-		return filename;
-	};
-	/* v8 ignore stop */
 }
 
 /**
@@ -4506,7 +4454,6 @@ function holdRequireResolve(nodeModule) {
  */
 const HOOKS = Objects.freeze({
 	resolve: (specifier, context, nextResolve) => {
-		if (RESOLVE_PROBE.path !== null && specifier === RESOLVE_PROBE.path) RESOLVE_PROBE.seen = true;
 		// The two virtual modules behind require(esm) (#534) resolve to themselves.
 		if (
 			StringMethods.startsWith(specifier, ESM_PREFIX) ||
