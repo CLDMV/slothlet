@@ -3151,9 +3151,11 @@ export class ModesProcessor extends ComponentBase {
 							}
 						}
 
-						// The folder's node is the file's function: indexed at the file, so the function's code is placed at
-						// the file, as eager mode builds the node from it. The node keeps the folder as its own path.
-						if (typeof implToWrap === "function") unifiedWrapperOwn.UnifiedWrapper._recordSourceFile(lazy_owner, file.path);
+						// The folder's node is the file's value: indexed at the file, so the function's code is placed at the
+						// file and what the file exports is saved with it before the file's code runs while a run is open, as
+						// eager mode builds the node from it. The node keeps the folder as its own path.
+						if (implToWrap !== null && (typeof implToWrap === "function" || typeof implToWrap === "object"))
+							unifiedWrapperOwn.UnifiedWrapper._recordSourceFile(lazy_owner, file.path);
 						return this.#refuseThenableValue(implToWrap, apiPath);
 					}
 				}

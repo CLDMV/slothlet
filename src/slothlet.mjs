@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:13:07-08:00 (1795486387)
+ *	@Last modified time: 2026-11-25T03:47:17-08:00 (1795607237)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2045,10 +2045,7 @@ class Slothlet {
 			};
 			// The root's members as they are, inheriting from the prototype the root has (a function root's is on its record).
 			const rootCapture = (api) => {
-				const copy = shallowCopy(api);
-				const held = rootHeld();
-				if (Reflect.getPrototypeOf(copy) !== held) Reflect.setPrototypeOf(copy, held);
-				return copy;
+				return shallowCopy(api, rootHeld());
 			};
 			// Whether a member is read from a prototype the function root was given: one the root does not hold itself.
 			const rootInherits = (prop) => {

@@ -2113,8 +2113,14 @@ function runtime_frontedDataMember(wrapper, prop) {
 		WeakMapMethods.set(SELF_DATA_METHODS, impl, byObject);
 	}
 	let method = MapMethods.get(byObject, prop);
-	if (method?.fn !== member) {
-		method = { fn: member, call: (...args) => Reflect.apply(member, impl, args) };
+	if (method?.fn !== member || method.wrapper !== wrapper) {
+		// A method running on the object can change it: while a run is open, the node and the object are saved first, as
+		// before any other change to the node (see runtime_snapshotBarrier).
+		const call = (...args) => {
+			if (anyRunOpen()) runtime_snapshotBarrier(wrapper);
+			return Reflect.apply(member, impl, args);
+		};
+		method = { fn: member, wrapper, call };
 		MapMethods.set(byObject, prop, method);
 	}
 	return method.call;
@@ -2129,7 +2135,7 @@ const SELF_DATA_VALUES = new WeakMap();
 
 /**
  * The methods {@link runtime_frontedDataMember} made to run on a data object itself, per object and key.
- * @type {WeakMap<object, Map<string|symbol, {fn: Function, call: Function}>>}
+ * @type {WeakMap<object, Map<string|symbol, {fn: Function, wrapper: object, call: Function}>>}
  * @private
  */
 const SELF_DATA_METHODS = new WeakMap();
@@ -4050,7 +4056,7 @@ const SNAPSHOT_LIVE_MEMBER = Objects.freeze({ __proto__: null, live: true });
  * What a node holds now, as a run that started before its next change reads it (see `helpers/run-snapshot`): each
  * member the node holds on itself (a child node, or a value it keeps) and each its value holds, with the attributes it
  * has, as the node's own traps would find it. Accessors and the members of a module's own Proxy are left to be read
- * live. Nothing runs: only the node's own store and its value are read, by their descriptors.
+ * live; an accessor is kept as well, for a run to read once the node no longer holds it. Nothing runs: only the node's own store and its value are read, by their descriptors.
  * @param {UnifiedWrapper} wrapper - The node's wrapper.
  * @returns {{members: Map<PropertyKey, (object|symbol)>, extensible: boolean}} The content.
  * @private
@@ -4060,7 +4066,13 @@ function runtime_captureNode(wrapper) {
 	const keep = (key, described) => {
 		if (described === undefined || isFrameworkReservedKey(key) || MapMethods.has(members, key)) return;
 		if (!("value" in described)) {
-			MapMethods.set(members, key, SNAPSHOT_LIVE_MEMBER);
+			// Read live while the node holds it; kept as it was, for a run to read once the instance deletes it.
+			const original = runtime_originalAccessor(described);
+			MapMethods.set(members, key, {
+				__proto__: null,
+				live: true,
+				accessor: { __proto__: null, get: original.get, set: original.set, enumerable: described.enumerable === true }
+			});
 			return;
 		}
 		// A child node answering a value in its place (a primitive a file exports) is kept as that value.
@@ -4549,6 +4561,20 @@ function runtime_checkpointFile(wrapper) {
 }
 
 /**
+ * Before a function a node's impl holds is handed out as it is rather than as a node of its own (a named export beside
+ * a file's default export that is a `Map`, which the node's composition layer holds): while a run is open, the node's
+ * file is saved for the runs open (see {@link runtime_checkpointFile}), as before a call through a node, since the
+ * caller runs the file's code with it.
+ * @param {UnifiedWrapper} wrapper - The node.
+ * @param {*} value - What is handed out.
+ * @returns {void}
+ * @private
+ */
+function runtime_checkpointCodeHandout(wrapper, value) {
+	if (typeof value === "function" && anyRunOpen()) runtime_checkpointFile(wrapper);
+}
+
+/**
  * Save a lazy node that has just loaded, and every node and built-in below it, for the runs open (see
  * `helpers/run-snapshot`): a change made through a stand-in for it while it loaded, which is made once it has, then
  * does not reach a run that started before the change.
@@ -4599,7 +4625,9 @@ function runtime_checkpointNodeBuiltins(domain, node) {
 		if (described !== undefined && "value" in described && builtinKind(described.value) !== null)
 			runtime_checkpointBuiltin(domain, described.value);
 	}
-	const impl = node.____slothletInternal.impl;
+	// A composed node (a file's default export with named exports beside it) holds its value under the framework's layer
+	// (see helpers/composition): the value itself is what is saved. A module's own Proxy is left alone.
+	const impl = layerUnderlying(node.____slothletInternal.impl);
 	if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return;
 	// A node over a built-in (a `Map` a file exports) holds its entries in the built-in itself.
 	if (builtinKind(impl) !== null) runtime_checkpointBuiltin(domain, impl);
@@ -4650,8 +4678,9 @@ function runtime_snapshotBarrier(wrapper) {
 	if (internal.mode === "lazy" && !internal.state.materialized) return;
 	// Once per window: later changes in the same window find the node saved already.
 	if (!beforeChange(domain, wrapper, runtime_captureNode)) return;
-	// A node over a built-in (a `Map`) holds its entries in the built-in, which a method running on it changes as itself.
-	const impl = internal.impl;
+	// A node over a built-in (a `Map`) holds its entries in the built-in, which a method running on it changes as itself;
+	// a composed node holds it under the framework's layer.
+	const impl = layerUnderlying(internal.impl);
 	if (impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && builtinKind(impl) !== null)
 		runtime_checkpointBuiltin(domain, impl);
 }
@@ -22186,6 +22215,7 @@ class UnifiedWrapper extends ComponentBase {
 					// A layer hands a method of the value under it out bound to that value: the method is what decides, so
 					// a built-in's (a Map's `get`) is the language's, not the module's.
 					runtime_enforceCodeMember(wrapper, layerMethodOriginal(proxied) ?? proxied, kept);
+					runtime_checkpointCodeHandout(wrapper, proxied);
 					return proxied;
 				}
 
