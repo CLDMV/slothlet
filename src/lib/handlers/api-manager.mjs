@@ -6320,6 +6320,40 @@ export class ApiManager extends ComponentBase {
 			const wrapper = resolveWrapper(value);
 			return wrapper !== null && !wrapper.____slothletInternal?.userAssigned;
 		};
+		// A node no module mounted (an object or function the host set on the api, held as a node) is a runtime write: the
+		// copy, built from the modules, has none of its own there, and takes what was written.
+		const writtenNode = (value) => {
+			const moduleID = resolveWrapper(value).____slothletInternal?.moduleID;
+			return moduleID === null || moduleID === undefined;
+		};
+		// What such a node holds, as a value for the copy: the node keeps the members of an object it was given on itself
+		// (its value is left without them), so a plain object or array is carried as one made of the node's members, the
+		// nodes below it carried the same way. Anything else is carried as the node's value.
+		const writtenValue = (wrapper, made = new Map()) => {
+			const impl = wrapper.____impl;
+			if (impl === null || typeof impl !== "object") return impl;
+			const prototype = Reflect.getPrototypeOf(impl);
+			const isArray = Arrays.isArray(impl);
+			if (!isArray && prototype !== Objects.prototype && prototype !== null) return impl;
+			if (MapMethods.has(made, wrapper)) return MapMethods.get(made, wrapper);
+			const value = isArray ? [] : Objects.create(prototype);
+			MapMethods.set(made, wrapper, value);
+			const keys = setFrom(Objects.keys(impl));
+			for (let index = 0, own = Objects.keys(wrapper); index < own.length; index++)
+				if (!SetMethods.has(ComponentBase.INTERNAL_KEYS, own[index])) SetMethods.add(keys, own[index]);
+			for (let index = 0, list = setToArray(keys); index < list.length; index++) {
+				const key = list[index];
+				let member;
+				try {
+					member = Objects.hasOwn(wrapper, key) ? wrapper[key] : impl[key];
+				} catch {
+					continue;
+				}
+				const child = member !== null && (typeof member === "object" || typeof member === "function") ? resolveWrapper(member) : null;
+				value[key] = child === null ? member : writtenNode(member) ? writtenValue(child, made) : (child.____impl ?? member);
+			}
+			return value;
+		};
 		const walk = async (fromWrapper, toWrapper, path) => {
 			if (WeakSetMethods.has(visited, fromWrapper)) return;
 			WeakSetMethods.add(visited, fromWrapper);
@@ -6340,6 +6374,8 @@ export class ApiManager extends ComponentBase {
 				if (isTreeNode(fromValue)) {
 					const toValue = toWrapper[key];
 					if (isTreeNode(toValue)) await walk(resolveWrapper(fromValue), resolveWrapper(toValue), memberPath);
+					else if (toValue === undefined && writtenNode(fromValue))
+						write(toProxy, key, writtenValue(resolveWrapper(fromValue)), memberPath);
 					continue;
 				}
 				if (Objects.hasOwn(toWrapper, key) && Objects.is(toWrapper[key], fromValue)) continue;
@@ -6354,6 +6390,7 @@ export class ApiManager extends ComponentBase {
 			if (isTreeNode(fromValue)) {
 				const toValue = toRoot[key];
 				if (isTreeNode(toValue)) await walk(resolveWrapper(fromValue), resolveWrapper(toValue), key);
+				else if (toValue === undefined && writtenNode(fromValue)) write(toTarget, key, writtenValue(resolveWrapper(fromValue)), key);
 				continue;
 			}
 			if (Objects.hasOwn(toRoot, key) && Objects.is(toRoot[key], fromValue)) continue;
