@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T12:49:54-08:00 (1795380594)
+ *	@Last modified time: 2026-11-25T03:22:13-08:00 (1795605733)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -183,9 +183,10 @@ const selfTraps = {
 		// Forward to the active per-runtime self proxy. Without this trap, JS
 		// defaults to setting on the empty `{}` target — silently lost since
 		// `get` reads from the live runtime self, not the target.
+		// Its answer is the runtime's: false when the api root refuses the write, so `Reflect.set` answers false and a
+		// strict assignment throws, as on a plain object (#960).
 		const runtime = getCurrentRuntime();
-		runtime.self[prop] = value;
-		return true;
+		return Reflect.set(runtime.self, prop, value);
 	}
 };
 

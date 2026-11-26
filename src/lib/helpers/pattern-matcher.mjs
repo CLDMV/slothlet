@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:51-08:00 (1794882531)
+ *	@Last modified time: 2026-11-25T11:15:01-08:00 (1795634101)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,11 +43,13 @@ import {
 	mapList,
 	RegExp,
 	RegExpMethods,
+	SetMethods,
 	regExpReplace,
 	splitText,
 	StringMethods,
 	textReplace
 } from "#helpers/intrinsics";
+import { UNSAFE_PATH_SEGMENTS } from "#helpers/segments";
 
 /**
  * Compile a glob pattern into a matcher function.
@@ -154,6 +156,30 @@ export function compilePattern(pattern, options = {}) {
 	const regex = new RegExp(regexPattern);
 
 	return (path) => RegExpMethods.exec(regex, path) !== null;
+}
+
+/**
+ * The first segment of a path pattern that no api path can hold (`__proto__`, `constructor`, `prototype`), if any.
+ * Braces are expanded and a leading whole-pattern `!` is read past, so `{a,constructor}.x` and `!*.prototype` are
+ * found; globs (`*`, `**`, `?`) and the exclusion form `!(a|b)` never name one. `toString`, `valueOf` and the like are
+ * ordinary api names and pass.
+ * @param {string} pattern - Glob path pattern.
+ * @returns {{ segment: string, index: number }|null} The offending segment and its index, or null when the pattern names none.
+ * @example
+ * unsafeSegmentOf("db.constructor"); // { segment: "constructor", index: 1 }
+ * unsafeSegmentOf("db.toString"); // null
+ * @package
+ */
+export function unsafeSegmentOf(pattern) {
+	if (typeof pattern !== "string") return null;
+	const body =
+		StringMethods.startsWith(pattern, "!") && !StringMethods.startsWith(pattern, "!(") ? StringMethods.slice(pattern, 1) : pattern;
+	for (let ofIndex = 0, ofList = expandBraces(body); ofIndex < ofList.length; ofIndex++) {
+		for (let segIndex = 0, segList = splitText(ofList[ofIndex], "."); segIndex < segList.length; segIndex++) {
+			if (SetMethods.has(UNSAFE_PATH_SEGMENTS, segList[segIndex])) return { segment: segList[segIndex], index: segIndex };
+		}
+	}
+	return null;
 }
 
 /**

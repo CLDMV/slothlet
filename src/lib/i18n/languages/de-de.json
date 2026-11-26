@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "Array enthält leere String-Segmente",
 		"API_PATH_REASON_RESERVED_NAME": "kollidiert mit reservierten Namen (slothlet, shutdown, destroy)",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "enthält ein unsicheres Segment (__proto__, constructor, prototype), das die Prototypenkette verunreinigen würde",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "nennt ein Segment, das kein API-Pfad enthalten kann (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "enthält ein Segment 'then', das diesen Namespace awaitable machen würde",
 		"API_PATH_REASON_INVALID_TYPE": "muss ein String, ein Array von Strings, ein leerer String (Root) oder null/undefined (Root) sein",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "enthält leere Pfad-Segmente",
@@ -559,7 +560,6 @@
 		"PERMISSION_BASELINE_REASON_CSP_BLOB_ALLOWED": "Die Seite führt Skripte von blob:-URLs aus: Ihre Content Security Policy erlaubt sie, oder sie hat keine.",
 		"PERMISSION_BASELINE_REASON_CSP_DATA_ALLOWED": "Die Seite führt Skripte von data:-URLs aus: Ihre Content Security Policy erlaubt sie, oder sie hat keine.",
 		"PERMISSION_BASELINE_REASON_VITEST_PLUGIN_ABSENT": "Ausführung unter vitest ohne das @cldmv/slothlet/vite-Plugin von slothlet in der vitest-Konfiguration.",
-		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_ENABLE": "AsyncContextFrame von Node ist aus, daher legt Node den Inhalt eines AsyncLocalStorage an asynchronen Ressourcen ab, die Modulcode erreichen kann. Starten Sie Node mit {flag}.",
 		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_REMOVE_FLAG": "AsyncContextFrame von Node ist aus, daher legt Node den Inhalt eines AsyncLocalStorage an asynchronen Ressourcen ab, die Modulcode erreichen kann. Entfernen Sie {flag} aus den Node-Flags und aus {env}.",
 		"INVALID_CONFIG_UNKNOWN_KEY": "Unbekannter Schlüssel '{key}' in {where}. Diese Option gibt es in slothlet v4 nicht. [{path|list}]",
 		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "Prüfen Sie den Schlüssel auf Tippfehler. Für slothlet v3 geschriebener Code lässt sich mit npx @cldmv/slothlet-migrate auf die v4-Namen umstellen."
