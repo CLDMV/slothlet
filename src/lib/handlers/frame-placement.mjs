@@ -6247,7 +6247,8 @@ if (isNode) {
 		STORE_SAMPLE = { Storage: AsyncLocalStorage, run: AsyncLocalStorage.prototype.run, exit: AsyncLocalStorage.prototype.exit };
 	}
 	const { EventEmitter } = builtin("node:events");
-	const nodeSetTimeout = builtin("node:timers").setTimeout;
+	// A platform without `node:timers` leaves its sample to fail below, which leaves its scripts unrecorded.
+	const nodeSetTimeout = builtin("node:timers")?.setTimeout;
 	for (
 		let ofIndex = 0,
 			ofList = [
