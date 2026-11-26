@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T11:20:17-08:00 (1795548017)
+ *	@Last modified time: 2026-11-25T11:44:36-08:00 (1795635876)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -493,7 +493,7 @@ function runtime_disable() {
 		try {
 			if (holdsValue(host, key, value)) Reflect.defineProperty(host, key, restore);
 		} catch {
-			/* v8 ignore next -- a host that no longer lets the member be defined keeps the wrapper, which passes through. */
+			// A host that no longer lets the member be defined keeps the wrapper, which passes through.
 		}
 	}
 	functionWrapper = null;

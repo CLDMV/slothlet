@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T08:47:20-08:00 (1794934040)
+ *	@Last modified time: 2026-11-24T22:02:23-08:00 (1795586543)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,10 +29,16 @@
  * (eager / lazy) goes first, so each version sees every position equally often. Per metric the report gives the
  * median over rounds and the spread (min–max and interquartile range).
  *
+ * `--v3-version=<x.y.z>` measures another v3 release than 3.24.0 (setup installs it and extracts that tag's fixtures;
+ * releases before 3.9.0 get the api folder as `dir`, their name for `base`). `--only=v3|v4` runs one version alone,
+ * so each version can run on its own machine or container, one after another; `--report=<a.json>,<b.json>,…` then
+ * merges those results into one table, a column per version in the order given, the last compared with each other.
+ *
  * Usage:
- *   node tests/performance/compare-v3-v4.mjs --setup [--v3-dir=<dir>]   # install 3.24.0 + extract its fixtures
- *   node tests/performance/compare-v3-v4.mjs [--rounds=8] [--v3-dir=<dir>] [--v4=dist|src] [--out=<dir>]
- *                                            [--match-v3-defaults] [--quick]
+ *   node tests/performance/compare-v3-v4.mjs --setup [--v3-version=<x.y.z>] [--v3-dir=<dir>]   # install + fixtures
+ *   node tests/performance/compare-v3-v4.mjs [--rounds=8] [--v3-version=<x.y.z>] [--v3-dir=<dir>] [--v4=dist|src]
+ *                                            [--only=v3|v4] [--out=<dir>] [--match-v3-defaults] [--quick]
+ *   node tests/performance/compare-v3-v4.mjs --report=<a.json>,<b.json>[,…] [--out=<dir>]
  *
  * `--quick` runs 2 rounds with tiny iteration counts. It proves the harness runs end to end; its numbers mean nothing.
  * `--match-v3-defaults` passes `routines: { auto: false, stack: false }` to v4 (the v3 defaults of `autoRoutines` and
@@ -47,7 +53,6 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(__dirname, "../..");
-const V3_VERSION = "3.24.0";
 
 const args = process.argv.slice(2);
 /**
@@ -62,8 +67,16 @@ function flag(name, fallback) {
 }
 const has = (name) => args.includes(`--${name}`);
 
+const V3_VERSION = flag("v3-version", "3.24.0");
+if (!/^3\.\d+\.\d+$/u.test(V3_VERSION)) {
+	throw new Error(`--v3-version must be a 3.x.y release, got ${V3_VERSION}`);
+}
+const only = flag("only");
+if (only !== undefined && only !== "v3" && only !== "v4") {
+	throw new Error("--only must be v3 or v4");
+}
 const quick = has("quick");
-const v3Dir = resolve(REPO, flag("v3-dir", "tmp/perf-compare/v3"));
+const v3Dir = resolve(REPO, flag("v3-dir", `tmp/perf-compare/v${V3_VERSION}`));
 const outDir = resolve(REPO, flag("out", "tmp/perf-compare/results"));
 const rounds = Number(flag("rounds", quick ? "2" : "8"));
 const matchV3Defaults = has("match-v3-defaults");
@@ -72,25 +85,67 @@ const iterations = quick
 	: { startup: 50, calls: 200, complex: 200, multi: 100, realistic: 500 };
 
 /**
- * Installs slothlet 3.24.0 from the registry into `v3Dir` and extracts the tag's fixtures next to it.
- * @returns {void}
+ * Whether a v3 release predates 3.9.0, which renamed the `dir` option to `base`.
+ * @param {string} version - x.y.z.
+ * @returns {boolean} True before 3.9.0.
  */
-function setup() {
+function takesDir(version) {
+	const [major, minor] = version.split(".").map(Number);
+	return major === 3 && minor < 9;
+}
+
+/**
+ * Reads the CPU limit of the container the process runs in (cgroup v2), when there is one.
+ * @returns {number|null} CPUs, or null without a limit.
+ */
+function cpuLimit() {
+	try {
+		const [quota, period] = readFileSync("/sys/fs/cgroup/cpu.max", "utf-8").trim().split(/\s+/u);
+		return quota === "max" ? null : Number(quota) / Number(period);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Installs the v3 release from the registry into `v3Dir` and extracts the tag's fixtures next to it.
+ * @returns {Promise<void>}
+ */
+async function setup() {
 	mkdirSync(v3Dir, { recursive: true });
 	const pkgPath = join(v3Dir, "package.json");
 	if (!existsSync(pkgPath)) {
 		writeFileSync(pkgPath, JSON.stringify({ name: "slothlet-v3-bench", private: true, type: "module" }, null, "\t") + "\n");
 	}
-	// chokidar: api_test/events/watcher.mjs imports it; v3.24.0 declared ^6.0.0.
+	// chokidar: api_test/events/watcher.mjs imports it; v3.24.0 declared ^6.0.0 (older fixtures don't import it).
 	execFileSync("npm", ["install", `@cldmv/slothlet@${V3_VERSION}`, "chokidar@^6.0.0", "--no-audit", "--no-fund", "--ignore-scripts"], {
 		cwd: v3Dir,
 		stdio: "inherit"
 	});
-	const archive = execFileSync("git", ["archive", `v${V3_VERSION}`, "api_tests/api_test", "tests/vitests/setup/api-test-config.jsonc"], {
-		cwd: REPO,
-		maxBuffer: 256 * 1024 * 1024
-	});
-	execFileSync("tar", ["-x", "-C", v3Dir], { input: archive });
+	const paths = ["api_tests/api_test", "tests/vitests/setup/api-test-config.jsonc"];
+	let archive = null;
+	try {
+		archive = execFileSync("git", ["archive", `v${V3_VERSION}`, ...paths], {
+			cwd: REPO,
+			maxBuffer: 256 * 1024 * 1024,
+			stdio: ["ignore", "pipe", "ignore"]
+		});
+	} catch {
+		// No git checkout or no local tag: take the tag's source archive from GitHub instead.
+	}
+	if (archive) {
+		execFileSync("tar", ["-x", "-C", v3Dir], { input: archive });
+	} else {
+		const url = `https://codeload.github.com/CLDMV/slothlet/tar.gz/refs/tags/v${V3_VERSION}`;
+		const response = await fetch(url);
+		if (!response.ok) {
+			throw new Error(`could not download ${url}: ${response.status}`);
+		}
+		const tarball = Buffer.from(await response.arrayBuffer());
+		execFileSync("tar", ["-xz", "-C", v3Dir, "--strip-components=1", ...paths.map((p) => `slothlet-${V3_VERSION}/${p}`)], {
+			input: tarball
+		});
+	}
 	console.log(`v3 ${V3_VERSION} ready in ${v3Dir}`);
 }
 
@@ -99,13 +154,15 @@ function setup() {
  * @returns {object[]} Version descriptors.
  */
 function versions() {
-	const v3Pkg = join(v3Dir, "node_modules/@cldmv/slothlet/package.json");
-	if (!existsSync(v3Pkg) || !existsSync(join(v3Dir, "api_tests/api_test"))) {
-		throw new Error(`v3 build not found in ${v3Dir}; run with --setup first`);
-	}
-	const installed = JSON.parse(readFileSync(v3Pkg, "utf-8")).version;
-	if (installed !== V3_VERSION) {
-		throw new Error(`${v3Dir} holds @cldmv/slothlet ${installed}, expected ${V3_VERSION}`);
+	if (only !== "v4") {
+		const v3Pkg = join(v3Dir, "node_modules/@cldmv/slothlet/package.json");
+		if (!existsSync(v3Pkg) || !existsSync(join(v3Dir, "api_tests/api_test"))) {
+			throw new Error(`v3 build not found in ${v3Dir}; run with --setup first`);
+		}
+		const installed = JSON.parse(readFileSync(v3Pkg, "utf-8")).version;
+		if (installed !== V3_VERSION) {
+			throw new Error(`${v3Dir} holds @cldmv/slothlet ${installed}, expected ${V3_VERSION}`);
+		}
 	}
 	const v4Source = flag("v4", existsSync(join(REPO, "dist")) ? "dist" : "src");
 	if (v4Source !== "dist" && v4Source !== "src") {
@@ -121,7 +178,7 @@ function versions() {
 	} catch {
 		// Not a git checkout; the version string still identifies the build.
 	}
-	return [
+	const all = [
 		{
 			key: "v3",
 			label: `v${V3_VERSION}`,
@@ -132,7 +189,10 @@ function versions() {
 			conditions: [],
 			// The shared fixtures collide on purpose (`math.mjs` vs `math/`, `exportDefault`'s default vs named export) and
 			// `api-test-config.jsonc` expects the `replace` outcome, as the test suites configure it (v3 shape here).
-			extraOptions: { api: { collision: { initial: "replace", api: "replace" } } }
+			extraOptions: {
+				...(takesDir(V3_VERSION) ? { dir: join(v3Dir, "api_tests/api_test") } : {}),
+				api: { collision: { initial: "replace", api: "replace" } }
+			}
 		},
 		{
 			key: "v4",
@@ -148,6 +208,7 @@ function versions() {
 			}
 		}
 	];
+	return only ? all.filter((v) => v.key === only) : all;
 }
 
 /**
@@ -167,7 +228,8 @@ function machine() {
 		node: process.version,
 		os: `${distro} (${os.platform()} ${os.release()}, ${os.arch()})`,
 		cpu: `${cpus[0]?.model ?? "unknown"}, ${cpus.length} logical processors`,
-		ramGB: Math.round(os.totalmem() / 1024 ** 3)
+		ramGB: Math.round(os.totalmem() / 1024 ** 3),
+		cpuLimit: cpuLimit()
 	};
 }
 
@@ -283,7 +345,7 @@ function markdown(report) {
 	lines.push(`### ${a.label} → ${b.label}`);
 	lines.push("");
 	lines.push(
-		`Measured ${report.date} on Node ${report.machine.node}, ${report.machine.os}, ${report.machine.cpu}, ${report.machine.ramGB} GB RAM. Load average (1/5/15 min) ${report.load.start.join(" / ")} at start and ${report.load.end.join(" / ")} at the end. ${report.rounds} rounds per version, each a fresh process; iterations per round: startup ${report.iterations.startup}, function calls ${report.iterations.calls}, nested ${report.iterations.complex}, per-module ${report.iterations.multi}, realistic ${report.iterations.realistic} (${report.realisticCalls} distinct calls). ${a.label}: ${a.source}. ${b.label}: ${b.source}${report.matchV3Defaults ? ", with `routines: { auto: false, stack: false }`" : ", shipped defaults"}.`
+		`${environment(report)} ${a.label}: ${a.source}. ${b.label}: ${b.source}${report.matchV3Defaults ? ", with `routines: { auto: false, stack: false }`" : ", shipped defaults"}.`
 	);
 	if (report.quick) {
 		lines.push("");
@@ -330,12 +392,78 @@ function markdown(report) {
 }
 
 /**
+ * One sentence describing where and how a report was measured.
+ * @param {object} report - Full JSON report.
+ * @returns {string} Sentence.
+ */
+function environment(report) {
+	const limit = report.machine.cpuLimit ? `, limited to ${report.machine.cpuLimit} CPUs` : "";
+	return `Measured ${report.date} on Node ${report.machine.node}, ${report.machine.os}, ${report.machine.cpu}${limit}, ${report.machine.ramGB} GB RAM. Load average (1/5/15 min) ${report.load.start.join(" / ")} at start and ${report.load.end.join(" / ")} at the end. ${report.rounds} rounds, each a fresh process; iterations per round: startup ${report.iterations.startup}, function calls ${report.iterations.calls}, nested ${report.iterations.complex}, per-module ${report.iterations.multi}, realistic ${report.iterations.realistic} (${report.realisticCalls} distinct calls).`;
+}
+
+/**
+ * Builds one table from several reports (`--report`), a column per version in the order given. The last column is
+ * compared with each earlier one.
+ * @param {object[]} reports - Parsed JSON reports, each holding one or more versions.
+ * @returns {string} Markdown.
+ */
+function mergedMarkdown(reports) {
+	const columns = reports.flatMap((report) =>
+		report.versions.map((v) => ({ label: v.label.split(" ")[0], full: v.label, source: v.source, stats: report.stats[v.key], report }))
+	);
+	const last = columns[columns.length - 1];
+	const lines = [`### ${columns.map((c) => c.label).join(" / ")}`, ""];
+	for (const c of columns) {
+		lines.push(`- **${c.full}** (${c.source}): ${environment(c.report)}`);
+	}
+	lines.push("");
+	lines.push(
+		`Each cell is the median over rounds, with the interquartile range in brackets.${columns.length > 1 ? ` The change columns give ${last.label} relative to each earlier version.` : ""}`
+	);
+	lines.push("");
+	const earlier = columns.slice(0, -1);
+	lines.push(`| Workload | ${columns.map((c) => c.label).join(" | ")} |${earlier.map((c) => ` ${last.label} vs ${c.label} |`).join("")}`);
+	lines.push(`| --- |${columns.map(() => " --- |").join("")}${earlier.map(() => " --- |").join("")}`);
+	for (const [metric, label] of Object.entries(LABELS)) {
+		if (columns.some((c) => !c.stats[metric])) {
+			continue;
+		}
+		const cells = columns.map((c) => `${fmt(c.stats[metric].median)} (${fmt(c.stats[metric].q1)}–${fmt(c.stats[metric].q3)})`);
+		const changes = earlier.map((c) => {
+			const ratio = last.stats[metric].median / c.stats[metric].median;
+			return ratio < 1 ? `${(1 / ratio).toFixed(2)}x faster` : `${ratio.toFixed(2)}x slower`;
+		});
+		lines.push(`| ${label} | ${[...cells, ...changes].join(" | ")} |`);
+	}
+	for (const report of reports) {
+		for (const mismatch of report.probeMismatches) {
+			lines.push("");
+			lines.push(
+				`Probe \`${mismatch.probe}\` returned different values: ${mismatch.results.map((r) => `${r.who} → \`${r.value}\``).join(", ")}.`
+			);
+		}
+	}
+	return lines.join("\n") + "\n";
+}
+
+/**
  * Entry point.
  * @returns {Promise<void>}
  */
 async function main() {
 	if (has("setup")) {
-		setup();
+		await setup();
+		return;
+	}
+	const reportFlag = flag("report");
+	if (reportFlag) {
+		const reports = reportFlag.split(",").map((file) => JSON.parse(readFileSync(resolve(file), "utf-8")));
+		const md = mergedMarkdown(reports);
+		mkdirSync(outDir, { recursive: true });
+		const file = join(outDir, `compare-merged-${new Date().toISOString().replace(/[:.]/gu, "-")}.md`);
+		writeFileSync(file, md);
+		console.log("\n" + md);
+		console.log(`Results: ${file}`);
 		return;
 	}
 	const vs = versions();
@@ -351,7 +479,7 @@ async function main() {
 	for (const v of vs) {
 		console.log(`  ${v.label}: ${v.source}`);
 	}
-	if (vs[1].conditions.length > 0) {
+	if (vs.length === 2 && vs[1].conditions.length > 0) {
 		console.log("  NOTE: v4 runs from src/ while v3 runs its published dist/. Run npm run build first for a like-for-like comparison.");
 	}
 	for (let round = 0; round < rounds; round++) {
@@ -414,8 +542,9 @@ async function main() {
 
 	mkdirSync(outDir, { recursive: true });
 	const stamp = new Date().toISOString().replace(/[:.]/gu, "-");
-	const base = join(outDir, `compare-v3-v4-${quick ? "quick-" : ""}${stamp}`);
-	const md = markdown(report);
+	const name = vs.length === 1 ? vs[0].label.split(" ")[0] : "v3-v4";
+	const base = join(outDir, `compare-${name}-${quick ? "quick-" : ""}${stamp}`);
+	const md = vs.length === 1 ? mergedMarkdown([report]) : markdown(report);
 	writeFileSync(`${base}.json`, JSON.stringify(report, null, "\t") + "\n");
 	writeFileSync(`${base}.md`, md);
 	console.log("\n" + md);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:19:31-08:00 (1795634371)
+ *	@Last modified time: 2026-11-25T11:44:32-08:00 (1795635872)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,8 @@
 import { segmentsOf } from "#helpers/segments";
 import { util, inheritsFrom } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { compilePattern } from "#helpers/pattern-matcher";
+import { compilePattern, unsafeSegmentOf } from "#helpers/pattern-matcher";
+import { translate } from "#i18n";
 import { normalizeHookConfig } from "#helpers/config";
 import { FORK, writeTarget } from "#helpers/flow-stores";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
@@ -401,6 +402,18 @@ const VERSION_BINDING = Symbol("@cldmv/slothlet/hook-version-binding");
  * @extends ComponentBase
  */
 /**
+ * An empty hook index: type → subset → pattern → hooks. Every level has no prototype, so a pattern is only ever an own
+ * key: one named like an `Object.prototype` member (`constructor`, `toString`, `__proto__`) finds no inherited value and
+ * gets its own slot like any other pattern.
+ * @returns {Record<string, Record<string, Record<string, object[]>>>} The index.
+ * @private
+ */
+function emptyHookIndex() {
+	const subsets = () => ({ __proto__: null, before: { __proto__: null }, primary: { __proto__: null }, after: { __proto__: null } });
+	return { __proto__: null, before: subsets(), after: subsets(), always: subsets(), error: subsets(), around: subsets() };
+}
+
+/**
  * The manager {@link HookManager#[FORK]} is copying, read once by the constructor it calls; null otherwise.
  * @type {HookManager|null}
  * @private
@@ -420,13 +433,7 @@ export class HookManager extends ComponentBase {
 	 * @type {object}
 	 * @private
 	 */
-	#hooks = {
-		before: { before: {}, primary: {}, after: {} },
-		after: { before: {}, primary: {}, after: {} },
-		always: { before: {}, primary: {}, after: {} },
-		error: { before: {}, primary: {}, after: {} },
-		around: { before: {}, primary: {}, after: {} }
-	};
+	#hooks = emptyHookIndex();
 
 	/**
 	 * Hook lookup by ID
@@ -478,6 +485,8 @@ export class HookManager extends ComponentBase {
 
 		this.enabled = hookConfig.enabled;
 		this.defaultPattern = hookConfig.pattern || "**";
+		// The configured path filter is a hook pattern too, so it meets the same refusal.
+		this.#assertPathablePattern(this.defaultPattern);
 		this.suppressErrors = hookConfig.errors === "suppress";
 
 		// Pin-enforcement policy. When true (default) a per-registration `pin: false` on a
@@ -634,6 +643,7 @@ export class HookManager extends ComponentBase {
 
 		// Validate pattern by compiling it (throws on errors like max nesting)
 		this.#compilePattern(pattern);
+		this.#assertPathablePattern(pattern);
 
 		// Identity of the registering module (null when registered outside a module — i.e. by the
 		// host). Used for the permission gate and pinned onto the hook for fire-time re-checks. Owner
@@ -654,7 +664,7 @@ export class HookManager extends ComponentBase {
 		// hook may intercept only what both the owner and that call may, at registration and every time it fires.
 		// Every call of the ceiling, as `{ path, filePath }` (#597).
 		const ownerCeilings = replayIdentity
-			? (replayIdentity.ownerCeilings ?? [])
+			? replayIdentity.ownerCeilings
 			: mapList(identityCeilings(ownerIdentity), (call) => ({
 					path: call.____slothletInternal?.apiPath ?? null,
 					filePath: call.____slothletInternal?.filePath ?? null
@@ -703,7 +713,7 @@ export class HookManager extends ComponentBase {
 				// never returns an empty versions map); the guard covers a future registry shape
 				// change, not a reachable state.
 				const defaultTag = versionManager.getDefaultVersion(logicalPath);
-				/* v8 ignore next 3 */
+				/* v8 ignore if */
 				if (defaultTag == null) {
 					throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern });
 				}
@@ -924,6 +934,7 @@ export class HookManager extends ComponentBase {
 		const written = writeTarget(this);
 		if (written !== this) return written.remove(filter);
 		let removed = 0;
+		if (!filter.id) this.#assertPathablePattern(filter.pattern);
 
 		// Filter by ID (fast path)
 		if (filter.id) {
@@ -1055,6 +1066,7 @@ export class HookManager extends ComponentBase {
 		if (written !== this) return written.enablePattern(pattern);
 		// Validate by compiling (throws on malformed patterns, consistent with on()).
 		this.#compilePattern(pattern);
+		this.#assertPathablePattern(pattern);
 		if (!SetMethods.has(this.enabledPatterns, pattern)) {
 			SetMethods.add(this.enabledPatterns, pattern);
 			this.patternFilterActive = true;
@@ -1082,6 +1094,7 @@ export class HookManager extends ComponentBase {
 	disablePattern(pattern) {
 		const written = writeTarget(this);
 		if (written !== this) return written.disablePattern(pattern);
+		this.#assertPathablePattern(pattern);
 		const removed = SetMethods.delete(this.enabledPatterns, pattern);
 		MapMethods.delete(this.#globalFilterCache, pattern);
 		if (SetMethods.size(this.enabledPatterns) === 0) {
@@ -1159,6 +1172,7 @@ export class HookManager extends ComponentBase {
 		}
 
 		const hooks = [];
+		if (!filter.id) this.#assertPathablePattern(filter.pattern);
 
 		// Filter by ID (fast path)
 		if (filter.id) {
@@ -1249,7 +1263,7 @@ export class HookManager extends ComponentBase {
 					permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, targetFilePath, runtimeContext) &&
 					// A hook registered under other modules' calls as its ceiling fires only where each of them may (#597).
 					ArrayMethods.every(
-						hook.ownerCeilings ?? [],
+						hook.ownerCeilings,
 						(ceiling) =>
 							ceiling.path === null ||
 							permissionManager.checkHookAccess(ceiling.path, apiPath, type, ceiling.filePath, targetFilePath, runtimeContext)
@@ -2033,6 +2047,25 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * Refuse a path pattern naming a segment no api path can hold (`__proto__`, `constructor`, `prototype`), the same
+	 * set a mount path refuses. Every entry point that takes a pattern calls it, so a hook can never be keyed by one.
+	 * @param {*} pattern - The pattern as given; anything that is not a string is left to the caller's own checks.
+	 * @returns {void}
+	 * @throws {SlothletError} API_PATH_INVALID naming the segment and its index.
+	 * @private
+	 */
+	#assertPathablePattern(pattern) {
+		const found = unsafeSegmentOf(pattern);
+		if (found === null) return;
+		throw new this.slothlet.SlothletError("API_PATH_INVALID", {
+			path: segmentsOf(pattern),
+			reason: translate("HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT"),
+			index: found.index,
+			segment: found.segment
+		});
+	}
+
+	/**
 	 * Whether a hook path pattern contains glob/negation metacharacters (so it can match more than
 	 * one concrete path). Concrete patterns are permission-checked at registration (fail-fast); glob
 	 * patterns defer entirely to the per-path fire-time check in {@link getHooksForPath}.
@@ -2105,7 +2138,7 @@ export class HookManager extends ComponentBase {
 		// unreachable via tests (2026-03-04): #private fields prevent external
 		// mutation; on() creates the array before writing to #byId so no public
 		// path can produce a missing patternHooks key.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!patternHooks) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
 				id: hook.id,
@@ -2116,14 +2149,14 @@ export class HookManager extends ComponentBase {
 			});
 		}
 
-		const index = typeof patternHooks === "string" ? StringMethods.indexOf(patternHooks, hook) : ArrayMethods.indexOf(patternHooks, hook);
+		const index = ArrayMethods.indexOf(patternHooks, hook);
 
 		// Invariant: hook object must be in patternHooks — on() pushes the exact object
 		// reference that it stores in #byId. If not found, internal state is corrupt.
 		// unreachable via tests (2026-03-04): on() pushes the identical object
 		// reference; no public path splices the array without clearing #byId,
 		// so indexOf always finds the hook and index === -1 is never true.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (index === -1) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
 				id: hook.id,
@@ -2158,6 +2191,7 @@ export class HookManager extends ComponentBase {
 	#setEnabledState(filter, enabled) {
 		let affected = 0;
 		let flipped = 0;
+		if (!filter.id) this.#assertPathablePattern(filter.pattern);
 
 		// Filter by ID (fast path)
 		if (filter.id) {
@@ -2288,7 +2322,7 @@ export class HookManager extends ComponentBase {
 				groupId: hook.groupId,
 				ownerFilePath: hook.ownerFilePath,
 				// A registration's ceiling (#597) travels with its owner, through the same private channel.
-				ownerCeilings: hook.ownerCeilings ?? [],
+				ownerCeilings: hook.ownerCeilings,
 				// Whether it was registered on a leaf in its owner's own file (#995), through the same private channel.
 				ownFile: hook.ownFile === true,
 				enabled: hook.enabled
@@ -2387,13 +2421,7 @@ export class HookManager extends ComponentBase {
 		// The instance's teardown of its own handler: the copies that hold it keep theirs.
 		writeTarget(this, true);
 		// Clear all hooks
-		this.#hooks = {
-			before: { before: {}, primary: {}, after: {} },
-			after: { before: {}, primary: {}, after: {} },
-			always: { before: {}, primary: {}, after: {} },
-			error: { before: {}, primary: {}, after: {} },
-			around: { before: {}, primary: {}, after: {} }
-		};
+		this.#hooks = emptyHookIndex();
 		MapMethods.clear(this.#byId);
 		this.#idCounter = 0;
 	}
