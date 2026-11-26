@@ -216,6 +216,7 @@
 		"coverage:merge": "node tools/coverage/merge-browser-coverage.mjs",
 		"coverage": "npm run coverage:node && npm run coverage:browser && npm run coverage:merge",
 		"coverage:analyze": "node tools/coverage/analyze-coverage.mjs",
+		"coverage:file": "node tools/coverage/coverage-file.mjs",
 		"coverage:all": "npm run coverage && npm run coverage:analyze",
 		"ci:coverage": "npm run coverage",
 		"test": "npm run test:pre-build",
@@ -335,12 +336,12 @@
 		"zero-dependencies"
 	],
 	"engines": {
-		"node": ">=22.15.0"
+		"node": ">=24.15.0"
 	},
 	"devEngines": {
 		"runtime": {
 			"name": "node",
-			"version": ">=22.22.0",
+			"version": ">=24.15.0",
 			"onFail": "error"
 		}
 	},
@@ -385,7 +386,7 @@
 	"devDependencies": {
 		"@cldmv/configs": "^1.2.4",
 		"@cldmv/fix-headers": "^2.2.2",
-		"@cldmv/vitest-runner": "~1.8.1",
+		"@cldmv/vitest-runner": "^1.11.0",
 		"@eslint/css": "^2.0.1",
 		"@eslint/js": "^10.0.1",
 		"@eslint/json": "^2.0.1",

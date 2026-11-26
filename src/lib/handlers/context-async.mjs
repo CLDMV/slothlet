@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T10:39:08-08:00 (1795631948)
+ *	@Last modified time: 2026-11-25T10:51:23-08:00 (1795632683)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -375,7 +375,7 @@ function storageMethodsOf(Storage) {
 
 /**
  * The token slothlet's storage holds for a store. Node keeps what a storage holds where module code can read it: on
- * async resources while `AsyncContextFrame` is off (Node 22, or a later Node run with `--no-async-context-frame`), under
+ * async resources while `AsyncContextFrame` is off (Node run with `--no-async-context-frame`), under
  * a symbol `async_hooks.executionAsyncResource()`, a promise, or an `AsyncResource` lists; and, with frames on, in the
  * frame a new `AsyncResource` carries, which `Map.prototype.forEach` walks. A store carries the instance, its handlers
  * and the running node's wrapper, so the storage holds a token instead, with the store in a private field only this
@@ -678,7 +678,7 @@ class SealedStorage {
  * What {@link AsyncContextManager#als} answers before the manager has made its store: no store is active, a callback
  * run outside every store runs as it is, and running a store (`run`, `enterWith`) makes the real one first. Reading the
  * manager on the live runtime (the runtime dispatcher asks it whether a store is active) therefore makes no store: on
- * Node 22 one that has run switches async hooks on for the whole process.
+ * a Node whose `AsyncContextFrame` is off one that has run switches async hooks on for the whole process.
  * @private
  */
 class DormantStore {
@@ -768,6 +768,8 @@ function storeInstanceID(store) {
  */
 export class AsyncContextManager {
 	constructor() {
+		// Runtime identity, checked instead of the class name (a minified bundle renames classes).
+		this.kind = "async";
 		// The store is made when an instance on the async runtime is created ({@link AsyncContextManager#openStore}), not
 		// here: a module-level singleton makes this manager in every host, also where only the live runtime is used.
 		this.store = null;
@@ -1095,8 +1097,8 @@ export class AsyncContextManager {
 		if (made !== undefined) return made.entries === 1;
 		// The suite's stand-in answer (`false`, see answerPromiseProbe) turns this check off; otherwise the probe's own.
 		if (promiseProbeAnswer !== false && this.#promiseJobsLeftOut === true) return this.#scriptBegun !== resource;
-		// Node runs every hook for a promise's job (Node 22.15, Node 24.0, or any Node before the probe's job has run):
-		// what put the scope in place is on the stack.
+		// The probe's job has not run yet (or the suite's stand-in turned the check off): what put the scope in place is on
+		// the stack.
 		const entry = this.#entry;
 		if (entry.stretch === this.#stretch && entry.resource === resource) return entry.byNode;
 		let byNode;
@@ -1113,11 +1115,10 @@ export class AsyncContextManager {
 	}
 
 	/**
-	 * Install the second async hook, which Node is asked to leave out of promise jobs (`trackPromises: false`, or the
-	 * hook's own marker for that on a Node whose `createHook()` takes no such option): it then runs only where a promise's
-	 * scope is put in place by code, through `runInAsyncScope()` (see {@link AsyncContextManager#scriptBegins}). Whether
-	 * Node does leave it out is told by the job of a promise made here, before which every promise's job is told by its
-	 * stack (see {@link AsyncContextManager#begunByNode}).
+	 * Install the second async hook, which Node is asked to leave out of promise jobs (`trackPromises: false`): it then
+	 * runs only where a promise's scope is put in place by code, through `runInAsyncScope()` (see
+	 * {@link AsyncContextManager#scriptBegins}). Whether Node does leave it out is told by the job of a promise made here,
+	 * before which every promise's job is told by its stack (see {@link AsyncContextManager#begunByNode}).
 	 * @returns {void}
 	 * @private
 	 */
@@ -1130,11 +1131,6 @@ export class AsyncContextManager {
 			},
 			trackPromises: false
 		});
-		// Node 22 releases whose `createHook()` takes no `trackPromises` still honour the marker it sets.
-		const marker = ArrayMethods.find(Objects.getOwnPropertySymbols(hook), (symbol) => symbol.description === "kNoPromiseHook");
-		// A Node without the marker: the probe below finds promise jobs not left out, and they are told by their stack.
-		/* v8 ignore next */
-		if (marker !== undefined) hook[marker] = true;
 		Reflect.apply(hookMethods.enable, hook, []);
 		this.#scopeHook = hook;
 		this.#promiseJobsLeftOut = null;
@@ -2094,7 +2090,7 @@ export class AsyncContextManager {
 		const outside = this.als.getStore();
 		const result = this.als.run(store, fn);
 		// A lazy load runs detached, with no store ({@link runDetached}). Where `AsyncLocalStorage` rests on async hooks
-		// (Node 22), `exit()` switches the storage off and a `run()` inside it switches it back on, so what follows
+		// (`AsyncContextFrame` off), `exit()` switches the storage off and a `run()` inside it switches it back on, so what follows
 		// the load would see the store of the call that triggered it. The flow is left as it was found: detached.
 		if (outside === undefined && this.als.getStore() !== undefined) this.als.disable();
 		return result;

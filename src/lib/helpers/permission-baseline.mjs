@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T08:12:03-08:00 (1795018323)
+ *	@Last modified time: 2026-11-25T10:51:30-08:00 (1795632690)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,8 +23,8 @@
  * - `csp-eval` (browser): the page refuses code made from a string (`Function`, and so `eval`): its Content Security
  *   Policy has no `'unsafe-eval'`.
  * - `csp-blob-script` and `csp-data-script` (browser): the page refuses scripts from `blob:` and `data:` URLs.
- * - `async-context-frame` (Node): Node's `AsyncContextFrame` is on. Where it is off (Node 22's default, or a later
- *   Node run with `--no-async-context-frame`), Node keeps what an `AsyncLocalStorage` holds on async resources module
+ * - `async-context-frame` (Node): Node's `AsyncContextFrame` is on. Where it is off (Node run with
+ *   `--no-async-context-frame`), Node keeps what an `AsyncLocalStorage` holds on async resources module
  *   code can reach. Tested by running a storage of slothlet's own with a marker and looking for the marker on the
  *   running async resource and a fresh promise; the flags are never parsed, since a version's default and flags passed
  *   through `NODE_OPTIONS` decide it as well. Run once per process, and only for an instance on the async runtime: the
@@ -47,19 +47,7 @@
 
 import { translate } from "#i18n";
 import { asyncStoreExposed, asyncStoreProbeAvailable } from "#helpers/async-store-slot";
-import {
-	ArrayMethods,
-	Blob,
-	EvalError,
-	listPush,
-	NativeFunction,
-	NativeProcess,
-	parseInt,
-	Reflect,
-	Symbols,
-	URL,
-	URLs
-} from "#helpers/intrinsics";
+import { ArrayMethods, Blob, EvalError, listPush, NativeFunction, Reflect, Symbols, URL, URLs } from "#helpers/intrinsics";
 
 /**
  * The global key of the record of who loaded each file vite transformed (#714), as `helpers/instance-imports` names it.
@@ -131,13 +119,6 @@ function viteRecords() {
 }
 
 /**
- * Node's major version, as slothlet loaded, or 0 where it is not Node.
- * @type {number}
- * @private
- */
-const NODE_MAJOR = parseInt(NativeProcess?.versions?.node ?? "0", 10) || 0;
-
-/**
  * Whether Node's `AsyncContextFrame` is on: what a storage holds is out of reach of the running async resource and a
  * fresh promise (see `helpers/async-store-slot`, whose probe this shares). Tested once per process.
  *
@@ -151,15 +132,12 @@ function asyncContextFrameOn() {
 }
 
 /**
- * The reason `async-context-frame` is not met, with the fix for this Node: Node 22 and 23 turn it on with
- * `--experimental-async-context-frame`; Node 24 and later have it on unless started with `--no-async-context-frame`.
+ * The reason `async-context-frame` is not met, with the fix: every supported Node has it on unless started with
+ * `--no-async-context-frame`.
  * @returns {string} The reason, translated.
  * @private
  */
 function asyncContextFrameReason() {
-	if (NODE_MAJOR !== 0 && NODE_MAJOR < 24) {
-		return translate("PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_ENABLE", { flag: "--experimental-async-context-frame" });
-	}
 	return translate("PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_REMOVE_FLAG", {
 		flag: "--no-async-context-frame",
 		env: "NODE_OPTIONS"

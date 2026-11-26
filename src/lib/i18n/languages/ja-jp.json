@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "配列に空の文字列セグメントが含まれています",
 		"API_PATH_REASON_RESERVED_NAME": "予約名 (slothlet, shutdown, destroy) と衝突しています",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "プロトタイプチェーンを汚染する安全でないセグメント (__proto__, constructor, prototype) が含まれています",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "どの API パスにも含められないセグメントを指定しています (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "'then' セグメントが含まれており、その名前空間が await 可能になってしまいます",
 		"API_PATH_REASON_INVALID_TYPE": "文字列、文字列の配列、空の文字列 (ルート)、または null/undefined (ルート) である必要があります",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "空のパスセグメントが含まれています",
@@ -559,7 +560,6 @@
 		"PERMISSION_BASELINE_REASON_CSP_BLOB_ALLOWED": "このページは blob: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
 		"PERMISSION_BASELINE_REASON_CSP_DATA_ALLOWED": "このページは data: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
 		"PERMISSION_BASELINE_REASON_VITEST_PLUGIN_ABSENT": "vitest の設定に slothlet の @cldmv/slothlet/vite プラグインがないまま vitest で実行しています。",
-		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_ENABLE": "Node の AsyncContextFrame がオフのため、Node は AsyncLocalStorage の値をモジュールのコードが届く非同期リソースに保持します。Node を {flag} 付きで起動してください。",
 		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_REMOVE_FLAG": "Node の AsyncContextFrame がオフのため、Node は AsyncLocalStorage の値をモジュールのコードが届く非同期リソースに保持します。Node のフラグと {env} から {flag} を外してください。",
 		"INVALID_CONFIG_UNKNOWN_KEY": "{where} に不明なキー '{key}' があります。slothlet v4 にこのオプションはありません。 [{path|list}]",
 		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "キーの綴りを確認してください。slothlet v3 向けのコードは npx @cldmv/slothlet-migrate で v4 の名前に移行できます。"
