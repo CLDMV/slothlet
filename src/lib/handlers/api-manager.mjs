@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T09:07:45-08:00 (1795626465)
+ *	@Last modified time: 2026-11-25T11:14:51-08:00 (1795634091)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,11 +36,12 @@
  * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
  * });
  */
-import { segmentsOf } from "#helpers/segments";
+import { segmentsOf, UNSAFE_PATH_SEGMENTS } from "#helpers/segments";
 import { translate } from "#i18n";
 import { ComponentBase } from "#factories/component-base";
 import {
 	readApiMember,
+	holdsApiMembers,
 	loadApiMember,
 	isWrapperAnsweredName,
 	isLazyStandIn,
@@ -129,8 +130,6 @@ const { versionDispatcherRecord } = frameworkInternalsInternals("lib/handlers/ap
 // Rule 18 (M07): Single-file/synthetic one-key unwrap — ~L2067
 // Rule 18 (M08): Bare-function merged value → callable container — ~L2260
 // Rule 18 (M09): Removal remove-if-sole vs revert-if-shared — ~L2874 / ~L3095
-
-const UNSAFE_PATH_SEGMENTS = setFrom(["__proto__", "constructor", "prototype"]);
 
 /**
  * Root members of the api the framework itself serves: its namespace and its root functions (#625).
@@ -3001,9 +3000,12 @@ export class ApiManager extends ComponentBase {
 		};
 		for (let i = stack.length - 1; i >= 0; i -= 1) {
 			const { parent, key } = stack[i];
-			const value = parent[key];
+			// The node itself, and whether it still holds anything, as the node holds it: never a listing made through the
+			// view a module's read hands back, which hides what that module may not read and, in the live runtime, reads
+			// the stack again for every member it describes.
+			const value = readApiMember(parent, key);
 			if (holdsHidden(value)) break;
-			if (value && (typeof value === "object" || typeof value === "function") && Objects.keys(value).length === 0) {
+			if (value && (typeof value === "object" || typeof value === "function") && !holdsApiMembers(value)) {
 				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
 				this.#beforeRootChange(parent);
 				runtime_frameworkWrite(parent, () => Reflect.deleteProperty(parent, key));
