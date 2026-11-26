@@ -4719,6 +4719,14 @@ function runtime_holdsOwnMember(node, prop) {
 const STAND_INS = new WeakSet();
 
 /**
+ * The getters a node holding a class instance keeps for a member written through it, which only read the member off the
+ * instance (see the set trap): the member is the instance's, and is described as the instance holds it (#971).
+ * @type {WeakSet<Function>}
+ * @private
+ */
+const INSTANCE_FORWARDERS = new WeakSet();
+
+/**
  * Whether a value is a stand-in a lazy node handed out for a member it has not loaded (#653): a change made through
  * one is made on the node it stands for once that node loads.
  * @param {*} value - The value.
@@ -7703,6 +7711,47 @@ function runtime_reportsWritable(wrapper, prop) {
 function runtime_onImpl(wrapper, operation) {
 	const impl = wrapper.____slothletInternal.impl;
 	return runtime_isModuleProxy(impl) ? runtime_runAccessor(wrapper, () => operation(impl), undefined, [], true) : operation(impl);
+}
+
+/**
+ * Record a class instance a node was handed as it is (a file's default export) as the value the node was built from,
+ * as a node of a member read off another value records its own (#972): the node then answers the instance's prototype
+ * and takes one set on it as the instance does. A value the node was handed for a position of another value keeps the
+ * record that position gave it.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {*} value - The value the node was handed.
+ * @returns {void}
+ * @private
+ */
+function runtime_noteInstanceSource(wrapper, value) {
+	const internal = wrapper.____slothletInternal;
+	if (hasOwn(internal, "sourceValue") && !internal.instanceSource) return;
+	if (internal.impl === value && runtime_definesOnInstance(wrapper)) {
+		internal.sourceValue = value;
+		internal.instanceSource = true;
+	} else if (internal.instanceSource) {
+		delete internal.sourceValue;
+		internal.instanceSource = false;
+	}
+}
+
+/**
+ * Whether a node holds a class instance as it is, whose members a write or a definition through the node lands on, as
+ * one made on the instance itself does (#589, #971): not an emitter or a live grafted object, which keep their own rules.
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True for such a node.
+ * @private
+ */
+function runtime_definesOnInstance(wrapper) {
+	const impl = wrapper.____slothletInternal.impl;
+	return (
+		impl !== null &&
+		typeof impl === "object" &&
+		!util.types.isProxy(impl) &&
+		isClassInstance(impl) &&
+		!wrapper.____slothletInternal.deferChildAdopt &&
+		!(EventEmitter && runtime_inherits(impl, EventEmitter))
+	);
 }
 
 /**
@@ -16588,6 +16637,31 @@ function runtime_isPosition(key) {
 }
 
 /**
+ * Keys in the order an ordinary object lists its own (#971): array positions ascending, then the other string keys,
+ * then symbols, each of those two kept in the order given, which is the order they were made.
+ *
+ * @param {Array<string|symbol>} keys - The keys, in the order they were made.
+ * @returns {Array<string|symbol>} The same keys, ordered.
+ * @private
+ *
+ * @example
+ * runtime_ordinaryKeyOrder(["b", "2", Symbol.for("s"), "a", "0"]); // ["0", "2", "b", "a", Symbol(s)]
+ */
+function runtime_ordinaryKeyOrder(keys) {
+	const positions = [];
+	const strings = [];
+	const symbols = [];
+	for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) {
+		const key = keys[ofIndex];
+		if (typeof key === "symbol") listPush(symbols, key);
+		else if (runtime_isPosition(key)) listPush(positions, key);
+		else listPush(strings, key);
+	}
+	ArrayMethods.sort(positions, (a, b) => Number(a) - Number(b));
+	return concatLists(positions, strings, symbols);
+}
+
+/**
  * Whether a key is a position at or past an array shell's read-only `length`, which takes no write or definition.
  *
  * @param {object} target - The proxy target.
@@ -17336,14 +17410,16 @@ function runtime_forwardHandlerTo(trapHandler, resolveLive) {
 function runtime_inspectMembers(wrapper) {
 	const node = wrapper.____slothletInternal.proxy;
 	const shown = {};
-	for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
+	// Every enumerable member, a symbol-keyed one included, as `util.inspect` shows an object's own (#971).
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(node); ofIndex < ofList.length; ofIndex++) {
 		const key = ofList[ofIndex];
 		// A member listed that the caller may not read after all (one the module's Proxy among the value's prototypes
 		// answers, which reading runs as a call of the node) is left out as well.
 		try {
 			// An accessor is shown by its form, as `util.inspect` shows one, and not run: it is the module's code.
 			const descriptor = Reflect.getOwnPropertyDescriptor(node, key);
-			shown[key] = descriptor && !("value" in descriptor) ? runtime_accessorLabel(descriptor) : node[key];
+			if (!descriptor?.enumerable) continue;
+			shown[key] = !("value" in descriptor) ? runtime_accessorLabel(descriptor) : node[key];
 		} catch (error) {
 			if (error?.code !== "PERMISSION_DENIED") throw error;
 		}
@@ -17386,7 +17462,9 @@ function runtime_inspectLabel(text) {
 function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIsModule(wrapper)) {
 	const internal = wrapper.____slothletInternal;
 	const childKeys = filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k));
-	if (childKeys.length > 0 && !internal.isCallable) return runtime_inspectMembers(wrapper);
+	// A class instance the node holds as it is holds every member written or defined through the node (see
+	// runtime_definesOnInstance): it is shown as the instance, below, as it was before anything was written (#971).
+	if (childKeys.length > 0 && !internal.isCallable && !runtime_definesOnInstance(wrapper)) return runtime_inspectMembers(wrapper);
 	// A lazy node not loaded yet shows as the function stand-in it is, `[Function: name]` — the form a module's view of
 	// it shows (#824) — not as the Proxy around it, which `util.inspect` prints as `Proxy([Function: name])`. Its members
 	// are not read: reading them would load it. A node on an object shell that holds nothing (a loaded node removed, #811) shows what it holds, as eager's
@@ -17401,8 +17479,12 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
 	// A function the node composed its members onto is a layer, which `util.inspect` would show as its bare shell: it is
 	// shown by its form and members, as to a module.
 	const layered = isCompositionLayer(internal.impl) && typeof internal.impl === "function";
+	// A function node holding members of its own, beside its function's, shows them with its form, as a function shows
+	// the members written onto it (#971): its function alone would leave them out.
+	const holdsOwnMembers = typeof internal.impl === "function" && childKeys.length > 0;
 	if (
 		!layered &&
+		!holdsOwnMembers &&
 		(!forModule || !runtime_memberHoldsCode(internal.impl, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)))
 	)
 		return internal.impl;
@@ -17885,6 +17967,7 @@ class UnifiedWrapper extends ComponentBase {
 		internal.impl = isRootLiveIdentity ? adoptedImpl : UnifiedWrapper._cloneImpl(adoptedImpl);
 		// The module's own object, when this node is built from a copy of one its file exports (#746).
 		internal.moduleObject = isRootLiveIdentity ? null : runtime_moduleObjectFor(this, initialImpl, false);
+		runtime_noteInstanceSource(this, initialImpl);
 		runtime_fillPrototype(this);
 		runtime_registerLeafFunction(this, internal.impl);
 
@@ -18218,6 +18301,7 @@ class UnifiedWrapper extends ComponentBase {
 			sourceFolder
 		});
 		node.____slothletInternal.sourceValue = value;
+		node.____slothletInternal.instanceSource = false;
 		node.____slothletInternal.moduleObject = impl !== value ? runtime_moduleObjectFor(node, value, true) : null;
 		return node.createProxy();
 	}
@@ -18417,6 +18501,7 @@ class UnifiedWrapper extends ComponentBase {
 		// The module's own object behind the new value, when its file exports it (#746); a member's is set by the
 		// node that hands it its value (see ___adoptImplChildren).
 		this.____slothletInternal.moduleObject = runtime_moduleObjectFor(this, newImpl, false);
+		runtime_noteInstanceSource(this, newImpl);
 		// The node's members come from the new value from here on: none of them was defined read-only through the node.
 		this.____slothletInternal.readOnlyKeys = null;
 		runtime_fillPrototype(this);
@@ -20241,6 +20326,7 @@ class UnifiedWrapper extends ComponentBase {
 		// The value the child was built from (before any clone), so a parent array can tell whether the
 		// element its cached child fronts is still the one at that index (#602).
 		nestedWrapper.____slothletInternal.sourceValue = value;
+		nestedWrapper.____slothletInternal.instanceSource = false;
 		// What an object assigned to the api after it was built holds is data, as the object is (#826).
 		if (WeakSetMethods.has(ASSIGNED_DATA, value) || runtime_holdsAssignedData(this)) nestedWrapper.____slothletInternal.assignedData = true;
 		// The module's own object, when the child is built from a copy of it: writes through the node reach it (#746).
@@ -21551,7 +21637,13 @@ class UnifiedWrapper extends ComponentBase {
 					desc &&
 					"value" in desc &&
 					!desc.configurable &&
-					!(desc.writable && (runtime_hasOwnMember(wrapper, prop) || Arrays.isArray(wrapperInternal.impl)))
+					!(
+						desc.writable &&
+						(runtime_hasOwnMember(wrapper, prop) ||
+							Arrays.isArray(wrapperInternal.impl) ||
+							// A function node's `prototype` the shell holds writable is read through the node (#972).
+							prop === "prototype")
+					)
 				) {
 					// Non-configurable property on target - must return actual value
 					// But if it's a function target for callable wrapper, redirect to wrapper
@@ -23094,12 +23186,16 @@ class UnifiedWrapper extends ComponentBase {
 					const node = wrapper.____slothletInternal.proxy;
 					// The reader's identity travels with the getter: called later with no caller of its own, it still reads as that module.
 					const reader = runtime_capturedReader(wrapper);
+					// A half the array's accessor lacks is lacking here too, as the array describes it (#970).
 					return {
 						__proto__: null,
-						get: () => runtime_readAsReader(wrapper, prop, node[prop], reader),
-						set: (value) => {
-							node[prop] = value;
-						},
+						get: typeof current.get === "function" ? () => runtime_readAsReader(wrapper, prop, node[prop], reader) : undefined,
+						set:
+							typeof current.set === "function"
+								? (value) => {
+										node[prop] = value;
+									}
+								: undefined,
 						enumerable: current.enumerable,
 						configurable: true
 					};
@@ -23156,7 +23252,14 @@ class UnifiedWrapper extends ComponentBase {
 
 			// Check wrapper properties (children), filter internals
 			const isInternal = isFrameworkReservedKey(prop);
-			if (!isInternal && hasOwn(wrapper, prop)) {
+			// A member written through a node holding a class instance is the instance's, which the node only reads through
+			// (see the set trap): it is described below as the instance holds it, a value as a value (#971).
+			const forwarded =
+				!isInternal &&
+				hasOwn(wrapper, prop) &&
+				WeakSetMethods.has(INSTANCE_FORWARDERS, Objects.getOwnPropertyDescriptor(wrapper, prop).get) &&
+				runtime_onImpl(wrapper, (impl) => hasOwn(impl, prop));
+			if (!isInternal && !forwarded && hasOwn(wrapper, prop)) {
 				const desc = Objects.getOwnPropertyDescriptor(wrapper, prop);
 				// hasOwn() guarantees a descriptor exists; the null guard's false branch is dead code.
 				// Return descriptor if it exists
@@ -23202,6 +23305,25 @@ class UnifiedWrapper extends ComponentBase {
 					runtime_functionOf(wrapper.____slothletInternal.impl) !== null
 				) {
 					const value = runtime_prototypeForReader(wrapper, runtime_exposePrototype(wrapper, implDescriptor.value), "prototype");
+					// A function's `prototype` is writable and non-configurable, as on any function (#972): the shell takes it so,
+					// which lets the node report it as it is. The shell's own value is never read: the member is described and
+					// read through the node, as the invariants allow for a writable member. A class's read-only `prototype`
+					// is described per reader, which a fixed member could not be, and stays configurable.
+					if (
+						implDescriptor.configurable === false &&
+						implDescriptor.writable === true &&
+						typeof target === "function" &&
+						Reflect.isExtensible(target) &&
+						!hasOwn(target, "prototype") &&
+						Reflect.defineProperty(target, "prototype", {
+							__proto__: null,
+							value: undefined,
+							writable: true,
+							enumerable: false,
+							configurable: false
+						})
+					)
+						return { __proto__: null, ...implDescriptor, value };
 					return virtualizeDescriptor({ __proto__: null, ...implDescriptor, value });
 				}
 				// A member that is the node's own function, or an ancestor's, is described holding that node, as reading it gives.
@@ -23238,9 +23360,33 @@ class UnifiedWrapper extends ComponentBase {
 			}
 
 			// A sealed node holds its members on its shell (see preventExtensions), and a non-extensible target
-			// must be listed exactly (proxy invariant).
-			if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
+			// must be listed exactly (proxy invariant). The invariant asks for the shell's keys, not their order: they
+			// are listed as the node lists them open, which is the order they were made, as a closed object lists its
+			// own (#971). A key the shell fixed before the node was closed is no earlier for it, and one only the shell
+			// holds (its inspect hook) goes with the keys of its kind.
+			if (!Reflect.isExtensible(target)) {
+				const held = Reflect.ownKeys(target);
+				if (Arrays.isArray(wrapper.____slothletInternal.impl)) return held;
+				const heldKeys = setFrom(held);
+				const ordered = filterList(listMembers(target, false, kept), (key) => SetMethods.has(heldKeys, key));
+				const listed = setFrom(ordered);
+				for (let ofIndex = 0; ofIndex < held.length; ofIndex++) {
+					if (!SetMethods.has(listed, held[ofIndex])) listPush(ordered, held[ofIndex]);
+				}
+				return runtime_ordinaryKeyOrder(ordered);
+			}
+			return listMembers(target, redact, kept);
+		};
 
+		/**
+		 * The keys an open node lists, in the order an object lists its own (#971).
+		 * @private
+		 * @param {Object} target - Proxy target.
+		 * @param {boolean} redact - Withhold the keys the calling module may not read.
+		 * @param {*} kept - The access a node a module kept is reading for (see runtime_takeCapturedAccess).
+		 * @returns {Array<string|symbol>} Property keys.
+		 */
+		const listMembers = (target, redact, kept) => {
 			const keys = new Set();
 
 			// An array-backed wrapper lists its array as it is now, in the array's own order (#602): not
@@ -23277,30 +23423,36 @@ class UnifiedWrapper extends ComponentBase {
 				SetMethods.add(keys, "name");
 			}
 
-			// Add all target keys (wrapper or function), checking configurability
-			for (let ofIndex = 0, ofList = Reflect.ownKeys(target); ofIndex < ofList.length; ofIndex++) {
-				const key = ofList[ofIndex];
-				const descriptor = Objects.getOwnPropertyDescriptor(target, key);
-				// Include non-configurable properties (required by proxy invariants)
-				// OR enumerable properties (child wrappers)
-				if (!descriptor.configurable || descriptor.enumerable) {
-					SetMethods.add(keys, key);
-				}
-			}
-
-			// CRITICAL: When proxy target is a callable function (not the wrapper itself),
-			// children are defined on wrapper, not target. Include wrapper's enumerable keys.
-			if (target !== wrapper) {
-				for (let ofIndex = 0, ofList = Reflect.ownKeys(wrapper); ofIndex < ofList.length; ofIndex++) {
+			// Add all target keys (wrapper or function), checking configurability: non-configurable properties (required by
+			// proxy invariants) OR enumerable properties (child wrappers). A wrapper that is its own target lists its members
+			// here, in the order they were made; a shell holds only keys it fixed, whenever that was, so they are listed
+			// after the members the node holds, in their place among them if the node holds them too (#971).
+			const addTargetKeys = () => {
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(target); ofIndex < ofList.length; ofIndex++) {
 					const key = ofList[ofIndex];
-					const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
-					// Wrapper-owned sibling props are always enumerable in tests; non-enumerable path never taken.
-					/* v8 ignore next */
-					if (descriptor && descriptor.enumerable) {
+					const descriptor = Objects.getOwnPropertyDescriptor(target, key);
+					if (!descriptor.configurable || descriptor.enumerable) {
 						SetMethods.add(keys, key);
 					}
 				}
-			}
+			};
+			if (target === wrapper) addTargetKeys();
+
+			// The members the node holds itself are on the wrapper, the shell being the target. A member defined
+			// non-enumerable on the node is listed too, as an object lists every key of its own (#971); the wrapper holds
+			// no key of the framework's but its reserved names.
+			const addWrapperKeys = () => {
+				if (target === wrapper) return;
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(wrapper); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					if (!isFrameworkReservedKey(key)) SetMethods.add(keys, key);
+				}
+			};
+			// A class instance the node holds as it is keeps its members in the order they were made, the ones written
+			// or defined through the node included (they land on it): it is listed first, as the instance lists itself
+			// (#971). The wrapper holds no member of its own there but what was written through the node.
+			const instanceFirst = runtime_definesOnInstance(wrapper);
+			if (!instanceFirst) addWrapperKeys();
 
 			// Add impl keys
 			const implKeys =
@@ -23320,6 +23472,8 @@ class UnifiedWrapper extends ComponentBase {
 					SetMethods.add(keys, key);
 				}
 			}
+			if (instanceFirst) addWrapperKeys();
+			if (target !== wrapper) addTargetKeys();
 
 			// Withhold keys whose terminal value this caller may not read, so enumeration cannot
 			// disclose the shape of a namespace the caller has no access to. Non-configurable own
@@ -23343,9 +23497,9 @@ class UnifiedWrapper extends ComponentBase {
 					if (SetMethods.has(keys, key)) listPush(uw_ordered, key);
 				}
 				for (const key of setValues(keys)) if (key !== "length" && key !== "name" && key !== "prototype") listPush(uw_ordered, key);
-				return uw_ordered;
+				return runtime_ordinaryKeyOrder(uw_ordered);
 			}
-			return setToArray(keys);
+			return runtime_ordinaryKeyOrder(setToArray(keys));
 		};
 
 		/**
@@ -23554,12 +23708,14 @@ class UnifiedWrapper extends ComponentBase {
 						if (!setSucceeded) return false;
 						const existingDescriptor = Objects.getOwnPropertyDescriptor(wrapper, prop);
 						if (!existingDescriptor || typeof existingDescriptor.set !== "function") {
+							const forward = () => {
+								const currentImpl = wrapper.____slothletInternal.impl;
+								return currentImpl ? runtime_readImplMember(wrapper, prop) : undefined;
+							};
+							if (isClassInstance(liveImpl)) WeakSetMethods.add(INSTANCE_FORWARDERS, forward);
 							Objects.defineProperty(wrapper, prop, {
 								__proto__: null,
-								get: () => {
-									const currentImpl = wrapper.____slothletInternal.impl;
-									return currentImpl ? runtime_readImplMember(wrapper, prop) : undefined;
-								},
+								get: forward,
 								set: (newValue) => {
 									const currentImpl = wrapper.____slothletInternal.impl;
 									if (currentImpl) runtime_writeImplMember(wrapper, prop, newValue);
@@ -24116,15 +24272,33 @@ class UnifiedWrapper extends ComponentBase {
 					// array holds stays an accessor that reads and writes through the node.
 					// So does an accessor of a module's own object the node fronts, as freezing the object keeps it one (#757).
 					const isArrayAccessor = (Arrays.isArray(target) || frontsModuleObject) && !("value" in descriptor);
+					// Any other node's accessor, one a module exported or one defined on the node, stays the accessor it is, as
+					// closing an object keeps its getters and setters (#970): the halves the node describes, which run as the
+					// node's module. A member the node only reads through to its value (a field of a class instance written
+					// through the node) is described by halves of the framework's own, and is the data it reads.
+					const isNodeAccessor =
+						!isArrayAccessor &&
+						!("value" in descriptor) &&
+						(WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.get) || WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.set));
+					if (isNodeAccessor) {
+						Reflect.defineProperty(target, key, {
+							__proto__: null,
+							get: descriptor.get,
+							set: descriptor.set,
+							enumerable: descriptor.enumerable,
+							configurable: true
+						});
+						continue;
+					}
 					Reflect.defineProperty(
 						target,
 						key,
 						isArrayAccessor
 							? {
 									__proto__: null,
-									get: frontsModuleObject && typeof descriptor.get !== "function" ? undefined : () => node[key],
+									get: typeof descriptor.get !== "function" ? undefined : () => node[key],
 									set:
-										frontsModuleObject && typeof descriptor.set !== "function"
+										typeof descriptor.set !== "function"
 											? undefined
 											: (value) => {
 													node[key] = value;
@@ -24327,14 +24501,27 @@ class UnifiedWrapper extends ComponentBase {
 					// definition of the object does (#746).
 					const moduleObject =
 						MapMethods.has(FRAMEWORK_WRITES, wrapper) || runtime_inRunTree(wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+					// A class instance the node holds as it is takes the definition too, as a write through the node lands on it
+					// (#589): it then lists and serializes the member where it was made, as the instance defined on does (#971).
+					// An accessor is held as the node adopted it, so whoever reads it off the instance runs it as the node's module.
+					const instance =
+						moduleObject === null &&
+						!MapMethods.has(FRAMEWORK_WRITES, wrapper) &&
+						!runtime_inRunTree(wrapper) &&
+						runtime_definesOnInstance(wrapper)
+							? internal.impl
+							: null;
+					const instanceDescriptor = "value" in raw ? raw : descriptor;
 					// All are checked before any changes, so a refusal by one leaves the others as they were.
 					if (
 						(bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) ||
 						!runtime_canDefine(wrapper, prop, descriptor) ||
-						(moduleObject !== null && !runtime_canDefine(moduleObject, prop, raw))
+						(moduleObject !== null && !runtime_canDefine(moduleObject, prop, raw)) ||
+						(instance !== null && !runtime_canDefine(instance, prop, instanceDescriptor))
 					)
 						return false;
 					if (moduleObject !== null && !Reflect.defineProperty(moduleObject, prop, raw)) return false;
+					if (instance !== null && !Reflect.defineProperty(instance, prop, instanceDescriptor)) return false;
 					if (moduleObject !== null && typeof prop === "string") SetMethods.add(runtime_moduleObjectKeys(moduleObject), prop);
 					// Whether the member takes a write once defined, as the same definition leaves it on an object (#749): the
 					// node's own store keeps every member read-only, so what was asked for is remembered beside it.
@@ -24399,6 +24586,21 @@ class UnifiedWrapper extends ComponentBase {
 						? null
 						: runtime_moduleObjectOf(wrapper);
 				if (moduleObject !== null && !Reflect.preventExtensions(moduleObject)) return false;
+				// So does a node over a module's own Proxy, which answers every operation on the node with its traps, behind the
+				// layer the build put over it or not: one that refuses to be closed leaves the node open, as it stays open
+				// itself (#972).
+				const closedProxy = layerUnderlying(wrapper.____slothletInternal.impl);
+				if (
+					moduleObject === null &&
+					!(wrapper.slothlet.____buildDepth > 0) &&
+					!MapMethods.has(FRAMEWORK_WRITES, wrapper) &&
+					!runtime_inRunTree(wrapper) &&
+					util.types.isProxy(closedProxy) &&
+					!runtime_isWrappedClassInstance(closedProxy) &&
+					(runtime_isModuleProxy(closedProxy) || runtime_isModuleStandIn(closedProxy)) &&
+					!runtime_onImpl(wrapper, () => Reflect.preventExtensions(closedProxy))
+				)
+					return false;
 				// Sealing reads the node's own descriptors, which must not start a sync of the half-sealed shell.
 				const internalState = wrapper.____slothletInternal;
 				const syncing = internalState.integritySyncing;
