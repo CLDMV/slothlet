@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:10-08:00 (1794882610)
+ *	@Last modified time: 2026-11-25T20:27:08-08:00 (1795667228)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,14 +27,16 @@
  * awaits `b.give`'s leaves, whose code calls the vault. `d.maker.make` is a second synchronous leaf `b` hands on.
  *
  * Every case runs across the matrix (eager/lazy, async/live, hooks on/off), and the error cases also through each
- * hook pipeline: none registered, an error hook, a synchronous around hook, and an async before hook (which moves
- * the call onto the asynchronous pipeline). An error's accessor may be refused for more than one reason (no
+ * hook pipeline where hooks are on: none registered, an error hook, a synchronous around hook, and an async before
+ * hook (which moves the call onto the asynchronous pipeline). With hooks off no pipeline is registered, so those
+ * configs run the "no hook" setup only. An error's accessor may be refused for more than one reason (no
  * module context at all is refused too), so those cases assert only that it never gets `a`'s rights or name.
  *
  *
  * The cases are spread over the `suites/permissions/permissions-sync-leaf-thenable-*.test.vitest.mjs` files, one per
- * matrix config (see {@link describeSyncLeafThenable}), so each file finishes in a few minutes; together they run every
- * case the single file ran.
+ * mode and runtime, each running its hooks-off and hooks-on config (see {@link describeSyncLeafThenable}), so each file
+ * finishes in a few minutes; together they run every case the single file ran, except the hook-pipeline variants a
+ * hooks-off config would only repeat.
  * @module tests/vitests/setup/permissions-sync-leaf-thenable
  */
 
@@ -90,6 +92,14 @@ const PIPELINES = {
 	"an around hook": (api) => api.slothlet.hook.on("b.**:around", ({ next }) => next(), { id: "i599-around" }),
 	"an async before hook": (api) => api.slothlet.hook.on("b.**:before", async () => {}, { id: "i599-before" })
 };
+
+/**
+ * The hook setups a matrix config runs the error cases under. Hook pipelines are only registered when hooks are on, so
+ * with hooks off every setup builds the same api and registers nothing: only "no hook" runs there.
+ * @param {{hook?: {enabled?: boolean}}} config - The matrix config.
+ * @returns {Array<[string, function(object): void]>} The `[name, register]` entries to run.
+ */
+const pipelinesFor = (config) => Object.entries(PIPELINES).filter(([name]) => config.hook?.enabled || name === "no hook");
 
 /**
  * Describe a failure case for a test title.
@@ -237,7 +247,7 @@ export function describeSyncLeafThenable(names) {
 
 		// ── An Error's accessors run as the module that threw it ────────────────────
 
-		describe.each(Object.entries(PIPELINES))("with %s", (_pipeline, register) => {
+		describe.each(pipelinesFor(config))("with %s", (_pipeline, register) => {
 			/**
 			 * Build the api and register the pipeline's hooks, when hooks are on.
 			 * @param {object} [permissions] - Overrides for the permissions config.
@@ -363,7 +373,7 @@ export function describeSyncLeafThenable(names) {
 			api = null;
 		});
 
-		describe.each(Object.entries(PIPELINES))("with %s", (_pipeline, register) => {
+		describe.each(pipelinesFor(config))("with %s", (_pipeline, register) => {
 			/**
 			 * Build the api and register the pipeline's hooks, when hooks are on.
 			 * @returns {Promise<void>}
