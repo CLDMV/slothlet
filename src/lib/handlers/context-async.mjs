@@ -636,6 +636,8 @@ function storeInstanceID(store) {
  */
 export class AsyncContextManager {
 	constructor() {
+		// Runtime identity, checked instead of the class name (a minified bundle renames classes).
+		this.kind = "async";
 		// The store is made when an instance on the async runtime is created ({@link AsyncContextManager#openStore}), not
 		// here: a module-level singleton makes this manager in every host, also where only the live runtime is used.
 		this.store = null;
