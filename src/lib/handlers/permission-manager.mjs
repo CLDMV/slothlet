@@ -2897,15 +2897,20 @@ export class PermissionManager extends ComponentBase {
 	 * allows; then hook-target rules (`pattern:type`) decide when any match; otherwise the
 	 * decision falls back to the CALL decision for `hookPath` — a path the caller may not call may
 	 * not be hooked either. A specific-type rule (`:before`) outranks an any-type rule (`:hook`).
-	 * Host-registered hooks (no owner identity) are always allowed (the trusted host). Emits audit
-	 * events; use {@link checkHookAccess} for a silent query (fire-time filtering).
+	 * Host-registered hooks (no owner identity) are always allowed (the trusted host). A hook on a leaf in
+	 * the owner's own source file (`callerFilePath === targetFilePath`) is allowed ahead of every rule, as a
+	 * call to that leaf is, and emits `permission:self-bypass` (#995); the framework surface (`slothlet.*`)
+	 * and module privacy are decided before that bypass. Emits audit events; use {@link checkHookAccess}
+	 * for a silent query (fire-time filtering).
 	 *
 	 * @param {string|null} callerPath - Hook owner's API path (the registering module); null for a
 	 *   host-registered hook (no owner identity), which is always allowed.
 	 * @param {string} hookPath - Concrete API path (fire-time) or registration pattern (registration).
 	 * @param {string} hookType - Hook type: "before", "after", "always", "error", or "around".
-	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
-	 * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
+	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for the self-hook bypass).
+	 * @param {string|null} [targetFilePath=null] - Source file slothlet recorded for the leaf at `hookPath`
+	 *   (for the self-hook bypass). Pass it only for a hook on an exact path, never for a pattern; null when
+	 *   there is no record, which means no bypass.
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
 	 * @returns {boolean} True if hooking is allowed.
 	 * @example
@@ -2931,10 +2936,11 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} callerPath - Hook owner's API path; null for a host-registered hook (always allowed).
 	 * @param {string} hookPath - Concrete API path being hooked.
 	 * @param {string} hookType - Hook type: "before", "after", "always", "error", or "around".
-	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for self-hook bypass).
-	 * @param {string|null} [targetFilePath=null] - Hooked path's source file path (for self-hook bypass).
-	 *   Typically null at fire time, where the target's source file isn't resolved — the filepath
-	 *   self-bypass is registration-only, so a self-hook is admitted at on()-time, not re-checked here.
+	 * @param {string|null} [callerFilePath=null] - Owner's source file path (for the self-hook bypass).
+	 * @param {string|null} [targetFilePath=null] - Source file slothlet recorded for the leaf at `hookPath`
+	 *   (for the self-hook bypass, #995). The hook manager passes it for a hook registered on exactly
+	 *   `hookPath`, so a self-hook admitted at on()-time keeps firing; a pattern hook passes null and goes
+	 *   through the rules for every concrete path.
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
 	 * @returns {boolean} True if hooking is allowed.
 	 * @example
@@ -4132,28 +4138,64 @@ export class PermissionManager extends ComponentBase {
 	#resolveHookAccess(callerPath, hookPath, hookType, callerFilePath, targetFilePath, runtimeContext) {
 		// Host-registered hook (no owner identity) is trusted, like an external (caller-less) call.
 		// Callers (on()/getHooksForPath) only reach here when the system is enabled, so there is no
-		// separate disabled-short-circuit; the call-level self-bypass is applied by the fallback below.
+		// separate disabled-short-circuit.
 		// Strict null/undefined check: an empty-string owner must not masquerade as "no owner" (#138 review).
 		if (callerPath == null) return { allowed: true, event: null, payload: null };
 
-		// 1. Module privacy (#260) before any hook rule: a hook sees a member's arguments and result, so a module that may
-		// not reach another module's private member may not hook it either, whatever a hook rule allows. Only a refusal is
-		// final here; a member of the hooking module's own goes on to the rules like any other path.
+		// 1. Module privacy (#260) before any hook rule and before the self-hook bypass: a hook sees a member's arguments
+		// and result, so a module that may not reach another module's private member may not hook it either, whatever a
+		// hook rule allows and whichever file it shares. Only a refusal is final here; a member of the hooking module's own
+		// goes on like any other path.
 		const privacy = this.#privacyDecision(callerPath, hookPath, callerFilePath, targetFilePath, false, false, false);
 		if (privacy !== null && !privacy.allowed) {
 			return { allowed: false, event: privacy.event, payload: { caller: callerPath, target: `${hookPath}:${hookType}` } };
 		}
 
-		// 2. Hook-target rules (pattern:type) decide when any match.
+		// 2. Self-hook bypass (#995): a hook on a leaf in the owner's own source file is allowed ahead of every rule,
+		// as the call-level self-call bypass allows a call to it. The hook manager passes a target file only for a
+		// hook on an exact path, so a pattern hook never reaches this. Module privacy (step 1) and the framework surface
+		// are decided before it.
+		if (callerFilePath && targetFilePath && callerFilePath === targetFilePath && this.#hookSelfBypassAllowed(callerPath, hookPath)) {
+			return {
+				allowed: true,
+				event: "permission:self-bypass",
+				payload: { caller: callerPath, target: `${hookPath}:${hookType}`, filePath: callerFilePath }
+			};
+		}
+
+		// 3. Hook-target rules (pattern:type) decide when any match.
 		const hookDecision = this.#evaluateHook(callerPath, hookPath, hookType, runtimeContext);
 		if (hookDecision.matched) {
 			return { allowed: hookDecision.allowed, event: hookDecision.event, payload: hookDecision.payload };
 		}
 
-		// 3. Layered fallback: the CALL decision for the path (blocked path ⇒ blocked hook).
-		// Hook fallback to the call decision carries no call/construct arguments → null callMeta.
-		const callDecision = this.#resolveAccess(callerPath, hookPath, callerFilePath, targetFilePath, runtimeContext, true, null);
+		// 4. Layered fallback: the CALL decision for the path (blocked path ⇒ blocked hook).
+		// Hook fallback to the call decision carries no call/construct arguments → null callMeta. The target file is
+		// not passed on: the self-bypass was decided in step 2, and a hook it did not admit must not be admitted by the
+		// call-level bypass instead.
+		const callDecision = this.#resolveAccess(callerPath, hookPath, callerFilePath, null, runtimeContext, true, null);
 		return { allowed: callDecision.allowed, event: callDecision.event, payload: callDecision.payload };
+	}
+
+	/**
+	 * Whether a hook whose owner and target share a source file may take the self-hook bypass (#995).
+	 *
+	 * @param {string} callerPath - Hook owner's API path.
+	 * @param {string} hookPath - The exact API path hooked.
+	 * @returns {boolean} False for the framework surface (`slothlet` and below), and for a module-private member
+	 *   the owner's module does not own (the same file mounted by two modules); true otherwise.
+	 * @private
+	 *
+	 * @description
+	 * The framework surface has no source file of its own, so a target file never matches there; it is refused here
+	 * as well so the bypass can never reach it. Module privacy is decided before the bypass: under `private.scope:
+	 * "folder"` one file is one folder, so the member is the owner's; under `"module"` it is the owner's when the
+	 * ownership registry gives both paths the same current module.
+	 */
+	#hookSelfBypassAllowed(callerPath, hookPath) {
+		if (hookPath === "slothlet" || StringMethods.startsWith(hookPath, "slothlet.")) return false;
+		if (!runtime_isPrivateName(hookPath)) return true;
+		return this.#privateScope === "folder" || this.#privateOwner(callerPath, hookPath) !== null;
 	}
 
 	/**
