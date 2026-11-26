@@ -15791,6 +15791,14 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		}
 	};
 
+	// The path a call through the view is a call of. A stand-in for a node not loaded yet resolves to the wrapper it waits
+	// for, so `self.ext._box.item.open` read in lazy mode resolves to `ext._box`: the call is of the member its chain
+	// reaches, and is checked as one, as the same call is in eager mode (#1006). Undefined for a node: its own path.
+	const calledPath = () => {
+		const chain = WeakMapMethods.get(WAITING_CHAINS, child);
+		return chain && chain.length > 0 ? runtime_standInPath(inner, chain) : undefined;
+	};
+
 	view = new NativeProxy(shadow, {
 		apply(_, thisArg, args) {
 			// What the call hands back is the reader's, as what a call through its view of `self` hands back is: a member
@@ -15802,7 +15810,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 				return runtime_selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller, null, inner);
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
-			const pending = runtime_enforceCapturedPair(inner, capturedCaller, ceiling, undefined, args, true);
+			const pending = runtime_enforceCapturedPair(inner, capturedCaller, ceiling, calledPath(), args, true);
 			const call = runtime_callAsDefiner(inner, () =>
 				runtime_selfViewResult(
 					asKept(() => Reflect.apply(child, thisArg, args)),
@@ -15820,7 +15828,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		},
 		construct(_, args, newTarget) {
 			if (gated && !(gated === "held" && WeakSetMethods.has(STAND_INS, child)))
-				runtime_enforceCapturedPair(inner, capturedCaller, ceiling, undefined, args);
+				runtime_enforceCapturedPair(inner, capturedCaller, ceiling, calledPath(), args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
