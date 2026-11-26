@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T21:20:38-08:00 (1793596838)
+ *	@Last modified time: 2026-11-25T18:19:43-08:00 (1795659583)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,8 +33,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { run, runMergeReports, printMergeOutput, printCoverageSummary, resolveBin, resolveVitestConfig } from "@cldmv/vitest-runner";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { run } from "@cldmv/vitest-runner";
 import { cleanTmpArtifacts } from "../lib/clean-tmp-artifacts.mjs";
 import { stageI18nPack, STAGED_ENV } from "./setup/i18n-pack-fixture.mjs";
 
@@ -130,24 +130,13 @@ const BASELINE_PATH = "tests/vitests/baseline-tests.json";
 const DEFAULT_VITEST_CONFIG = ".configs/vitest.config.mjs";
 
 /**
- * Heap ceiling for the coverage merge step, in MB (`VITEST_MERGE_HEAP_MB` overrides).
- * The merge reads every per-file blob into one process; with 500+ files it outgrows
- * Node's default ~4 GB heap and dies with "heap out of memory" after every test passed.
- * It runs once, after all test workers have exited, so it can take a larger heap than
- * the workers without raising the run's peak memory. At ~800 files the merge outgrew 8 GB
- * too, so the default is 12 GB (4 GB free on a 16 GB CI runner); on a machine with less
- * than 14 GB it drops to total memory minus 2 GB, never below 4 GB.
+ * Heap ceiling for the runner's coverage merge step, in MB (`VITEST_MERGE_HEAP_MB` overrides).
+ * The merge reads every per-file blob into one process; at ~800 files it outgrew 8 GB, so it
+ * gets 12 GB. It runs once, after all test workers have exited, so the larger heap does not
+ * raise the run's peak memory. The runner applies it to the merge only, never to the workers.
  * @type {number}
  */
-const MERGE_HEAP_MB = process.env.VITEST_MERGE_HEAP_MB
-	? parseInt(process.env.VITEST_MERGE_HEAP_MB, 10)
-	: Math.max(4096, Math.min(12288, Math.floor(os.totalmem() / 1024 ** 2) - 2048));
-
-/**
- * Directory the coverage run writes its per-file blobs to before the merge.
- * @type {string}
- */
-const COVERAGE_BLOBS_DIR = path.join(projectRoot, ".vitest-coverage-blobs");
+const MERGE_HEAP_MB = 12288;
 
 /**
  * Escape all regex metacharacters in a string so it can be safely used
@@ -210,6 +199,33 @@ const PER_FILE_HEAP_OVERRIDES = [
 	{ pattern: "metadata/metadata-edge-cases", heapMb: 6144 }
 ];
 
+/**
+ * Time limit per test file, in ms, for @cldmv/vitest-runner's watchdog (`VITEST_FILE_TIMEOUT`, in
+ * seconds, overrides). The runner's own default of 30 minutes is too close for the slowest suites on a
+ * 4-core CI runner: in a plain (no coverage) Node 22 run on next, all-api-structures took 23.5 minutes and
+ * api-root-integrity, reload-held-code and permissions-sync-leaf-thenable 12–15, and coverage runs are
+ * slower.
+ * @type {number}
+ */
+const FILE_TIMEOUT_MS = 60 * 60 * 1000;
+
+/**
+ * Idle limit per test file, in ms, for the runner's watchdog (`VITEST_FILE_IDLE_TIMEOUT`, in seconds,
+ * overrides). Off: a file's output doesn't show how far it has got. A coverage run gives every file the blob
+ * reporter, which prints nothing until the file ends, and the default reporter can stay silent for a whole
+ * long file too. With the runner's 10-minute default, next's CI killed every file that ran past 10 minutes
+ * (all-api-structures, api-root-integrity, reload-held-code, permissions-sync-leaf-thenable and, under
+ * coverage, four more) while each was still passing. {@link FILE_TIMEOUT_MS} still ends a file that hangs.
+ * @type {number}
+ */
+const FILE_IDLE_TIMEOUT_MS = 0;
+
+/**
+ * Per-file watchdog limits for files that outgrow {@link FILE_TIMEOUT_MS}.
+ * @type {Array<{ pattern: string, timeoutMs?: number, idleTimeoutMs?: number }>}
+ */
+const PER_FILE_TIMEOUT_OVERRIDES = [{ pattern: "api-structures/all-api-structures.test.vitest.mjs", timeoutMs: 120 * 60 * 1000 }];
+
 // Scratch dirs (gitignored, same pair the repo's own eslint/prettier ignores use) that test
 // discovery must never enter. `tmp/` holds per-agent git worktrees (tmp/agents/*/wt) and staged
 // fixtures — each carries its own full copy of tests/vitests/suites, which partial-path pattern
@@ -257,6 +273,58 @@ EXAMPLES:
 `);
 }
 
+/** Matches a vitest test file name in this repo. */
+const TEST_FILE_PATTERN = /\.test\.vitest\.[cm]?js$/i;
+
+/**
+ * List every test file under `tests/vitests`, as project-relative forward-slash paths.
+ * @returns {string[]} Test file paths.
+ * @example
+ * const files = listTestFiles();
+ */
+function listTestFiles() {
+	const base = path.join(projectRoot, DEFAULT_TEST_DIR);
+	if (!fs.existsSync(base)) return [];
+	return fs
+		.readdirSync(base, { recursive: true })
+		.map((entry) => String(entry).replace(/\\/g, "/"))
+		.filter((entry) => TEST_FILE_PATTERN.test(entry) && !entry.split("/").includes("node_modules"))
+		.map((entry) => `${DEFAULT_TEST_DIR}/${entry}`.replace(/\\/g, "/"));
+}
+
+/**
+ * Whether an argument names a test file, folder or path pattern, so it is a selector and never a flag's value.
+ * @param {string} arg - Raw CLI argument (not starting with "-").
+ * @returns {boolean} True when it should be treated as a test selector.
+ * @example
+ * isTestSelector("suites/config"); // true
+ * isTestSelector("verbose"); // false
+ */
+function isTestSelector(arg) {
+	if (TEST_FILE_PATTERN.test(arg)) return true;
+	const [normalized] = normalizePatterns([arg]);
+	if (fs.existsSync(path.resolve(projectRoot, arg)) || fs.existsSync(path.resolve(projectRoot, normalized))) return true;
+	if (!arg.includes("/")) return false;
+	return listTestFiles().some((file) => file.includes(normalized.replace(/\\/g, "/")));
+}
+
+/**
+ * Find selectors that match no test file: not an existing test file, not a folder holding one, and not a
+ * substring of any test file path.
+ * @param {string[]} patterns - Test selectors from the CLI.
+ * @returns {string[]} The selectors that matched nothing.
+ * @example
+ * findUnmatchedSelectors(["suites/config", "suites/nope"]); // ["suites/nope"]
+ */
+export function findUnmatchedSelectors(patterns) {
+	const files = listTestFiles();
+	return patterns.filter((pattern) => {
+		const [normalized] = normalizePatterns([pattern]);
+		const needle = normalized.replace(/\\/g, "/").replace(/\/+$/, "");
+		return !files.some((file) => file.includes(needle));
+	});
+}
+
 /**
  * Parse CLI arguments into runner options, vitest passthrough args, and test patterns.
  * @param {string[]} args - Raw process arguments excluding node and script path.
@@ -277,7 +345,7 @@ EXAMPLES:
  * @example
  * const parsed = parseArguments(["--baseline", "--workers", "2", "suites/config"]);
  */
-function parseArguments(args) {
+export function parseArguments(args) {
 	let help = false;
 	let baseline = false;
 	let showErrorDetails = true;
@@ -400,7 +468,9 @@ function parseArguments(args) {
 
 		if (arg.startsWith("-")) {
 			vitestArgs.push(arg);
-			if (i + 1 < args.length && !args[i + 1].startsWith("-")) {
+			// `--name=value` carries its own value; a bare flag takes the next argument as its value
+			// only when that argument isn't a test selector.
+			if (!arg.includes("=") && i + 1 < args.length && !args[i + 1].startsWith("-") && !isTestSelector(args[i + 1])) {
 				vitestArgs.push(args[i + 1]);
 				i++;
 			}
@@ -452,6 +522,26 @@ function normalizePatterns(patterns) {
 }
 
 /**
+ * Collect the values of every `--coverage.include` argument (`=value` or separate value form).
+ * @param {string[]} vitestArgs - Vitest passthrough arguments.
+ * @returns {string[]} The include globs, in order.
+ * @example
+ * coverageIncludeFromArgs(["--coverage.include=src/a.mjs"]); // ["src/a.mjs"]
+ */
+export function coverageIncludeFromArgs(vitestArgs) {
+	const includes = [];
+	for (let i = 0; i < vitestArgs.length; i++) {
+		const arg = vitestArgs[i];
+		if (arg.startsWith("--coverage.include=")) {
+			includes.push(arg.slice("--coverage.include=".length));
+		} else if (arg === "--coverage.include" && i + 1 < vitestArgs.length) {
+			includes.push(vitestArgs[++i]);
+		}
+	}
+	return includes;
+}
+
+/**
  * Build runner options for @cldmv/vitest-runner from parsed compatibility args.
  * @param {ReturnType<typeof parseArguments>} parsed - Parsed CLI arguments.
  * @returns {import("@cldmv/vitest-runner").RunOptions} Fully resolved runner options.
@@ -477,9 +567,18 @@ function buildRunOptions(parsed) {
 		earlyRunPatterns: parsed.earlyRunPatterns,
 		exclude: parsed.excludePatterns,
 		perFileHeapOverrides: PER_FILE_HEAP_OVERRIDES,
+		perFileTimeoutOverrides: PER_FILE_TIMEOUT_OVERRIDES,
 		conditions: ["slothlet-dev"],
 		nodeEnv: process.env.NODE_ENV || "development"
 	};
+
+	// An explicit option would shadow VITEST_FILE_TIMEOUT / VITEST_FILE_IDLE_TIMEOUT, so only set each when its env var is absent.
+	if (!process.env.VITEST_FILE_TIMEOUT) {
+		runOptions.fileTimeoutMs = FILE_TIMEOUT_MS;
+	}
+	if (!process.env.VITEST_FILE_IDLE_TIMEOUT) {
+		runOptions.fileIdleTimeoutMs = FILE_IDLE_TIMEOUT_MS;
+	}
 
 	if (maxOldSpaceMb && Number.isFinite(maxOldSpaceMb)) {
 		runOptions.maxOldSpaceMb = maxOldSpaceMb;
@@ -505,49 +604,14 @@ function buildRunOptions(parsed) {
 		runOptions.vitestArgs.unshift("--coverage");
 	}
 
-	// Coverage runs merge their blobs here (mergeCoverage) rather than in the runner, so the
-	// merge can have its own heap ceiling.
-	if (hasCoverage || parsed.coverageQuiet) {
-		runOptions.blobsDir = COVERAGE_BLOBS_DIR;
-		runOptions.mergeReports = false;
+	// The runner merges the blobs itself, with its own heap ceiling, and writes
+	// coverage/coverage-index.json. An explicit option would shadow VITEST_MERGE_HEAP_MB, so only set
+	// it when the env var is absent.
+	if (!process.env.VITEST_MERGE_HEAP_MB) {
+		runOptions.mergeMaxOldSpaceMb = MERGE_HEAP_MB;
 	}
 
 	return runOptions;
-}
-
-/**
- * Merge the coverage blobs a run left in `COVERAGE_BLOBS_DIR` into the final report, with
- * `MERGE_HEAP_MB` of heap, and print the summary as the runner would.
- * @param {import("@cldmv/vitest-runner").RunOptions} runOptions - Options the run used.
- * @returns {Promise<number>} The merge's exit code (1 when there are no blobs to merge).
- * @example
- * const code = await mergeCoverage(buildRunOptions(parsed));
- */
-async function mergeCoverage(runOptions) {
-	const blobs = fs.existsSync(COVERAGE_BLOBS_DIR) ? fs.readdirSync(COVERAGE_BLOBS_DIR).filter((f) => f.endsWith(".blob")) : [];
-	if (blobs.length === 0) return 1;
-
-	const extraCoverageArgs = runOptions.vitestArgs.filter((arg) => arg.startsWith("--coverage."));
-	if (!runOptions.coverageQuiet) {
-		console.log(`\n${"=".repeat(80)}`);
-		console.log(`📊 Merging ${blobs.length} coverage blobs into final report (heap ${MERGE_HEAP_MB} MB)...`);
-		console.log("=".repeat(80));
-	}
-
-	const { exitCode, output } = await runMergeReports(COVERAGE_BLOBS_DIR, {
-		cwd: projectRoot,
-		vitestBin: resolveBin(projectRoot, "vitest", "vitest"),
-		vitestConfig: await resolveVitestConfig(projectRoot, runOptions.vitestConfig),
-		conditions: runOptions.conditions,
-		nodeEnv: runOptions.nodeEnv,
-		maxOldSpaceMb: Math.max(MERGE_HEAP_MB, runOptions.maxOldSpaceMb ?? 0),
-		extraCoverageArgs,
-		quietOutput: runOptions.coverageQuiet
-	});
-	if (runOptions.coverageQuiet) printMergeOutput(exitCode, output);
-	await printCoverageSummary(projectRoot, extraCoverageArgs, runOptions.worstCoverageCount);
-	fs.rmSync(COVERAGE_BLOBS_DIR, { recursive: true, force: true });
-	return exitCode;
 }
 
 /**
@@ -601,16 +665,31 @@ async function main() {
 	process.env[STAGED_ENV] = "1";
 	process.once("exit", restoreI18nPack);
 
+	// Selectors that match no test file must fail loudly, never fall back to the whole suite.
+	if (parsed.testPatterns.length > 0 && !parsed.testListFile && !parsed.baseline) {
+		const unmatched = findUnmatchedSelectors(parsed.testPatterns);
+		if (unmatched.length === parsed.testPatterns.length) {
+			console.error(`❌ No test files match: ${unmatched.join(", ")}`);
+			process.exit(1);
+		}
+	}
+
+	// The runner hands `--coverage.*` args only to the merge step, so the per-file runs would still
+	// collect all of src/. The vitest config reads this variable for `coverage.include` instead.
+	const coverageInclude = coverageIncludeFromArgs(parsed.vitestArgs);
+	if (coverageInclude.length > 0) {
+		process.env.SLOTHLET_COVERAGE_INCLUDE = JSON.stringify(coverageInclude);
+	}
+
 	const runOptions = buildRunOptions(parsed);
 	const code = await run(runOptions);
-	if (runOptions.mergeReports === false) {
-		const mergeCode = await mergeCoverage(runOptions);
-		process.exit(code || mergeCode);
-	}
 	process.exit(code);
 }
 
-main().catch((error) => {
-	console.error("Fatal error:", error);
-	process.exit(1);
-});
+// Run only as the entry script, so tests can import parseArguments without starting a run.
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+	main().catch((error) => {
+		console.error("Fatal error:", error);
+		process.exit(1);
+	});
+}

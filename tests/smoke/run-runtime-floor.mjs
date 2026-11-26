@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T08:06:19-08:00 (1794931579)
+ *	@Last modified time: 2026-11-25T10:51:44-08:00 (1795632704)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,26 +16,19 @@
 /**
  * @fileoverview Runs the runtime-floor smoke test on a Node binary you point it at.
  *
- * npm refuses `npm run` below the dev floor (`devEngines`), so this runner is started by npm on the dev Node and
- * launches `tests/smoke/runtime-floor.mjs` on the Node binary named by `SLOTHLET_FLOOR_NODE` (normally a Node 22.15.0
- * build, the `engines.node` floor). It runs the smoke test twice: once as that Node starts by default, and once with
- * `--experimental-async-context-frame` in `NODE_OPTIONS`, so the AsyncContextFrame canary is checked both ways.
+ * Launches `tests/smoke/runtime-floor.mjs` on the Node binary named by `SLOTHLET_FLOOR_NODE` (normally a Node 24.15.0
+ * build, the `engines.node` floor), or on the Node running npm when it is not set. It runs the smoke test twice: once
+ * as that Node starts by default, and once with `--no-async-context-frame` in `NODE_OPTIONS`, so the AsyncContextFrame
+ * canary is checked both ways.
  *
  * @example
- * SLOTHLET_FLOOR_NODE=/path/to/node-v22.15.0/bin/node npm run test:runtime-floor
- * SLOTHLET_FLOOR_NODE=/path/to/node-v22.15.0/bin/node npm run test:runtime-floor:dist   # after npm run build
+ * SLOTHLET_FLOOR_NODE=/path/to/node-v24.15.0/bin/node npm run test:runtime-floor
+ * SLOTHLET_FLOOR_NODE=/path/to/node-v24.15.0/bin/node npm run test:runtime-floor:dist   # after npm run build
  */
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const floorNode = process.env.SLOTHLET_FLOOR_NODE;
-if (!floorNode) {
-	console.error(
-		"SLOTHLET_FLOOR_NODE is not set. Point it at the Node binary to test (normally Node 22.15.0, the engines.node floor):\n" +
-			"  SLOTHLET_FLOOR_NODE=/path/to/node-v22.15.0/bin/node npm run test:runtime-floor"
-	);
-	process.exit(1);
-}
+const floorNode = process.env.SLOTHLET_FLOOR_NODE || process.execPath;
 
 const dist = process.argv.includes("--dist");
 const script = fileURLToPath(new URL("./runtime-floor.mjs", import.meta.url));
@@ -50,7 +43,7 @@ console.log(`Runtime-floor smoke test on Node ${version.stdout.trim()} against $
 
 const runs = [
 	{ label: "default flags", nodeOptions: "" },
-	{ label: "--experimental-async-context-frame", nodeOptions: "--experimental-async-context-frame" }
+	{ label: "--no-async-context-frame", nodeOptions: "--no-async-context-frame" }
 ];
 let failed = false;
 for (const run of runs) {

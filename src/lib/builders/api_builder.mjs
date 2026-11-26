@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T08:49:37-08:00 (1795625377)
+ *	@Last modified time: 2026-11-25T10:51:22-08:00 (1795632682)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2843,7 +2843,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// A name the object does not hold itself reads as in plain JS, as at an api node: undefined when nothing has it
-					// (serializers and Node 22/24's util.inspect probe objects for such names, `$$typeof`, `0`), and what the
+					// (serializers and Node 24's util.inspect probe objects for such names, `$$typeof`, `0`), and what the
 					// language's own prototypes give every object or function (`constructor`, `toString`) as it is.
 					const own = Reflect.getOwnPropertyDescriptor(target, prop);
 					if (!own) {
@@ -3127,7 +3127,7 @@ export class ApiBuilder extends ComponentBase {
 		 * A namespace object as `util.inspect` shows it to the code inspecting it now: the members that code lists, each
 		 * read through the route proxy as it reads it, a function and an accessor by their form (nothing is run), and a
 		 * nested object the same way to the depth asked for. A plain copy, so `util.inspect` formats no route proxy and no
-		 * object behind one (Node formats a Proxy's target, not what its traps answer, and Node 22/24 one level of it only).
+		 * object behind one (Node formats a Proxy's target, not what its traps answer, and Node 24 one level of it only).
 		 * @param {object} view - The route proxy over `raw`, as the reader reaches it.
 		 * @param {object} raw - The namespace object.
 		 * @param {string} routePath - Its route (`slothlet.env`).
@@ -3176,8 +3176,8 @@ export class ApiBuilder extends ComponentBase {
 
 		/**
 		 * Give a namespace object the `util.inspect` hook that shows it as {@link namespaceShown} does, to whoever inspects
-		 * it: Node formats the object behind a route proxy (the innermost one on Node 26, the next one on Node 22/24), so
-		 * without it a module would be shown members it may not read, or Node 22/24 would list the next proxy itself.
+		 * it: Node formats the object behind a route proxy (the innermost one on Node 26, the next one on Node 24), so
+		 * without it a module would be shown members it may not read, or Node 24 would list the next proxy itself.
 		 * @param {object} raw - The namespace object.
 		 * @param {string} routePath - Its route.
 		 * @returns {void}
