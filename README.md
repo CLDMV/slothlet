@@ -168,8 +168,7 @@ Run slothlet in the browser, web workers, and Electron renderers — anywhere th
 
 ### Requirements
 
-- **Node.js v22.15.0 or higher** to use slothlet
-- **Node.js v22.22.0 or higher** to develop on it (build, tests, tooling; enforced through `devEngines`)
+- **Node.js v24.15.0 or higher**, to use slothlet and to develop on it (`engines` and `devEngines`)
 
 ### Install
 

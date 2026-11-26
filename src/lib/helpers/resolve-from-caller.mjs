@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:58-08:00 (1794882478)
+ *	@Last modified time: 2026-11-25T11:44:44-08:00 (1795635884)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -121,7 +121,7 @@ export class Resolver extends ComponentBase {
 		// Browser mode: SLOTHLET_LIB_ROOT is null when fileURLToPath failed at init.
 		// In that environment every call to resolvePathFromCaller returns early, so
 		// this method is never reached; the guard is a belt-and-suspenders safety net.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!SLOTHLET_LIB_ROOT) return false;
 
 		// Normalize path for comparison
@@ -143,7 +143,7 @@ export class Resolver extends ComponentBase {
 			// Only internal when the file sits directly in the slothlet package root.
 			// Unreachable in tests: the slothlet-dev condition routes imports to src/,
 			// so package-root index files never appear on V8 stacks during test execution.
-			/* v8 ignore next */
+			/* v8 ignore if */
 			if (path.dirname(normalized) === SLOTHLET_PKG_ROOT) return true;
 		}
 
@@ -247,7 +247,7 @@ export class Resolver extends ComponentBase {
 		// Unreachable in practice: #findCallerBase always resolves to the test
 		// file's path because the test runner is always on the V8 stack. callerFile
 		// is only null if the entire stack is slothlet-internal — never in tests.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!callerFile) {
 			// Fallback: resolve from current working directory
 			return path.resolve(Processes.cwd(), rel);

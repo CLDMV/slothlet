@@ -4,9 +4,10 @@
  * @param {object} options - Generation options
  * @param {string} options.output - Output file path for .d.ts
  * @param {string} options.interfaceName - Name of the interface to generate
- * @param {boolean} [options.includeDocumentation=true] - Include the per-member comments that explain an
- *   `unknown` member (a member with no module origin). Accepted for compatibility; the explanation is
- *   always emitted, since an unexplained `unknown` is a worse surprise than one extra comment line.
+ * @param {boolean} [options.includeDocumentation=true] - Copy each member's JSDoc from its originating export
+ *   (description, `@param`, `@returns`, `@deprecated`, `@example`) onto the generated member, so hovering
+ *   `api.x.y` or `self.x.y` shows the leaf's documentation. `false` leaves members without it. The comment that
+ *   explains an `unknown` member (one with no module origin) is emitted either way.
  * @param {boolean} [options.augmentRuntime=true] - Extend `SlothletSelf` from `@cldmv/slothlet/runtime`
  *   with the generated interface, so an imported `self` is typed as the api. Turn it off when several
  *   generated interfaces live in one TypeScript program and only one of them should type `self`.

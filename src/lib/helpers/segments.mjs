@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T19:05:39-08:00 (1794884739)
+ *	@Last modified time: 2026-11-25T11:15:03-08:00 (1795634103)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,15 @@
  * form, lossless where a segment could hold a ".", and one line for a consumer to join. Paths slothlet takes keep
  * accepting a dotted string or an array; messages render the joined form.
  */
-import { Arrays, copyList, splitText } from "#helpers/intrinsics";
+import { Arrays, copyList, setFrom, splitText } from "#helpers/intrinsics";
+
+/**
+ * The segments no api path can hold: they name members every object already has. A mount path, a loose `self.x = …`
+ * write and a hook pattern all refuse them.
+ * @type {Set<string>}
+ * @package
+ */
+export const UNSAFE_PATH_SEGMENTS = setFrom(["__proto__", "constructor", "prototype"]);
 
 /**
  * The segments of an api path.
