@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:38:14-08:00 (1795297094)
+ *	@Last modified time: 2026-11-25T11:44:35-08:00 (1795635875)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -142,13 +142,11 @@ function normaliseVersionTag(tag) {
 	const bare = stripSuffix(stripPrefix(tag));
 	const parts = mapList(splitText(bare, "."), (p) => {
 		const n = parseInt(p, 10);
-		// parseInt produces a valid number for well-formed version strings; isNaN fallback is unreachable.
-		/* v8 ignore next */
+		// A non-numeric segment ("beta", "x") counts as 0.
 		return isNaN(n) ? 0 : n;
 	});
-	// Well-formed version strings always yield at least one segment; the ?? 0 fallbacks are unreachable.
-	/* v8 ignore next */
-	return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
+	// split always yields a first segment, so only its `?? 0` is unreachable; a short tag ("v1") takes the others.
+	return [/* v8 ignore next */ parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
 }
 
 /**
@@ -163,11 +161,8 @@ function compareTuples(a, b) {
 	for (let i = 0; i < 3; i++) {
 		if (a[i] !== b[i]) return b[i] - a[i];
 	}
-	// All three components are equal — only reachable when both tags normalise to the
-	// exact same [major, minor, patch] tuple AND produce the same suffix score. The
-	// sort caller resolves such ties in a separate comparator step, so the explicit
-	// tiebreak expression runs instead; this fallthrough is a defensive guard.
-	/* v8 ignore next */
+	// All three components are equal ("2.0.0" and "2.0.0-beta", "v2" and "2"); the sort caller then breaks the
+	// tie on the suffix.
 	return 0;
 }
 
@@ -394,12 +389,12 @@ export class VersionManager extends ComponentBase {
 		const entry = MapMethods.get(this.#registry, logicalPath);
 		// api.slothlet.versioning.remove (api_builder.mjs) checks existence before calling us;
 		// this guard is only reached via a direct internal call with a non-existent path.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!entry) return false;
 
 		const versionEntry = MapMethods.get(entry.versions, versionTag);
 		// Same as above — the public wrapper ensures versionTag exists before calling unregisterVersion.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!versionEntry) return false;
 
 		// Remove module reverse-lookup
@@ -505,8 +500,7 @@ export class VersionManager extends ComponentBase {
 		}
 		const ve = MapMethods.get(entry.versions, versionTag);
 		// #versionMetadataByModule is always populated at registerVersion time; the ?? {} fallback is defensive.
-		/* v8 ignore next */
-		const existing = MapMethods.get(this.#versionMetadataByModule, ve.moduleID) ?? {};
+		const existing = /* v8 ignore next */ MapMethods.get(this.#versionMetadataByModule, ve.moduleID) ?? {};
 		// version and path are injected fields that always take precedence over user-supplied fields.
 		MapMethods.set(this.#versionMetadataByModule, ve.moduleID, {
 			...existing,
@@ -560,8 +554,7 @@ export class VersionManager extends ComponentBase {
 				ve = ofEntry[1];
 			// The same version metadata versioning.metadata.get() and the dispatcher read, with the injected version and path.
 			// #versionMetadataByModule is always populated at registerVersion time; the ?? fallback is defensive.
-			/* v8 ignore next */
-			const stored = MapMethods.get(this.#versionMetadataByModule, ve.moduleID) ?? {
+			const stored = /* v8 ignore next */ MapMethods.get(this.#versionMetadataByModule, ve.moduleID) ?? {
 				version: ve.versionTag,
 				path: segmentsOf(logicalPath)
 			};
@@ -631,7 +624,7 @@ export class VersionManager extends ComponentBase {
 		const entry = MapMethods.get(this.#registry, logicalPath);
 		// entry is always populated before getDefaultVersion is called (registered before dispatch);
 		// this null-guard is a defensive fallback.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!entry || MapMethods.size(entry.versions) === 0) return null;
 
 		// Step 1: explicit default flag
@@ -652,10 +645,7 @@ export class VersionManager extends ComponentBase {
 				const cmp = compareTuples(a.tuple, b.tuple);
 				if (cmp !== 0) return cmp;
 				// Tiebreak: prefer stable over pre-release (shorter suffix = stable)
-				// Only one ordering is exercised by the test matrix; reverse-order branch is not hit.
-				/* v8 ignore next */
 				const aSuffix = regExpMatch(/[-+]/, a.tag) ? 1 : 0;
-				/* v8 ignore next */
 				const bSuffix = regExpMatch(/[-+]/, b.tag) ? 1 : 0;
 				return aSuffix - bSuffix;
 			}
@@ -688,9 +678,7 @@ export class VersionManager extends ComponentBase {
 			// String: look up key in caller's versionMetadata
 			resolvedTag = caller?.version?.metadata?.[discriminator] ?? null;
 		}
-		// Config validation ensures discriminator is always string or function;
-		// the function case is separated here so the false-branch (neither) can be annotated.
-		/* v8 ignore next */
+		// Config validation ensures discriminator is always a string or a function.
 		if (typeof discriminator === "function") {
 			try {
 				resolvedTag = discriminator(allVersions, caller);
@@ -708,8 +696,7 @@ export class VersionManager extends ComponentBase {
 				key: "DEBUG_VERSION_RESOLVED",
 				version: null,
 				apiPath: logicalPath,
-				// caller always has metadata with moduleID in normal versioned dispatch contexts.
-				/* v8 ignore next */
+				// A function dispatcher called from host code has no caller.
 				callerModule: caller?.module ?? null
 			});
 			return null;
@@ -719,8 +706,7 @@ export class VersionManager extends ComponentBase {
 			key: "DEBUG_VERSION_RESOLVED",
 			version: resolvedTag,
 			apiPath: logicalPath,
-			// caller always has metadata with moduleID in normal versioned dispatch contexts.
-			/* v8 ignore next */
+			// A function dispatcher called from host code has no caller.
 			callerModule: caller?.module ?? null
 		});
 
@@ -746,7 +732,7 @@ export class VersionManager extends ComponentBase {
 		const entry = MapMethods.get(this.#registry, logicalPath);
 		// Dispatcher is only created after registerVersion, so logicalPath is always
 		// in #registry when buildAllVersionsArg is called — defensive guard.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!entry) return {};
 
 		const defaultTag = this.getDefaultVersion(logicalPath);
@@ -760,10 +746,8 @@ export class VersionManager extends ComponentBase {
 			// would fragment dotted version tags like "2.3.0" into ["2","3","0"].
 			const mountedWrapper = this.#walkApiPath(ve.versionedParts);
 			// metadata handler and versionMetadataByModule are always present in normal usage.
-			/* v8 ignore next */
-			const userMetadata = this.slothlet.handlers.metadata?.getMetadata?.(mountedWrapper) ?? {};
-			/* v8 ignore next */
-			const versionMetadata = MapMethods.get(this.#versionMetadataByModule, ve.moduleID) ?? {};
+			const userMetadata = /* v8 ignore next */ this.slothlet.handlers.metadata?.getMetadata?.(mountedWrapper) ?? {};
+			const versionMetadata = /* v8 ignore next */ MapMethods.get(this.#versionMetadataByModule, ve.moduleID) ?? {};
 
 			result[tag] = {
 				metadata: userMetadata,
@@ -796,8 +780,7 @@ export class VersionManager extends ComponentBase {
 		const callerVersionEntry = callerModuleID ? this.#findVersionEntryForModule(callerModuleID) : null;
 		const module = system?.baseModuleID ?? (typeof callerModuleID === "string" ? stripComposite(callerModuleID) : null);
 		// metadata handler is always present during normal dispatch.
-		/* v8 ignore next */
-		const userMetadata = metadataHandler?.getMetadata?.(callerWrapper) ?? {};
+		const userMetadata = /* v8 ignore next */ metadataHandler?.getMetadata?.(callerWrapper) ?? {};
 		const path = Objects.freeze(this.pathSegments(String(internal.apiPath ?? "")));
 
 		if (!callerVersionEntry) {
@@ -806,8 +789,7 @@ export class VersionManager extends ComponentBase {
 
 		const defaultTag = this.getDefaultVersion(callerVersionEntry.logicalPath);
 		// versionMetadataByModule always contains an entry for a registered versioned caller.
-		/* v8 ignore next */
-		const versionMetadata = MapMethods.get(this.#versionMetadataByModule, callerModuleID) ?? {};
+		const versionMetadata = /* v8 ignore next */ MapMethods.get(this.#versionMetadataByModule, callerModuleID) ?? {};
 
 		return {
 			path,
@@ -873,16 +855,14 @@ export class VersionManager extends ComponentBase {
 	#findVersionEntryForModule(moduleID) {
 		const key = MapMethods.get(this.#moduleToVersionKey, moduleID);
 		// key absence means moduleID was never registered as a versioned module — caller is unversioned.
-		/* v8 ignore next */
 		if (!key) return null;
 		const entry = MapMethods.get(this.#registry, key.logicalPath);
 		// #moduleToVersionKey and #registry are always kept in sync by registerVersion/unregisterVersion;
 		// a missing registry entry here would indicate state corruption — defensive guard.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!entry) return null;
 		// versionTag in #moduleToVersionKey is always kept in sync with #registry entries.
-		/* v8 ignore next */
-		return MapMethods.get(entry.versions, key.versionTag) ?? null;
+		return /* v8 ignore next */ MapMethods.get(entry.versions, key.versionTag) ?? null;
 	}
 
 	/**
@@ -898,18 +878,17 @@ export class VersionManager extends ComponentBase {
 	 */
 	#walkApiPath(apiPath) {
 		// apiPath is always a non-empty string or non-empty array at all call sites — defensive null guard.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!apiPath) return undefined;
 		let node = this.slothlet.api;
 		// Accept string or string[]. When given an array the segments are used directly,
 		// preventing a re-split that would fragment dotted version tags (e.g. "2.3.0").
 		// All current callers pass pre-split arrays; the string-split path is a defensive fallback.
-		/* v8 ignore next */
-		const segments = Arrays.isArray(apiPath) ? apiPath : splitText(apiPath, ".");
+		const segments = Arrays.isArray(apiPath) ? apiPath : /* v8 ignore next */ splitText(apiPath, ".");
 		for (let i = 0; i < segments.length; i++) {
 			const segment = segments[i];
 			// node can only be null/undefined if the API tree is partially torn down — defensive guard.
-			/* v8 ignore next */
+			/* v8 ignore if */
 			if (node == null) return undefined;
 			node = node[segment];
 		}
@@ -977,8 +956,8 @@ export class VersionManager extends ComponentBase {
 				// Fall through to default
 				tag = manager.getDefaultVersion(logicalPath);
 				// tag is null only when no versions exist while the dispatcher is live;
-				// teardownDispatcher prevents this in normal usage — defensive guard.
-				/* v8 ignore next */
+				// it can happen in the window before teardownDispatcher's deletePath runs, which the suite cannot hold open.
+				/* v8 ignore else */
 				if (tag != null) {
 					manager.slothlet.debug("versioning", {
 						key: "DEBUG_VERSION_DEFAULT_USED",
@@ -996,7 +975,7 @@ export class VersionManager extends ComponentBase {
 			const versionTag = resolveVersion();
 			// resolveVersion() only returns null when no versions are registered;
 			// teardownDispatcher ensures the dispatcher is removed before that happens.
-			/* v8 ignore next */
+			/* v8 ignore if */
 			if (!versionTag) return null;
 			// Build segment array rather than a dot string so that dotted version tags
 			// (e.g. "2.3.0") are kept atomic and not re-fragmented by #walkApiPath.
@@ -1045,29 +1024,32 @@ export class VersionManager extends ComponentBase {
 				// ── 2. Stable framework accessors → fixed values ─────────────────
 				if (prop === "____isVersionDispatcher") return true;
 				// UnifiedWrapper intercepts these at its own handlers before delegating to impl[prop].
-				/* v8 ignore start */
+				/* v8 ignore if */
 				if (prop === "____materializeOnCreate") return false;
+				/* v8 ignore if */
 				if (prop === "____displayName") return displayName;
+				/* v8 ignore if */
 				if (prop === "___materialize") return () => {};
+				/* v8 ignore if */
 				if (prop === "length") return 0;
+				/* v8 ignore if */
 				if (prop === "name") return displayName;
-				/* v8 ignore stop */
 
 				// ── 3. then → undefined (not a Promise/thenable) ─────────────────
 				// UnifiedWrapper intercepts "then" at L2350 before delegating to impl[prop].
-				/* v8 ignore next */
+				/* v8 ignore if */
 				if (prop === "then") return undefined;
 
 				// ── 4. constructor ────────────────────────────────────────────
 				// UnifiedWrapper intercepts "constructor" at L2351 before delegating to impl[prop].
-				/* v8 ignore next */
+				/* v8 ignore if */
 				if (prop === "constructor") return NativeObject;
 
 				// ── 5. Symbol.toStringTag → delegate to resolved versioned wrapper ─
 				if (prop === Symbol.toStringTag) {
 					const vw = resolveVersionedWrapper();
 					// vw is null only if no versions remain while dispatcher is live — defensive guard.
-					/* v8 ignore next */
+					/* v8 ignore if */
 					if (!vw) return "Object";
 					return vw[Symbol.toStringTag];
 				}
@@ -1114,8 +1096,8 @@ export class VersionManager extends ComponentBase {
 				// ── 13. Version-routing dispatch (user-defined properties) ──────────
 				const versionTag = resolveVersion();
 				// versionTag is null only if no versions exist while dispatcher is live;
-				// teardownDispatcher prevents this in normal usage — defensive guard.
-				/* v8 ignore next 4 */
+				// it can happen in the window before teardownDispatcher's deletePath runs, which the suite cannot hold open.
+				/* v8 ignore if */
 				if (!versionTag) {
 					throw new manager.SlothletError("VERSION_NO_DEFAULT", {
 						path: segmentsOf(logicalPath)
@@ -1126,7 +1108,7 @@ export class VersionManager extends ComponentBase {
 				const versionedWrapper = manager.#walkApiPath(concatLists([versionTag], splitText(logicalPath, ".")));
 				// versionedWrapper can only be missing if the versioned path was removed
 				// outside the VersionManager lifecycle — defensive guard.
-				/* v8 ignore next */
+				/* v8 ignore if */
 				if (!versionedWrapper) return undefined;
 
 				return versionedWrapper[prop];
@@ -1157,11 +1139,11 @@ export class VersionManager extends ComponentBase {
 			has(t, key) {
 				// Reflect.has(target, key) fires when key IS in the frozen target itself;
 				// tests only check user-defined keys (“login” etc.) which are not in the target.
-				/* v8 ignore next */
+				/* v8 ignore if */
 				if (Reflect.has(t, key)) return true;
 				const entry = MapMethods.get(manager.#registry, logicalPath);
 				// entry is always present when the dispatcher is live — defensive guard.
-				/* v8 ignore next */
+				/* v8 ignore if */
 				if (!entry) return false;
 				for (const ve of mapValues(entry.versions)) {
 					const vw = manager.#walkApiPath(ve.versionedParts);
@@ -1169,7 +1151,7 @@ export class VersionManager extends ComponentBase {
 					// (via ___adoptImplChildren), bypassing prop-in-impl delegation; the true-return
 					// is only reachable by accessing the raw dispatcher directly, which is not
 					// possible through the public API — defensive guard.
-					/* v8 ignore next */
+					/* v8 ignore if */
 					if (vw && key in vw) return true;
 				}
 				return false;
@@ -1184,12 +1166,12 @@ export class VersionManager extends ComponentBase {
 				const keySet = setFrom(Reflect.ownKeys(t));
 				const entry = MapMethods.get(manager.#registry, logicalPath);
 				// entry is always present when dispatcher is live — dispatcher is torn down before registry is cleared.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (entry) {
 					for (const ve of mapValues(entry.versions)) {
 						const vw = manager.#walkApiPath(ve.versionedParts);
 						// vw is always present for registered versioned paths — teardownDispatcher cleans up.
-						/* v8 ignore next */
+						/* v8 ignore else */
 						if (vw) {
 							for (let ofIndex = 0, ofList = Reflect.ownKeys(NativeObject(vw)); ofIndex < ofList.length; ofIndex++) {
 								const k = ofList[ofIndex];
@@ -1293,8 +1275,8 @@ export class VersionManager extends ComponentBase {
 			defineProperty(t, prop, descriptor) {
 				const vw = resolveVersionedWrapper();
 				// No versioned wrapper — only reachable when no versions are registered while
-				// the dispatcher is still live; teardownDispatcher prevents this in normal usage.
-				/* v8 ignore next */
+				// the dispatcher is still live, in the window before teardownDispatcher's deletePath runs.
+				/* v8 ignore if */
 				if (!vw) return Reflect.defineProperty(t, prop, descriptor);
 				if (descriptor.configurable === false) {
 					// Preflight whether t would accept this descriptor WITHOUT mutating t.
@@ -1314,7 +1296,7 @@ export class VersionManager extends ComponentBase {
 					// in this codebase can reach t to call preventExtensions/freeze/seal.
 					// The branch exists to keep the shadow accurate for future-proofing but
 					// is unreachable in all current execution paths.
-					/* v8 ignore next */
+					/* v8 ignore if */
 					if (!Reflect.isExtensible(t)) {
 						Reflect.preventExtensions(shadow);
 					}
@@ -1388,10 +1370,10 @@ export class VersionManager extends ComponentBase {
 
 				const vw = resolveVersionedWrapper();
 				// No versioned wrapper — only reachable when no versions are registered while
-				// the dispatcher is still live; teardownDispatcher prevents this in normal usage.
+				// the dispatcher is still live, in the window before teardownDispatcher's deletePath runs.
 				// Absorb silently: mutating the raw target would make the key visible via ownKeys
 				// while get still throws VERSION_NO_DEFAULT (inconsistent set/get semantics).
-				/* v8 ignore next */
+				/* v8 ignore if */
 				if (!vw) return true;
 				// Delegate to the versioned wrapper's set trap (UnifiedWrapper.setTrap),
 				// which performs the correct delete → defineProperty cycle so the property
@@ -1457,7 +1439,7 @@ export class VersionManager extends ComponentBase {
 				for (let ofIndex = 0, ofList = [api, boundApi]; ofIndex < ofList.length; ofIndex++) {
 					const root = ofList[ofIndex];
 					// api/boundApi are always set when updateDispatcher is called during normal registration.
-					/* v8 ignore next */
+					/* v8 ignore if */
 					if (!root || !isCurrent()) continue;
 					await apiManager.setValueAtPath(root, parts, dispatcher, mountOptions);
 					listPush(written, root);
@@ -1503,12 +1485,12 @@ export class VersionManager extends ComponentBase {
 		// The removal joins the path's ordering, after any mount in flight, and the path's next mount starts
 		// only once it is done, so a removal that pauses cannot delete a dispatcher registered after it.
 		const remove = async () => {
-			// api/boundApi null guards and .catch() bodies are only unreachable after shutdown
-			// (teardownDispatcher is not called during shutdown), or when called before init.
-			/* v8 ignore start */
-			if (api) await PromiseMethods.catch(apiManager.deletePath(api, parts), () => {});
-			if (boundApi) await PromiseMethods.catch(apiManager.deletePath(boundApi, parts), () => {});
-			/* v8 ignore stop */
+			// api/boundApi are null only after shutdown (teardownDispatcher is not called during shutdown) or before
+			// init, and deletePath does not reject here; the hints cover those arms and the .catch() bodies.
+			/* v8 ignore else */
+			if (api) await PromiseMethods.catch(apiManager.deletePath(api, parts), /* v8 ignore next */ () => {});
+			/* v8 ignore else */
+			if (boundApi) await PromiseMethods.catch(apiManager.deletePath(boundApi, parts), /* v8 ignore next */ () => {});
 		};
 		const previous = MapMethods.get(this.#dispatcherMounts, logicalPath);
 		const removing = PromiseMethods.then(previous ? PromiseMethods.then(previous, remove, remove) : remove(), () => {

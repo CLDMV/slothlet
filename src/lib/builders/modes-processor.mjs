@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:43-08:00 (1795419103)
+ *	@Last modified time: 2026-11-25T11:44:30-08:00 (1795635870)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -275,8 +275,7 @@ export class ModesProcessor extends ComponentBase {
 		// routineManager is always auto-registered via slothletProperty (see slothlet.mjs), so the
 		// optional-chain never short-circuits and snapshotRawEntries always returns a Map — the
 		// nullish `?.`/`?? new Map()` fallback is a defensive floor no compose path reaches.
-		/* v8 ignore next */
-		const priorRawEntries = this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) ?? new Map();
+		const priorRawEntries = /* v8 ignore next */ this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) ?? new Map();
 		const priorOwnershipEntries = this.slothlet.handlers.ownership?.snapshotModuleEntries(moduleID) ?? new Map();
 		let constructedWrapper = null;
 		const registerWrapper = (wrapper) => {
@@ -333,7 +332,7 @@ export class ModesProcessor extends ComponentBase {
 		const ownership = this.slothlet.handlers.ownership;
 		// ownership is always auto-registered via slothletProperty (see slothlet.mjs); the absence
 		// guard is a defensive floor no compose path reaches.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!ownership) return;
 		if (priorOwnershipEntry) ownership.restoreEntry(moduleID, apiPath, priorOwnershipEntry);
 		else ownership.removePath(apiPath, moduleID);
@@ -620,8 +619,8 @@ export class ModesProcessor extends ComponentBase {
 		// value into every call (not just one) keeps every internal collision within this module's
 		// own build agreeing with the mount's own top-level decision (#365/#366 review — see #373).
 		// Third || arm ("replace") unreachable — collision config always supplies an initial/api value.
-		/* v8 ignore next 2 */
 		const modes_effectiveCollisionMode =
+			/* v8 ignore next */
 			collisionModeOverride ||
 			(collisionContext === "initial" ? this.slothlet.config.api.collision.mode.initial : this.slothlet.config.api.collision.mode.api) ||
 			"replace";
@@ -738,8 +737,6 @@ export class ModesProcessor extends ComponentBase {
 
 		if (!isRoot && shouldWrap && !populateDirectly) {
 			const existingTarget = api[categoryName];
-			// existingTarget is always undefined or a plain object at this point; the else-if FALSE branch is unreachable.
-			/* v8 ignore start */
 			if (existingTarget && resolveWrapper(existingTarget)) {
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
@@ -753,12 +750,10 @@ export class ModesProcessor extends ComponentBase {
 				// If existingTarget is a wrapper proxy, don't try to clone it - use empty object
 				// The wrapper will be populated with new children during file processing
 				// existingTarget never has a wrapper in this else-if (the outer if already handled that); ? {} arm is unreachable.
-				/* v8 ignore next */
 				const initialImpl = resolveWrapper(existingTarget)
-					? {}
+					? /* v8 ignore next */ {}
 					: // existingTarget is always the actual value here (not undefined); || {} fallback is unreachable.
-						/* v8 ignore next */
-						this.slothlet.helpers.modesUtils.cloneWrapperImpl(existingTarget || {}, mode);
+						this.slothlet.helpers.modesUtils.cloneWrapperImpl(/* v8 ignore next */ existingTarget || {}, mode);
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_CATEGORY_WRAPPER_CREATED",
@@ -780,7 +775,7 @@ export class ModesProcessor extends ComponentBase {
 
 				// Tag folder wrapper with system metadata so folders have metadata accessible
 				// metadata handler is always registered in test configurations; FALSE branch is unreachable.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (this.slothlet.handlers?.metadata) {
 					this.slothlet.handlers.metadata.tagSystemMetadata(
 						wrapper,
@@ -819,7 +814,6 @@ export class ModesProcessor extends ComponentBase {
 				}
 			}
 		}
-		/* v8 ignore stop */
 		if (!isRoot && this.slothlet.config.debug?.modes) {
 			this.slothlet.debug("modes", {
 				message: await t("DEBUG_MODE_PROCESSING_DIRECTORY", { mode, categoryName, currentDepth })
@@ -920,7 +914,7 @@ export class ModesProcessor extends ComponentBase {
 				listPush(loadedModules, { file, mod: exports, moduleName, moduleKeys, analysis });
 			} catch (error) {
 				// All errors thrown by loadModule are wrapped as SlothletError; the FALSE branch (non-SlothletError) is unreachable.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (error.name === "SlothletError") throw error;
 				// Unreachable in practice: loader.loadModule() wraps every import failure in
 				// SlothletError("MODULE_IMPORT_FAILED"), so the only errors arriving here are
@@ -1107,14 +1101,9 @@ export class ModesProcessor extends ComponentBase {
 				// namespace instead of becoming it). The build's own root level is already excluded by
 				// !isRoot, exactly as in the initial build.
 				if (!isRoot && moduleName === categoryName) {
-					// In tests, moduleName===categoryName always satisfies the single-key-no-default condition; the FALSE arm is unreachable.
-					/* v8 ignore start */
 					if (moduleKeys.length === 1 && moduleKeys[0] === moduleName && !analysis.hasDefault) {
-						/* v8 ignore stop */
 						// Case 1: export const folder = {...} - wrap and use as category
 						const exportedValue = mod[moduleName];
-						// exportedValue is always a non-null object in test fixtures; the FALSE branch is unreachable.
-						/* v8 ignore next */
 						if (typeof exportedValue === "object" && exportedValue !== null) {
 							if (this.slothlet.config.debug?.modes && categoryName === "string") {
 								this.slothlet.debug("modes", {
@@ -1128,7 +1117,7 @@ export class ModesProcessor extends ComponentBase {
 							}
 							// CRITICAL: Wrap the object so all its functions get context wrapping
 							// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-							/* v8 ignore next */
+							/* v8 ignore else */
 							if (shouldWrap) {
 								// An array node serves its members through its array, so when sibling files will attach, the
 								// array gets a layer to hold them beside its elements, as a self-named array default does; the
@@ -1154,8 +1143,8 @@ export class ModesProcessor extends ComponentBase {
 								// semantics.
 								const modes_case1Existing = api[categoryName];
 								const modes_case1ExistingW = resolveWrapper(modes_case1Existing);
-								/* v8 ignore next 2 */
 								const modes_case1CollisionMode =
+									/* v8 ignore next */
 									collisionModeOverride ||
 									(collisionContext === "initial"
 										? this.slothlet.config.api.collision.mode.initial
@@ -1196,7 +1185,7 @@ export class ModesProcessor extends ComponentBase {
 							for (let ofIndex = 0, ofList = Objects.keys(exportedValue); ofIndex < ofList.length; ofIndex++) {
 								const key = ofList[ofIndex];
 								// ownership handler is always registered in test configurations; FALSE branch is unreachable.
-								/* v8 ignore next */
+								/* v8 ignore else */
 								if (this.slothlet.handlers.ownership) {
 									this.slothlet.handlers.ownership.register({
 										// moduleID is always provided; || file.moduleID fallback is unreachable.
@@ -1211,22 +1200,17 @@ export class ModesProcessor extends ComponentBase {
 							}
 							continue;
 						}
-						// analysis.hasDefault is not always true in this code path; FALSE arm (neither single-named-export nor has-default) is unreachable in test fixtures.
-						/* v8 ignore start */
 					} else if (analysis.hasDefault) {
-						/* v8 ignore stop */
 						// Case 2: folder/folder.mjs with default export
 						// Make the category callable by replacing it with wrapped function
 						// But DON'T continue - allow other files to attach properties later
 						// Example: logger/logger.mjs (default function) + logger/utils.mjs (named exports)
 						// Result: api.logger() callable + api.logger.utils.* from other files
 						// moduleKeys always has items in this code path; the Object.keys fallback is unreachable.
-						/* v8 ignore next */
-						const namedKeys = moduleKeys.length > 0 ? moduleKeys : filterList(Objects.keys(mod), (key) => key !== "default");
-						// mod.default is always a function in this code path; the moduleContent fallback is unreachable.
+						const namedKeys =
+							moduleKeys.length > 0 ? moduleKeys : /* v8 ignore next */ filterList(Objects.keys(mod), (key) => key !== "default");
 						// Members are put on a callable layer over the module's function, never on the function
 						// itself: the layer the module's named exports were composed onto, or a fresh one (#585 review).
-						/* v8 ignore start */
 						// A non-function default gets the same treatment when sibling files will attach to it: a plain
 						// object is copied, and a class instance, built-in or array gets a layer, so the siblings are held
 						// beside the value instead of written onto the module's own.
@@ -1242,23 +1226,17 @@ export class ModesProcessor extends ComponentBase {
 											{ default: moduleContent }
 										: copyForComposition(moduleContent, { addsMembers: true })
 									: moduleContent;
-						/* v8 ignore stop */
 						// Attach named exports to the module (function or object)
 						if (namedKeys.length > 0) {
 							for (let ofIndex = 0, ofList = namedKeys; ofIndex < ofList.length; ofIndex++) {
 								const key = ofList[ofIndex];
 								// Skip if already in moduleContent (from earlier CJS default object handling)
-								// All namedKeys are already in callableModule at this point; this guard's false arm is unreachable.
-								/* v8 ignore next */
 								if (key in callableModule) {
 									continue;
 								}
-								// All namedKeys reaching here are already in callableModule (L344's `continue` always fires first).
-								/* v8 ignore start */
 								if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], callableModule, mod.default)) {
 									continue;
 								}
-								/* v8 ignore stop */
 								// Unreachable in practice: any key that passes shouldAttachNamedExport=true was
 								// already attached to mod.default by processModuleForAPI's hybrid loop above,
 								// so it is always already in callableModule (caught by the earlier `continue`).
@@ -1288,8 +1266,8 @@ export class ModesProcessor extends ComponentBase {
 						// have discarded (#372/#373 review). The || fallback mirrors the lazy collision
 						// path's: normalizeCollision always supplies both initial and api values, so the
 						// fallback guards a hand-built config only.
-						/* v8 ignore next 2 */
 						const modes_eagerCollisionMode =
+							/* v8 ignore next */
 							collisionModeOverride ||
 							(collisionContext === "initial"
 								? this.slothlet.config.api.collision.mode.initial
@@ -1361,7 +1339,7 @@ export class ModesProcessor extends ComponentBase {
 						}
 						moduleContent = callableModule;
 						// shouldWrap is always true in tests (effectiveMode=lazy only with populateDirectly=true, and populateDirectly=true never uses lazy mode).
-						/* v8 ignore next */
+						/* v8 ignore else */
 						if (shouldWrap) {
 							const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 								mode: effectiveMode,
@@ -1390,10 +1368,8 @@ export class ModesProcessor extends ComponentBase {
 							//   L1115 (lazy transparent folder) — hardcodes mode="eager"
 							//   L1469 (lazy materializer) — hardcodes mode="eager"
 							// So effectiveMode can never be "lazy" when populateDirectly is true.
-							/* v8 ignore start */
 							api[categoryName] = moduleContent;
 							targetApi = api[categoryName];
-							/* v8 ignore stop */
 						}
 						// Only process named exports separately if the default was a function
 						// (For object defaults, named exports are already in callableModule)
@@ -1418,14 +1394,13 @@ export class ModesProcessor extends ComponentBase {
 									continue;
 								}
 								// moduleID always provided; fallback unreachable.
-								/* v8 ignore next */
-								const modes_namedModuleID = moduleID || file.moduleID;
+								const modes_namedModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 								const modes_namedAssigned = await this.#assignWithRoutineRevert(
 									modes_namedApiPath,
 									modes_namedModuleID,
 									(registerWrapper) => {
 										// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-										/* v8 ignore next */
+										/* v8 ignore else */
 										if (shouldWrap) {
 											const namedWrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 												mode: effectiveMode,
@@ -1456,10 +1431,9 @@ export class ModesProcessor extends ComponentBase {
 										/* v8 ignore stop */
 									}
 								);
-								// ownership handler is always registered when enabled; IF FALSE unreachable. Gated on
+								// ownership handler is always registered. Gated on
 								// modes_namedAssigned so a skip/warn-rejected assignment isn't recorded as owned
 								// (#366 review — see #373).
-								/* v8 ignore next */
 								if (modes_namedAssigned && this.slothlet.handlers.ownership) {
 									this.slothlet.handlers.ownership.register({
 										// moduleID always provided; fallback unreachable.
@@ -1477,7 +1451,7 @@ export class ModesProcessor extends ComponentBase {
 						// assignToApiPath's collision detection, so there is no rejection case to gate
 						// this specific registration on.
 						// ownership handler is always registered; IF FALSE is unreachable.
-						/* v8 ignore next */
+						/* v8 ignore else */
 						if (this.slothlet.handlers.ownership) {
 							this.slothlet.handlers.ownership.register({
 								// moduleID always provided; fallback unreachable.
@@ -1491,8 +1465,6 @@ export class ModesProcessor extends ComponentBase {
 						}
 						// Continue for this module; other files in the folder still process in later iterations
 						continue;
-						// moduleKeys is always empty in this code path; the named-exports else-if is unreachable in tests.
-						/* v8 ignore start */
 					} else if (moduleKeys.length > 0) {
 						// Case 3: Multiple named exports - flatten to category level (Rule 6 - F01)
 						// Example: util/util.mjs with exports { size, secondFunc } → api.util.size(), api.util.secondFunc()
@@ -1513,14 +1485,13 @@ export class ModesProcessor extends ComponentBase {
 									propValue = ofEntry[1];
 								const modes_hybridApiPath = memberPath(propKey, file.path);
 								// moduleID always provided; fallback unreachable.
-								/* v8 ignore next */
-								const modes_hybridModuleID = moduleID || file.moduleID;
+								const modes_hybridModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 								const modes_hybridAssigned = await this.#assignWithRoutineRevert(
 									modes_hybridApiPath,
 									modes_hybridModuleID,
 									(registerWrapper) => {
 										// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-										/* v8 ignore next */
+										/* v8 ignore else */
 										if (shouldWrap) {
 											const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 												mode: effectiveMode,
@@ -1546,10 +1517,9 @@ export class ModesProcessor extends ComponentBase {
 										});
 									}
 								);
-								// ownership handler is always registered when enabled; IF FALSE unreachable. Gated
+								// ownership handler is always registered. Gated
 								// on modes_hybridAssigned so a skip/warn-rejected assignment isn't recorded as
 								// owned (#366 review — see #373).
-								/* v8 ignore next */
 								if (modes_hybridAssigned && this.slothlet.handlers.ownership) {
 									this.slothlet.handlers.ownership.register({
 										moduleID: modes_hybridModuleID,
@@ -1566,14 +1536,13 @@ export class ModesProcessor extends ComponentBase {
 								if (key !== moduleName) {
 									const modes_hybridOtherApiPath = memberPath(key, file.path);
 									// moduleID always provided; fallback unreachable.
-									/* v8 ignore next */
-									const modes_hybridOtherModuleID = moduleID || file.moduleID;
+									const modes_hybridOtherModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 									const modes_hybridOtherAssigned = await this.#assignWithRoutineRevert(
 										modes_hybridOtherApiPath,
 										modes_hybridOtherModuleID,
 										(registerWrapper) => {
 											// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-											/* v8 ignore next */
+											/* v8 ignore else */
 											if (shouldWrap) {
 												const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 													mode: effectiveMode,
@@ -1599,10 +1568,9 @@ export class ModesProcessor extends ComponentBase {
 											});
 										}
 									);
-									// ownership handler is always registered when enabled; IF FALSE unreachable. Gated
+									// ownership handler is always registered. Gated
 									// on modes_hybridOtherAssigned so a skip/warn-rejected assignment isn't recorded
 									// as owned (#366 review — see #373).
-									/* v8 ignore next */
 									if (modes_hybridOtherAssigned && this.slothlet.handlers.ownership) {
 										this.slothlet.handlers.ownership.register({
 											moduleID: modes_hybridOtherModuleID,
@@ -1639,14 +1607,13 @@ export class ModesProcessor extends ComponentBase {
 								}
 								const modes_multiApiPath = memberPath(key, file.path);
 								// moduleID always provided; fallback unreachable.
-								/* v8 ignore next */
-								const modes_multiModuleID = moduleID || file.moduleID;
+								const modes_multiModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 								const modes_multiAssigned = await this.#assignWithRoutineRevert(
 									modes_multiApiPath,
 									modes_multiModuleID,
 									async (registerWrapper) => {
 										// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-										/* v8 ignore next */
+										/* v8 ignore else */
 										if (shouldWrap) {
 											const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 												mode: effectiveMode,
@@ -1688,10 +1655,9 @@ export class ModesProcessor extends ComponentBase {
 										});
 									}
 								);
-								// ownership handler is always registered when enabled; IF FALSE unreachable. Gated
+								// ownership handler is always registered. Gated
 								// on modes_multiAssigned so a skip/warn-rejected assignment isn't recorded as
 								// owned (#366 review — see #373).
-								/* v8 ignore next */
 								if (modes_multiAssigned && this.slothlet.handlers.ownership) {
 									this.slothlet.handlers.ownership.register({
 										moduleID: modes_multiModuleID,
@@ -1705,7 +1671,6 @@ export class ModesProcessor extends ComponentBase {
 						}
 						continue;
 					}
-					/* v8 ignore stop */
 				}
 				// Regular files with only named exports (no default) - expose each export directly
 				// Example: get-http-status.mjs with export { getHTTPStatus } → api.util.getHTTPStatus()
@@ -1726,14 +1691,13 @@ export class ModesProcessor extends ComponentBase {
 							const preferredName = key;
 							const modes_preferredApiPath = memberPath(preferredName, file.path);
 							// moduleID always provided; fallback unreachable.
-							/* v8 ignore next */
-							const modes_preferredModuleID = moduleID || file.moduleID;
+							const modes_preferredModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 							const modes_preferredAssigned = await this.#assignWithRoutineRevert(
 								modes_preferredApiPath,
 								modes_preferredModuleID,
 								(registerWrapper) => {
 									// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-									/* v8 ignore next */
+									/* v8 ignore else */
 									if (shouldWrap) {
 										const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 											mode: effectiveMode,
@@ -1759,10 +1723,9 @@ export class ModesProcessor extends ComponentBase {
 									});
 								}
 							);
-							// ownership handler is always registered when enabled; IF FALSE unreachable. Gated on
+							// ownership handler is always registered. Gated on
 							// modes_preferredAssigned so a skip/warn-rejected assignment isn't recorded as
 							// owned (#366 review — see #373).
-							/* v8 ignore next */
 							if (modes_preferredAssigned && this.slothlet.handlers.ownership) {
 								this.slothlet.handlers.ownership.register({
 									moduleID: modes_preferredModuleID,
@@ -1796,8 +1759,7 @@ export class ModesProcessor extends ComponentBase {
 						// The member is assigned on this directory's own level, under its own name.
 						const modes_hoistedApiPath = memberPath(key, file.path);
 						// moduleID always provided; fallback unreachable.
-						/* v8 ignore next */
-						const modes_hoistedModuleID = moduleID || file.moduleID;
+						const modes_hoistedModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 						const modes_hoistedOneAssigned = await this.#assignWithRoutineRevert(
 							modes_hoistedApiPath,
 							modes_hoistedModuleID,
@@ -1832,7 +1794,7 @@ export class ModesProcessor extends ComponentBase {
 
 					// Register ownership for each hoisted property
 					// ownership handler is always registered when enabled; IF FALSE unreachable.
-					/* v8 ignore next */
+					/* v8 ignore else */
 					if (this.slothlet.handlers.ownership) {
 						for (let ofIndex = 0, ofList = Objects.keys(moduleContent); ofIndex < ofList.length; ofIndex++) {
 							const key = ofList[ofIndex];
@@ -1891,8 +1853,7 @@ export class ModesProcessor extends ComponentBase {
 							const value = member.accessor ? moduleContent[key] : member.value;
 							const modes_addapiApiPath = memberPath(key, file.path);
 							// moduleID always provided; fallback unreachable.
-							/* v8 ignore next */
-							const modes_addapiModuleID = moduleID || file.moduleID;
+							const modes_addapiModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 							const modes_addapiOneAssigned = await this.#assignWithRoutineRevert(
 								modes_addapiApiPath,
 								modes_addapiModuleID,
@@ -1927,7 +1888,7 @@ export class ModesProcessor extends ComponentBase {
 
 						// Register ownership for each merged property
 						// ownership handler is always registered when enabled; IF FALSE unreachable.
-						/* v8 ignore next */
+						/* v8 ignore else */
 						if (this.slothlet.handlers.ownership) {
 							for (let ofIndex = 0, ofList = Objects.keys(modes_addapiMembers); ofIndex < ofList.length; ofIndex++) {
 								const key = ofList[ofIndex];
@@ -1951,14 +1912,13 @@ export class ModesProcessor extends ComponentBase {
 						// is the mount's last segment, which Rule 13 hoists onto the mount itself (#243).
 						const modes_categoryApiPath = memberPath(effectiveCategoryName, file.path);
 						// moduleID always provided; fallback unreachable.
-						/* v8 ignore next */
-						const modes_categoryModuleID = moduleID || file.moduleID;
+						const modes_categoryModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 						const modes_categoryAssigned = await this.#assignWithRoutineRevert(
 							modes_categoryApiPath,
 							modes_categoryModuleID,
 							(registerWrapper) => {
 								// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-								/* v8 ignore next */
+								/* v8 ignore else */
 								if (shouldWrap) {
 									const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 										mode: effectiveMode,
@@ -1994,7 +1954,6 @@ export class ModesProcessor extends ComponentBase {
 						// Register ownership. Gated on modes_categoryAssigned so a skip/warn-rejected
 						// assignment isn't recorded as owned (#366 review — see #373).
 						// ownership handler is always registered when enabled; IF FALSE unreachable.
-						/* v8 ignore next */
 						if (modes_categoryAssigned && this.slothlet.handlers.ownership) {
 							const apiPath = modes_categoryApiPath;
 							this.slothlet.handlers.ownership.register({
@@ -2015,14 +1974,13 @@ export class ModesProcessor extends ComponentBase {
 				// Wrap in UnifiedWrapper
 				const modes_propertyApiPath = memberPath(propertyName, file.path);
 				// moduleID always provided; fallback unreachable.
-				/* v8 ignore next */
-				const modes_propertyModuleID = moduleID || file.moduleID;
+				const modes_propertyModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 				const modes_propertyAssigned = await this.#assignWithRoutineRevert(
 					modes_propertyApiPath,
 					modes_propertyModuleID,
 					(registerWrapper) => {
 						// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-						/* v8 ignore next */
+						/* v8 ignore else */
 						if (shouldWrap) {
 							const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 								mode: effectiveMode,
@@ -2039,8 +1997,6 @@ export class ModesProcessor extends ComponentBase {
 								key: "DEBUG_MODE_FILE_WRAPPER_ASSIGNMENT",
 								propertyName,
 								apiPath: modes_propertyApiPath,
-								// Debug-only property; inner ternary arms ("wrapper"/"value") unreachable in tests.
-								/* v8 ignore next */
 								overwriting: propertyName in targetApi ? (resolveWrapper(targetApi[propertyName]) ? "wrapper" : "value") : "nothing"
 							});
 							return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
@@ -2068,10 +2024,9 @@ export class ModesProcessor extends ComponentBase {
 						implHasProperty: !!resolveWrapper(targetApi)?.____slothletInternal.impl?.utils
 					});
 				}
-				// ownership handler is always registered when enabled; IF FALSE unreachable. Gated on
+				// ownership handler is always registered. Gated on
 				// modes_propertyAssigned so a skip/warn-rejected assignment isn't recorded as owned
 				// (#366 review — see #373).
-				/* v8 ignore next */
 				if (modes_propertyAssigned && this.slothlet.handlers.ownership) {
 					// Mirror the wrapper's apiPath (line ~935): fold in apiPathPrefix so a
 					// deep `api.add("a.b.c", folder)` registers ownership at the full mount
@@ -2246,8 +2201,6 @@ export class ModesProcessor extends ComponentBase {
 											: this.slothlet.processors.flatten.composeFunctionDefault(exports.default);
 									if (moduleKeys.length > 0) {
 										// Add named exports to the default (function or object)
-										// implToWrap is always a function when this code path is reached in tests; the object else-if arm is unreachable.
-										/* v8 ignore start */
 										if (typeof implToWrap === "function") {
 											// Function default: attach named exports as properties. Prefer
 											// collisionModeOverride first — same priority as modes_effectiveCollisionMode
@@ -2256,15 +2209,15 @@ export class ModesProcessor extends ComponentBase {
 											// falling back to the instance's configured default (#372/#373 review).
 											const collisionConfig = this.slothlet.config.api.collision.mode;
 											// || "merge" fallback unreachable — collisionConfig always has an initial/api value.
-											/* v8 ignore next */
 											const collisionMode =
+												/* v8 ignore next */
 												collisionModeOverride ||
 												(collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) ||
 												"merge";
 											for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
 												const key = ofList[ofIndex];
 												// moduleKeys already excludes "default"; false branch unreachable.
-												/* v8 ignore next */
+												/* v8 ignore else */
 												if (key !== "default") {
 													const hasExisting = this.slothlet.processors.flatten.defaultHasMember(exports.default, key);
 													if (
@@ -2304,7 +2257,6 @@ export class ModesProcessor extends ComponentBase {
 												this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 											}
 										}
-										/* v8 ignore stop */
 									}
 								} else {
 									// Fallback - use the whole module
@@ -2335,32 +2287,28 @@ export class ModesProcessor extends ComponentBase {
 								// (#372/#373 review).
 								const modes_eagerCollisionConfig = this.slothlet.config.api.collision.mode;
 								// || "merge" fallback unreachable — collision config always provides an initial/api value.
-								/* v8 ignore next */
 								const modes_eagerCollisionMode =
+									/* v8 ignore next */
 									collisionModeOverride ||
 									(collisionContext === "initial" ? modes_eagerCollisionConfig?.initial : modes_eagerCollisionConfig?.api) ||
 									"merge";
 								const modes_existingAtKey = targetApi[subDirName];
 								if (modes_existingAtKey !== undefined && modes_eagerCollisionMode !== "replace" && modes_eagerCollisionMode !== "skip") {
 									const modes_existingWrapper = resolveWrapper(modes_existingAtKey);
-									// modes_existingAtKey is always a wrapper (never a plain value) here; IF FALSE unreachable.
-									/* v8 ignore next */
 									if (modes_existingWrapper) {
 										// This block only runs when recursive=true (eager mode). In eager mode,
 										// files are fully materialized before the subDir loop, so materializeFunc
 										// is never set on an eager wrapper. Guard kept as a future-proof fallback.
 										// Eager wrappers never have a pending materializeFunc; IF TRUE unreachable.
-										/* v8 ignore start */
+										/* v8 ignore if */
 										if (
+											/* v8 ignore next */
 											modes_existingWrapper.____slothletInternal?.materializeFunc &&
 											!modes_existingWrapper.____slothletInternal?.state?.materialized
 										) {
 											await modes_existingWrapper.___materialize();
 										}
-										/* v8 ignore stop */
 										// Ensure children are adopted from impl
-										// childrenAdopted is always false at this point; IF FALSE unreachable.
-										/* v8 ignore next */
 										if (
 											modes_existingWrapper.____slothletInternal?.impl &&
 											!modes_existingWrapper.____slothletInternal?.state?.childrenAdopted
@@ -2374,16 +2322,12 @@ export class ModesProcessor extends ComponentBase {
 											implToWrap = this.slothlet.processors.flatten.cloneDefault(implToWrap);
 										}
 										const modes_existingImpl = modes_existingWrapper.____impl;
-										// modes_existingImpl is always a non-null, non-array object here; IF FALSE unreachable.
-										/* v8 ignore next */
 										if (modes_existingImpl && typeof modes_existingImpl === "object" && !Arrays.isArray(modes_existingImpl)) {
 											if (typeof implToWrap === "object" && implToWrap !== null) {
 												for (let ofIndex = 0, ofList = Objects.keys(modes_existingImpl); ofIndex < ofList.length; ofIndex++) {
 													const k = ofList[ofIndex];
-													// Unreachable in practice: ___adoptImplChildren() pre-merges all
-													// existing impl keys into implToWrap before this loop runs, so
-													// every key from modes_existingImpl is already present in implToWrap.
-													/* v8 ignore next */
+													// ___adoptImplChildren adopts onto the wrapper, not onto implToWrap, so a key only the
+													// existing impl has is copied here.
 													if (!(k in implToWrap)) {
 														// Copied as described, not read: a getter adoption left on the impl stays a
 														// getter, and runs on the node it lands on (#585 review).
@@ -2394,10 +2338,7 @@ export class ModesProcessor extends ComponentBase {
 														});
 													}
 												}
-												// Unreachable in practice: implToWrap is derived from a module default export,
-												// which is always an object in every test fixture. The object-branch above fires
-												// first, so a function-typed implToWrap is never observed here.
-												/* v8 ignore start */
+												// A function default (a folder whose self-named file exports one) takes this arm.
 											} else if (typeof implToWrap === "function") {
 												for (let ofIndex = 0, ofList = Objects.entries(modes_existingImpl); ofIndex < ofList.length; ofIndex++) {
 													const ofEntry = ofList[ofIndex],
@@ -2408,7 +2349,6 @@ export class ModesProcessor extends ComponentBase {
 													}
 												}
 											}
-											/* v8 ignore stop */
 										}
 										// Also absorb any child properties from existing wrapper
 										const modes_existingChildKeys = filterList(Objects.keys(modes_existingWrapper), (k) => !isFrameworkReservedKey(k));
@@ -2433,12 +2373,9 @@ export class ModesProcessor extends ComponentBase {
 								}
 
 								// Flatten: put the module content directly at targetApi[subDirName]
-								// categoryName always set; ": subDirName" fallback unreachable.
-								/* v8 ignore next */
 								const modes_subDirApiPath = memberPath(subDirName, file.path);
 								// moduleID always provided; fallback unreachable.
-								/* v8 ignore next */
-								const modes_subDirModuleID = moduleID || file.moduleID;
+								const modes_subDirModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 								const modes_subDirAssigned = await this.#assignWithRoutineRevert(
 									modes_subDirApiPath,
 									modes_subDirModuleID,
@@ -2462,10 +2399,9 @@ export class ModesProcessor extends ComponentBase {
 										});
 									}
 								);
-								// ownership handler is always registered when enabled; IF FALSE unreachable. Gated
+								// ownership handler is always registered. Gated
 								// on modes_subDirAssigned so a skip/warn-rejected assignment isn't recorded as
 								// owned (#366 review — see #373).
-								/* v8 ignore next */
 								if (modes_subDirAssigned && this.slothlet.handlers.ownership) {
 									this.slothlet.handlers.ownership.register({
 										moduleID: modes_subDirModuleID,
@@ -2604,18 +2540,15 @@ export class ModesProcessor extends ComponentBase {
 					// The replace mode collision in api-assignment.mjs handles materialization.
 					const collisionConfig = this.slothlet.config.api?.collision?.mode;
 					// Third || arm ("replace") unreachable — collisionConfig always provides an initial/api value.
-					/* v8 ignore start */
 					const modes_initialCollisionMode =
+						/* v8 ignore next */
 						collisionModeOverride || (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "replace";
-					/* v8 ignore stop */
 					let modes_fileFolderImpl = null;
 					const modes_lazyExisting = targetApi[subDirName];
 					if (modes_initialCollisionMode !== "replace" && resolveWrapper(modes_lazyExisting)) {
 						const modes_lazyExistingW = resolveWrapper(modes_lazyExisting);
 						// Root files are processed eagerly even in lazy mode, so impl should exist
 						const existImpl = modes_lazyExistingW.____impl;
-						// existImpl is always a non-null, non-array object at this point; IF FALSE unreachable.
-						/* v8 ignore next */
 						if (existImpl && typeof existImpl === "object" && !Arrays.isArray(existImpl)) {
 							// Copied as described, not spread: a spread runs a getter adoption left on the impl and keeps
 							// what it returned; described, it stays a getter and runs on the folder's node (#585 review).
@@ -2638,10 +2571,7 @@ export class ModesProcessor extends ComponentBase {
 							// (even in lazy mode), so ____impl is always a non-null object by the time
 							// we reach this loop. The null-init guard is a defensive belt-and-suspenders
 							// safety net for future edge cases where impl may not yet exist.
-							/* v8 ignore next */
 							if (!modes_fileFolderImpl) modes_fileFolderImpl = {};
-							// modes_fileFolderImpl never contains ck at this point; IF FALSE unreachable.
-							/* v8 ignore next */
 							if (!(ck in modes_fileFolderImpl)) {
 								Objects.defineProperty(
 									modes_fileFolderImpl,
@@ -2758,13 +2688,11 @@ export class ModesProcessor extends ComponentBase {
 				}
 				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
-						// defaultFunc always has a name; "anonymous" fallback unreachable.
-						/* v8 ignore next */
 						message: await t("DEBUG_MODE_ROOT_CONTRIBUTOR", { mode, functionName: defaultFunc.name || "anonymous" })
 					});
 				}
 				// ownership handler is always registered when enabled; IF FALSE unreachable.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (this.slothlet.handlers.ownership) {
 					this.slothlet.handlers.ownership.register({
 						// moduleID always provided; fallback unreachable.
@@ -2798,12 +2726,11 @@ export class ModesProcessor extends ComponentBase {
 					const { moduleName, file, defaultFunc } = ofList[ofIndex];
 					const modes_rootApiPath = memberPath(moduleName, file.path);
 					// moduleID always provided; fallback unreachable.
-					/* v8 ignore next */
-					const modes_rootModuleID = moduleID || file.moduleID;
+					const modes_rootModuleID = /* v8 ignore next */ moduleID || file.moduleID;
 					const modes_rootAssigned = await this.#assignWithRoutineRevert(modes_rootApiPath, modes_rootModuleID, (registerWrapper) => {
 						// Wrap in UnifiedWrapper if needed
 						// shouldWrap=false requires populateDirectly=true + lazy mode (never in tests); IF FALSE unreachable.
-						/* v8 ignore next */
+						/* v8 ignore else */
 						if (shouldWrap) {
 							const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 								mode: effectiveMode,
@@ -2833,10 +2760,9 @@ export class ModesProcessor extends ComponentBase {
 							collisionModeOverride: modes_effectiveCollisionMode
 						});
 					});
-					// ownership handler is always registered when enabled; IF FALSE unreachable. Gated on
+					// ownership handler is always registered. Gated on
 					// modes_rootAssigned so a skip/warn-rejected assignment isn't recorded as owned (#366
 					// review — see #373).
-					/* v8 ignore next */
 					if (modes_rootAssigned && this.slothlet.handlers.ownership) {
 						this.slothlet.handlers.ownership.register({
 							moduleID: modes_rootModuleID,
@@ -2916,11 +2842,9 @@ export class ModesProcessor extends ComponentBase {
 			// If parent sourceFolder exists, append this directory name
 			// Otherwise use config dir as base
 			// sourceFolder is always provided by callers; config?.base fallback unreachable.
-			/* v8 ignore start */
 			const actualSourceFolder = sourceFolder
 				? regExpReplace(/\\/g, `${sourceFolder}/${dir.sourceName ?? dir.name}`, "/")
-				: regExpReplace(/\\/g, `${this.slothlet.config?.base}/${dir.sourceName ?? dir.name}`, "/");
-			/* v8 ignore stop */
+				: /* v8 ignore next */ regExpReplace(/\\/g, `${this.slothlet.config?.base}/${dir.sourceName ?? dir.name}`, "/");
 
 			// Compute parent API path prefix - strip the last segment (which is this directory)
 			// e.g., if this wrapper is 'lookup.config', and we're materializing 'config' directory,
@@ -2928,8 +2852,7 @@ export class ModesProcessor extends ComponentBase {
 			// So we strip the last segment: 'lookup.config' → 'lookup'
 			const parentPrefix = StringMethods.includes(apiPath, ".") ? ArrayMethods.join(copyList(splitText(apiPath, "."), 0, -1), ".") : "";
 			// dir.children.directories is always populated for test fixtures; the || [] fallback branch is never taken.
-			/* v8 ignore next */
-			const subDirs = dir.children.directories || [];
+			const subDirs = /* v8 ignore next */ dir.children.directories || [];
 			if (dir.children.files.length === 1 && subDirs.length === 0) {
 				const file = dir.children.files[0];
 				// A folder's only file named `addapi` is its self-named file (Rule 11 with F01; see processFiles).
@@ -3016,8 +2939,6 @@ export class ModesProcessor extends ComponentBase {
 
 							// Hybrid pattern: default (function OR object) + named exports
 							// Attach named exports as properties
-							// No test fixture combines a default export with additional named exports to trigger this path.
-							/* v8 ignore start */
 							if (moduleKeys.length > 0 && (typeof implToWrap === "function" || (typeof implToWrap === "object" && implToWrap !== null))) {
 								// Use the wrapper's own effective mode (createLazySubdirectoryWrapper's
 								// `collisionMode` param, already override-or-config-resolved by its caller)
@@ -3027,11 +2948,7 @@ export class ModesProcessor extends ComponentBase {
 								// not necessarily collision.initial (PR #366 review).
 								for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
 									const key = ofList[ofIndex];
-									// Unreachable in practice: shouldAttachNamedExport always returns true
-									// for every key in every test fixture (exported keys are never "default"
-									// and always pass the filter). The guard exists so users can block
-									// specific named exports in future without changing this loop.
-									/* v8 ignore next */
+									// A named export that is the default itself (`export { fn as alias }`) is not attached again.
 									if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, exports[key], implToWrap, exports.default)) {
 										continue;
 									}
@@ -3041,7 +2958,6 @@ export class ModesProcessor extends ComponentBase {
 									this.slothlet.processors.flatten.assignNamedExport(implToWrap, key, exports[key]);
 								}
 							}
-							/* v8 ignore stop */
 						} else {
 							implToWrap = modContent;
 						}
@@ -3138,8 +3054,6 @@ export class ModesProcessor extends ComponentBase {
 						} else if (fileFolderCollisionImpl && typeof implToWrap === "function") {
 							for (let ofIndex = 0, ofList = Objects.keys(fileFolderCollisionImpl); ofIndex < ofList.length; ofIndex++) {
 								const k = ofList[ofIndex];
-								// Function impl never pre-sets the same keys as fileFolderCollisionImpl; false branch unreachable.
-								/* v8 ignore next */
 								if (implToWrap[k] === undefined) {
 									Objects.defineProperty(implToWrap, k, {
 										__proto__: null,
@@ -3197,8 +3111,6 @@ export class ModesProcessor extends ComponentBase {
 					const ofEntry = ofList[ofIndex],
 						k = ofEntry[0],
 						v = ofEntry[1];
-					// Collision impl keys never overlap with already-materialized keys in tests; false branch unreachable.
-					/* v8 ignore next */
 					if (!(k in materialized)) {
 						materialized[k] = v;
 					}
@@ -3250,8 +3162,7 @@ export class ModesProcessor extends ComponentBase {
 				// processFiles wraps every composed module, so a non-wrapper category value would need a
 				// raw-content path none of this materializer's call-sites produce; degrade to no-unwrap
 				// rather than throwing on one.
-				/* v8 ignore next */
-				const extractedImpl = mainValueW ? unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(mainValueW) : null;
+				const extractedImpl = mainValueW ? unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(mainValueW) : /* v8 ignore next */ null;
 				const lazy_fromComposed = this.#fromComposedModule(materialized[categoryName], mainValueW, extractedImpl);
 				if (lazy_fromComposed !== null) {
 					mainValue = lazy_fromComposed;
@@ -3334,7 +3245,7 @@ export class ModesProcessor extends ComponentBase {
 				// The else path is a defensive fallback for the theoretical case where materialized
 				// contains an explicit null/undefined entry — never produced by processFiles.
 				// nestedValue is always a valid lazy wrapper here (never null/undefined from processFiles).
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (nestedValue && resolveWrapper(nestedValue) !== null) {
 					const attachedKeys = filterList(Objects.keys(nestedValue), (key) => key !== "____slothletInternal");
 					// Members named like a function's own built-in properties (`name`, `length`, `prototype`) are
@@ -3399,20 +3310,15 @@ export class ModesProcessor extends ComponentBase {
 						this.#refuseThenableValue(composed, apiPath);
 						return composed;
 					}
-					// Lazy wrappers have no visible child keys at this point; true arm never reached in tests.
-					/* v8 ignore start */
 					if (attachedKeys.length > 0) {
 						return nestedValue;
 					}
-					/* v8 ignore stop */
 					return nestedValue.____impl ?? nestedValue;
 					// nestedValue is always a valid lazy wrapper here; the else branch (null/undefined)
 					// is a defensive fallback never produced by processFiles.
-					/* v8 ignore start */
 				} else {
 					return nestedValue;
 				}
-				/* v8 ignore stop */
 			}
 			// POC pattern: return the materialized implementation
 			return this.#refuseThenableValue(materialized, apiPath);
@@ -3431,7 +3337,7 @@ export class ModesProcessor extends ComponentBase {
 		// Set collision mode from parent (api.add config or parent wrapper's collision mode)
 		// collisionMode is always provided by the parent buildAPI call; a falsy value would
 		// only occur if invoked directly without a config, which never happens in production.
-		/* v8 ignore next */
+		/* v8 ignore else */
 		if (collisionMode) {
 			wrapper.____slothletInternal.state.collisionMode = collisionMode;
 		}
@@ -3453,7 +3359,7 @@ export class ModesProcessor extends ComponentBase {
 					v = ofEntry[1];
 				// Module export keys are always strings and never a framework-reserved name (the loader refuses
 				// one); false branch unreachable. A member named with a leading underscore is the module's own.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (typeof k === "string" && !isFrameworkReservedKey(k)) {
 					Objects.defineProperty(wrapper, k, { __proto__: null, value: v, writable: false, enumerable: true, configurable: true });
 				}

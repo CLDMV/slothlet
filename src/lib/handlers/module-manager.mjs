@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T01:47:44-08:00 (1795600064)
+ *	@Last modified time: 2026-11-25T11:44:33-08:00 (1795635873)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -813,7 +813,7 @@ function pickHighestSemver(versions) {
 	// (`#buildVersionConfigs`) gates with `if (group.length < 2) continue` before
 	// invoking, so this guard is unreachable from inside slothlet today. Kept for
 	// safety so the function remains self-contained for future callers.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (versions.length === 1) return versions[0];
 	const segs = (v) =>
 		mapList(regExpSplit(/[.\-+]/, String(v)), (p) => {

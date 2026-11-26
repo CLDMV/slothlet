@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T10:51:28-08:00 (1795632688)
+ *	@Last modified time: 2026-11-25T11:44:41-08:00 (1795635881)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2497,10 +2497,11 @@ async function viteCapabilityRefusal(importer) {
 		refusal.context.reasonCode = "unattributed";
 		return refusal;
 	} catch {
-		/* v8 ignore next 4 -- slothlet's errors are loadable wherever the plugin runs; the code alone otherwise. */
+		/* v8 ignore start -- slothlet's errors are loadable wherever the plugin runs; the code alone otherwise. */
 		const error = new PristineError(`PERMISSION_CAPABILITY_REFUSED: imports (import) ${importer}`);
 		error.code = "PERMISSION_CAPABILITY_REFUSED";
 		return error;
+		/* v8 ignore stop */
 	}
 }
 

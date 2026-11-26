@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:37:26-08:00 (1795297046)
+ *	@Last modified time: 2026-11-25T11:44:39-08:00 (1795635879)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -214,7 +214,6 @@ function runtime_patchHandlerAccessor(proto, propName) {
 		// a listener: the platform's own listener behind the property (Node registers one through `addEventListener`)
 		// is registered as it is, and serves whichever handler the property holds then. Made only while an instance on the
 		// async runtime is up, the one runtime with a store to carry: null on the live runtime alone, and in a browser.
-		/* v8 ignore next */
 		const resource = AsyncResource && anyAsyncInstance() ? new AsyncResource("slothlet-event-handler") : null;
 		const pinned = pinToCurrentCaller(value);
 		const wrapper =
