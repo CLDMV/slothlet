@@ -198,8 +198,7 @@ export class RoutineManager extends ComponentBase {
 		// (the built-in defaults, or `[]` when explicitly disabled) on every instance, and config is
 		// always present when the RoutineManager runs — so neither the `config?.` nor the `?? []` arm
 		// is ever taken.
-		/* v8 ignore next */
-		return this.slothlet.config?.routines?.entries ?? [];
+		return /* v8 ignore next */ this.slothlet.config?.routines?.entries ?? [];
 	}
 
 	/**
@@ -317,7 +316,7 @@ export class RoutineManager extends ComponentBase {
 		// src/slothlet.mjs, which carries the same "ownership is always auto-registered via
 		// slothletProperty; false arm unreachable" note on its own `if (this.handlers.ownership)`
 		// guards) — so `!ownership` never holds here.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!ownership) return true;
 		const owner = ownership.getCurrentOwner(entry.apiPath);
 		if (!owner) return true;
@@ -361,7 +360,7 @@ export class RoutineManager extends ComponentBase {
 		// only calls this AFTER its own `#findRoutine(name)` already succeeded, and rebuildStacks()
 		// calls it with `routine.name` while iterating `this.#routines` — so #findRoutine here never
 		// returns undefined.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!routine) return [];
 		return this.#applyStackFilter(filterList(this.raw, (entry) => this.#matches(routine, entry)));
 	}
@@ -489,8 +488,7 @@ export class RoutineManager extends ComponentBase {
 				// undefined on error rather than rejecting, and its own #applyStackFilter reads and every
 				// property write are individually try/caught, so the method never rejects — this .catch()
 				// defends a would-be unexpected rejection that no code path actually produces.
-				/* v8 ignore next */
-				PromiseMethods.catch(this.#reactivelyPatchStack(entry), () => {});
+				PromiseMethods.catch(this.#reactivelyPatchStack(entry), /* v8 ignore next */ () => {});
 			},
 			undefined,
 			this.clock
@@ -1139,7 +1137,6 @@ export class RoutineManager extends ComponentBase {
 					listPush(results, await contextManager.runInContext(instanceID, fn, receiver, args, wrapper, true));
 				} else {
 					// Pre-load / post-teardown: no live extent to enter, so apply directly as before.
-					/* v8 ignore next */
 					listPush(results, await Reflect.apply(fn, receiver, args));
 				}
 			} catch (error) {
@@ -1243,8 +1240,7 @@ export class RoutineManager extends ComponentBase {
 		// runPathFor selects a single (apiPath, moduleID) contributor and every `raw` mutator keeps at
 		// most one entry per that pair, so after the empty-guard `results` always has length 1 — the
 		// array-return arm is unreachable, kept only as a defensive fallback.
-		/* v8 ignore next */
-		return results.length === 1 ? results[0] : results;
+		return results.length === 1 ? results[0] : /* v8 ignore next */ results;
 	}
 
 	/**
@@ -1340,7 +1336,7 @@ export class RoutineManager extends ComponentBase {
 			// per-mount loop) never enumerates the framework's reserved keys at this top level —
 			// this defensive skip mirrors the inner `visit`'s identical guard (which DOES see wrapper
 			// internals as it recurses) but is never taken for a root node.
-			/* v8 ignore next */
+			/* v8 ignore if */
 			if (isFrameworkReservedKey(key)) continue;
 			await visit(root[key]);
 		}
@@ -1489,8 +1485,7 @@ export class RoutineManager extends ComponentBase {
 		const ownership = this.slothlet.handlers.ownership;
 		// Unreachable `: new Set()` arm — the ownership handler is always auto-registered (see
 		// #isCurrentOwner's note), so the ternary always takes the truthy branch.
-		/* v8 ignore next */
-		const endpoints = ownership ? setFrom(mapValuesToArray(ownership.moduleEndpoints)) : new Set();
+		const endpoints = ownership ? setFrom(mapValuesToArray(ownership.moduleEndpoints)) : /* v8 ignore next */ new Set();
 		if (bare || (!routine.recursive && !StringMethods.startsWith(routine.name, "!"))) {
 			// Every bounded shape (literal, `*`/`?`, `**`, `{}`) walks one `.`-segment at a time —
 			// #materializeGlobPath descends only as far as each segment actually requires. Brace

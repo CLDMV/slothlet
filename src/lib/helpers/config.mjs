@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:13:02-08:00 (1795486382)
+ *	@Last modified time: 2026-11-25T11:44:38-08:00 (1795635878)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -706,8 +706,7 @@ export class Config extends ComponentBase {
 		// module load. The false-arm of the ternary fires only in real browsers /
 		// workers / Electron renderers; the Node-only vitest runner cannot exercise
 		// it without stubbing the `process` global (which destabilizes vitest).
-		/* v8 ignore next */
-		return IS_NODE ? "node" : "browser";
+		return IS_NODE ? "node" : /* v8 ignore next */ "browser";
 	}
 
 	/**

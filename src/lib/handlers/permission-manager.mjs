@@ -845,8 +845,7 @@ export class PermissionManager extends ComponentBase {
 		const permConfig = slothlet.config?.permissions;
 		if (permConfig) {
 			// The "allow" fallback in || is uncovered when all tests supply policy explicitly.
-			/* v8 ignore next */
-			this.#defaultPolicy = permConfig.policy || "allow";
+			this.#defaultPolicy = /* v8 ignore next */ permConfig.policy || "allow";
 			// An absent mode is "on"; `true` and `false` are the boolean forms of "on" and "off".
 			const mode = permConfig.mode === undefined || permConfig.mode === true ? "on" : permConfig.mode === false ? "off" : permConfig.mode;
 			this.#enabled = mode === "on" || mode === "strict";
@@ -1137,8 +1136,11 @@ export class PermissionManager extends ComponentBase {
 		// Self-modification protection: a module cannot remove the rules registered on its behalf (its manifest's,
 		// an api.add's). A rule its own code added (the module layer, #625) is its to remove. The guarded rules are
 		// registered with an owner only internally, and their ids are not handed to the module.
-		/* v8 ignore start */
+		// The hints cover the throw and the owner test, whose last operands only a module removing its own manifest's
+		// rule would evaluate; the statement and its pass-through arm stay counted.
+		/* v8 ignore if */
 		if (
+			/* v8 ignore next */
 			entry.ownerModuleID &&
 			ArrayMethods.includes(runtime_moduleIDList(callerModuleID), entry.ownerModuleID) &&
 			entry.layer !== "module" &&
@@ -1149,7 +1151,6 @@ export class PermissionManager extends ComponentBase {
 				module: entry.ownerModuleID
 			});
 		}
-		/* v8 ignore stop */
 		MapMethods.delete(this.#rules, ruleId);
 		MapMethods.delete(this.#callRules, ruleId);
 		MapMethods.delete(this.#writeRules, ruleId);
@@ -1241,8 +1242,11 @@ export class PermissionManager extends ComponentBase {
 		// Self-modification protection, mirroring removeRule: a module cannot remove the event rules registered on its
 		// behalf (its manifest's). One its own code added (the module layer, #625) is its to remove. The guarded rules
 		// are registered with an owner only internally, and their ids are not handed to the module.
-		/* v8 ignore start */
+		// The hints cover the throw and the owner test, whose last operands only a module removing its own manifest's
+		// rule would evaluate; the statement and its pass-through arm stay counted.
+		/* v8 ignore if */
 		if (
+			/* v8 ignore next */
 			entry.ownerModuleID &&
 			ArrayMethods.includes(runtime_moduleIDList(callerModuleID), entry.ownerModuleID) &&
 			entry.layer !== "module" &&
@@ -1250,7 +1254,6 @@ export class PermissionManager extends ComponentBase {
 		) {
 			throw new this.SlothletError("PERMISSION_SELF_MODIFY", { id: ruleId, module: entry.ownerModuleID });
 		}
-		/* v8 ignore stop */
 		MapMethods.delete(this.#eventRules, ruleId);
 		this.#eventRulesEpoch = nextEpoch();
 		return true;
@@ -2181,7 +2184,7 @@ export class PermissionManager extends ComponentBase {
 		};
 		// Code the live runtime cannot attribute has no module to register for. Unreachable through the routes that
 		// call this: the framework's call gate refuses such code on `slothlet.*` before the rule is looked at.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!internal) refuse();
 		// A malformed rule is left to the rule validation, which refuses it.
 		if (typeof rule?.target !== "string") return { ownerModuleID: internal.moduleID, layer: "module", writer: module };

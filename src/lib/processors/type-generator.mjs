@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
+ *	@Last modified time: 2026-11-25T11:18:28-08:00 (1795634308)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,16 +24,19 @@ import * as nodePath from "path";
 import { SlothletError } from "#errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkReservedKey } from "#helpers/reserved-keys";
+import { docLinesFor } from "#processors/type-docs";
 import {
 	ArrayMethods,
 	Arrays,
 	Boolean,
+	concatLists,
 	copyList,
 	Date,
 	DateMethods,
 	filterList,
 	JSON,
 	listPush,
+	Map,
 	mapList,
 	Objects,
 	RegExpMethods,
@@ -71,9 +74,10 @@ const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
  * @param {object} options - Generation options
  * @param {string} options.output - Output file path for .d.ts
  * @param {string} options.interfaceName - Name of the interface to generate
- * @param {boolean} [options.includeDocumentation=true] - Include the per-member comments that explain an
- *   `unknown` member (a member with no module origin). Accepted for compatibility; the explanation is
- *   always emitted, since an unexplained `unknown` is a worse surprise than one extra comment line.
+ * @param {boolean} [options.includeDocumentation=true] - Copy each member's JSDoc from its originating export
+ *   (description, `@param`, `@returns`, `@deprecated`, `@example`) onto the generated member, so hovering
+ *   `api.x.y` or `self.x.y` shows the leaf's documentation. `false` leaves members without it. The comment that
+ *   explains an `unknown` member (one with no module origin) is emitted either way.
  * @param {boolean} [options.augmentRuntime=true] - Extend `SlothletSelf` from `@cldmv/slothlet/runtime`
  *   with the generated interface, so an imported `self` is typed as the api. Turn it off when several
  *   generated interfaces live in one TypeScript program and only one of them should type `self`.
@@ -110,12 +114,13 @@ export async function generateTypes(api, options) {
 	const context = {
 		ownership: findOwnership(api),
 		routineNames: findRoutineNames(api),
-		outputDir
+		outputDir,
+		docs: options.includeDocumentation !== false ? new Map() : null
 	};
 
 	// Describe the api, then render it.
 	const members = describeMembers(api, "", context, new Set());
-	const declaration = generateDeclaration(members, options, rootCallType(api, context));
+	const declaration = generateDeclaration(members, options, rootCallType(api, context), rootCallDocs(api, context));
 
 	// Ensure the output directory exists. mkdir with recursive:true is idempotent
 	// and never throws when the directory already exists, so no existsSync pre-check
@@ -143,6 +148,31 @@ function rootCallType(api, context) {
 	const instance = findInstance(api);
 	const filePath = instance ? runtime_rootFileOf(instance) : null;
 	return filePath ? originType({ filePath, exportPath: ["default"] }, context) : null;
+}
+
+/**
+ * The JSDoc of the api root's function (its root file's default export), when documentation is on.
+ * @param {*} api - The composed api.
+ * @param {object} context - Shared generation state (`ownership`, `docs`).
+ * @returns {string[]|null} The comment lines, or `null`.
+ * @private
+ */
+function rootCallDocs(api, context) {
+	if (!context.docs || typeof api !== "function" || !context.ownership) return null;
+	const instance = findInstance(api);
+	const filePath = instance ? runtime_rootFileOf(instance) : null;
+	return filePath ? docLinesFor({ filePath, exportPath: ["default"] }, context.docs) : null;
+}
+
+/**
+ * The JSDoc lines for a node's origin, when documentation is on.
+ * @param {object|null} origin - The node's ownership origin.
+ * @param {object} context - Shared generation state (`docs` is the per-run file cache, or `null` when off).
+ * @returns {string[]|null} The comment lines, or `null`.
+ * @private
+ */
+function nodeDocs(origin, context) {
+	return context.docs ? docLinesFor(origin, context.docs) : null;
 }
 
 /**
@@ -197,7 +227,7 @@ function findRoutineNames(api) {
  * @param {string} apiPath - Dotted path of `value` ("" at the root).
  * @param {object} context - Shared generation state (`ownership`, `routineNames`, `outputDir`).
  * @param {Set<*>} ancestors - Values on the current descent path (cycle guard).
- * @returns {Array<{key: string, type: string, comment: (string|null)}>} One entry per member.
+ * @returns {Array<{key: string, type: string, comment: (string|null), docs?: (string[]|null)}>} One entry per member.
  * @private
  */
 function describeMembers(value, apiPath, context, ancestors) {
@@ -230,7 +260,8 @@ function describeMembers(value, apiPath, context, ancestors) {
  * @param {string} apiPath - Dotted api path of the node.
  * @param {object} context - Shared generation state.
  * @param {Set<*>} ancestors - Cycle guard.
- * @returns {{type: string, comment: (string|null)}} The type, plus a comment when it needs one.
+ * @returns {{type: string, comment: (string|null), docs: (string[]|null)}} The type, plus a comment when it needs
+ *   one and the export's JSDoc lines when documentation is on.
  * @private
  */
 function describeNode(value, apiPath, context, ancestors) {
@@ -256,11 +287,12 @@ function describeNode(value, apiPath, context, ancestors) {
 	// the rest — members merged onto an export from elsewhere — are added to it.
 	const children = isComposite ? describeMembers(value, apiPath, context, ancestors) : [];
 	const extra = filterList(children, (child) => !isCoveredBy(origin, context.ownership.getOrigin(`${apiPath}.${child.key}`)));
+	const docs = nodeDocs(origin, context);
 	if (extra.length === 0) {
-		return { type: base, comment: null };
+		return { type: base, comment: null, docs };
 	}
 	if (typeof value === "function") {
-		return { type: `${base} & ${renderObject(extra, 1)}`, comment: null };
+		return { type: `${base} & ${renderObject(extra, 1)}`, comment: null, docs };
 	}
 	// A plain object export whose members were partly replaced or extended: drop the replaced keys from
 	// the export's type so the placed values win, rather than intersecting two conflicting types.
@@ -268,7 +300,7 @@ function describeNode(value, apiPath, context, ancestors) {
 		mapList(extra, (child) => JSON.stringify(child.key)),
 		" | "
 	);
-	return { type: `Omit<${base}, ${omitted}> & ${renderObject(extra, 1)}`, comment: null };
+	return { type: `Omit<${base}, ${omitted}> & ${renderObject(extra, 1)}`, comment: null, docs };
 }
 
 /**
@@ -312,7 +344,7 @@ function originType(origin, context) {
 	// TypeScript types `import("x.cjs")` itself as `module.exports` (its `["default"]` is not the same
 	// type under NodeNext or Bundler), so the leading `default` segment is dropped.
 	if (segments[0] === "default" && context.ownership.isCommonJSModule(origin.filePath)) {
-		segments = typeof segments === "string" ? StringMethods.slice(segments, 1) : copyList(segments, 1);
+		segments = copyList(segments, 1);
 	}
 	const access = ArrayMethods.join(
 		mapList(segments, (segment) => `[${JSON.stringify(segment)}]`),
@@ -342,7 +374,7 @@ function importSpecifier(filePath, outputDir) {
 
 /**
  * Render members as an object type literal.
- * @param {Array<{key: string, type: string, comment: (string|null)}>} members - Members to render.
+ * @param {Array<{key: string, type: string, comment: (string|null), docs?: (string[]|null)}>} members - Members to render.
  * @param {number} indent - Indentation depth of the members.
  * @returns {string} The object type (`{ ... }`).
  * @private
@@ -356,7 +388,7 @@ function renderObject(members, indent) {
 
 /**
  * Append rendered members to `lines`, nesting object types one level deeper.
- * @param {Array<{key: string, type: string, comment: (string|null)}>} members - Members to render.
+ * @param {Array<{key: string, type: string, comment: (string|null), docs?: (string[]|null)}>} members - Members to render.
  * @param {number} indent - Indentation depth.
  * @param {string[]} lines - Output lines.
  * @returns {void}
@@ -365,8 +397,9 @@ function renderObject(members, indent) {
 function renderMembers(members, indent, lines) {
 	const pad = StringMethods.repeat("\t", indent);
 	for (let ofIndex = 0, ofList = members; ofIndex < ofList.length; ofIndex++) {
-		const { key, type, comment } = ofList[ofIndex];
-		if (comment) listPush(lines, `${pad}/** ${comment} */`);
+		const { key, type, comment, docs } = ofList[ofIndex];
+		if (docs) renderDocBlock(docs, comment, pad, lines);
+		else if (comment) listPush(lines, `${pad}/** ${comment} */`);
 		const name = RegExpMethods.exec(IDENTIFIER, key) !== null ? key : JSON.stringify(key);
 		// Nested object literals were rendered at depth 1; re-indent them to this member's depth.
 		const reindented = ArrayMethods.join(splitText(type, "\n"), `\n${pad}`);
@@ -375,14 +408,37 @@ function renderMembers(members, indent, lines) {
 }
 
 /**
+ * Append a JSDoc block: the copied documentation lines, then the generator's own note when the member has one.
+ * @param {string[]} docs - Comment content lines (already escaped).
+ * @param {string|null} note - The generator's comment for the member, if any.
+ * @param {string} pad - Indentation.
+ * @param {string[]} lines - Output lines.
+ * @returns {void}
+ * @private
+ */
+function renderDocBlock(docs, note, pad, lines) {
+	const content = note ? concatLists(docs, ["", note]) : docs;
+	if (content.length === 1) {
+		listPush(lines, `${pad}/** ${content[0]} */`);
+		return;
+	}
+	listPush(lines, `${pad}/**`);
+	for (let lineIndex = 0; lineIndex < content.length; lineIndex++) {
+		listPush(lines, content[lineIndex] ? `${pad} * ${content[lineIndex]}` : `${pad} *`);
+	}
+	listPush(lines, `${pad} */`);
+}
+
+/**
  * Generate TypeScript declaration file content
- * @param {Array<{key: string, type: string, comment: (string|null)}>} members - Root members.
+ * @param {Array<{key: string, type: string, comment: (string|null), docs?: (string[]|null)}>} members - Root members.
  * @param {object} options - Generation options
  * @param {string|null} [rootCall=null] - The api root function's type, when the root is a function (#803).
+ * @param {string[]|null} [rootDocs=null] - The root function's JSDoc lines, when documentation is on.
  * @returns {string} Declaration file content
  * @private
  */
-function generateDeclaration(members, options, rootCall = null) {
+function generateDeclaration(members, options, rootCall = null, rootDocs = null) {
 	const interfaceName = options.interfaceName;
 	const augment = options.augmentRuntime !== false;
 	const lines = [];
@@ -403,7 +459,9 @@ function generateDeclaration(members, options, rootCall = null) {
 	// from the function's own type; the call signature is inherited by `SlothletSelf` below.
 	if (rootCall) {
 		const fn = `Extract<${rootCall}, (...args: any[]) => any>`;
-		listPush(lines, `\t/** The api root's own function (\`api()\`, and \`self()\` in a leaf). */`);
+		const note = "The api root's own function (`api()`, and `self()` in a leaf).";
+		if (rootDocs) renderDocBlock(rootDocs, note, "\t", lines);
+		else listPush(lines, `\t/** ${note} */`);
 		listPush(lines, `\t(...args: Parameters<${fn}>): ReturnType<${fn}>;`);
 	}
 	renderMembers(members, 1, lines);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T09:18:56-08:00 (1795367936)
+ *	@Last modified time: 2026-11-25T11:44:35-08:00 (1795635875)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -201,7 +201,7 @@ function runtime_install(host, name, make) {
 		return false;
 	}
 	// A read-only property ignores the write without throwing outside strict mode's reach of a frozen builtin.
-	/* v8 ignore next 4 */
+	/* v8 ignore if */
 	if (!holdsValue(host, name, wrapper)) {
 		layer.active = false;
 		return false;
