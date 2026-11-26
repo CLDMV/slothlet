@@ -620,15 +620,15 @@ import { self } from "@cldmv/slothlet/runtime";
 ### ❌ Mistake 2: Using V2 API Surface
 
 ```js
-// ❌ WRONG (v2 API - does not exist in v3)
+// ❌ WRONG (v2 API, removed in v3 and absent from v4)
 await api.addApi("plugins", "./dir");
 await api.reloadApi("math.*");
 api.hooks.on("validate", "before", handler, { pattern: "math.*" });
 await api.run({ userId: "alice" }, fn);
 
-// ✅ CORRECT (v3 API)
+// ✅ CORRECT (v4 API)
 await api.slothlet.api.add("plugins", "./dir");
-await api.slothlet.api.reload("math.*");
+await api.slothlet.api.reload("math"); // a path or module id, not a glob
 api.slothlet.hook.on("math.*:before", handler);
 await api.slothlet.context.run({ userId: "alice" }, fn);
 ```

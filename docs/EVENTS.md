@@ -218,7 +218,7 @@ Every registration gets a listener id, returned as `id` from `on` / `once`:
 <owner moduleID>:<event>:<n>
 ```
 
-- **owner moduleID** — the id of the module that registered the listener (e.g. `plug` for a module added with `{ moduleID: "plug" }`, `base_slothlet` for the base directory). A host registration has an empty owner, so its ids start with `:` — an empty string is never a real module id, so a host id cannot collide with a module's.
+- **owner moduleID** — the id of the module that registered the listener (e.g. `plug` for a module added with `{ id: "plug" }`, `base_slothlet` for the base directory). A host registration has an empty owner, so its ids start with `:` — an empty string is never a real module id, so a host id cannot collide with a module's.
 - **event** — the event name.
 - **n** — the listener's registration ordinal among its owner's registrations for that event: `0`, `1`, `2`, … Every `on` / `once` call counts, including one that was refused at `deny`, so a rule change cannot shift the ids of a module's other listeners.
 

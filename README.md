@@ -12,7 +12,7 @@ With our **copy-left materialization** in lazy mode, you get the best of both wo
 
 The name might suggest we're taking it easy, but don't be fooled. **Slothlet delivers speed where it counts**, with smart optimizations that make your APIs fly.
 
-**🎉 Welcome to the future of module loading with Slothlet v3!**
+**🎉 Welcome to the future of module loading with Slothlet v4!**
 
 > _Where sophisticated architecture meets blazing performance - slothlet is anything but slow._
 
@@ -22,39 +22,40 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 > **🚀 Production Ready Modes:**
 >
 > - **Eager Mode**: Fully stable and production-ready for immediate module loading
-> - **Lazy Mode**: Production-ready with advanced copy-left materialization and 2.2x faster startup (function calls within 6% of eager - essentially equal)
+> - **Lazy Mode**: Production-ready with advanced copy-left materialization and 1.96x faster startup (function calls close to eager once materialized)
 
 [![Contributors]][contributors_url] [![Sponsor shinrai]][sponsor_url]
 
 ---
 
-## 🎉 Introducing Slothlet v3.0
+## 🎉 Introducing Slothlet v4.0
 
 > [!IMPORTANT]
-> **Slothlet v3.0 is a major release - the biggest since v2.0.**
+> **Slothlet v4.0 is a major release.** Most of the public surface is renamed, unknown config keys and method options are errors, and a few defaults change. **Upgrading from v3? Read the [v3 → v4 migration guide](https://github.com/CLDMV/slothlet/blob/master/docs/MIGRATION.md)** and run `npx @cldmv/slothlet-migrate --write`, then `npx @cldmv/slothlet-migrate audit .` until it is clean.
 
-v3 rebuilds Slothlet from the inside out with a **Unified Wrapper architecture** that delivers consistent, inspectable, hook-intercepted API proxies across every loading mode. On top of this foundation comes a redesigned hook system with three-phase subset ordering, per-request context isolation improvements, a full internationalization layer, background materialization with progress tracking, granular API mutation controls, collision modes for runtime API management, and lifecycle events for every stage of the module lifecycle.
+v4 gives every name one meaning and every option group the same shape: config keys, method options, `api.slothlet` methods, error codes and details, event, hook and diagnostics payloads, manifest fields and package entry points. Reported api paths are segments arrays, one `caller` object appears everywhere, and `api.slothlet.node()` replaces the `__` fields on nodes. Routines run and stack by default, `_` / `__` privacy follows the owning module, and the init context is copied, with `context.set` to change it at runtime. With permissions on, built-in capabilities stay closed to module code until a rule opens them, and `permissions.mode: "strict"` refuses to start when the host's baseline is not met.
 
-Every feature has been hardened with a comprehensive test suite - over **5,300 tests** across eager, lazy, CJS, ESM, TypeScript, and mixed module scenarios.
+Every feature is covered by a comprehensive test suite: over **TODO(release): N tests** in more than TODO(release): N test files (both counts from the final green CI run on `next`), run across eager and lazy mode, the async and live runtimes, CJS, ESM, TypeScript and mixed module trees, and the permission system's modes.
 
-📋 **[See the full v3.0 changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3.0.md)** for the architecture rewrite, hook system redesign, i18n layer, background materialization, lifecycle events, collision modes, mutation controls, sanitization improvements, and context isolation upgrades.
+📋 **[See the full v4.0.0 changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v4/v4.0.0.md)** · [v3.0 changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3.0.md) for the v3 architecture rewrite.
 
 ---
 
 ## ✨ What's New
 
-### Latest: v3.24.0 (November 2026)
+### Latest: v4.0.0 (November 2026)
 
-- **Code a module made runs as that module** — with permissions on, a callback, getter, conversion or Proxy trap a caller hands to a leaf now runs as the caller, with the leaf it runs inside as its ceiling, so both have to be allowed; closures, factories, classes, instances and accessors a module hands out keep running as the module that made them, wherever they are called later. New `permissions.caller.ceiling: "chain"` holds supplied code to every leaf it passed through, and frames are matched to the script that runs them, so code compiled under another module's file name is not that module's (#597).
-- **Fixes** — `new` on a lazy folder that has not loaded yet constructs the class (subclassing one before it loads throws `LAZY_SUBCLASS_BEFORE_LOAD`), a cyclic object read through `self` inside a module closes its cycle again so deep equality finishes, and development moves to Node 22.22 while the runtime floor stays at 22.15 (#686, #694, #689).
-- [View full v3.24.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.24.0.md)
+- **One set of v4 names, checked strictly** — config keys, method options, `api.slothlet` methods, error codes and details, payloads, manifest fields (`slothlet.module.json` format 2) and package entry points move to their v4 names, and unknown config keys or method options throw instead of being ignored. The new `@cldmv/slothlet-migrate` tool rewrites what it can prove and its `audit` command lists every v3 name left; the [migration guide](https://github.com/CLDMV/slothlet/blob/master/docs/MIGRATION.md) covers the rest.
+- **New defaults and behaviours** — routines run and stack by default, `_` / `__` privacy follows the owning module, the init context is copied (`context.set` changes it), warnings are recorded per instance on `api.slothlet.warnings`, `api.remove(apiPath, id)` takes the path first, and `hidden` globs can re-include with `!`. Module code may no longer import a leaf file, in any permission mode: leaves reach each other through `self` and share code through lib files beside the api folder, while the host imports them as before. Everything queued for the unreleased 3.25.0 ships here too: `clock`, `helpers`, api nodes that behave like the module's own objects, and many permission, ownership and lazy-mode fixes.
+- **Run isolation, capabilities and `"strict"`** — `run()` and `scope()` are isolated in every permission mode on both runtimes, at a small cost per promise step from the hooks each runtime installs, and each run reads a snapshot of the instance as of its start: later changes don't reach it, its own writes stay in it, and `run.self()` / `scope({ self: true })` hand the host the run's own view. With permissions on, rule targets name an access level (`:call`, `:read`, `:access`, `:write`, `:full`) and there is no write without the read, code from before a `restart()` is refused after it, and code from strings, `data:` / `blob:` imports and module hooks are refused to module code until a `capability:*` rule opens them, and `permissions.search` sets how far handed and returned values are searched for code; lazy mode under vitest needs the `@cldmv/slothlet/vite` plugin. `permissions.mode: "strict"` starts only on a met baseline; an async-runtime instance needs Node's `AsyncContextFrame` on (the default), and `"on"` warns without it. Node.js 24.15.0 or later is required.
+- [View full v4.0.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v4/v4.0.0.md)
 
 ### Recent Releases
 
+- **v3.24.0** (November 2026) — code a module made runs as that module and code a caller hands to a leaf runs as the caller, with `permissions.ceiling` and `permissions.provenance`; `new` on an unloaded lazy folder constructs the class, and cyclic reads through `self` close again (#597, #686, #694) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.24.0.md))
 - **v3.23.0** (October 2026) — permission modes (`"on"`, `"off"` by default, `"disabled"`) with the framework namespace protected even when off; module ownership enforced at any depth with new `:write` rules; eager and lazy compose the same api, plus many composition and live-runtime fixes (#628, #585, #580, #656) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.23.0.md))
 - **v3.22.1** (October 2026) — `require("@cldmv/slothlet")` returns the same function as `import`, with `defaults` and the named `slothlet` alias set at once (CommonJS loads the ES module build through `require(esm)`); `@cldmv/slothlet/devcheck` is no longer published; header restamp and dev dependency updates otherwise (#568, #570, #569) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.22.1.md))
 - **v3.22.0** (October 2026) — requires Node.js 22.15+; `api.slothlet.restart()`, `around` hooks, host-controlled event delivery, `permissions.owner`, per-instance helper modules and origin-based typegen, plus new host-only defaults for lifecycle methods and a set of reload, remove and ownership fixes (#518, #504, #496, #497, #509, #484, #529) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.22.0.md))
-- **v3.21.0** (September 2026) — principals for permission conditions: named, module-owned async resolvers whose cached, read-only facts reach the sync conditions of rules that declare `requires`; plus instances with no base directory and `metadata.caller()` / `.self()` allowed by default (#459, #471, #468) ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.21.0.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/) folder.**
 
@@ -65,7 +66,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 ### 🎯 **Dual Loading Strategies**
 
 - **Eager Loading**: Immediate loading for maximum performance in production environments
-- **Lazy Loading**: Copy-left materialization with look-ahead proxies (2.2x faster startup, function calls equal to eager after materialization)
+- **Lazy Loading**: Copy-left materialization with look-ahead proxies (1.96x faster startup, function calls close to eager after materialization)
 
 > [!IMPORTANT]
 > **Function Call Patterns:**
@@ -75,8 +76,8 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ### ⚡ Performance Excellence
 
-- **Startup Performance**: 2.2x faster startup in lazy mode (15.41ms vs 34.28ms)
-- **Runtime Performance**: Function calls essentially equal between modes (9.99μs lazy vs 9.46μs eager - within 6% measurement noise)
+- **Startup Performance**: 1.96x faster startup in lazy mode (15.0ms vs 29.4ms to create an instance, v4.0.0)
+- **Runtime Performance**: Function calls cost a few microseconds in either mode once a module is materialized (`math.add`: 5.5μs eager, 7.6μs lazy, v4.0.0)
 - **Copy-left materialization**: Once loaded, modules stay materialized - no re-processing overhead
 - **Zero dependencies**: Pure Node.js implementation
 - **Memory efficiency**: Lazy mode loads modules on-demand, eager mode optimizes for predictable behavior
@@ -195,7 +196,7 @@ const asyncResult = await api.async.process(); // Async stays async
 
 CommonJS works the same way: `const slothlet = require("@cldmv/slothlet")`.
 
-**Lazy mode** with copy-left materialization — all calls awaited, ~2.2× faster startup:
+**Lazy mode** with copy-left materialization — all calls awaited, 1.96× faster startup:
 
 ```javascript
 const api = await slothlet({ mode: "lazy", base: "./api" });
@@ -229,8 +230,8 @@ Also configurable: `depth`, `hidden` (globs hiding files/folders from the API), 
 | Mode                            | Startup       | Function calls                               | Best for                                   |
 | ------------------------------- | ------------- | -------------------------------------------- | ------------------------------------------ |
 | **Eager** (default)             | Loads upfront | Sync stays sync, async stays async           | Production, predictable performance        |
-| **Lazy**                        | 2.2× faster   | All calls awaited; materialized on first use | Large APIs, startup-sensitive apps         |
-| **Lazy + `loader.materialize`** | 2.2× faster   | Pre-warmed by background loader              | Best of both — lazy startup, eager runtime |
+| **Lazy**                        | 1.96× faster  | All calls awaited; materialized on first use | Large APIs, startup-sensitive apps         |
+| **Lazy + `loader.materialize`** | 1.96× faster  | Pre-warmed by background loader              | Best of both — lazy startup, eager runtime |
 
 ```javascript
 // Lazy + background materialization
@@ -392,7 +393,7 @@ try {
 
 - **[Configuration Reference](https://github.com/CLDMV/slothlet/blob/master/docs/CONFIGURATION.md)** — every option with defaults, validation rules, and the `api.slothlet.diag.*` namespace
 - **[Generated API Reference](https://github.com/CLDMV/slothlet/blob/master/docs/generated/API.md)** — auto-generated from JSDoc; the complete public surface
-- **[Changelog](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/)** — all release notes (v2 + v3)
+- **[Changelog](https://github.com/CLDMV/slothlet/tree/master/docs/changelog/)** — all release notes (v2, v3 and v4)
 - **[Migration Guide](https://github.com/CLDMV/slothlet/blob/master/docs/MIGRATION.md)** — upgrading from v3.x (v2.x: [v2 → v3](https://github.com/CLDMV/slothlet/blob/master/docs/migration/v2-to-v3.md))
 
 ### Technical Guides
