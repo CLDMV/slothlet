@@ -3558,8 +3558,7 @@ function runtime_selfRootView(slothlet, reader) {
 				assertChange(prop);
 				return Reflect.set(target, prop, value);
 			}
-			slothlet.handlers.apiManager.setOwnedProperty(prop, value, runtime_selfRootWriter(slothlet, reader, [prop]));
-			return true;
+			return slothlet.handlers.apiManager.setOwnedProperty(prop, value, runtime_selfRootWriter(slothlet, reader, [prop]));
 		},
 		defineProperty(target, prop, descriptor) {
 			assertChange(prop);
