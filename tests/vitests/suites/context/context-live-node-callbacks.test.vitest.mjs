@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:33:22-08:00 (1794951202)
+ *	@Last modified time: 2026-11-25T13:04:05-08:00 (1795640645)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -143,9 +143,7 @@ const CASES = [
 	"\t...(crypto.argon2",
 	'\t\t? { argon2: (env, done) => crypto.argon2("argon2id", { message: "p", nonce: Buffer.alloc(16), parallelism: 1, tagLength: 32, memory: 8, passes: 1 }, done) }',
 	"\t\t: {}),",
-	"\t...(crypto.diffieHellman.length >= 2",
-	"\t\t? { diffieHellman: (env, done) => crypto.diffieHellman({ privateKey: env.x25519[0].privateKey, publicKey: env.x25519[1].publicKey }, done) }",
-	"\t\t: {}),",
+	"\tdiffieHellman: (env, done) => crypto.diffieHellman({ privateKey: env.x25519[0].privateKey, publicKey: env.x25519[1].publicKey }, done),",
 	"\t...(crypto.encapsulate && env_hasMlKem()",
 	"\t\t? {",
 	"\t\t\t\tencapsulate: (env, done) => crypto.encapsulate(env.mlKem.publicKey, done),",
@@ -378,8 +376,6 @@ describe("Node callback APIs > the patch itself", () => {
 				const id = `${group}.${name}`;
 				if (covered.has(id) || notPatched.has(id)) continue;
 				if (group === "crypto" && callbackFree(name)) continue;
-				// Node 22's `diffieHellman` takes no callback.
-				if (id === "crypto.diffieHellman" && crypto.diffieHellman.length < 2) continue;
 				missing.push(id);
 			}
 		}

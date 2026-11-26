@@ -336,12 +336,12 @@
 		"zero-dependencies"
 	],
 	"engines": {
-		"node": ">=22.15.0"
+		"node": ">=24.15.0"
 	},
 	"devEngines": {
 		"runtime": {
 			"name": "node",
-			"version": ">=22.22.0",
+			"version": ">=24.15.0",
 			"onFail": "error"
 		}
 	},
