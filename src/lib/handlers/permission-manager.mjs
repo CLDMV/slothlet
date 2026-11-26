@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:44:33-08:00 (1795635873)
+ *	@Last modified time: 2026-11-25T11:52:55-08:00 (1795636375)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2893,7 +2893,8 @@ export class PermissionManager extends ComponentBase {
 	/**
 	 * Enforce whether a caller may register or fire a hook of `hookType` on `hookPath`.
 	 *
-	 * Layered resolution: hook-target rules (`pattern:type`) decide when any match; otherwise the
+	 * Layered resolution: module privacy first, so another module's private member is never hooked whatever a rule
+	 * allows; then hook-target rules (`pattern:type`) decide when any match; otherwise the
 	 * decision falls back to the CALL decision for `hookPath` — a path the caller may not call may
 	 * not be hooked either. A specific-type rule (`:before`) outranks an any-type rule (`:hook`).
 	 * Host-registered hooks (no owner identity) are always allowed (the trusted host). Emits audit
@@ -3348,7 +3349,7 @@ export class PermissionManager extends ComponentBase {
 	mayReachPrivate(callerPath, holderPath, callerFilePath, holderFilePath) {
 		if (!this.#enabled || callerPath === null) return true;
 		if (holderPath === "slothlet" || StringMethods.startsWith(holderPath, "slothlet.")) return true;
-		if (callerFilePath && holderFilePath && callerFilePath === holderFilePath) return true;
+		// No same-file shortcut: one file composed by two modules holds two modules' members, so the owners decide.
 		if (this.#privateScope === "folder")
 			return Boolean(callerFilePath && holderFilePath && runtime_sameModuleDir(callerFilePath, holderFilePath));
 		return this.#privateHolderOwner(callerPath, `${holderPath}._`) !== null;
@@ -3801,61 +3802,17 @@ export class PermissionManager extends ComponentBase {
 				(targetPath == null ? undefined : StringMethods.startsWith(targetPath, "slothlet.permissions.principal.")));
 		if (!this.#enabled && !isControlTarget) return { allowed: true, event: null, payload: null };
 
-		// Self-call bypass: same source file always allowed
+		// Module privacy first (#260), ahead of the self-call bypass and every rule: one source file can be composed by
+		// two modules (the same folder mounted twice), and a private member is the module's, not the file's.
+		const privacy = this.#privacyDecision(callerPath, targetPath, callerFilePath, targetFilePath, moduleCaller, newMember, heldMember);
+		if (privacy !== null) return privacy;
+
+		// Self-call bypass: same source file always allowed. A private target never gets here: privacy decided it.
 		if (callerFilePath && targetFilePath && callerFilePath === targetFilePath) {
 			return {
 				allowed: true,
 				event: "permission:self-bypass",
 				payload: { caller: callerPath, target: targetPath, filePath: callerFilePath }
-			};
-		}
-
-		// Module privacy (#260): a `_`/`__`-prefixed member is private to its module. Enforced HERE —
-		// before rules and before the cache — deliberately: the api path is a lossy projection of the
-		// module tree, so no rule glob can encode "same module" (the guarantee is absolute, not
-		// overridable by user rules), and the decision cache is keyed by path pair alone, which cannot
-		// distinguish two callers' module identities. Under `private.scope: "module"` (the default) the
-		// module is the module ID that currently owns the member's path, read live from the ownership
-		// registry like the owner grant, so it needs no file paths and moves with add/remove/reload.
-		// Under `"folder"` it is the directory of the two source files.
-		// The injected `slothlet.*` control tree is framework surface, not module exports — its
-		// members have no source files and no owning module, and internal machinery probes it with
-		// synthetic `__`-prefixed children (`slothlet.permissions.__probe__`). Module privacy never
-		// applies there.
-		if (runtime_isPrivateName(targetPath) && targetPath !== "slothlet" && !StringMethods.startsWith(targetPath, "slothlet.")) {
-			// A private member of a node belongs to the node's owner, so creating one is answered as reading it there would
-			// be: only the module that owns the node may (`targetFilePath` is the holding node's source file). A name with
-			// three or more leading underscores is the framework's, which module code creates on another module's node no
-			// more than a `_`/`__` one. A member a value beneath a node holds (a class's prototype) is the node's the same way.
-			const sameModule =
-				this.#privateScope === "folder"
-					? Boolean(callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath))
-					: (newMember || heldMember ? this.#privateHolderOwner(callerPath, targetPath) : this.#privateOwner(callerPath, targetPath)) !==
-						null;
-			if (sameModule) {
-				return {
-					allowed: true,
-					event: "permission:private-module-bypass",
-					payload: { caller: callerPath, target: targetPath, filePath: callerFilePath }
-				};
-			}
-			// No caller identity = the host (module callers always carry a file path at the
-			// enforcement sites). The host obeys the configured policy — secure default deny.
-			// A caller declared a module without a file (#508: the call-gate query answers for a
-			// supplied module identity) is never the host, so the host policy does not apply to it.
-			if (!callerFilePath && !moduleCaller && this.#privateHost === "allow") {
-				return {
-					allowed: true,
-					event: "permission:private-host-allow",
-					payload: { caller: callerPath ?? null, target: targetPath }
-				};
-			}
-			// Payload matches every other denial's shape; the private-name target itself carries the
-			// why (an underscore-prefixed terminal segment is the module-privacy marker).
-			return {
-				allowed: false,
-				event: "permission:denied",
-				payload: { caller: callerPath ?? null, target: targetPath }
 			};
 		}
 
@@ -3900,6 +3857,80 @@ export class PermissionManager extends ComponentBase {
 			}
 		}
 		return entry;
+	}
+
+	/**
+	 * The module-privacy decision for a caller→target pair (#260), or null when the target is not a module-private member.
+	 *
+	 * @param {string|null} callerPath - Caller API path; null for the host.
+	 * @param {string} targetPath - Target API path.
+	 * @param {string|null} callerFilePath - Caller source file path.
+	 * @param {string|null} targetFilePath - Target source file path.
+	 * @param {boolean} moduleCaller - The caller is a module with no known source file (see {@link PermissionManager#resolveAccess}).
+	 * @param {boolean} newMember - The target is a member the caller's module is about to create.
+	 * @param {boolean} heldMember - The target is a member a value beneath a node holds.
+	 * @returns {{ allowed: boolean, event: string, payload: object }|null} The decision, or null when privacy does not apply.
+	 * @private
+	 *
+	 * @description
+	 * Decided ahead of the self-call bypass, every call and hook rule, and the cache. Sharing a source file is not sharing
+	 * a module: the same file composed by two modules (one folder mounted twice) is two modules' members, so a leaf of one
+	 * mount reaches the other mount's private members no more than any other module does. A call within the module's own
+	 * file is still audited as a self-call.
+	 */
+	#privacyDecision(callerPath, targetPath, callerFilePath, targetFilePath, moduleCaller, newMember, heldMember) {
+		// Module privacy (#260): a `_`/`__`-prefixed member is private to its module. Enforced HERE —
+		// before rules and before the cache — deliberately: the api path is a lossy projection of the
+		// module tree, so no rule glob can encode "same module" (the guarantee is absolute, not
+		// overridable by user rules), and the decision cache is keyed by path pair alone, which cannot
+		// distinguish two callers' module identities. Under `private.scope: "module"` (the default) the
+		// module is the module ID that currently owns the member's path, read live from the ownership
+		// registry like the owner grant, so it needs no file paths and moves with add/remove/reload.
+		// Under `"folder"` it is the directory of the two source files.
+		// The injected `slothlet.*` control tree is framework surface, not module exports — its
+		// members have no source files and no owning module, and internal machinery probes it with
+		// synthetic `__`-prefixed children (`slothlet.permissions.__probe__`). Module privacy never
+		// applies there.
+
+		if (!runtime_isPrivateName(targetPath) || targetPath === "slothlet" || StringMethods.startsWith(targetPath, "slothlet.")) return null;
+		// A private member of a node belongs to the node's owner, so creating one is answered as reading it there would
+		// be: only the module that owns the node may (`targetFilePath` is the holding node's source file). A name with
+		// three or more leading underscores is the framework's, which module code creates on another module's node no
+		// more than a `_`/`__` one. A member a value beneath a node holds (a class's prototype) is the node's the same way.
+		const sameModule =
+			this.#privateScope === "folder"
+				? Boolean(callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath))
+				: (newMember || heldMember ? this.#privateHolderOwner(callerPath, targetPath) : this.#privateOwner(callerPath, targetPath)) !==
+					null;
+		if (sameModule) {
+			return {
+				allowed: true,
+				// A call within the module's own file is audited as the self-call it is.
+				event:
+					callerFilePath && targetFilePath && callerFilePath === targetFilePath
+						? "permission:self-bypass"
+						: "permission:private-module-bypass",
+				payload: { caller: callerPath, target: targetPath, filePath: callerFilePath }
+			};
+		}
+		// No caller identity = the host (module callers always carry a file path at the
+		// enforcement sites). The host obeys the configured policy — secure default deny.
+		// A caller declared a module without a file (#508: the call-gate query answers for a
+		// supplied module identity) is never the host, so the host policy does not apply to it.
+		if (!callerFilePath && !moduleCaller && this.#privateHost === "allow") {
+			return {
+				allowed: true,
+				event: "permission:private-host-allow",
+				payload: { caller: callerPath ?? null, target: targetPath }
+			};
+		}
+		// Payload matches every other denial's shape; the private-name target itself carries the
+		// why (an underscore-prefixed terminal segment is the module-privacy marker).
+		return {
+			allowed: false,
+			event: "permission:denied",
+			payload: { caller: callerPath ?? null, target: targetPath }
+		};
 	}
 
 	/**
@@ -4105,13 +4136,21 @@ export class PermissionManager extends ComponentBase {
 		// Strict null/undefined check: an empty-string owner must not masquerade as "no owner" (#138 review).
 		if (callerPath == null) return { allowed: true, event: null, payload: null };
 
-		// 1. Hook-target rules (pattern:type) decide when any match.
+		// 1. Module privacy (#260) before any hook rule: a hook sees a member's arguments and result, so a module that may
+		// not reach another module's private member may not hook it either, whatever a hook rule allows. Only a refusal is
+		// final here; a member of the hooking module's own goes on to the rules like any other path.
+		const privacy = this.#privacyDecision(callerPath, hookPath, callerFilePath, targetFilePath, false, false, false);
+		if (privacy !== null && !privacy.allowed) {
+			return { allowed: false, event: privacy.event, payload: { caller: callerPath, target: `${hookPath}:${hookType}` } };
+		}
+
+		// 2. Hook-target rules (pattern:type) decide when any match.
 		const hookDecision = this.#evaluateHook(callerPath, hookPath, hookType, runtimeContext);
 		if (hookDecision.matched) {
 			return { allowed: hookDecision.allowed, event: hookDecision.event, payload: hookDecision.payload };
 		}
 
-		// 2. Layered fallback: the CALL decision for the path (blocked path ⇒ blocked hook).
+		// 3. Layered fallback: the CALL decision for the path (blocked path ⇒ blocked hook).
 		// Hook fallback to the call decision carries no call/construct arguments → null callMeta.
 		const callDecision = this.#resolveAccess(callerPath, hookPath, callerFilePath, targetFilePath, runtimeContext, true, null);
 		return { allowed: callDecision.allowed, event: callDecision.event, payload: callDecision.payload };
