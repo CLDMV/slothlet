@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T00:00:00-08:00 (1794988800)
+ *	@Last modified time: 2026-11-25T11:47:03-08:00 (1795636023)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -228,7 +228,7 @@ function probe(nodeFlags) {
 	return JSON.parse(result.stdout.trim().split("\n").pop());
 }
 
-// Node 24 and later switch AsyncContextFrame off with this flag; Node 22 runs without it by default.
+// Node 24 and later switch AsyncContextFrame off with this flag.
 const FRAMES = process.allowedNodeEnvironmentFlags.has("--no-async-context-frame")
 	? [
 			["default async context", []],

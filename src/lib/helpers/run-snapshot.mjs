@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T00:08:30-08:00 (1795421310)
+ *	@Last modified time: 2026-11-25T04:19:20-08:00 (1795609160)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -423,6 +423,12 @@ class RunSnapshot extends Domain {
 		addStart(domain, this.start);
 		/** The tick of the instance's clock the run reads the instance at: its outermost run's start. */
 		this.base = parent === null ? this.start : parent.base;
+		/**
+		 * The root of the api tree its outermost run started on, whose nodes the instance saves versions of (set by
+		 * `copyForRun` in `helpers/flow-stores`): a copy of that tree built for the run later reads as of the start
+		 * through it.
+		 */
+		this.root = parent === null ? null : parent.root;
 		if (parent !== null) addStart(instance, this.base);
 		/** Raw object → the run's own copy, made on its first change. */
 		this.copies = new WeakMap();
@@ -737,19 +743,104 @@ export function declaresPrivate(value) {
  * @private
  */
 function scanPrivate(source) {
+	// The last character that is not white space or part of a comment, and the word it ends, if any: a `/` after one of
+	// these starts a regular expression literal, after anything else it divides.
+	let previous = "";
+	let wordEnd = -1;
+	// How many braces are open in code, and for each template substitution (`${`) open, how many were open at it: its
+	// closing brace returns to the template's text.
+	let depth = 0;
+	const substitutions = [];
 	for (let index = 0; index < source.length; index++) {
 		const char = source[index];
-		if (char === "'" || char === '"' || char === "`") {
+		if (char === "`" || (char === "}" && substitutions.length !== 0 && substitutions[substitutions.length - 1] === depth)) {
+			if (char === "}") substitutions.length--;
+			// A template's text, up to its end or the next substitution.
+			for (index++; index < source.length; index++) {
+				const at = source[index];
+				if (at === "\\") index++;
+				else if (at === "`") break;
+				else if (at === "$" && source[index + 1] === "{") {
+					index++;
+					listPush(substitutions, depth);
+					break;
+				}
+			}
+			previous = source[index] === "`" ? "`" : "{";
+			wordEnd = index;
+			continue;
+		} else if (char === "'" || char === '"') {
 			for (index++; index < source.length && source[index] !== char; index++) if (source[index] === "\\") index++;
 		} else if (char === "/" && source[index + 1] === "/") {
 			while (index < source.length && source[index] !== "\n") index++;
+			continue;
 		} else if (char === "/" && source[index + 1] === "*") {
 			const end = StringMethods.indexOf(source, "*/", index + 2);
 			if (end < 0) return false;
 			index = end + 1;
+			continue;
+		} else if (char === "/" && startsRegExp(source, previous, wordEnd)) {
+			let inClass = false;
+			for (index++; index < source.length; index++) {
+				const at = source[index];
+				if (at === "\\") index++;
+				else if (at === "[") inClass = true;
+				else if (at === "]") inClass = false;
+				else if ((at === "/" && !inClass) || at === "\n") break;
+			}
 		} else if (char === "#" && RegExpMethods.exec(/[A-Za-z_$\u0080-\uffff]/, source[index + 1] ?? "") !== null) return true;
+		else if (char === "{") depth++;
+		else if (char === "}") depth--;
+		if (char === " " || char === "\t" || char === "\n" || char === "\r") continue;
+		previous = char;
+		wordEnd = index;
 	}
 	return false;
+}
+
+/**
+ * The characters after which a `/` starts a regular expression literal, not a division.
+ * @type {string}
+ * @private
+ */
+const BEFORE_REGEXP = "(,=:[!&|?{};+-*%<>~^";
+
+/**
+ * The words after which a `/` starts a regular expression literal, not a division.
+ * @type {Set<string>}
+ * @private
+ */
+const WORDS_BEFORE_REGEXP = new Set([
+	"return",
+	"typeof",
+	"instanceof",
+	"in",
+	"of",
+	"new",
+	"delete",
+	"void",
+	"throw",
+	"case",
+	"do",
+	"else",
+	"yield",
+	"await"
+]);
+
+/**
+ * Whether a `/` in class source, outside strings and comments, starts a regular expression literal: told by what comes
+ * before it, as a tokenizer would for the cases class source holds.
+ * @param {string} source - The class's source.
+ * @param {string} previous - The last character before it that is not white space or a comment ("" at the start).
+ * @param {number} wordEnd - The index of that character.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function startsRegExp(source, previous, wordEnd) {
+	if (previous === "" || StringMethods.includes(BEFORE_REGEXP, previous)) return true;
+	let start = wordEnd;
+	while (start > 0 && RegExpMethods.exec(/[A-Za-z]/, source[start - 1]) !== null) start--;
+	return SetMethods.has(WORDS_BEFORE_REGEXP, StringMethods.slice(source, start, wordEnd + 1));
 }
 
 /**
@@ -812,12 +903,14 @@ function inherits(value, ctor) {
 
 /**
  * A shallow copy of an object's own state, keeping its prototype: a built-in of the same kind holding the same entries,
- * or an object holding the same own members (data members as values, accessors as they are).
+ * or an object holding the same own members (data members as values, accessors as they are), each with the attributes
+ * it has, and closed to new members when the object is.
  * @param {object} raw - The object.
+ * @param {object|null} [prototype] - The prototype the copy has, when it is not the object's own.
  * @returns {object} The copy.
  * @internal
  */
-export function shallowCopy(raw) {
+export function shallowCopy(raw, prototype = Reflect.getPrototypeOf(raw)) {
 	const kind = builtinKind(raw);
 	let copy;
 	if (kind === "map") {
@@ -837,11 +930,8 @@ export function shallowCopy(raw) {
 		const length = FunctionMethods.call(PrototypeFunctions.DataView.byteLength, raw);
 		copy = new DataView(ArrayBufferMethods.slice(FunctionMethods.call(PrototypeFunctions.DataView.buffer, raw), offset, offset + length));
 	} else if (Arrays.isArray(raw)) copy = [];
-	else copy = Objects.create(Reflect.getPrototypeOf(raw));
-	if (kind !== null) {
-		const prototype = Reflect.getPrototypeOf(raw);
-		if (Reflect.getPrototypeOf(copy) !== prototype) Reflect.setPrototypeOf(copy, prototype);
-	}
+	else copy = Objects.create(prototype);
+	if (Reflect.getPrototypeOf(copy) !== prototype) Reflect.setPrototypeOf(copy, prototype);
 	if (kind === null || kind === "map" || kind === "set" || kind === "date" || kind === "regexp") {
 		const keys = Reflect.ownKeys(raw);
 		for (let index = 0; index < keys.length; index++) {
@@ -851,11 +941,13 @@ export function shallowCopy(raw) {
 			if (kind === "regexp" && key === "lastIndex") continue;
 			if (Arrays.isArray(copy) && key === "length") {
 				copy.length = described.value;
+				if (described.writable === false) Reflect.defineProperty(copy, "length", { __proto__: null, writable: false });
 				continue;
 			}
-			Reflect.defineProperty(copy, key, { __proto__: null, ...described, configurable: true });
+			Reflect.defineProperty(copy, key, { __proto__: null, ...described });
 		}
 	}
+	if (!Reflect.isExtensible(raw)) Reflect.preventExtensions(copy);
 	return copy;
 }
 
@@ -1006,7 +1098,12 @@ function saveMembers(domain, raw, work) {
 	let content = last === null ? null : last.content;
 	let others = null;
 	if (content !== null) {
-		if (Reflect.getPrototypeOf(raw) !== Reflect.getPrototypeOf(content) || Arrays.isArray(raw) !== Arrays.isArray(content)) content = null;
+		if (
+			Reflect.getPrototypeOf(raw) !== Reflect.getPrototypeOf(content) ||
+			Arrays.isArray(raw) !== Arrays.isArray(content) ||
+			Reflect.isExtensible(raw) !== Reflect.isExtensible(content)
+		)
+			content = null;
 		else {
 			others = Reflect.ownKeys(content);
 			if (others.length !== keys.length) content = null;
@@ -1027,15 +1124,14 @@ function saveMembers(domain, raw, work) {
 }
 
 /**
- * Whether two own members are one: the same value or accessors, with the same attributes (all but `configurable`,
- * which a version's copy always has).
+ * Whether two own members are one: the same value or accessors, with the same attributes.
  * @param {PropertyDescriptor} mine - The object's member.
  * @param {PropertyDescriptor|undefined} theirs - The version's.
  * @returns {boolean} True when they are.
  * @private
  */
 function sameMember(mine, theirs) {
-	if (theirs === undefined || mine.enumerable !== theirs.enumerable) return false;
+	if (theirs === undefined || mine.enumerable !== theirs.enumerable || mine.configurable !== theirs.configurable) return false;
 	if ("value" in mine) return "value" in theirs && mine.writable === theirs.writable && Objects.is(mine.value, theirs.value);
 	return !("value" in theirs) && mine.get === theirs.get && mine.set === theirs.set;
 }

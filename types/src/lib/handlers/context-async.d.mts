@@ -422,7 +422,7 @@ declare class SealedStorage {
  * What {@link AsyncContextManager#als} answers before the manager has made its store: no store is active, a callback
  * run outside every store runs as it is, and running a store (`run`, `enterWith`) makes the real one first. Reading the
  * manager on the live runtime (the runtime dispatcher asks it whether a store is active) therefore makes no store: on
- * Node 22 one that has run switches async hooks on for the whole process.
+ * a Node whose `AsyncContextFrame` is off one that has run switches async hooks on for the whole process.
  * @private
  */
 declare class DormantStore {

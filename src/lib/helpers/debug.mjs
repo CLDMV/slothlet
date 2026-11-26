@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-25T11:44:38-08:00 (1795635878)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -67,9 +67,7 @@ export class SlothletDebug {
 	 */
 	log(code, context = {}) {
 		// Only log if debug flag for this code is enabled
-		// this.debugFlags is always a truthy object ({} at minimum) — constructor sets `config.debug || {}`,
-		// so the `!this.debugFlags` left-hand branch of || is structurally unreachable.
-		/* v8 ignore next */
+		// this.debugFlags is always an object ({} at minimum) — the constructor sets `config.debug || {}`.
 		if (!this.debugFlags || !this.debugFlags[code]) {
 			return;
 		}

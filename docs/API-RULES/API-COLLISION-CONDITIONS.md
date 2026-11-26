@@ -171,7 +171,7 @@ The change to a callable proxy is one-way: when no function is left (`remove()` 
 **Related Rule**: [Rule 17](../API-RULES.md#rule-17-collision-resolution)
 **Status**: ✅ Active
 
-**Pattern**: Outside the wrapper-vs-wrapper path, three shape combinations resolve differently: wrapper-vs-plain merges the plain object's keys onto the wrapper (incoming keys win); plain-vs-wrapper replaces the plain with the wrapper; plain-vs-plain does `Object.assign` (incoming wins).
+**Pattern**: Outside the wrapper-vs-wrapper path, three shape combinations resolve differently: wrapper-vs-plain merges the plain object's keys onto the wrapper (incoming keys win); plain-vs-wrapper replaces the plain with the wrapper, except that under `merge` a primitive existing leaf is kept (O01); plain-vs-plain does `Object.assign` (incoming wins).
 
 **Source(s)**: `src/lib/builders/api-assignment.mjs:715-736`
 
