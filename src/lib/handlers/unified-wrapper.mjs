@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:44:17-08:00 (1795643057)
+ *	@Last modified time: 2026-11-25T21:07:50-08:00 (1795669670)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5909,10 +5909,14 @@ function runtime_isTerminalData(value) {
  * @example
  * // tool.mjs: export function _secret() {}
  * runtime_isPrivateFunctionMember(toolWrapper, "_secret", toolWrapper._secret); // true
+ * runtime_isPrivateFunctionMember(toolWrapper, "__proto__", Function.prototype); // false: the engine's, not the module's
  */
 function runtime_isPrivateFunctionMember(wrapper, prop, value) {
 	if (typeof prop !== "string" || typeof value !== "function") return false;
 	if (!wrapper.slothlet.handlers.permissionManager.isPrivateTarget?.(runtime_memberPathOf(wrapper, prop))) return false;
+	// A name the engine gives every object or function (`__proto__`, `__lookupGetter__`, …) is the language's, not one the
+	// module made private: it is private only where the node holds a member of that name of its own.
+	if (!runtime_hasOwnMember(wrapper, prop) && ArrayMethods.some(INHERITED_HOLDERS, (holder) => hasOwn(holder, prop))) return false;
 	return runtime_functionOf(runtime_unwrapLeafValue(value)) !== null;
 }
 
