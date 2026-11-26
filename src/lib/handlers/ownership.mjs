@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
+ *	@Last modified time: 2026-11-25T11:44:33-08:00 (1795635873)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -574,7 +574,7 @@ export class OwnershipManager extends ComponentBase {
 	setModuleEndpoint(moduleID, endpoint) {
 		// Callers (addApiComponent, base load) always pass a real string moduleID;
 		// the type guard is defensive against a malformed/absent ID.
-		/* v8 ignore next */
+		/* v8 ignore else */
 		if (typeof moduleID === "string" && moduleID) {
 			MapMethods.set(this.moduleEndpoints, moduleID, endpoint);
 			let mounts = MapMethods.get(this.moduleMounts, moduleID);
@@ -946,7 +946,7 @@ export class OwnershipManager extends ComponentBase {
 		// Unreachable: every caller passes a non-empty stack — getCurrentOwner() returns early on an
 		// empty/absent stack before calling here, and the removePath() call sites reach here only after
 		// their own non-empty guard / the stack.length===0 delete branch. Kept as a defensive floor.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!stack || stack.length === 0) return undefined;
 		let fallback;
 		for (let i = stack.length - 1; i >= 0; i--) {
@@ -1496,7 +1496,7 @@ export class OwnershipManager extends ComponentBase {
 			// pathToModule entry, because register(), removePath() and unregister() update both maps in
 			// lockstep. The `!entry` arm is a defensive floor against a map desync no public path produces
 			// (reproducing it would require hand-corrupting the internal maps — a tautology, not a test).
-			/* v8 ignore next */
+			/* v8 ignore if */
 			if (!entry) continue;
 			MapMethods.set(snapshot, path, {
 				value: entry.value,

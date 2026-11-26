@@ -600,10 +600,11 @@ declare function scriptKeyInstance(key: string): string | null;
  * The resolve hook copies a leaf's instance query onto its relative imports and marks relative
  * `require()`s made inside an instance scope; the load hook serves the cross-module-system cases
  * (#534) and passes every unmarked URL straight through.
- * Uses the synchronous in-thread `module.registerHooks()` (Node >= 22.15 / 23.5, slothlet's engines
- * floor). The off-thread `module.register()` is deliberately not used: it adds a cross-thread round
+ * Uses the synchronous in-thread `module.registerHooks()`, which Node asks for a `require()`, a
+ * `require.resolve()` and an `import` alike. The off-thread `module.register()` is deliberately not used: it adds a cross-thread round
  * trip to every import in the process and reorders module evaluation enough to break leaves that
- * start a fire-and-forget runtime import. A host without `registerHooks()` is left untouched.
+ * start a fire-and-forget runtime import. A host without `registerHooks()` (a stand-in `node:module`) is left
+ * untouched.
  * @param {object} nodeModule - The `node:module` namespace.
  * @param {object} [registry=globalThis] - The global object in production. Any other object is a registry of the
  *   caller's own: this copy's hooks are then registered on `nodeModule` once per registry, whichever copy keeps the
