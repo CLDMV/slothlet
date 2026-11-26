@@ -300,6 +300,11 @@ import type { SlothletAPI } from "@cldmv/slothlet";
 
 export interface MyAPI {
 	math: {
+		/**
+		 * Add two numbers.
+		 * @param a - First addend.
+		 * @returns The sum.
+		 */
 		add: typeof import("../api/math.js")["add"];
 	};
 	logger: typeof import("../api/logger.mjs")["default"] & {
@@ -326,6 +331,8 @@ declare module "@cldmv/slothlet/runtime" {
 | A member with no module origin (a runtime `self.X = value`, in-memory `api.add()` exports) | `unknown`, with a comment saying why                                    |
 
 > **Every leaf is typed by its own source.** Each member is `typeof import(...)` of the export slothlet actually placed there, so TypeScript reads the leaf's own types — JSDoc in `.mjs` / `.cjs`, annotations in `.ts` / `.mts` (including types it imports, such as `node:events`), frozen constants, object leaves typed through an interface. The origin comes from composition itself (slothlet records which export produced each api node), so flattened, hoisted, and merged members are typed correctly too. Specifiers are relative to the generated file and use each leaf's runtime extension (`.ts` → `.js`, `.mts` → `.mjs`), which resolves under both `NodeNext` and `Bundler`. Because JavaScript leaves are referenced directly, the program that includes the declaration needs `allowJs: true`.
+
+> **Each member carries its leaf's JSDoc.** With `docs` on (the default), the generator copies the JSDoc above each export onto the generated member: the description, `@param`, `@returns`, `@deprecated` and `@example`. Hovering `api.math.add` or `self.math.add` then shows the leaf's own documentation, and a `@deprecated` export is struck through at its call sites. `{type}` expressions are dropped from `@param` / `@returns`, since the member's type comes from the export itself, and other tags (`@type`, `@internal`, …) are left out. The JSDoc is found for top-level declarations (`export function`, `export const`, `export default`, `export class`), members of an exported object literal, CommonJS `module.exports` / `exports.name`, and a file-level binding that an export refers to (`module.exports = { shout }`, `export default greet`, `export { add as plus }`). Members typed as a whole module or export (`text: typeof import("../api/text.cjs")`) need nothing copied: TypeScript reads the docs of their members from the source. Pass `docs: false` to leave the comments out.
 
 ### Runtime Imports (`self`, `context`, `instance`)
 
@@ -426,7 +433,7 @@ const { filePath, content } = await generate({
 console.log(`Wrote ${filePath} (${content.length} bytes)`);
 ```
 
-`generate()` loads the API in eager + fast TypeScript mode internally, walks the composed structure, references each node's originating export (see [Example Generated Output](#example-generated-output)), writes the `.d.ts`, and shuts the loaded instance down before returning. It does not need the `typescript` package. If `base`, `output`, or `name` is missing or empty, it throws `SlothletError("INVALID_CONFIG")` — the same error class everything else uses. A key it does not take (`dir`, `interfaceName`, …) throws `INVALID_CONFIG_UNKNOWN_KEY`. Its options are `base`, `output`, `name`, `augment` (default `true`), `docs` (default `true`) and `typescript`. The `package.json` `slothlet.typegen` fallback takes the same names.
+`generate()` loads the API in eager + fast TypeScript mode internally, walks the composed structure, references each node's originating export (see [Example Generated Output](#example-generated-output)), writes the `.d.ts`, and shuts the loaded instance down before returning. It does not need the `typescript` package. If `base`, `output`, or `name` is missing or empty, it throws `SlothletError("INVALID_CONFIG")` — the same error class everything else uses. A key it does not take (`dir`, `interfaceName`, …) throws `INVALID_CONFIG_UNKNOWN_KEY`. Its options are `base`, `output`, `name`, `augment` (default `true`), `docs` (default `true`: copy each leaf's JSDoc onto its generated member, see the note under [Example Generated Output](#example-generated-output)) and `typescript`. The `package.json` `slothlet.typegen` fallback takes the same names.
 
 ### What the output looks like
 

@@ -10,7 +10,8 @@
  * @param {string} options.output - Path to write the `.d.ts` file to (relative or absolute).
  * @param {string} options.name - Name of the generated TypeScript interface (e.g. `"MyApi"`).
  * @param {boolean|string|object} [options.typescript] - Override TypeScript loader config. Same union accepted by `slothlet({ typescript })`: pass `true` (default mode), `"fast"` / `"strict"`, or an object like `{ mode: "fast" }`. Defaults to `{ mode: "fast" }` when omitted.
- * @param {boolean} [options.docs=true] - Include JSDoc comments in the generated declaration.
+ * @param {boolean} [options.docs=true] - Copy each leaf's JSDoc (description, `@param`, `@returns`, `@deprecated`,
+ *   `@example`) onto its member in the generated declaration. `false` leaves the members without it.
  * @param {boolean} [options.augment=true] - Extend `SlothletSelf` from `@cldmv/slothlet/runtime` with the
  *   generated interface, so leaves that import `self` get the api's types. Set `false` when another generated
  *   declaration in the same TypeScript program should type `self` instead.

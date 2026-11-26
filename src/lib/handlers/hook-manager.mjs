@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:14:52-08:00 (1795634092)
+ *	@Last modified time: 2026-11-25T11:44:32-08:00 (1795635872)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -664,7 +664,7 @@ export class HookManager extends ComponentBase {
 		// hook may intercept only what both the owner and that call may, at registration and every time it fires.
 		// Every call of the ceiling, as `{ path, filePath }` (#597).
 		const ownerCeilings = replayIdentity
-			? (replayIdentity.ownerCeilings ?? [])
+			? replayIdentity.ownerCeilings
 			: mapList(identityCeilings(ownerIdentity), (call) => ({
 					path: call.____slothletInternal?.apiPath ?? null,
 					filePath: call.____slothletInternal?.filePath ?? null
@@ -713,7 +713,7 @@ export class HookManager extends ComponentBase {
 				// never returns an empty versions map); the guard covers a future registry shape
 				// change, not a reachable state.
 				const defaultTag = versionManager.getDefaultVersion(logicalPath);
-				/* v8 ignore next 3 */
+				/* v8 ignore if */
 				if (defaultTag == null) {
 					throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern });
 				}
@@ -761,12 +761,23 @@ export class HookManager extends ComponentBase {
 		// Permission gate (registration): a concrete-target hook is checked now for fail-fast feedback.
 		// Glob-target hooks register unconditionally and are gated per concrete path at fire time
 		// (see getHooksForPath). Host-registered hooks (no owner identity) are trusted and never gated.
-		// The target filePath is passed as null, so the call-level same-source-file self-bypass does not
-		// apply at registration — registration-time hook self-bypass is a deferred feature (#118 open Q).
+		// A concrete target passes the source file recorded for its leaf, so a hook on a leaf in the owner's
+		// own file takes the same-source-file self-bypass a call to it would (#995). Each ceiling is checked
+		// against that file with its own file, as a call's ceilings are.
+		// A reload replays a hook before a lazy tree has loaded its leaves, so a hook that was registered on a leaf
+		// in its owner's own file finds no record for the path yet and would lose the bypass it was admitted with.
+		// Its registration check is left to the fire-time check, which runs on every fire with the record of the
+		// path as it is then; every other replayed hook is checked here as before.
+		const exactPattern = !this.#isGlobPattern(pattern);
+		const deferToFire =
+			exactPattern && replayIdentity?.ownFile === true && this.slothlet.handlers?.ownership?.getCurrentOwner(pattern) == null;
+		let ownFile = deferToFire;
 		const permissionManager = this.slothlet.handlers?.permissionManager;
-		if (permissionManager?.isEnabled?.() && ownerPath && !this.#isGlobPattern(pattern)) {
+		if (permissionManager?.isEnabled?.() && ownerPath && exactPattern && !deferToFire) {
 			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-			if (!permissionManager.enforceHookAccess(ownerPath, pattern, type, ownerFilePath, null, runtimeContext)) {
+			const targetFilePath = this.#recordedFilePath(pattern);
+			ownFile = targetFilePath !== null && targetFilePath === ownerFilePath;
+			if (!permissionManager.enforceHookAccess(ownerPath, pattern, type, ownerFilePath, targetFilePath, runtimeContext)) {
 				throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
 					caller: ownerPath,
 					target: segmentsOf(`${pattern}:${type}`)
@@ -776,7 +787,7 @@ export class HookManager extends ComponentBase {
 				const ceiling = ownerCeilings[i];
 				if (
 					ceiling.path !== null &&
-					!permissionManager.enforceHookAccess(ceiling.path, pattern, type, ceiling.filePath, null, runtimeContext)
+					!permissionManager.enforceHookAccess(ceiling.path, pattern, type, ceiling.filePath, targetFilePath, runtimeContext)
 				) {
 					throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
 						caller: ceiling.path,
@@ -817,6 +828,10 @@ export class HookManager extends ComponentBase {
 			id,
 			type,
 			pattern,
+			// Registered on one exact path (no glob): the only hooks the self-hook bypass applies to (#995).
+			exactPattern,
+			// Registered on a leaf recorded in the owner's own file, so a reload replay can defer its check (#995).
+			ownFile,
 			handler: effectiveHandler,
 			lockCaller,
 			// Owner identity for the fire-time permission re-check (null = host-registered/trusted).
@@ -1230,24 +1245,31 @@ export class HookManager extends ComponentBase {
 		// Fire-time permission filter: when permissions are enabled, a hook fires only if its owner is
 		// allowed to hook `apiPath` for this type. Host-registered hooks (ownerPath null) are always
 		// allowed; disabled permissions skip the filter entirely (no overhead on the common path).
-		// targetFilePath is null here: the hooked path's source file isn't resolved at fire time, so
-		// the filepath-based self-hook bypass is registration-only. A module hooking its own path is
-		// already admitted at on()-time via that bypass; fire-time relies on path-based resolution.
+		// A hook registered on exactly `apiPath` is checked with the source file recorded for the leaf there
+		// now, so a self-hook admitted at on()-time keeps firing, and stops taking the bypass once the path
+		// is another file's (#995). A pattern hook gets no target file: the rules decide every path it matches.
 		const permissionManager = this.slothlet.handlers?.permissionManager;
 		if (permissionManager?.isEnabled?.() && hooks.length > 0) {
 			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-			return filterList(
-				hooks,
-				(hook) =>
-					permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext) &&
+			let recorded;
+			const targetFileFor = (hook) => {
+				if (!hook.exactPattern || hook.pattern !== apiPath) return null;
+				if (recorded === undefined) recorded = this.#recordedFilePath(apiPath);
+				return recorded;
+			};
+			return filterList(hooks, (hook) => {
+				const targetFilePath = targetFileFor(hook);
+				return (
+					permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, targetFilePath, runtimeContext) &&
 					// A hook registered under other modules' calls as its ceiling fires only where each of them may (#597).
 					ArrayMethods.every(
-						hook.ownerCeilings ?? [],
+						hook.ownerCeilings,
 						(ceiling) =>
 							ceiling.path === null ||
-							permissionManager.checkHookAccess(ceiling.path, apiPath, type, ceiling.filePath, null, runtimeContext)
+							permissionManager.checkHookAccess(ceiling.path, apiPath, type, ceiling.filePath, targetFilePath, runtimeContext)
 					)
-			);
+				);
+			});
 		}
 
 		return hooks;
@@ -2012,6 +2034,19 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * The source file slothlet recorded for the leaf at an exact api path: the ownership registry's entry
+	 * for the path's current owner, so it follows reload, remove and re-add (#995).
+	 *
+	 * @param {string} apiPath - Exact API path.
+	 * @returns {string|null} The recorded file, or null when the path has no owner or its owner no file
+	 *   (an in-memory leaf, a path not loaded yet). Null means no self-hook bypass.
+	 * @private
+	 */
+	#recordedFilePath(apiPath) {
+		return this.slothlet.handlers?.ownership?.getCurrentOwner(apiPath)?.filePath ?? null;
+	}
+
+	/**
 	 * Refuse a path pattern naming a segment no api path can hold (`__proto__`, `constructor`, `prototype`), the same
 	 * set a mount path refuses. Every entry point that takes a pattern calls it, so a hook can never be keyed by one.
 	 * @param {*} pattern - The pattern as given; anything that is not a string is left to the caller's own checks.
@@ -2103,7 +2138,7 @@ export class HookManager extends ComponentBase {
 		// unreachable via tests (2026-03-04): #private fields prevent external
 		// mutation; on() creates the array before writing to #byId so no public
 		// path can produce a missing patternHooks key.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!patternHooks) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
 				id: hook.id,
@@ -2114,14 +2149,14 @@ export class HookManager extends ComponentBase {
 			});
 		}
 
-		const index = typeof patternHooks === "string" ? StringMethods.indexOf(patternHooks, hook) : ArrayMethods.indexOf(patternHooks, hook);
+		const index = ArrayMethods.indexOf(patternHooks, hook);
 
 		// Invariant: hook object must be in patternHooks — on() pushes the exact object
 		// reference that it stores in #byId. If not found, internal state is corrupt.
 		// unreachable via tests (2026-03-04): on() pushes the identical object
 		// reference; no public path splices the array without clearing #byId,
 		// so indexOf always finds the hook and index === -1 is never true.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (index === -1) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
 				id: hook.id,
@@ -2287,7 +2322,9 @@ export class HookManager extends ComponentBase {
 				groupId: hook.groupId,
 				ownerFilePath: hook.ownerFilePath,
 				// A registration's ceiling (#597) travels with its owner, through the same private channel.
-				ownerCeilings: hook.ownerCeilings ?? [],
+				ownerCeilings: hook.ownerCeilings,
+				// Whether it was registered on a leaf in its owner's own file (#995), through the same private channel.
+				ownFile: hook.ownFile === true,
 				enabled: hook.enabled
 			});
 		}
@@ -2315,7 +2352,8 @@ export class HookManager extends ComponentBase {
 					ownerPath: reg.ownerPath ?? null,
 					ownerFilePath: reg.ownerFilePath ?? null,
 					ownerModule: reg.ownerModule ?? null,
-					ownerCeilings: reg.ownerCeilings ?? []
+					ownerCeilings: reg.ownerCeilings ?? [],
+					ownFile: reg.ownFile === true
 				},
 				// Re-stamp a version-dispatched member's binding so remove-by-group and the
 				// fire-time version signal survive reload (#250).

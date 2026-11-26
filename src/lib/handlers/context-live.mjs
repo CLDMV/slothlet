@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T09:45:09-08:00 (1795628709)
+ *	@Last modified time: 2026-11-25T11:44:32-08:00 (1795635872)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1379,7 +1379,7 @@ export class LiveContextManager {
 	 */
 	getCallerIdentity(instanceID) {
 		const store = this.tryGetContext(instanceID);
-		/* v8 ignore next — callers reach this only with an active instance. */
+		/* v8 ignore if -- callers reach this only with an active instance. */
 		if (!store) return undefined;
 		return this.#identityFor(store);
 	}
@@ -3241,9 +3241,7 @@ export class LiveContextManager {
 			store.callerWrapper = null;
 			store.currentWrapper = null;
 		}
-		// currentWrapper is optional; false branch is covered directly in context-live-branches tests
-		// but v8 hit-counter overflows to -255 in the parallel matrix, appearing uncovered.
-		/* v8 ignore next */
+		// currentWrapper is optional; context-live-branches drives both arms.
 		if (currentWrapper) {
 			store.callerWrapper = entryCaller;
 			store.callerCeiling = entryIdentity?.ceiling ?? null;
@@ -3261,7 +3259,7 @@ export class LiveContextManager {
 			// Idempotence guard. The sync and settle paths are mutually exclusive by construction, so the
 			// second call this protects against does not occur — but restoring twice would roll a nested
 			// call's saved state back over the live one, which is worth guarding regardless.
-			/* v8 ignore next */
+			/* v8 ignore if */
 			if (restored) return;
 			restored = true;
 			if (!carriesAwaits) this.#activeID = previousInstanceID;
@@ -3367,7 +3365,7 @@ export class LiveContextManager {
 				// field at null for its whole async lifetime. Were it untracked, a single suspended module
 				// call resuming meanwhile would trust that null field and be treated as the host — failing
 				// open. Tracking it keeps the count honest, so that module is resolved from its stack instead.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (currentWrapper || asHost) {
 					SetMethods.add(this.#suspendedFor(store), entry);
 					this.#suspendedVersion++;
@@ -3463,7 +3461,7 @@ export class LiveContextManager {
 	 */
 	captureFlow(instanceID) {
 		const store = this.tryGetContext(instanceID);
-		/* v8 ignore next — a live instance always has a store while its api is callable; guards a torn-down instance. */
+		/* v8 ignore if -- a live instance always has a store while its api is callable; guards a torn-down instance. */
 		if (!store) return null;
 		// The identity resolved for the executing call, not the store's shared fields: those are restored
 		// in settle order, so once calls overlap they can name a call that has already finished (#591).
