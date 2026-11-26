@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T10:20:18-08:00 (1795544418)
+ *	@Last modified time: 2026-11-25T02:38:12-08:00 (1795603092)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,8 +29,7 @@
 import { defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { generateBrowserAssets, generateManifest } from "../src/lib/helpers/generate-manifest.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const slothletCondition = "slothlet-dev";
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -49,6 +48,14 @@ const LEAF_COPY_REL = "api_tests/api_test_leaf_file_import_browser";
 const CODE_STRINGS_REL = "api_tests/api_test_code_strings_browser/api";
 
 export default defineConfig(async () => {
+	// Loaded by Node itself, not bundled into the config: vite bundles this file without the
+	// `slothlet-dev` condition, so a static import here resolved generate-manifest's `#errors` /
+	// `#helpers/*` imports to dist/ and the config failed to load (ERR_PACKAGE_IMPORT_NOT_DEFINED)
+	// in any checkout without a build. A computed specifier stays external, and Node (started with
+	// `--conditions=slothlet-dev` by the coverage:browser script) resolves those imports to src/.
+	const { generateBrowserAssets, generateManifest } = await import(
+		pathToFileURL(resolve(REPO, "src/lib/helpers/generate-manifest.mjs")).href
+	);
 	// Built once in node; the browser can't read the fixture tree to build a manifest itself.
 	const { manifest, importmap } = await generateBrowserAssets(FIXTURE_DIR, { base: "/" });
 	const helperManifest = await generateManifest(resolve(REPO, HELPER_REL));
@@ -135,7 +142,22 @@ export default defineConfig(async () => {
 					"src/lib/helpers/eventemitter-context.mjs",
 					"src/lib/handlers/context-async.mjs",
 					"src/lib/builders/api_builder.mjs",
-					"src/slothlet.mjs"
+					"src/slothlet.mjs",
+					// Files with their own `isNode` / `getBuiltinModule?.()` / `globalThis.process` arms.
+					"src/lib/handlers/frame-placement.mjs",
+					"src/lib/handlers/unified-wrapper.mjs",
+					"src/lib/handlers/shared-values.mjs",
+					"src/lib/handlers/context-live.mjs",
+					"src/lib/helpers/async-resource-context.mjs",
+					"src/lib/helpers/async-store-slot.mjs",
+					"src/lib/helpers/capability-context.mjs",
+					"src/lib/helpers/clone-context.mjs",
+					"src/lib/helpers/config.mjs",
+					"src/lib/helpers/intrinsics.mjs",
+					"src/lib/helpers/node-callback-context.mjs",
+					"src/lib/helpers/permission-baseline.mjs",
+					"src/lib/helpers/scheduler-context.mjs",
+					"src/lib/processors/loader.mjs"
 				],
 				exclude: ["**/*.json", "api_tests/**", "tests/**", "tools/**"],
 				// Separate dir so it doesn't clobber the node run's coverage/; merged afterwards.
