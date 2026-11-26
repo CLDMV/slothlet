@@ -96,7 +96,7 @@ Nodes carry no framework keys. `api.slothlet.node(target)` returns one frozen re
 
 ### Framework-private names moved off `_` and `__`
 
-Names slothlet keeps for itself now use `____` (private) and `___` (callables). A module may export `_impl` or `_materialize` freely, and code that read slothlet's old `_impl`, `__state` or `_materialize` loses them. Only the prefix changed; the full list is under "Framework-private names".
+Names slothlet keeps for itself now use `____` (private) and `___` (callables), and every name with either prefix is slothlet's: a module export, file or folder named `___x` is refused at load. A module may export `_impl` or `_materialize` freely, and code that read slothlet's old `_impl`, `__state` or `_materialize` loses them. Only the prefix changed; the full list is under "Framework-private names".
 
 ### `hook.errors` and `reload` values
 

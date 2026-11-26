@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:21:26-08:00 (1795641686)
+ *	@Last modified time: 2026-11-25T13:44:17-08:00 (1795643057)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ import {
 } from "#helpers/composition";
 import { SlothletError } from "#errors";
 import { ComponentBase } from "#factories/component-base";
-import { isFrameworkReservedKey, internals as reservedKeysInternals } from "#helpers/reserved-keys";
+import { isFrameworkName, isFrameworkReservedKey, internals as reservedKeysInternals } from "#helpers/reserved-keys";
 import { runtime_isWrappedClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
 import { combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { handsOutAsModule, toComparablePath, internals as framePlacementInternals } from "#handlers/frame-placement";
@@ -338,6 +338,30 @@ function runtime_isUnchangingDefinition(holder, prop, descriptor) {
 }
 
 /**
+ * How a definition of a framework-prefixed name is answered: absorbed (success, nothing defined), as an assignment of
+ * such a name is.
+ *
+ * @description
+ * The framework's own `___materialize` and its impl metadata keys are exempt. A proxy invariant refuses a handler that
+ * reports success for a member the target does not hold when the target is closed or the definition fixes it
+ * (`configurable: false`); those definitions are refused (`false`) instead, so the name is still never stored.
+ *
+ * @param {object} target - The proxy target.
+ * @param {string|symbol} prop - The member name.
+ * @param {PropertyDescriptor} descriptor - The definition.
+ * @param {object|null} [wrapper] - The node defined on, when it is one (a branded one keeps its marker keys).
+ * @returns {boolean|undefined} True when the definition is absorbed, false when it is refused, undefined when the name is not the framework's.
+ * @internal
+ */
+function runtime_absorbsFrameworkName(target, prop, descriptor, wrapper = null) {
+	if (typeof prop !== "string" || !isFrameworkName(prop) || prop === "___materialize") return undefined;
+	if (SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, prop)) return undefined;
+	// The dispatcher marker keys, on a wrapper the framework branded for them, are the framework's own writes.
+	if (wrapper !== null && isFrameworkMarkerKey(prop) && isFrameworkInternal(wrapper)) return undefined;
+	return Reflect.isExtensible(target) && descriptor.configurable !== false;
+}
+
+/**
  * The traps a self data view and a self member view change their value through (see {@link runtime_selfDataView},
  * {@link runtime_selfMemberView}): defining, deleting, setting the prototype and closing the value are each a write the
  * reader has to be allowed, made on the value itself, with the view's shadow kept to what the engine checks it against.
@@ -356,6 +380,9 @@ function runtime_selfViewWriteTraps(raw, shadow, assertWrite, mirror, mirrorClos
 			mirrorClosed();
 			if (!Reflect.isExtensible(raw) && runtime_isUnchangingDefinition(raw, prop, descriptor)) return true;
 			assertWrite(prop);
+			// A framework-prefixed name is absorbed as the node's own write absorbs it: nothing is stored on the value.
+			const absorbed = runtime_absorbsFrameworkName(shadow, prop, descriptor);
+			if (absorbed !== undefined) return absorbed;
 			const stored =
 				"value" in descriptor ? { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) } : descriptor;
 			if (!Reflect.defineProperty(raw, prop, stored)) return false;
@@ -3562,6 +3589,9 @@ function runtime_selfRootView(slothlet, reader) {
 		},
 		defineProperty(target, prop, descriptor) {
 			assertChange(prop);
+			// A framework-prefixed name is absorbed as the node's own write absorbs it.
+			const absorbed = runtime_absorbsFrameworkName(target, prop, descriptor);
+			if (absorbed !== undefined) return absorbed;
 			if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 			return Reflect.defineProperty(target, prop, descriptor);
 		},
@@ -9951,6 +9981,8 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 			return { __proto__: null, ...descriptor, value: runtime_handIn(maker, descriptor.value) };
 		},
 		defineProperty: (target, prop, descriptor) =>
+			// A framework-prefixed name is absorbed as the node's own write absorbs it.
+			runtime_absorbsFrameworkName(target, prop, descriptor) ??
 			Reflect.defineProperty(
 				target,
 				prop,
@@ -13192,6 +13224,9 @@ const CROSSING_HANDLER = {
 	defineProperty(shadow, prop, descriptor) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		runtime_crossAssertWrite(state, prop, "define");
+		// A framework-prefixed name is absorbed as the node's own write absorbs it.
+		const absorbed = runtime_absorbsFrameworkName(shadow, prop, descriptor);
+		if (absorbed !== undefined) return absorbed;
 		const into = { ...descriptor };
 		if ("value" in descriptor) into.value = runtime_crossIn(state, descriptor.value);
 		if ("get" in descriptor) into.get = runtime_crossIn(state, descriptor.get);
@@ -19626,6 +19661,16 @@ class UnifiedWrapper extends ComponentBase {
 			if (SetMethods.has(internalKeys, key)) {
 				continue;
 			}
+			// A name with the framework's prefix (`___` / `____`) is never a member: the wrapper's own members carry it,
+			// and a child under such a name would stand in for one of them. An object's own member leaves it as an
+			// adopted one does, so no read or listing of the node reaches it through the impl either.
+			if (isFrameworkName(key) && !(isFrameworkMarkerKey(key) && isFrameworkInternal(this))) {
+				if (typeof this.____slothletInternal.impl === "object" && !uw_isLayer) {
+					const reservedDescriptor = Objects.getOwnPropertyDescriptor(this.____slothletInternal.impl, key);
+					if (reservedDescriptor?.configurable) delete this.____slothletInternal.impl[key];
+				}
+				continue;
+			}
 			// Skip metadata/helper keys
 			if (typeof key === "string" && SetMethods.has(metadataKeys, key)) {
 				continue;
@@ -23624,12 +23669,18 @@ class UnifiedWrapper extends ComponentBase {
 			// A node of a run's tree changes values the instance's tree shares: what it writes stays on the node itself.
 			const runTreeNode = runtime_inRunTree(wrapper);
 			if (runTreeNode) runtime_ownRunTreeArray(wrapper);
-			// Keys that must not be settable from outside — they shadow private state or are
-			// read-only informational accessors whose values come from ____slothletInternal.
-			// Silently absorb the write so no TypeError leaks key existence.
+			// Keys that must not be settable from outside — every name with the framework's prefix, which would shadow
+			// the wrapper's own members and state, or read-only informational accessors whose values come from
+			// ____slothletInternal. Silently absorb the write so no TypeError leaks key existence.
 			// ___materialize is exempted: the framework writes it directly on the target.
 			// Module code meets the write rules first, so an assignment is refused as a definition is (#625).
-			if (SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) && prop !== "___materialize") {
+			if (
+				(SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) ||
+					(isFrameworkName(prop) &&
+						!SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, prop) &&
+						!(isFrameworkMarkerKey(prop) && isFrameworkInternal(wrapper)))) &&
+				prop !== "___materialize"
+			) {
 				runtime_assertOwnedWrite(wrapper, prop);
 				return true;
 			}
@@ -24523,6 +24574,10 @@ class UnifiedWrapper extends ComponentBase {
 					if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
 					// An object defined after the api was built is data, as one assigned is (#826).
 					if ("value" in descriptor) runtime_markAssignedData(wrapper, descriptor.value);
+					// A name with the framework's prefix is never a member: a definition is absorbed as an assignment is, so nothing
+					// is stored and nothing reads back (the framework's own `___materialize` and metadata keys excepted).
+					const absorbed = runtime_absorbsFrameworkName(target, prop, descriptor, wrapper);
+					if (absorbed !== undefined) return absorbed;
 					// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 					if (isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
 					// A member fixed in one step holding an object would be handed out as it is: refused while permissions are on.

@@ -27,7 +27,7 @@
  * system off, where the privacy gate does not apply. A private member a class's prototype holds is the owning module's
  * as one the node holds is: another module reading it through any of the prototype routes is refused as reading it off
  * the node is, and the prototype lists and describes it to that module no more than a node does. Names with three or
- * four leading underscores are the framework's: creating one on another module's node is refused as a `__` one is.
+ * four leading underscores are the framework's, on any node: a module creating one on a node is answered as a no-op, nothing is stored and reading it back gives undefined (a class prototype is the module's own plain object and holds it as plain JS does); on another module's node, where the privacy gate applies, it is refused as a `__` one is.
  * Checked in eager and lazy mode, async and live runtime.
  *
  * Fixture: `api_tests/api_test_private_create` — `owned/` mounted at `owned`, `creator/` mounted at `creator`;
@@ -224,15 +224,22 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => SETUPS.map((
 			}
 		});
 
-		it('answers creating a member with three or four leading underscores on another module\'s node as a "__" one', async () => {
+		it("absorbs creating a member with three or four leading underscores on another module's node, and refuses it where the privacy gate applies", async () => {
 			await mount();
 			for (const prefix of FRAMEWORK_PREFIXES) {
 				for (const how of HOWS) {
 					const key = keyFor(prefix, how);
 					const outcome = await creatorMakes("other", how, key);
-					const twinAnswer = await plain(how, key);
 					if (other === "plain") {
-						expect({ prefix, how, ...outcome }).toEqual({ prefix, how, ...twinAnswer, ownerRead: twinAnswer.read });
+						// Where the privacy gate does not apply the write is absorbed: nothing is stored, nothing reads back. A
+						// prototype is the module's own plain object, which holds the member as plain JS does.
+						if (PROTOTYPE_ROUTES.includes(how)) {
+							const twinAnswer = await plain(how, key);
+							expect({ prefix, how, ...outcome }).toEqual({ prefix, how, ...twinAnswer, ownerRead: twinAnswer.read });
+							continue;
+						}
+						const missing = await absent(how, key);
+						expect({ prefix, how, ...outcome }).toEqual({ prefix, how, created: "done", read: missing, ownerRead: missing });
 						continue;
 					}
 					// Refused, so nothing was created: the creator and the owning module read nothing there.
@@ -248,13 +255,15 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => SETUPS.map((
 			}
 		});
 
-		it("lets a module create a member with three or four leading underscores on its own node, and read it back, as plain JS does", async () => {
+		it("absorbs a module creating a member with three or four leading underscores on its own node: nothing is stored and it reads back undefined", async () => {
 			await mount();
 			for (const prefix of FRAMEWORK_PREFIXES) {
 				for (const how of HOWS) {
 					const key = keyFor(prefix, how);
 					const creator = await creatorMakes("own", how, key);
-					expect({ prefix, how, ...creator }).toEqual({ prefix, how, ...(await plain(how, key)) });
+					// A prototype is the module's own plain object, which holds the member as plain JS does.
+					const expected = PROTOTYPE_ROUTES.includes(how) ? await plain(how, key) : { created: "done", read: await absent(how, key) };
+					expect({ prefix, how, ...creator }).toEqual({ prefix, how, ...expected });
 				}
 			}
 		});

@@ -408,6 +408,7 @@
 		"API_PATH_REASON_UNSAFE_SEGMENT": "contém um segmento inseguro (__proto__, constructor, prototype) que poluiria a cadeia de protótipos",
 		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "nomeia um segmento que nenhum caminho da API pode conter (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "contém um segmento 'then', que tornaria esse namespace awaitable",
+		"API_PATH_REASON_FRAMEWORK_SEGMENT": "contém um segmento que começa com três sublinhados, um nome reservado aos membros próprios do framework",
 		"API_PATH_REASON_INVALID_TYPE": "deve ser uma string, array de strings, string vazia (raiz) ou null/undefined (raiz)",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "contém segmentos de caminho vazios",
 		"API_PATH_REASON_COLLISION_ERROR": "o caminho já existe e o modo de colisão é 'error'",

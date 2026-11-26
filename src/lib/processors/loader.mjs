@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:44:47-08:00 (1795635887)
+ *	@Last modified time: 2026-11-25T14:03:42-08:00 (1795644222)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,8 @@ import { DEFAULT_API_DEPTH } from "#helpers/defaults";
 // browser, but those methods never run there, so no per-call guard is needed.
 import { isNode, fsp, path, url, createRequire } from "#helpers/platform";
 import { compilePattern } from "#helpers/pattern-matcher";
-import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
+import { isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
+import { isFrameworkName } from "#helpers/reserved-keys";
 import { SlothletError, SlothletWarning } from "#errors";
 import { translate } from "#i18n";
 import { HELPERS_PARAM, HELPERS_PER_MODULE, internals as instanceImportsInternals } from "#helpers/instance-imports";
@@ -958,7 +959,7 @@ export class Loader extends ComponentBase {
 	 * @private
 	 */
 	#isReservedEntryName(name) {
-		return isFrameworkReservedKey(name) || isFrameworkReservedKey(this.slothlet.helpers.sanitize.sanitizePropertyName(name));
+		return isFrameworkName(name) || isFrameworkName(this.slothlet.helpers.sanitize.sanitizePropertyName(name));
 	}
 
 	/**
@@ -1724,12 +1725,12 @@ export class Loader extends ComponentBase {
 		for (let ofIndex = 0, ofList = Objects.keys(module); ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
 			if (key !== "default" && key !== "module.exports" && typeof key === "string") {
-				// Reserved-name rejection (#260): an export named for a framework-reserved key
-				// (`___materialize`, `____impl`, …) can only ever be shadowed by the framework's own
+				// Reserved-name rejection (#260): an export named with the framework's prefix
+				// (`___materialize`, `____impl`, any `___` / `____` name) can only ever be shadowed by the framework's own
 				// handle — it is unreachable on the composed surface and a standing hazard to the
 				// wrapper contract. Refuse it loudly at load instead of silently coexisting, so the
 				// module author learns at the file, not from a distant behavioral surprise.
-				if (isFrameworkReservedKey(key)) {
+				if (isFrameworkName(key)) {
 					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key });
 				}
 				// No api path can hold `__proto__`: composing it would set the node's prototype rather than add a

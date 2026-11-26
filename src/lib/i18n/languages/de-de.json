@@ -408,6 +408,7 @@
 		"API_PATH_REASON_UNSAFE_SEGMENT": "enthält ein unsicheres Segment (__proto__, constructor, prototype), das die Prototypenkette verunreinigen würde",
 		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "nennt ein Segment, das kein API-Pfad enthalten kann (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "enthält ein Segment 'then', das diesen Namespace awaitable machen würde",
+		"API_PATH_REASON_FRAMEWORK_SEGMENT": "enthält ein Segment, das mit drei Unterstrichen beginnt – ein Name, der den eigenen Mitgliedern des Frameworks vorbehalten ist",
 		"API_PATH_REASON_INVALID_TYPE": "muss ein String, ein Array von Strings, ein leerer String (Root) oder null/undefined (Root) sein",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "enthält leere Pfad-Segmente",
 		"API_PATH_REASON_COLLISION_ERROR": "Pfad existiert bereits und Kollisionsmodus ist 'error'",
