@@ -148,21 +148,197 @@ State a run needs to hand back belongs in its return value, not in `self`.
 
 ### Module code cannot import leaf files
 
-An api file, or a lib file it loads, that imports, re-exports or requires another file of an api tree (a sibling, a file in another folder of the tree, a file of an `api.add()` mount) is refused with `MODULE_LEAF_IMPORT_REFUSED`, whatever the permission mode. In v3 the import loaded a second copy of the file, with its own module state. Move code two leaves share into a lib folder outside the api tree, and reach another leaf through `self`:
+An api file, or a lib file it loads, that imports, re-exports or requires another file of an api tree (a sibling, a file in another folder of the tree, a file of an `api.add()` mount) is refused with `MODULE_LEAF_IMPORT_REFUSED`, whatever the permission mode. In v3 the import loaded a second copy of the file, with its own module state. Move code two leaves share into a lib folder outside the api tree, and reach another leaf through `self`.
 
-```javascript
-// v3: api/report/report.mjs
-import { make } from "../point/point.mjs";
-export const report = (x) => make(x);
+v3, a helper kept in the api tree and imported by its siblings:
 
-// v4: shared code in lib/, or the leaf through self
-import { self } from "@cldmv/slothlet/runtime";
-export const report = (x) => self.point.make(x);
+```text
+project/
+└── api/
+    ├── util/format.mjs    export const format = (p) => `${p.x},${p.y}`;
+    ├── point/point.mjs    export const make = (x, y) => ({ x, y });
+    └── report/report.mjs  import { format } from "../util/format.mjs";   // a leaf file
+                           import { make } from "../point/point.mjs";     // a leaf file
+                           export const report = (x, y) => format(make(x, y));
 ```
 
-The host's own imports of leaf files are unchanged. See [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#leaf-files-are-not-imported).
+v4, the helper moved to `lib/` beside `api/`, and the sibling leaf reached through `self`:
 
-In the browser no import is seen, so the refusal does not apply there: a module that imports a leaf file still gets a copy of the file of its own, as in v3, and that copy is never the leaf. The same code is refused under Node and under vite or vitest, so move it to `self` or a lib folder even when the browser build works.
+```text
+project/
+├── lib/
+│   └── format.mjs         export const format = (p) => `${p.x},${p.y}`;
+└── api/
+    ├── point/point.mjs    export const make = (x, y) => ({ x, y });
+    └── report/report.mjs  (below)
+```
+
+```javascript
+// api/report/report.mjs
+import { self } from "@cldmv/slothlet/runtime";
+import { format } from "../../lib/format.mjs"; // a lib file: loads
+
+export const report = async (x, y) => format(await self.point.make(x, y));
+```
+
+If the host still needs `api.util.format`, keep a leaf that re-exports the lib file: `api/util/format.mjs` with `export { format } from "../../lib/format.mjs";`. A leaf importing a lib file is fine; other leaves still reach it through `self.util.format`, not by importing it.
+
+- **Host code is exempt.** The host and its tests import leaf files as before, and a file no live instance composes is a lib file.
+- **Apis shipped as npm packages are held to the same rule.** A package's leaf and lib files are refused a leaf file whether they name it by a relative path, the package's own name, an `#imports` entry or another package's bare specifier. Package authors move shared code into the package's lib folder the same way.
+- **The refusal happens as the import resolves.** An eager build fails with the importing file's `MODULE_IMPORT_FAILED`, the refusal as its cause; in lazy mode the folder holding the file fails as it loads; an `import()` or `require()` inside a function fails when it runs.
+
+In the browser no import is seen, so the refusal does not apply there: a module that imports a leaf file still gets a copy of the file of its own, as in v3, and that copy is never the leaf. The same code is refused under Node and under vite or vitest, so move it to `self` or a lib folder even when the browser build works. See [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#leaf-files-are-not-imported).
+
+### A run reads a snapshot of the instance as of its start
+
+- v3: a `run()` / `scope()` read the instance live. A change the host or a module made after the run started (`api.x = …`, a member or a `Map` changed through the api) reached the open run, and data objects such as a `Map` or a `Date` were the instance's own objects inside it.
+- v4: a run reads the api tree, every value reachable through it, the permission rules, hooks, metadata, versioning and the context as they were when it started. A run opened afterwards reads the new value. What a run writes stays in the run. Nothing is copied when a run opens; the instance saves an object just before it first changes it while a run is open.
+
+```javascript
+// api/settings.mjs
+import { self, context } from "@cldmv/slothlet/runtime";
+export const cfg = { n: 1 };
+export function read() {
+	return [context.region, self.settings.cfg.n];
+}
+
+// host
+const api = await slothlet({ base: "./api", context: { region: "eu" } });
+let release;
+const gate = new Promise((resolve) => (release = resolve));
+const pending = api.slothlet.context.run({ user: "alice" }, async () => {
+	await gate;
+	return api.settings.read();
+});
+api.slothlet.context.set({ region: "us" }); // after the run started
+api.settings.cfg.n = 5; // after the run started
+release();
+await pending; // ["eu", 1]: the run reads the instance as of its start
+api.settings.read(); // ["us", 5]
+```
+
+What to check:
+
+- **Code that expects a run to see later changes.** A long-running run, such as a server's `listen()` called inside `run()`, keeps reading the instance as it was when the run opened, so it doesn't see later config. Open the server outside the run and open a run per request, or keep changing values in something the snapshot doesn't cover (a module's own variables, a live resource).
+- **Identity checks on built-ins.** A `Map`, `Set`, `Date`, typed array and the like read in a run is the run's own copy, so `===` against the instance's object is `false`. Compare by content, or by key: a copied `Map` keeps the same key objects.
+- **Emitters are shared.** An `EventEmitter` or `EventTarget` is the live object in every run: listeners, events and plain properties a run sets on it reach the instance.
+- **Promises.** While a run of the instance is open, a promise a call returns is a new promise object that settles one microtask later with the same value. Code that compares a returned promise with `===`, or counts microtasks, sees the difference.
+- **Outside the snapshot.** A module's own variables, `#private` methods, live resources and references kept from before the run are the objects themselves. The full list is in [CONTEXT-PROPAGATION.md](./CONTEXT-PROPAGATION.md#what-a-runs-snapshot-covers-and-what-it-doesnt).
+
+### The host's `api` inside a run, and `run.self()`
+
+Inside a run, `api` is the instance's api: a change the host makes through it in the run (a write, `Object.defineProperty`, `delete`, a closing, `Object.setPrototypeOf`) reaches the instance. To keep the host's changes in the run, use the run's own view, which `run.self()` and `scope({ self: true })` hand to the callback:
+
+```javascript
+await api.slothlet.context.run.self({ requestId: "req-123" }, (view) => {
+	view.draft = "note"; // stays in the run
+	api.saved = "note"; // reaches the instance
+});
+```
+
+The view is what module code's `self` resolves to in that run. See [CONTEXT-PROPAGATION.md](./CONTEXT-PROPAGATION.md#apislothletcontextrunselfcontextdata-callback-args).
+
+### `run()` and `scope()` are isolated in every permission mode
+
+Every `run()` / `scope()` keeps its context and its callers to itself, on both runtimes, whatever `permissions.mode` says (no `permissions` config, `"off"`, `"disabled"`, `"on"` or `"strict"`). The permission mode decides only what code is allowed to do, not which flow it sees.
+
+- v3: on the live runtime, two `run()` flows waiting at `await`s at the same time could see each other's context ([#889](https://github.com/CLDMV/slothlet/issues/889)), and how far a run was kept apart from code outside it depended on the permission mode.
+- v4: no code sees or takes another flow's context, and each flow's calls report their own caller. The details, and the browser's one limit (the code after a bare `await` while flows interleave), are in [CONTEXT-PROPAGATION.md](./CONTEXT-PROPAGATION.md#code-that-enters-another-flow-by-itself-async-runtime).
+
+### Process-wide hooks while an instance exists
+
+Keeping flows apart in every mode needs a hook that Node runs for every promise and callback in the process, not only for slothlet's.
+
+- v3: no `async_hooks` hook and no V8 promise hooks were installed.
+- v4, async runtime: an `async_hooks.createHook()` hook is installed while any async-runtime instance exists, in every permission mode, and removed after the last one shuts down. Measured on Node 26, it adds about 0.9 µs per `await` of a `then()` outside every flow and about 1.3 µs inside a `run()` or a call, and about 0.9 µs / 3.2 µs per `setImmediate()` outside / inside.
+- v4, live runtime in Node: V8's promise hooks (`v8.promiseHooks`, not `async_hooks`) are installed while any live instance exists, in every permission mode. They cost every promise job in the process about 0.15 µs, and a callback a flow registers through a patched boundary about 1 µs more.
+
+A process with only live instances still makes no `async_hooks` hook and no `AsyncLocalStorage`. If another library in the process also installs hooks, both run.
+
+### A thenable a `run()` callback returns settles inside the run
+
+- v3: on the async runtime, a thenable that is not a native promise, returned from a `run()` / `scope()` callback, had its `then()` called after the run's store was left, so it read no run context.
+- v4: the result is taken up inside the run on both runtimes. Native promises and plain values come back as before. `run()` and `scope()` always return a promise.
+
+### A function is the same value in every run
+
+- v3.24.0: a value a module made could come back as a Proxy with the permission system off, and nested data lost its identity ([#726](https://github.com/CLDMV/slothlet/issues/726)).
+- v4: a function read through the api is the same value inside and outside a `run()` and in every run, so `emitter.off(fn)`, `Set` / `Map` keys and memoised lookups find it. Under `permissions.caller.attribution: "precise"` it is its module's one stand-in, the same in every run. A job a flow's own code hands Node (a promise reaction, a timer, an immediate, a microtask, a listener) still runs in that flow.
+
+### There is no write without the read
+
+With the permission system on, every module write that passes the ownership and write rules is also held to the read of the member it changes, as the read gate decides it: assignment, `defineProperty`, `delete`, `Reflect.set`, writes through a held node or view, class prototype members, data objects, and `api.add` / `api.remove` from module code.
+
+- v3: a module could replace, redefine or delete a member it was refused a read of, and an explicit write grant passed a write without the read rules.
+- v4: replacing a node is held to the read of every member beneath it; a deny on an object member of a module's data covers writes beneath it as it covers reads; giving a value a member it inherits or one the language reads by itself (`toJSON`, `toString`, `valueOf`, …) is held to the access of the value's path. A function member is held to the read too, so a `:call` deny keeps a module from calling a function, not from replacing it where a write rule grants that. A member that does not exist yet takes over nothing, and an accessor keeps the write rules alone. Permissions off or disabled are unchanged. See [PERMISSIONS.md](./PERMISSIONS.md#write-permissions).
+
+If a module legitimately rewrites members it may not read, grant it with a `:write` rule, which grants the read as well (next section).
+
+### Rule access levels: `:call`, `:read`, `:access`, `:write`, `:full`
+
+A rule target's suffix now names which of a call, a read and a write the rule decides.
+
+| Suffix    | Call | Read | Write |
+| --------- | ---- | ---- | ----- |
+| `:call`   | ✓    |      |       |
+| `:read`   |      | ✓    |       |
+| `:access` | ✓    | ✓    |       |
+| `:write`  |      | ✓    | ✓     |
+| `:full`   | ✓    | ✓    | ✓     |
+
+- v3: a target without a suffix decided calls and reads, and `:write` decided writes alone.
+- v4: a target with no suffix is `:access`, so call and read rules keep their meaning. A `:write` allow now grants the read as well as the write, so under `policy: "deny"` a `:write` grant alone lets its callers read and write those members; add a deny on the read where a writer must not read. A `:write` deny refuses the write alone, and a deny that takes the read away refuses the write too. `self.access()` and `global.check.access()` answer whether both the call and the read are allowed. See [PERMISSIONS.md](./PERMISSIONS.md#access-levels).
+
+### A rule target with an unknown suffix is refused
+
+- v3: a target whose suffix named no level and no hook type (`secret.**:wirte`) was kept as a rule on the literal target and matched no api path.
+- v4: it throws `PERMISSION_RULE_INVALID` wherever a rule comes in: the config's `permissions.rules`, `rules.add`, a manifest, the `permissions` option of `api.add`, and rules module code registers. A `capability:` target takes no suffix check. Fix the spelling; an instance whose config carries such a rule does not start.
+- v4 also refuses, with `PERMISSION_RULE_INVALID` in the same places, a target whose path holds a `:` of its own (`vault.secret:read:write`) or names no path before its suffix (`:write`). Both were accepted before and matched nothing.
+- An `api.add` `permissions` option given as an array or a string, or with an `allow` / `deny` that is not an array, was ignored; v4 refuses it with `INVALID_ARGUMENT` before anything mounts.
+
+### Code from before `restart()` is refused after it, with permissions on
+
+- v3: a function, bound function, closure or method a module returned before `restart()` kept working afterwards with the rebuilt instance's rights.
+- v4: while the permission system is on, everything such code does through `self` after the restart is refused with `PERMISSION_DENIED`, and so is a snapshot its call took, whether the host runs it outside any call or inside a `run()` / `scope()`. A `restart()` inside a run does the same for that run's copy. Read the member from `api` again (a held reference is re-pointed) to reach the new instance's code. `reload()` is not a restart: code from before a reload keeps working. With the permission system off, such code keeps working after a restart too.
+
+A `run()` / `scope()` open across a `restart()` that fails is refused as after `shutdown()`: its modules' calls through `self` throw `CONTEXT_NOT_ACTIVE_SELF`. See [RELOAD.md](./RELOAD.md).
+
+### `caller.capture: false` covers only code no module runs
+
+`permissions.caller.capture: false` still turns off the reader identity a function read out of the api carries.
+
+- v3: a reference invoked with no active caller was treated as the host's, wherever the call came from.
+- v4: the opt-out restores host standing only for a reference invoked with no module code running, as when the host calls a reference a module handed it. A reference a module's own code invokes, a callback the module defined included, is still enforced as that module, and the async runtime treats a host call outside every flow as the live runtime does. See [PERMISSIONS.md](./PERMISSIONS.md#captured-references-remember-who-captured-them).
+
+### `FOLDER_INVALID` text and the uncaught-error output
+
+- The `FOLDER_INVALID` message no longer names v3's `dir`. It reads "Configuration error: the path must be a non-empty string that points to an existing folder. Received: …", in every language. Match on `err.code`, not on the text.
+- The handler the package entry installs for an uncaught slothlet error prints the error's `cause` and `details` instead of v3's `originalError` and `context`. Update anything that parses that output.
+- v3 registered that handler as an `uncaughtException` listener that rethrew every other error, so Node exited with code 7 even when the host had a handler of its own. v4 registers it as an `uncaughtExceptionMonitor`: a host with its own `uncaughtException` handler gets every error, a `SlothletError` included, and the readable output (with exit code 1) appears only when nothing else handles the error. Any other unhandled error ends the process as it would without slothlet.
+- What to change: a supervisor, script or test that checks for exit code 7 now sees 1. An app with its own `uncaughtException` handler that used to be ended anyway now keeps running when the handler returns, as it does in plain Node; if it relied on that exit, call `process.exit()` in the handler.
+
+### A member a module creates at runtime is owned by that module
+
+- v3: a member module code created at runtime had no owner of its own; an object or function it created was recorded for the module owning the node it was written on.
+- v4: the module that creates a member (a new key by assignment, `defineProperty`, `Reflect.set`, through a held node, or at the top of `self`) owns it, with what a created object holds. Removing that module removes the member, a scoped removal removes just that member, and a full reload keeps neither. A member placed through a write grant stays part of the subtree it was written into.
+
+### Metadata with a cycle through an array is refused
+
+- v3: metadata validation walked plain objects only, so a cycle through an array (or object → array → object) was accepted.
+- v4: it throws `INVALID_ARGUMENT`, like a cycle through plain objects, at every entry point (config `metadata`, `api.add` metadata, `metadata.global` / `set`).
+
+### Node.js 24.15 or later
+
+slothlet requires Node.js 24.15.0 or later, to run it and to develop on it (`engines.node` and `devEngines` are both `>=24.15.0`).
+
+- v3: Node 22.15 or later to run slothlet, 22.22 or later to develop it.
+- v4: Node 24.15.0 or later. Node 22 is no longer supported; it reaches end of life in April 2027. The async runtime relies on Node's `AsyncContextFrame`, which is on by default from Node 24, and 24.15.0 is the first Node 24 release with both async hooks that leave promise jobs out (`createHook({ trackPromises: false })`) and `module.registerHooks()` asked for a `require.resolve()`, which slothlet relies on.
+- With permissions on, an async-runtime instance checks that `AsyncContextFrame` is on (the `async-context-frame` baseline check). It fails only when Node runs with `--no-async-context-frame`, on the command line or in `NODE_OPTIONS`: under `permissions.mode: "strict"` the instance then does not start (`PERMISSION_BASELINE_UNMET`), and under `"on"` it starts and raises one `WARNING_PERMISSION_BASELINE_UNMET`. With permissions off or disabled, and on the live runtime, nothing is checked.
+
+### Reload instance IDs and `diag.inspect().runtime.running`
+
+- v3: a full reload's instance ID was `<id>_reload_<time>`; `diag.inspect().runtime.running` was `false` inside `context.run()` / `scope()` on the async runtime and could read `true` in host code outside every call on the live runtime.
+- v4: the ID is `<id>_reload_<time>_<random>`, claimed before the old one is let go; if it cannot be claimed the reload fails with `INSTANCE_ID_IN_USE` and the instance keeps working on its current ID. `runtime.running` is `true` exactly while code of the instance (a call, a `run()` / `scope()` callback, a load) runs. Don't parse instance IDs.
 
 ### Lazy mode under vitest needs the plugin
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:41-08:00 (1794882581)
+ *	@Last modified time: 2026-11-25T11:47:26-08:00 (1795636046)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,7 @@
  * them.
  *
  * The reads run in a plain Node process, once as it is and once with an async hook enabled (`createHook()` with
- * `before` and `after`): with async hooks on (Node 22 has them on whenever an `AsyncLocalStorage` is in use), Node runs
+ * `before` and `after`): with async hooks on, Node runs
  * its timer and immediate queues through one more frame of its own, and a call picked up after an `await` there has
  * to read as the same call.
  * @module tests/vitests/suites/permissions/permissions-callable-folder-positions

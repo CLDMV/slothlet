@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T19:49:35-08:00 (1794973775)
+ *	@Last modified time: 2026-11-25T01:47:41-08:00 (1795600061)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,7 +76,6 @@ import {
 	setValues,
 	splitText,
 	String,
-	StringMethods,
 	WeakMap,
 	WeakMapMethods
 } from "#helpers/intrinsics";
@@ -659,9 +658,8 @@ export class EventManager extends ComponentBase {
 		}
 		if (
 			typeof listenerId !== "string" ||
-			!(typeof envelope.listeners === "string"
-				? StringMethods.includes(envelope.listeners, listenerId)
-				: ArrayMethods.includes(envelope.listeners, listenerId))
+			// The envelope is the frozen one this instance built: its `listeners` is always a frozen array.
+			!ArrayMethods.includes(envelope.listeners, listenerId)
 		) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "listenerId",
@@ -832,7 +830,7 @@ export class EventManager extends ComponentBase {
 		let level = pm.resolveEventLevel(sub.subscriberPath, event, runtimeContext);
 		// A subscription made under another module's call as its ceiling is delivered at no more than that call
 		// would be (#597).
-		for (let i = 0, ceilingPaths = sub.ceilingPaths ?? []; i < ceilingPaths.length; i++) {
+		for (let i = 0, ceilingPaths = sub.ceilingPaths; i < ceilingPaths.length; i++) {
 			const ceilingPath = ceilingPaths[i];
 			const ceilingLevel = pm.resolveEventLevel(ceilingPath, event, runtimeContext);
 			if (EVENT_LEVEL_RANK[ceilingLevel] < EVENT_LEVEL_RANK[level]) level = ceilingLevel;

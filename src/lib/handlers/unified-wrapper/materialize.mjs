@@ -104,7 +104,8 @@ let trustedRootOwn,
 	captureNode,
 	checkpointNodeBuiltins,
 	checkpointNodePrototypes,
-	isWrapper;
+	isWrapper,
+	noteInstanceSource;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -114,17 +115,18 @@ let realClass;
  * @param {object} wrapper - The wrapper to hold the member.
  * @param {PropertyKey} key - The member's key.
  * @param {{get?: Function, set?: Function}} accessor - The module's own getter and setter.
+ * @param {boolean} [enumerable=true] - Whether the member is enumerable, as it is on the object it came from.
  * @returns {void}
  * @private
  *
  * @example
  * defineAdoptedAccessor(wrapper, "total", descriptor);
  */
-function defineAdoptedAccessor(wrapper, key, accessor) {
+function defineAdoptedAccessor(wrapper, key, accessor, enumerable = true) {
 	Objects.defineProperty(wrapper, key, {
 		__proto__: null,
 		...adoptAccessor(wrapper, accessor),
-		enumerable: true,
+		enumerable,
 		configurable: true
 	});
 }
@@ -352,9 +354,10 @@ export function MaterializeLayer(Base) {
 	return Base.layer(
 		class Materialize extends Base {
 			static {
-				Base.define("materialize", { defineAdoptedAccessor, adoptAccessor, adoptArrayIntegrity, syncArrayIntegrity });
+				Base.define("materialize", { defineAdoptedAccessor, adoptAccessor, adoptArrayIntegrity, syncArrayIntegrity, checkpointLoaded });
 				Base.define("impl", { toAdopt: implToAdopt });
 				Base.linkLayer(this, (methods, registered) => {
+					noteInstanceSource = methods.rules.noteInstanceSource;
 					realClass = registered;
 					UnifiedWrapper = registered;
 					ASSIGNED_DATA = methods.values.ASSIGNED_DATA;
@@ -584,6 +587,7 @@ export function MaterializeLayer(Base) {
 					sourceFolder
 				});
 				node.____slothletInternal.sourceValue = value;
+				node.____slothletInternal.instanceSource = false;
 				node.____slothletInternal.moduleObject = impl !== value ? moduleObjectFor(node, value, true) : null;
 				return node.___createProxy();
 			}
@@ -783,6 +787,7 @@ export function MaterializeLayer(Base) {
 				// The module's own object behind the new value, when its file exports it (#746); a member's is set by the
 				// node that hands it its value (see ___adoptImplChildren).
 				this.____slothletInternal.moduleObject = moduleObjectFor(this, newImpl, false);
+				noteInstanceSource(this, newImpl);
 				// The node's members come from the new value from here on: none of them was defined read-only through the node.
 				this.____slothletInternal.readOnlyKeys = null;
 				fillPrototype(this);
@@ -1862,11 +1867,13 @@ export function MaterializeLayer(Base) {
 					// A function's non-enumerable own properties are its own surface, not child endpoints — the
 					// same rule the get trap applies (#304). Beyond `length`/`name`/`prototype` (skipped above),
 					// this covers a module's own `Object.defineProperty(fn, k, { enumerable: false })` and the own
-					// `arguments`/`caller` every sloppy-mode (CommonJS) function carries on Node 22; adopting them
+					// `arguments`/`caller` every sloppy-mode (CommonJS) function carries; adopting them
 					// made them enumerable api children that `Object.keys()` and typegen reported.
 					if (typeof this.____slothletInternal.impl === "function" && !descriptor.enumerable) {
 						continue;
 					}
+					// An object's non-enumerable own member is still its member: it is adopted, and keeps its enumerability, so
+					// `Object.keys()`, `JSON.stringify()` and its descriptor report what they report for the object (#964).
 					// An accessor becomes an accessor on the wrapper that runs the impl's own getter on every read and
 					// its setter on every write, as in plain JavaScript; adopting its value would store what it returned
 					// at load (#590), and drop the setter. It stays on the
@@ -1887,7 +1894,7 @@ export function MaterializeLayer(Base) {
 							delete this.____slothletInternal.impl[key];
 							continue;
 						}
-						defineAdoptedAccessor(this, key, descriptor);
+						defineAdoptedAccessor(this, key, descriptor, descriptor.enumerable);
 						continue;
 					}
 					const value = this.____slothletInternal.impl[key];
@@ -1975,7 +1982,7 @@ export function MaterializeLayer(Base) {
 							__proto__: null,
 							value: cycleNode.___createProxy(),
 							writable: false,
-							enumerable: true,
+							enumerable: descriptor.enumerable,
 							configurable: true
 						});
 						continue;
@@ -2152,7 +2159,13 @@ export function MaterializeLayer(Base) {
 									propKey: key
 								});
 							}
-							Objects.defineProperty(this, key, { __proto__: null, value: wrapped, writable: false, enumerable: true, configurable: true });
+							Objects.defineProperty(this, key, {
+								__proto__: null,
+								value: wrapped,
+								writable: false,
+								enumerable: descriptor.enumerable,
+								configurable: true
+							});
 							// Symbol keys are not used as API module names in practice.
 							/* v8 ignore next */
 							if (typeof key !== "symbol") {
@@ -2204,7 +2217,7 @@ export function MaterializeLayer(Base) {
 								const currentImpl = this.____slothletInternal.impl;
 								if (currentImpl) currentImpl[key] = newValue;
 							},
-							enumerable: true,
+							enumerable: descriptor.enumerable,
 							configurable: true
 						});
 					} else if (wrapped === null) {
@@ -2212,7 +2225,13 @@ export function MaterializeLayer(Base) {
 						// explicit `null` value — both are stored unwrapped. Object identity itself keeps a
 						// builtin live (mutating the same Map is visible from every reference to it); nothing
 						// further is needed the way the primitive branch above needs a live accessor.
-						Objects.defineProperty(this, key, { __proto__: null, value: value, writable: false, enumerable: true, configurable: true });
+						Objects.defineProperty(this, key, {
+							__proto__: null,
+							value: value,
+							writable: false,
+							enumerable: descriptor.enumerable,
+							configurable: true
+						});
 						// `keepImplProperties` is always false when called from ___setImpl; this guard is unreachable.
 						/* v8 ignore next */
 						if (descriptor.configurable && !keepImplProperties && this.____slothletInternal.impl) {
@@ -2220,7 +2239,13 @@ export function MaterializeLayer(Base) {
 						}
 					} else {
 						// wrapped is falsy but not null - shouldn't happen, but define value anyway
-						Objects.defineProperty(this, key, { __proto__: null, value: value, writable: false, enumerable: true, configurable: true });
+						Objects.defineProperty(this, key, {
+							__proto__: null,
+							value: value,
+							writable: false,
+							enumerable: descriptor.enumerable,
+							configurable: true
+						});
 						// wrapped=false (shouldn't happen) — `keepImplProperties` is always false when called from ___setImpl; guard is unreachable.
 						/* v8 ignore next */
 						if (descriptor.configurable && !keepImplProperties && this.____slothletInternal.impl) {
@@ -2602,6 +2627,7 @@ export function MaterializeLayer(Base) {
 				// The value the child was built from (before any clone), so a parent array can tell whether the
 				// element its cached child fronts is still the one at that index (#602).
 				nestedWrapper.____slothletInternal.sourceValue = value;
+				nestedWrapper.____slothletInternal.instanceSource = false;
 				// What an object assigned to the api after it was built holds is data, as the object is (#826).
 				if (WeakSetMethods.has(ASSIGNED_DATA, value) || holdsAssignedData(this)) nestedWrapper.____slothletInternal.assignedData = true;
 				// The module's own object, when the child is built from a copy of it: writes through the node reach it (#746).

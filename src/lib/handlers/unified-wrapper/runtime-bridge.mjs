@@ -411,8 +411,7 @@ function runtimeTraps(contextManager, runtime) {
 			// held to the root of the tree, as a change to `self` as a whole is (#625).
 			if (typeof prop === "symbol") {
 				selfChangeTarget(ctx, prop);
-				ctx.self[prop] = value;
-				return true;
+				return Reflect.set(ctx.self, prop, value);
 			}
 			// A module never replaces the framework's namespace or root functions, isolated scope or not (#625).
 			if (ctx.slothlet) assertFrameworkRootChange(ctx.slothlet, prop);
@@ -420,8 +419,7 @@ function runtimeTraps(contextManager, runtime) {
 			// own api (see the run layer): the write goes to it, which makes it through `apiManager.setOwnedProperty`
 			// with every check the write below meets, and keeps it in the run.
 			if (ctx.slothlet?.boundApi && ctx.self !== ctx.slothlet.boundApi) {
-				ctx.self[prop] = value;
-				return true;
+				return Reflect.set(ctx.self, prop, value);
 			}
 			const apiManager = ctx.slothlet?.handlers?.apiManager;
 			if (apiManager && typeof apiManager.setOwnedProperty === "function") {
@@ -430,12 +428,12 @@ function runtimeTraps(contextManager, runtime) {
 				// Ownership is anchored to the currently executing module.
 				// Code a caller supplied to another module's call writes as the supplier and every call of its ceiling,
 				// and each of them has to own the path (#597).
-				apiManager.setOwnedProperty(String(prop), value, trustedRootOwn.writersOf(ctx));
+				// The write's own answer: false when the root refuses it (closed, or a read-only member), as on a plain object (#960).
+				return apiManager.setOwnedProperty(String(prop), value, trustedRootOwn.writersOf(ctx));
 			} else {
 				/* v8 ignore next */
-				ctx.self[prop] = value;
+				return Reflect.set(ctx.self, prop, value);
 			}
-			return true;
 		}
 	};
 

@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "数组包含空字符串片段",
 		"API_PATH_REASON_RESERVED_NAME": "与保留名称冲突（slothlet、shutdown、destroy）",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "包含会污染原型链的不安全段（__proto__、constructor、prototype）",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "指定了任何 API 路径都不可能包含的段 (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "包含 'then' 段，这会使该命名空间变为可 await",
 		"API_PATH_REASON_FRAMEWORK_SEGMENT": "包含以三个下划线开头的段，该名称保留给框架自身的成员",
 		"API_PATH_REASON_INVALID_TYPE": "必须是字符串、字符串数组、空字符串（根）或 null/undefined（根）",
@@ -560,7 +561,6 @@
 		"PERMISSION_BASELINE_REASON_CSP_BLOB_ALLOWED": "该页面会运行来自 blob: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
 		"PERMISSION_BASELINE_REASON_CSP_DATA_ALLOWED": "该页面会运行来自 data: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
 		"PERMISSION_BASELINE_REASON_VITEST_PLUGIN_ABSENT": "在 vitest 下运行，但 vitest 配置中没有 slothlet 的 @cldmv/slothlet/vite 插件。",
-		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_ENABLE": "Node 的 AsyncContextFrame 已关闭，因此 Node 把 AsyncLocalStorage 保存的值放在模块代码可以触及的异步资源上。请使用 {flag} 启动 Node。",
 		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_REMOVE_FLAG": "Node 的 AsyncContextFrame 已关闭，因此 Node 把 AsyncLocalStorage 保存的值放在模块代码可以触及的异步资源上。请从 Node 的启动参数和 {env} 中移除 {flag}。",
 		"INVALID_CONFIG_UNKNOWN_KEY": "{where} 中有未知的键 '{key}'。slothlet v4 没有这个选项。 [{path|list}]",
 		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "请检查键是否拼写错误。为 slothlet v3 编写的代码可以用 npx @cldmv/slothlet-migrate 迁移到 v4 的名称。"

@@ -1175,13 +1175,16 @@ export function WaitingLayer(Base) {
 							// starts as `wrapper` and the walk only ever reassigns it to a truthy resolveWrapper()
 							// result — the non-wrapper arm returns undefined above), and a wrapper's prototype is
 							// the framework's, which `in` would wrongly reach into.
+							// The member is read through the node, as a read of its path answers once the folder has loaded: the raw
+							// wrapper's own slot holds a primitive member's child node, not the primitive.
 							const isFinalInternal = isFrameworkReservedKey(prop);
 							if (!isFinalInternal && hasOwn(current, prop)) {
-								if (!kept) return current[prop];
+								const node = current.____slothletInternal.proxy;
+								if (!kept) return node[prop];
 								const previous = rulesShared.keptAccessorRead;
 								rulesShared.keptAccessorRead = { wrapper: current, reader: kept.reader };
 								try {
-									return current[prop];
+									return node[prop];
 								} finally {
 									rulesShared.keptAccessorRead = previous;
 								}

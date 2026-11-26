@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T15:08:41-08:00 (1794956921)
+ *	@Last modified time: 2026-11-25T11:47:14-08:00 (1795636034)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@
  *
  * A child process runs each configuration, with Node's default async context and, where the Node running the suite has
  * the switch, with `AsyncContextFrame` off. The suite's own process runs the same routes once more as on a Node whose
- * async hooks cannot leave promises out (Node 22.15, 24.0), where a promise's job is told by walking the stack: the
+ * async hooks cannot leave promises out, where a promise's job is told by walking the stack: the
  * install-time probe's answer is put in place for it.
  */
 
@@ -175,7 +175,7 @@ function probe(nodeFlags, mode) {
 	return JSON.parse(result.stdout.trim().split("\n").pop());
 }
 
-// Node 24 and later switch AsyncContextFrame off with this flag; Node 22 runs without it by default.
+// Node 24 and later switch AsyncContextFrame off with this flag.
 const FRAMES = process.allowedNodeEnvironmentFlags.has("--no-async-context-frame")
 	? [
 			["default async context", []],
@@ -347,8 +347,7 @@ describe("Permissions > a flow's own promise or tick job re-entered by module co
 });
 
 /**
- * Whether the Node running the suite leaves an async hook made with `trackPromises: false` (or the `kNoPromiseHook`
- * marker on a Node whose `createHook()` takes no such option) out of a promise's job: told by a hook of the test's own,
+ * Whether the Node running the suite leaves an async hook made with `trackPromises: false` out of a promise's job: told by a hook of the test's own,
  * whose `before` would see the job's async id. Call it while slothlet's job hook is installed, so promises get ids.
  * @returns {Promise<boolean>} Whether promise jobs are left out.
  */
@@ -361,8 +360,6 @@ function nodeLeavesPromiseJobsOut() {
 			},
 			trackPromises: false
 		});
-		const marker = Object.getOwnPropertySymbols(hook).find((symbol) => symbol.description === "kNoPromiseHook");
-		if (marker !== undefined) hook[marker] = true;
 		hook.enable();
 		Promise.resolve().then(() => {
 			const job = executionAsyncId();

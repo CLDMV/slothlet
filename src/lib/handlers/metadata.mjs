@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:44:23-08:00 (1795419863)
+ *	@Last modified time: 2026-11-25T11:44:33-08:00 (1795635873)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -287,7 +287,7 @@ export class Metadata extends ComponentBase {
 		const isContainer = (candidate) => Arrays.isArray(candidate) || utilities.isPlainObject(candidate);
 		// Only #mergeMetadataValue() calls this helper, and both call sites already guard with
 		// a plain-object / array check before invoking it. The non-container early return is unreachable.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!isContainer(value)) return;
 
 		const validate = (candidate, ancestors = new WeakSet()) => {
@@ -911,7 +911,7 @@ export class Metadata extends ComponentBase {
 	 */
 	getPathMetadata(apiPath) {
 		// All callers (metadata.get) always pass a valid resolved string; the null/non-string guard is defensive.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!apiPath || typeof apiPath !== "string") return {};
 		return { ...this.#globalUserMetadata, ...this.#collectPathChain(apiPath) };
 	}
@@ -1076,7 +1076,7 @@ export class Metadata extends ComponentBase {
 		const written = writeTarget(this);
 		if (written !== this) return written.takeUserChanges(from);
 		// Defensive: a reload always hands the old copy's own handler, which it set tracking on.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!(from instanceof Metadata) || from === this || from.#changes === null) return;
 		const changes = from.#changes;
 		from.#changes = null;
@@ -1169,8 +1169,10 @@ export class Metadata extends ComponentBase {
 	 */
 	#identity(wrapper) {
 		const built = this.slothlet.handlers?.versionManager?.buildCallerArg?.(wrapper);
-		/* v8 ignore next 2 -- the version manager is always registered; the fallback keeps the shape without one */
+		// The version manager is always registered, so `built` is always set; the fallback keeps the shape without one.
+		/* v8 ignore else */
 		if (built) return built;
+		/* v8 ignore start */
 		const system = this.getSystemMetadata(wrapper);
 		return {
 			path: system?.apiPath ? splitText(system.apiPath, ".") : [],
@@ -1178,6 +1180,7 @@ export class Metadata extends ComponentBase {
 			metadata: this.getMetadata(wrapper),
 			version: null
 		};
+		/* v8 ignore stop */
 	}
 
 	/**

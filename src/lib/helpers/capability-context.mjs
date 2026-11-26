@@ -503,7 +503,7 @@ function runtime_disable() {
 		try {
 			if (holdsValue(host, key, value)) Reflect.defineProperty(host, key, restore);
 		} catch {
-			/* v8 ignore next -- a host that no longer lets the member be defined keeps the wrapper, which passes through. */
+			// A host that no longer lets the member be defined keeps the wrapper, which passes through.
 		}
 	}
 	functionWrapper = null;

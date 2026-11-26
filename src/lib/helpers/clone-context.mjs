@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:18-08:00 (1794951318)
+ *	@Last modified time: 2026-11-25T01:49:19-08:00 (1795600159)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -577,6 +577,9 @@ function runtime_reveal(root) {
 						(buffer, made) => apply(mapSet, copies, [buffer, made])
 					);
 					apply(mapSet, copies, [value, copy]);
+					// A copy made without `remember` (a date, a pattern, a boxed primitive) is still the one copy of the data:
+					// the node reached again, directly or through another view, gives it back, as one object cloned twice does.
+					if (subject !== value) apply(mapSet, copies, [subject, copy]);
 					return copy;
 				}
 				if ("value" in node) {

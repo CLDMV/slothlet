@@ -827,14 +827,14 @@ function rootProxy(slothlet, records, instanceApi, closeSelf) {
 	// A run that started before a change to the root reads the root as it was (see helpers/run-snapshot): the root's
 	// members are saved before every change to it, once per window, while a run is open.
 	const rootBarrier = () => {
-		if (anyRunOpen() && slothlet.api && !inRunTree()) beforeChange(domainOf(slothlet), slothlet.api, rootCapture);
+		if (!anyRunOpen() || !slothlet.api) return;
+		if (!inRunTree()) beforeChange(domainOf(slothlet), slothlet.api, rootCapture);
+		// The root of a run's own tree is saved for the runs opened in that run (see Slothlet#_runTreeSnapshot).
+		else beforeChange(slothlet._runTreeSnapshot(slothlet._treeEpoch), slothlet.api, rootCapture);
 	};
 	// The root's members as they are, inheriting from the prototype the root has (a function root's is on its record).
 	const rootCapture = (api) => {
-		const copy = shallowCopy(api);
-		const held = rootHeld();
-		if (Reflect.getPrototypeOf(copy) !== held) Reflect.setPrototypeOf(copy, held);
-		return copy;
+		return shallowCopy(api, rootHeld());
 	};
 	// Whether a member is read from a prototype the function root was given: one the root does not hold itself.
 	const rootInherits = (prop) => {

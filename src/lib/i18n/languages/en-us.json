@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "array contains empty string segments",
 		"API_PATH_REASON_RESERVED_NAME": "conflicts with reserved names (slothlet, shutdown, destroy)",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "contains an unsafe segment (__proto__, constructor, prototype) that would pollute the prototype chain",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "names a segment that no api path can hold (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "contains a 'then' segment, which would make that namespace awaitable",
 		"API_PATH_REASON_FRAMEWORK_SEGMENT": "contains a segment starting with three underscores, a name reserved for the framework's own members",
 		"API_PATH_REASON_INVALID_TYPE": "must be a string, array of strings, empty string (root), or null/undefined (root)",
@@ -560,7 +561,6 @@
 		"PERMISSION_BASELINE_REASON_CSP_BLOB_ALLOWED": "the page runs scripts from blob: URLs: its Content Security Policy allows them, or it has none.",
 		"PERMISSION_BASELINE_REASON_CSP_DATA_ALLOWED": "the page runs scripts from data: URLs: its Content Security Policy allows them, or it has none.",
 		"PERMISSION_BASELINE_REASON_VITEST_PLUGIN_ABSENT": "running under vitest without slothlet's @cldmv/slothlet/vite plugin in the vitest config.",
-		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_ENABLE": "Node's AsyncContextFrame is off, so Node keeps what an AsyncLocalStorage holds on async resources that module code can reach. Start Node with {flag}.",
 		"PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_REMOVE_FLAG": "Node's AsyncContextFrame is off, so Node keeps what an AsyncLocalStorage holds on async resources that module code can reach. Remove {flag} from Node's flags and from {env}.",
 		"INVALID_CONFIG_UNKNOWN_KEY": "Unknown key '{key}' in {where}. It is not an option slothlet v4 has. [{path|list}]",
 		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "Check the key for a typo. Code written for slothlet v3 can be moved to the v4 names with npx @cldmv/slothlet-migrate."

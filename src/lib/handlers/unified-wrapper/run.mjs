@@ -61,7 +61,8 @@ import {
 	mapValues,
 	mapEntriesToArray,
 	listUnshift,
-	String
+	String,
+	splitText
 } from "#helpers/intrinsics";
 import {
 	beforeChange,
@@ -84,7 +85,8 @@ import {
 	handOutSettled,
 	rawBehind,
 	rawContent,
-	declaresPrivate
+	declaresPrivate,
+	anyRunOpen
 } from "#helpers/run-snapshot";
 import { RUN_COPY, RUN_SELF } from "#helpers/flow-stores";
 
@@ -132,7 +134,9 @@ let trustedRootOwn,
 	FRAMEWORK_MEMBER_NAMES,
 	takeRefusedChange,
 	WAITING_CHAINS,
-	isWrapper;
+	isWrapper,
+	originalAccessor,
+	reconcileMade;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -241,7 +245,7 @@ const SNAPSHOT_LIVE_MEMBER = Objects.freeze({ __proto__: null, live: true });
  * What a node holds now, as a run that started before its next change reads it (see `helpers/run-snapshot`): each
  * member the node holds on itself (a child node, or a value it keeps) and each its value holds, with the attributes it
  * has, as the node's own traps would find it. Accessors and the members of a module's own Proxy are left to be read
- * live. Nothing runs: only the node's own store and its value are read, by their descriptors.
+ * live; an accessor is kept as well, for a run to read once the node no longer holds it. Nothing runs: only the node's own store and its value are read, by their descriptors.
  * @param {UnifiedWrapper} wrapper - The node's wrapper.
  * @returns {{members: Map<PropertyKey, (object|symbol)>, extensible: boolean}} The content.
  * @private
@@ -251,7 +255,13 @@ function captureNode(wrapper) {
 	const keep = (key, described) => {
 		if (described === undefined || isFrameworkReservedKey(key) || MapMethods.has(members, key)) return;
 		if (!("value" in described)) {
-			MapMethods.set(members, key, SNAPSHOT_LIVE_MEMBER);
+			// Read live while the node holds it; kept as it was, for a run to read once the instance deletes it.
+			const original = originalAccessor(described);
+			MapMethods.set(members, key, {
+				__proto__: null,
+				live: true,
+				accessor: { __proto__: null, get: original.get, set: original.set, enumerable: described.enumerable === true }
+			});
 			return;
 		}
 		// A child node answering a value in its place (a primitive a file exports) is kept as that value.
@@ -267,8 +277,8 @@ function captureNode(wrapper) {
 	};
 	// A node fronting a module's own object holds what that object holds (the node follows it on its next read): the
 	// object is read, so a change the module made through its own variable and the node has not followed yet is not
-	// taken for the node's.
-	const object = moduleObjectOf(wrapper);
+	// taken for the node's. A node of a run's tree holds its members itself: it does not follow the object.
+	const object = inRunTree(wrapper) ? null : moduleObjectOf(wrapper);
 	// Whether the node takes new members and the prototype it holds, as they are now.
 	const open = nodeOpen(wrapper);
 	const prototype = snapshotPrototype(wrapper);
@@ -471,7 +481,9 @@ function checkpointNodeBuiltins(domain, node) {
 		if (described !== undefined && "value" in described && builtinKind(described.value) !== null)
 			checkpointBuiltin(domain, described.value);
 	}
-	const impl = node.____slothletInternal.impl;
+	// A composed node (a file's default export with named exports beside it) holds its value under the framework's layer
+	// (see helpers/composition): the value itself is what is saved. A module's own Proxy is left alone.
+	const impl = layerUnderlying(node.____slothletInternal.impl);
 	if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return;
 	// A node over a built-in (a `Map` a file exports) holds its entries in the built-in itself.
 	if (builtinKind(impl) !== null) checkpointBuiltin(domain, impl);
@@ -497,13 +509,19 @@ function snapshotBarrier(wrapper) {
 	const domain = domainOf(slothlet);
 	if (!runsOpen(domain)) return;
 	if (runShared.RUN_WRITE !== null && runShared.RUN_WRITE.node === wrapper) return;
-	if (slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper) || inRunTree(wrapper)) return;
+	if (slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper)) return;
 	const internal = wrapper.____slothletInternal;
 	if (internal.mode === "lazy" && !internal.state.materialized) return;
+	// A node of a run's own tree is saved for the runs opened in that run, which read it as of their start on it.
+	if (inRunTree(wrapper)) {
+		beforeChange(slothlet._runTreeSnapshot?.(internal.epoch) ?? null, wrapper, captureNode);
+		return;
+	}
 	// Once per window: later changes in the same window find the node saved already.
 	if (!beforeChange(domain, wrapper, captureNode)) return;
-	// A node over a built-in (a `Map`) holds its entries in the built-in, which a method running on it changes as itself.
-	const impl = internal.impl;
+	// A node over a built-in (a `Map`) holds its entries in the built-in, which a method running on it changes as itself;
+	// a composed node holds it under the framework's layer.
+	const impl = layerUnderlying(internal.impl);
 	if (impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && builtinKind(impl) !== null) checkpointBuiltin(domain, impl);
 }
 
@@ -610,12 +628,16 @@ function runTreeHides(wrapper, prop) {
  * @private
  */
 function runAsMaker(owner, fn, thisArg = undefined, args = [], attribute = true, asNode = false, origin = null) {
+	// The generator objects the module handed out are matched to their stand-ins around its code (#965).
+	reconcileMade(owner);
 	try {
 		return runAsMakerRaw(owner, fn, thisArg, args, attribute, asNode, origin);
 	} catch (error) {
 		// What the module's code threw is the module's: it is read as the module, wherever it is reported (#599).
 		rememberMadeFailure(owner, error);
 		throw error;
+	} finally {
+		reconcileMade(owner);
 	}
 }
 
@@ -863,6 +885,38 @@ function runViewReceiver(thisArg) {
 	if (thisArg === null || (typeof thisArg !== "object" && typeof thisArg !== "function")) return thisArg;
 	if (!WeakMapMethods.has(RUN_VIEW_REALS, thisArg)) return thisArg;
 	return privateCallReceiver(WeakMapMethods.get(RUN_VIEW_REALS, thisArg)) ?? thisArg;
+}
+
+/**
+ * The node the instance saves versions of for a node a run's view reads (see `helpers/run-snapshot`): the node itself,
+ * or, for a node of a copy of the tree the run started on (built for the run when the instance changed that tree, see
+ * `Slothlet#copyForSharers`), the node at the same path in the tree the run started on. The view reaches a node of the
+ * copy only through members the instance has not changed since the run started, so that path holds the node the copy
+ * was made from. Read by descriptors only, so no getter or trap runs.
+ * @param {*} node - The node, as the view reads through it.
+ * @param {object} snap - The run's snapshot.
+ * @returns {*} The node whose versions answer for it.
+ * @private
+ */
+function startNodeOf(node, snap) {
+	const root = snap.root;
+	if (root === null || root === undefined || (typeof root !== "object" && typeof root !== "function")) return node;
+	const wrapper = nodeWrapperOf(node);
+	if (wrapper === null) return node;
+	const internal = wrapper.____slothletInternal;
+	// A node of the tree the run started on (or of any tree but a copy) answers for itself.
+	if ((internal.epoch ?? 0) >= 0 || typeof internal.apiPath !== "string" || internal.apiPath === "") return node;
+	const segments = splitText(internal.apiPath, ".");
+	let holder = root;
+	let found = node;
+	for (let index = 0; index < segments.length; index++) {
+		const described = Reflect.getOwnPropertyDescriptor(holder, segments[index]);
+		const child = described !== undefined && "value" in described ? resolveWrapper(described.value) : null;
+		if (child === null) return node;
+		holder = child;
+		found = described.value;
+	}
+	return found;
 }
 
 /**
@@ -1161,6 +1215,39 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		const version = versionAt(snap, held, outerReadAt.start);
 		return version === CURRENT ? held : version;
 	};
+	/**
+	 * The content a node of an outer run's own tree (one that run got when it changed its tree, see
+	 * `Slothlet#_runTreeSnapshot`) had when this run started on that run: null while it is as it was then, undefined for a
+	 * node of no outer run's tree.
+	 * @param {*} node - The node, as the view reads through it.
+	 * @returns {object|null|undefined} The content.
+	 */
+	const outerTreeVersion = (node) => {
+		if (snap === null || snap.parent === null) return undefined;
+		const wrapper = nodeWrapperOf(node);
+		const epoch = wrapper === null ? 0 : (wrapper.____slothletInternal.epoch ?? 0);
+		if (epoch >= 0) return undefined;
+		const owner = slothlet._runTreeSnapshot?.(epoch) ?? null;
+		if (owner === null) return undefined;
+		for (let at = snap; at.parent !== null; at = at.parent) {
+			if (at.parent !== owner) continue;
+			const held = versionAt(owner, wrapper, at.start);
+			return held === CURRENT ? null : held;
+		}
+		return undefined;
+	};
+	/**
+	 * The root of this run's own tree as a run opened in this one reads it now (see readThroughOuter): the members it
+	 * held when that run started, when this run changed it since; null otherwise.
+	 * @returns {object|null} The root's saved members.
+	 */
+	const ownRootAtOuterRead = () => {
+		if (outerReadAt === null || outerReadAt.run !== run || snap === null) return null;
+		const api = slothlet.api;
+		if (api === null || api === undefined || (typeof api !== "object" && typeof api !== "function")) return null;
+		const held = versionAt(snap, api, outerReadAt.start);
+		return held === CURRENT ? null : held;
+	};
 	const keyOf = (parts) => ArrayMethods.join(parts, RUN_PATH_SEPARATOR);
 	/**
 	 * Keep a change the run made.
@@ -1321,17 +1408,29 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		// The node's content as of the run's start, when the instance changed it since (see helpers/run-snapshot); null
 		// while it is as it was, and for what the view does not read of the instance (a node the run wrote, the root, an
 		// outer run's view, the run's own tree).
-		const snapshotOf = () =>
-			snap === null || local || real === undefined || real === null || atInstanceRoot || run.forked || WeakMapMethods.has(RUN_OF_VIEW, real)
-				? null
-				: nodeVersion(real, snap);
+		const snapshotOf = () => {
+			if (
+				snap === null ||
+				local ||
+				real === undefined ||
+				real === null ||
+				atInstanceRoot ||
+				run.forked ||
+				WeakMapMethods.has(RUN_OF_VIEW, real)
+			)
+				return null;
+			// A node of an outer run's own tree reads as that run held it when this one started on it.
+			const outer = outerTreeVersion(real);
+			return outer !== undefined ? outer : nodeVersion(startNodeOf(real, snap), snap);
+		};
 		// What a saved member is handed out as: a node as `self` hands it to the reader.
 		const snapshotValue = (value) => (isApiNode(value) ? selfView(value) : value);
 		// The instance's root as of the run's start, when the instance changed it since (a member replaced, added or
 		// deleted): the members its api held then. Null while it is as it was, and for every view but the root's.
 		const rootVersion = () => {
 			if (snap === null || !atInstanceRoot || run.forked) return null;
-			const api = slothlet.api;
+			// The root the run started on: the instance saves its versions there, also once the run reads a copy of its tree.
+			const api = snap.root ?? slothlet.api;
 			if (api === null || api === undefined || (typeof api !== "object" && typeof api !== "function")) return null;
 			const held = versionAt(snap.instance, api, snap.base);
 			return held === CURRENT ? null : held;
@@ -1526,9 +1625,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				gateShadow(prop, value);
 				return handOut(prop, value, true);
 			}
-			if (real === undefined || real === null) return below(prop) ? viewAt(concatLists(parts, [prop]), undefined, true) : undefined;
-			// A member the node does not hold itself is inherited from the prototype the run gave it, if it gave one.
+			// A member the node does not hold itself is inherited from the prototype the run gave it, if it gave one: a namespace
+			// only the run wrote holds nothing else.
 			const gave = given();
+			if (real === undefined || real === null) {
+				if (below(prop)) return viewAt(concatLists(parts, [prop]), undefined, true);
+				return gave === null || gave.prototype === null ? undefined : Reflect.get(gave.prototype, prop, receiver);
+			}
 			if (gave !== null && Reflect.getOwnPropertyDescriptor(real, prop) === undefined) {
 				return gave.prototype === null ? undefined : Reflect.get(gave.prototype, prop, receiver);
 			}
@@ -1552,6 +1655,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				} else if ("value" in held && held.value !== Reflect.getOwnPropertyDescriptor(slothlet.api, prop)?.value) {
 					enforceRead(rootGate(slothlet), prop, unwrapSelfView(held.value));
 					return handOut(prop, selfView(held.value), local);
+				} else if (!("value" in held)) {
+					// An accessor the root held then that it holds no longer, or holds another way now, runs as it was then.
+					const now = Reflect.getOwnPropertyDescriptor(slothlet.api, prop);
+					if (now === undefined || "value" in now || now.get !== held.get) {
+						enforceRead(rootGate(slothlet), prop, undefined);
+						return typeof held.get === "function" ? handOut(prop, Reflect.apply(held.get, receiver, []), local) : undefined;
+					}
 				}
 			}
 			// A getter the module's object holds runs with the view as `this`, so it reads what the run wrote.
@@ -1575,6 +1685,17 @@ function makeRunSelf(slothlet, parentSelf, record) {
 						gateShadow(prop, undefined);
 						return undefined;
 					}
+				} else if (held.accessor !== undefined && !holdsOwnMember(real, prop)) {
+					// An accessor the node held then and the instance deleted since runs as it was then.
+					const gate = nodeWrapperOf(real);
+					if (gate) enforceRead(gate, prop, undefined);
+					const getter = held.accessor.get;
+					if (typeof getter !== "function") return undefined;
+					return handOut(
+						prop,
+						gate ? runViewAccessor({ wrapper: gate }, getter, receiver, []) : Reflect.apply(getter, receiver, []),
+						local
+					);
 				} else if (!held.live) {
 					const live = throughRunView(() => Reflect.get(real, prop));
 					if (sameSnapshotMember(live, held.value)) return handOut(prop, live, local);
@@ -1756,7 +1877,21 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					if (forked()) {
 						const node = current();
 						if (node === null || node === undefined) return undefined;
-						const value = Reflect.get(node, prop);
+						// A run opened in this one reads this run's root as of its start on it.
+						const atOuterStart = parts.length === 0 && typeof prop === "string" ? ownRootAtOuterRead() : null;
+						const held = atOuterStart === null ? undefined : Reflect.getOwnPropertyDescriptor(atOuterStart, prop);
+						const value =
+							atOuterStart === null
+								? Reflect.get(node, prop)
+								: held === undefined
+									? Objects.hasOwn(node, prop)
+										? undefined
+										: Reflect.get(node, prop)
+									: "value" in held
+										? held.value
+										: typeof held.get === "function"
+											? Reflect.apply(held.get, node, [])
+											: undefined;
 						// A member of the root is handed to a reader as `self` hands it, as before the run had a tree of its own: a
 						// view keeping who read it, also for a run opened in this one, which reads it through this view.
 						return parts.length === 0 && typeof prop === "string" && !SetMethods.has(RUN_FRAMEWORK_ROOTS, prop) ? selfView(value) : value;
@@ -1790,6 +1925,8 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					if (closed()) return Reflect.has(shell, prop);
 					if (forked()) {
 						const node = current();
+						const atOuterStart = parts.length === 0 && typeof prop === "string" ? ownRootAtOuterRead() : null;
+						if (atOuterStart !== null) return Objects.hasOwn(atOuterStart, prop) || (!Objects.hasOwn(node, prop) && prop in node);
 						return node !== null && node !== undefined && prop in node;
 					}
 					const copy = arrayCopy();
@@ -1797,7 +1934,10 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					const entry = own(prop);
 					if (entry !== undefined) return entry.op !== "delete";
 					if (below(prop)) return true;
-					if (real === undefined || real === null) return false;
+					if (real === undefined || real === null) {
+						const gave = given();
+						return gave !== null && gave.prototype !== null && prop in gave.prototype;
+					}
 					const version = snapshotOf();
 					if (version !== null) {
 						if (MapMethods.has(version.members, prop)) return true;
@@ -1852,11 +1992,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					}
 					const atStart = forked() ? null : rootVersion();
 					if (atStart !== null) {
-						// The root lists the members its api held when the run started, and the framework's own.
-						for (const name of setValues(setFrom(keys)))
-							if (rootMember(name) && Objects.hasOwn(slothlet.api, name) && !Objects.hasOwn(atStart, name)) SetMethods.delete(keys, name);
+						// The root lists the members its api held when the run started, in their order then, and the framework's own.
+						const listed = new Set();
 						for (let index = 0, names = Reflect.ownKeys(atStart); index < names.length; index++)
-							if (rootMember(names[index])) SetMethods.add(keys, names[index]);
+							if (rootMember(names[index]) || SetMethods.has(keys, names[index])) SetMethods.add(listed, names[index]);
+						for (const name of setValues(keys))
+							if (!SetMethods.has(listed, name) && !(rootMember(name) && Objects.hasOwn(slothlet.api, name))) SetMethods.add(listed, name);
+						keys = listed;
 					}
 					if (!forked()) {
 						const members = outerHeld(MapMethods.get(run.entries, key));
@@ -1914,13 +2056,16 @@ function makeRunSelf(slothlet, parentSelf, record) {
 									enumerable: held.enumerable === true,
 									configurable: true
 								};
-							}
+							} else return { __proto__: null, ...held, configurable: true };
 						}
 						const version = snapshotOf();
 						if (version !== null) {
 							const held = MapMethods.get(version.members, prop);
 							if (held === undefined) {
 								if (holdsOwnMember(real, prop)) return undefined;
+							} else if (held.accessor !== undefined && !holdsOwnMember(real, prop)) {
+								const { get, set, enumerable } = held.accessor;
+								return { __proto__: null, get, set, enumerable, configurable: true };
 							} else if (!held.live) {
 								return {
 									__proto__: null,
@@ -1937,7 +2082,12 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					const desc = WeakMapMethods.has(RUN_OF_VIEW, node)
 						? readThroughOuter(() => Reflect.getOwnPropertyDescriptor(node, prop))
 						: Reflect.getOwnPropertyDescriptor(node, prop);
-					if (!desc) return undefined;
+					if (!desc) {
+						// A namespace only the run wrote below the node (`self["ns.child"] = …`) is a member it lists, as it reads it.
+						if (!forked() && below(prop))
+							return { __proto__: null, value: readMember(prop, view), writable: true, enumerable: true, configurable: true };
+						return undefined;
+					}
 					if (!("value" in desc)) return { __proto__: null, ...desc, configurable: true };
 					return { __proto__: null, ...desc, value: forked() ? desc.value : readMember(prop, view), configurable: true };
 				},
@@ -2453,6 +2603,8 @@ export function RunLayer(Base) {
 		class Run extends Base {
 			static {
 				Base.define("run", {
+					nodeVersion,
+					sameSnapshotMember,
 					runsNoModuleCode,
 					runsForHander,
 					shared: runShared,
@@ -2481,6 +2633,8 @@ export function RunLayer(Base) {
 				});
 				Base.define("is", { callerLocked: isCallerLocked });
 				Base.linkLayer(this, (methods, registered) => {
+					reconcileMade = methods.membrane.reconcileMade;
+					originalAccessor = methods.nodes.originalAccessor;
 					realClass = registered;
 					INTRINSICS = methods.values.INTRINSICS;
 					holdsDataKind = methods.holds.dataKind;
@@ -2630,6 +2784,20 @@ export function RunLayer(Base) {
 						checkpointNodePrototypes(domain, node);
 					}
 				});
+			}
+
+			/**
+			 * Before a function a node's impl holds is handed out as it is rather than as a node of its own (a named export
+			 * beside a file's default export that is a `Map`, which the node's composition layer holds): while a run is open,
+			 * the node's file is saved for the runs open (see {@link ___checkpointFile}), as before a call through a node,
+			 * since the caller runs the file's code with it.
+			 * @param {*} value - What is handed out.
+			 * @returns {void}
+			 * @private
+			 */
+			___checkpointCodeHandout(value) {
+				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/run", import.meta.url);
+				if (typeof value === "function" && anyRunOpen()) this.___checkpointFile();
 			}
 
 			/**

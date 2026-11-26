@@ -29,7 +29,7 @@
  */
 
 import { segmentsOf } from "#helpers/segments";
-import { isNode, util } from "#helpers/platform";
+import { isNode, util, EventEmitter } from "#helpers/platform";
 import { isCompositionLayer, layerForwards, layerHeldKeys, layerUnderlying } from "#helpers/composition";
 import { SlothletError } from "#errors";
 import { isFrameworkReservedKey } from "#helpers/reserved-keys";
@@ -126,7 +126,9 @@ let trustedRootOwn,
 	UnifiedWrapper,
 	resolveWrapper,
 	registeredWrapper,
-	isWrapper;
+	isWrapper,
+	isClassInstance,
+	inherits;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -1200,6 +1202,47 @@ function onImpl(wrapper, operation) {
 }
 
 /**
+ * Record a class instance a node was handed as it is (a file's default export) as the value the node was built from,
+ * as a node of a member read off another value records its own (#972): the node then answers the instance's prototype
+ * and takes one set on it as the instance does. A value the node was handed for a position of another value keeps the
+ * record that position gave it.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {*} value - The value the node was handed.
+ * @returns {void}
+ * @private
+ */
+function noteInstanceSource(wrapper, value) {
+	const internal = wrapper.____slothletInternal;
+	if (hasOwn(internal, "sourceValue") && !internal.instanceSource) return;
+	if (internal.impl === value && definesOnInstance(wrapper)) {
+		internal.sourceValue = value;
+		internal.instanceSource = true;
+	} else if (internal.instanceSource) {
+		delete internal.sourceValue;
+		internal.instanceSource = false;
+	}
+}
+
+/**
+ * Whether a node holds a class instance as it is, whose members a write or a definition through the node lands on, as
+ * one made on the instance itself does (#589, #971): not an emitter or a live grafted object, which keep their own rules.
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True for such a node.
+ * @private
+ */
+function definesOnInstance(wrapper) {
+	const impl = wrapper.____slothletInternal.impl;
+	return (
+		impl !== null &&
+		typeof impl === "object" &&
+		!util.types.isProxy(impl) &&
+		isClassInstance(impl) &&
+		!wrapper.____slothletInternal.deferChildAdopt &&
+		!(EventEmitter && inherits(impl, EventEmitter))
+	);
+}
+
+/**
  * The definer of the code making a call while no call runs (#726): when the frames tell it is a module's code (a
  * function the module handed out, run by the host), that code's definer, the nearest leaf frame of its file or the
  * file's module. Null while a call runs, for the host's own code, with the permission system off or `provenance` off,
@@ -2043,6 +2086,8 @@ export function RulesLayer(Base) {
 					enforceCodeMember,
 					pinnedCodeMember,
 					onImpl,
+					noteInstanceSource,
+					definesOnInstance,
 					hostRunDefiner,
 					memberHoldsCode,
 					gateLeafCopy,
@@ -2077,6 +2122,8 @@ export function RulesLayer(Base) {
 				Base.define("impl", { default: implDefault });
 				Base.define("has", { ownMember: hasOwnMember });
 				Base.linkLayer(this, (methods, registered) => {
+					inherits = methods.values.inherits;
+					isClassInstance = methods.is.classInstance;
 					realClass = registered;
 					UnifiedWrapper = registered;
 					INTRINSICS = methods.values.INTRINSICS;

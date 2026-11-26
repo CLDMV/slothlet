@@ -26,7 +26,7 @@
 
 import { segmentsOf } from "#helpers/segments";
 import { util, EventEmitter } from "#helpers/platform";
-import { layerUnderlying } from "#helpers/composition";
+import { isCompositionLayer, layerUnderlying } from "#helpers/composition";
 import { SlothletError } from "#errors";
 import { runtime_isWrappedClassInstance } from "#helpers/class-instance-wrapper";
 import { combineCeilings, identityCeilings } from "#handlers/trusted-root";
@@ -159,7 +159,9 @@ let runtime_unwrapClassInstance,
 	TYPED_ARRAY_READERS,
 	DATA_READERS,
 	MEMBER_HOLDERS,
-	isWrapper;
+	isWrapper,
+	WAITING_CHAINS,
+	standInPath;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -2014,8 +2016,7 @@ function selfRootView(slothlet, reader) {
 				assertChange(prop);
 				return Reflect.set(target, prop, value);
 			}
-			slothlet.handlers.apiManager.setOwnedProperty(prop, value, selfRootWriter(slothlet, reader, [prop]));
-			return true;
+			return slothlet.handlers.apiManager.setOwnedProperty(prop, value, selfRootWriter(slothlet, reader, [prop]));
 		},
 		defineProperty(target, prop, descriptor) {
 			assertChange(prop);
@@ -2958,6 +2959,14 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 		}
 	};
 
+	// The path a call through the view is a call of. A stand-in for a node not loaded yet resolves to the wrapper it waits
+	// for, so `self.ext._box.item.open` read in lazy mode resolves to `ext._box`: the call is of the member its chain
+	// reaches, and is checked as one, as the same call is in eager mode (#1006). Undefined for a node: its own path.
+	const calledPath = () => {
+		const chain = WeakMapMethods.get(WAITING_CHAINS, child);
+		return chain && chain.length > 0 ? standInPath(inner, chain) : undefined;
+	};
+
 	view = new NativeProxy(shadow, {
 		apply(_, thisArg, args) {
 			// What the call hands back is the reader's, as what a call through its view of `self` hands back is: a member
@@ -2969,7 +2978,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 				return selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller, null, inner);
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
-			const pending = inner.___enforceCapturedPair(capturedCaller, ceiling, undefined, args, true);
+			const pending = inner.___enforceCapturedPair(capturedCaller, ceiling, calledPath(), args, true);
 			const call = callAsDefiner(inner, () =>
 				selfViewResult(
 					asKept(() => Reflect.apply(child, thisArg, args)),
@@ -2987,7 +2996,7 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 		},
 		construct(_, args, newTarget) {
 			if (gated && !(gated === "held" && WeakSetMethods.has(STAND_INS, child)))
-				inner.___enforceCapturedPair(capturedCaller, ceiling, undefined, args);
+				inner.___enforceCapturedPair(capturedCaller, ceiling, calledPath(), args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
@@ -3137,9 +3146,9 @@ function capturedReader(wrapper) {
 /**
  * The object a value stands for once every layer slothlet put around it is taken off: a prototype's handle, a view
  * `self` hands out, a full-isolation run's view, a crossing view, a stand-in, a view of a given prototype, a pinned code
- * member, the async runtime's context wrapper of a class instance, and a node, which stands for its module's value (the
- * function of a function node). Anything else is the value itself. Nothing of the module's code runs: only slothlet's own
- * records are read.
+ * member, the async runtime's context wrapper of a class instance, a node, which stands for its module's value (the
+ * function of a function node), and a composition layer, which stands for the module's value beneath it. Anything else
+ * is the value itself. Nothing of the module's code runs: only slothlet's own records are read.
  * @param {*} value - The value.
  * @returns {*} What it stands for.
  * @private
@@ -3161,9 +3170,14 @@ function underlyingValue(value) {
 			if (unwrapped !== next) next = unwrapped;
 			else {
 				const wrapper = resolveWrapper(next);
-				if (wrapper === null) return next;
-				const impl = wrapper.____slothletInternal.impl;
-				next = functionOf(impl) ?? impl;
+				if (wrapper !== null) {
+					const impl = wrapper.____slothletInternal.impl;
+					next = functionOf(impl) ?? impl;
+				} else if (isCompositionLayer(next)) {
+					// A composed value's layer stands for the module's own value beneath it (a default-export function the
+					// build put members on), which is what the module's code holds.
+					next = layerUnderlying(next);
+				} else return next;
 			}
 		}
 		if (next === value) return value;
@@ -3265,6 +3279,8 @@ export function ViewsLayer(Base) {
 					reader: capturedReader
 				});
 				Base.linkLayer(this, (methods, registered) => {
+					standInPath = methods.stand.inPath;
+					WAITING_CHAINS = methods.nodes.WAITING_CHAINS;
 					realClass = registered;
 					capturedViewSet = methods.captured.viewSet;
 					INTRINSICS = methods.values.INTRINSICS;

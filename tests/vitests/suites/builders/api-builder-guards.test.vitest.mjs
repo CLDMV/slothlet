@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T08:12:34-08:00 (1795018354)
+ *	@Last modified time: 2026-11-25T13:39:32-08:00 (1795642772)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -531,6 +531,7 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 		// Fake LiveContextManager with empty instances map
 		sl.contextManager = {
 			constructor: { name: "LiveContextManager" },
+			kind: "live",
 			currentInstanceID: null,
 			instances: new Map(),
 			runParent(id) {
@@ -551,6 +552,7 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 		// Fake AsyncContextManager with no active ALS context and empty instances map
 		sl.contextManager = {
 			constructor: { name: "AsyncContextManager" },
+			kind: "async",
 			tryGetContext: () => null,
 			instances: new Map()
 		};

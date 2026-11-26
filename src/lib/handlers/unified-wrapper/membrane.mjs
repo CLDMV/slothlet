@@ -70,6 +70,9 @@ import {
 	WeakSet,
 	WeakSetMethods,
 	WeakRefMethods,
+	WeakRef,
+	listSplice,
+	mapEntriesToArray,
 	ObjectMethods
 } from "#helpers/intrinsics";
 
@@ -671,7 +674,7 @@ const searchBudget = (slothlet) => ({ remaining: slothlet?.config?.permissions?.
  * intrinsic one and it has no members of its own that reading what it settles to could reach, so that read runs none
  * of a module's code. Members under symbols of no registry and none of the language's are left out: `then` reads none
  * of them, its stand-in carries none of them, and Node keeps its own there on every promise made while an
- * `AsyncLocalStorage` runs on async hooks (Node 22's async ids and stores).
+ * `AsyncLocalStorage` runs on async hooks (its async ids and stores, while `AsyncContextFrame` is off).
  * @param {object} value - An object that is not a Proxy.
  * @returns {boolean} True for such a promise.
  * @private
@@ -730,9 +733,202 @@ function dataHoldsLeafFunction(slothlet, value, depth, budget) {
 }
 
 /**
+ * How many module records hold generator objects mirrored onto their stand-ins (see {@link generatorStandIn}):
+ * while none do, no call looks for any to mirror.
+ * @type {number}
+ * @private
+ */
+let mirroringMakers = 0;
+
+/**
+ * Whether two property descriptors describe the same member.
+ * @param {PropertyDescriptor|undefined} a - One.
+ * @param {PropertyDescriptor|undefined} b - The other.
+ * @returns {boolean} True when they do.
+ * @private
+ */
+function sameDescriptor(a, b) {
+	if (a === undefined || b === undefined) return a === b;
+	return (
+		a.enumerable === b.enumerable &&
+		a.configurable === b.configurable &&
+		a.writable === b.writable &&
+		"value" in a === "value" in b &&
+		Objects.is(a.value, b.value) &&
+		a.get === b.get &&
+		a.set === b.set
+	);
+}
+
+/**
+ * A property descriptor with what it holds converted for the other side of a mirror.
+ * @param {PropertyDescriptor} descriptor - The descriptor.
+ * @param {function(*): *} convert - Converts a value.
+ * @returns {PropertyDescriptor} The converted descriptor.
+ * @private
+ */
+function convertDescriptor(descriptor, convert) {
+	const converted = { __proto__: null, enumerable: descriptor.enumerable, configurable: descriptor.configurable };
+	if ("value" in descriptor) {
+		converted.value = convert(descriptor.value);
+		converted.writable = descriptor.writable;
+	} else {
+		converted.get = descriptor.get === undefined ? undefined : convert(descriptor.get);
+		converted.set = descriptor.set === undefined ? undefined : convert(descriptor.set);
+	}
+	return converted;
+}
+
+/**
+ * Carry what one side of a mirrored generator object changed since the two last matched over to the other side
+ * (#965): a member it added, changed or deleted is added, changed or deleted there, converted for it, the members run
+ * in its `Reflect.ownKeys` order, and the other side is closed to extension when it is. Nothing of either side runs:
+ * a generator object is an ordinary object, so reading and defining its members runs no code.
+ *
+ * A member moved in the order was deleted and added again since the two last matched, so the other side still holds it
+ * as it was then, configurable: it is moved by deleting and adding it again there, before its new form is defined.
+ * The order is carried only when the side's own changed, so a side that changed nothing never undoes the other's.
+ * @param {Map<string|symbol, {original: PropertyDescriptor, standIn: PropertyDescriptor}>} seen - Each member's
+ *   descriptor on each side when they last matched.
+ * @param {Array<string|symbol>} matched - The members' order when the two last matched.
+ * @param {object} from - The side whose changes are carried.
+ * @param {object} to - The side they are carried to.
+ * @param {function(*): *} convert - Converts a value for `to`.
+ * @param {"original"|"standIn"} fromSide - Which side `from` is.
+ * @returns {void}
+ * @private
+ */
+function mirrorSide(seen, matched, from, to, convert, fromSide) {
+	const toSide = fromSide === "original" ? "standIn" : "original";
+	for (let ofIndex = 0, ofList = mapEntriesToArray(seen); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex][0];
+		if (Reflect.getOwnPropertyDescriptor(from, key) !== undefined) continue;
+		Reflect.deleteProperty(to, key);
+		MapMethods.delete(seen, key);
+	}
+	const keys = Reflect.ownKeys(from);
+	const changed = [];
+	for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) {
+		const key = keys[ofIndex];
+		const descriptor = Reflect.getOwnPropertyDescriptor(from, key);
+		const known = MapMethods.get(seen, key);
+		if (known !== undefined && sameDescriptor(descriptor, known[fromSide])) continue;
+		const converted = convertDescriptor(descriptor, convert);
+		// A member new to this side is added where it can still be moved; its own form is defined once it is in place.
+		if (known === undefined) Reflect.defineProperty(to, key, { __proto__: null, ...converted, configurable: true });
+		listPush(changed, { key, descriptor, converted });
+	}
+	let reordered = keys.length !== matched.length;
+	for (let ofIndex = 0; !reordered && ofIndex < keys.length; ofIndex++) reordered = keys[ofIndex] !== matched[ofIndex];
+	if (reordered) {
+		// The longest start of the side's order the other side already holds in that order stays; each member past it is
+		// moved to the end, in order.
+		const order = Reflect.ownKeys(to);
+		let inPlace = 0;
+		for (let ofIndex = 0; ofIndex < order.length && inPlace < keys.length; ofIndex++) if (order[ofIndex] === keys[inPlace]) inPlace++;
+		for (let ofIndex = inPlace; ofIndex < keys.length; ofIndex++) {
+			const key = keys[ofIndex];
+			const held = Reflect.getOwnPropertyDescriptor(to, key);
+			if (held === undefined || !Reflect.deleteProperty(to, key)) continue;
+			Reflect.defineProperty(to, key, held);
+		}
+	}
+	for (let ofIndex = 0; ofIndex < changed.length; ofIndex++) {
+		const entry = changed[ofIndex];
+		Reflect.defineProperty(to, entry.key, entry.converted);
+		MapMethods.set(seen, entry.key, {
+			__proto__: null,
+			[fromSide]: entry.descriptor,
+			[toSide]: Reflect.getOwnPropertyDescriptor(to, entry.key)
+		});
+	}
+	if (!Objects.isExtensible(from)) Objects.preventExtensions(to);
+}
+
+/**
+ * Bring a generator object and its stand-in to match (#965): what the stand-in's holders changed is carried to the
+ * generator object, then what the module changed is carried to the stand-in.
+ * @param {object} mirror - The mirror (see {@link generatorStandIn}).
+ * @returns {void}
+ * @private
+ */
+function reconcileMirror(mirror) {
+	if (mirror.busy) return;
+	mirror.busy = true;
+	try {
+		const { maker, owner, original, standIn, seen } = mirror;
+		mirrorSide(seen, mirror.order, standIn, original, (value) => handIn(maker, value), "standIn");
+		mirrorSide(seen, mirror.order, original, standIn, (value) => handOut(maker, owner, value), "original");
+		mirror.order = Reflect.ownKeys(original);
+	} finally {
+		mirror.busy = false;
+	}
+}
+
+/**
+ * Bring every generator object a module made and handed out to match its stand-in (#965), as its code is about to run
+ * or has run: its code sees what the stand-ins' holders changed, and they see what its code changed. Stand-ins no one
+ * holds any longer are dropped.
+ * @param {object} wrapper - A wrapper of the module.
+ * @returns {void}
+ * @private
+ */
+function reconcileMade(wrapper) {
+	if (mirroringMakers === 0 || !wrapper?.____slothlet) return;
+	const makers = WeakMapMethods.get(MAKERS, wrapper.____slothlet);
+	if (!makers) return;
+	const moduleID = wrapper.____slothletInternal?.moduleID;
+	const maker = moduleID ? MapMethods.get(makers.byID, moduleID) : WeakMapMethods.get(makers.byWrapper, wrapper);
+	const mirrors = maker?.mirrors;
+	if (!mirrors) return;
+	for (let ofIndex = 0; ofIndex < mirrors.length;) {
+		const standIn = WeakRefMethods.deref(mirrors[ofIndex]);
+		const mirror = standIn === undefined ? undefined : WeakMapMethods.get(STAND_IN_RECORDS, standIn)?.mirror;
+		if (mirror === undefined) {
+			listSplice(mirrors, ofIndex, 1);
+			continue;
+		}
+		reconcileMirror(mirror);
+		ofIndex++;
+	}
+	if (mirrors.length === 0) {
+		maker.mirrors = null;
+		mirroringMakers--;
+	}
+}
+
+/**
+ * Run a call of a module's node with the generator objects the module handed out matched to their stand-ins before
+ * and after it (see {@link reconcileMade}).
+ * @param {object} wrapper - The node's wrapper.
+ * @param {function(*, *, *): *} run - The call's trap.
+ * @param {*} a - Its first argument.
+ * @param {*} b - Its second argument.
+ * @param {*} c - Its third argument.
+ * @returns {*} What the call returned.
+ * @private
+ */
+function runMirrored(wrapper, run, a, b, c) {
+	if (mirroringMakers === 0) return run(a, b, c);
+	reconcileMade(wrapper);
+	try {
+		return run(a, b, c);
+	} finally {
+		reconcileMade(wrapper);
+	}
+}
+
+/**
  * The stand-in of a generator or async generator object a module made (#597): a generator of the same kind with the
  * same prototype — so its steps are the intrinsic `next`, `return` and `throw` — delegating each step to the
- * original, run as the module. The original is not changed, so one that cannot be extended is handled alike.
+ * original, run as the module.
+ *
+ * The generator object's own members are the stand-in's, each the same kind of member with the same attributes, in the
+ * same order, and the stand-in is closed to extension, sealed or frozen exactly when the generator object is (#965).
+ * The two are separate objects, so they are matched whenever the module's code runs: before and after each step, each
+ * call of the module's nodes and each run of code it handed out (an accessor of the generator object among them), and
+ * as an async step or call settles. What the stand-in's holders changed is carried to the generator object first, then
+ * what the module changed is carried to the stand-in.
  * @param {object} maker - The module's record.
  * @param {object} owner - The wrapper it runs as.
  * @param {object} original - The generator object.
@@ -741,12 +937,18 @@ function dataHoldsLeafFunction(slothlet, value, depth, budget) {
  */
 function generatorStandIn(maker, owner, original) {
 	const existing = WeakMapMethods.get(maker.made, original);
-	if (existing) return existing;
+	if (existing) {
+		const mirror = WeakMapMethods.get(STAND_IN_RECORDS, existing)?.mirror;
+		if (mirror) reconcileMirror(mirror);
+		return existing;
+	}
 	const isAsync = FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, GENERATOR_PROTOTYPES.asyncGenerator, original);
 	const steps = isAsync ? GENERATOR_PROTOTYPES.asyncGenerator : GENERATOR_PROTOTYPES.generator;
+	let mirror = null;
 	// A step's result is no one's value (R3-D17): the step runs as the module and the value in it is handed out as the
 	// module's, while the `{ value, done }` around it is a plain result, as the engine makes one (#758). An async step's
-	// promise settles to such a result.
+	// promise settles to such a result. The step runs as the module, so the two are matched around it; an async
+	// generator's code runs on until its step settles, so they are matched again then.
 	const step = (name) => (value) => {
 		const box = { step: false, done: false };
 		const take = (result) => {
@@ -764,7 +966,10 @@ function generatorStandIn(maker, owner, original) {
 			undefined,
 			[handIn(maker, value)]
 		);
-		const wrap = (given) => (box.step ? { value: given, done: box.done } : given);
+		const wrap = (given) => {
+			if (mirror) reconcileMirror(mirror);
+			return box.step ? { value: given, done: box.done } : given;
+		};
 		return isAsync ? Reflect.apply(SLOT_READERS.then, handed, [wrap]) : wrap(handed);
 	};
 	const driver = { next: step("next"), return: step("return"), throw: step("throw") };
@@ -777,11 +982,18 @@ function generatorStandIn(maker, owner, original) {
 				return yield* driver;
 			})();
 	Reflect.setPrototypeOf(standIn, Reflect.getPrototypeOf(original));
-	if (Objects.isFrozen(original)) Objects.freeze(standIn);
-	else if (Objects.isSealed(original)) Objects.seal(standIn);
-	else if (!Objects.isExtensible(original)) Objects.preventExtensions(standIn);
 	WeakMapMethods.set(maker.made, original, standIn);
-	WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
+	mirror = { maker, owner, original, standIn, seen: new Map(), order: [], busy: false };
+	WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original, mirror });
+	reconcileMirror(mirror);
+	// A frozen generator object never changes again, and neither does its stand-in.
+	if (!Objects.isFrozen(original)) {
+		if (!maker.mirrors) {
+			maker.mirrors = [];
+			mirroringMakers++;
+		}
+		listPush(maker.mirrors, new WeakRef(standIn));
+	}
 	return standIn;
 }
 
@@ -800,8 +1012,14 @@ function promiseStandIn(maker, owner, original) {
 	if (existing) return existing;
 	const standIn = new Promise((resolve, reject) => {
 		Reflect.apply(SLOT_READERS.then, original, [
-			(value) => resolve(handOut(maker, owner, value)),
-			(reason) => reject(handOut(maker, owner, reason))
+			(value) => {
+				reconcileMade(owner);
+				resolve(handOut(maker, owner, value));
+			},
+			(reason) => {
+				reconcileMade(owner);
+				reject(handOut(maker, owner, reason));
+			}
 		]);
 	});
 	WeakMapMethods.set(maker.made, original, standIn);
@@ -1025,6 +1243,8 @@ function attributeResultTo(owner, value, callerIsHost, caller) {
  * @private
  */
 function attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null) {
+	// An async call's code has run on until now: the generator objects its module handed out are matched again (#965).
+	reconcileMade(owner);
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (!owner?.____slothlet?.instanceID || !owner.____slothlet.contextManager?.runInContext) return value;
 	const previous = handOutReceiver;
@@ -1560,7 +1780,9 @@ function membrane(maker, owner, original, asNode = false, made = maker.made) {
 		ownKeys: () => {
 			if (!exec(() => Reflect.isExtensible(original))) settle();
 			const keys = exec(() => Reflect.ownKeys(original));
-			if (!Reflect.isExtensible(shadow)) return Reflect.ownKeys(shadow);
+			// The shadow was just settled to hold exactly these keys; they are listed in the original's order, as the
+			// original lists them, not in the order the shadow came to hold them.
+			if (!Reflect.isExtensible(shadow)) return keys;
 			// Every member the shadow holds fixed is still the original's; the language requires it be listed.
 			for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
@@ -3030,7 +3252,16 @@ const CROSSING_HANDLER = {
 	ownKeys(shadow) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		if (!Reflect.isExtensible(state.original) || !Reflect.isExtensible(shadow)) crossSettle(shadow, state);
-		if (!Reflect.isExtensible(shadow)) return Reflect.ownKeys(shadow);
+		if (!Reflect.isExtensible(shadow)) {
+			// A closed shadow's members are the ones reported, in the value's order: a member pinned to the shadow while it
+			// was open sits there ahead of the value's others, and the language fixes which members are reported, not their
+			// order (#965).
+			const held = Reflect.ownKeys(shadow);
+			const inOrder = filterList(Reflect.ownKeys(state.original), (key) => ArrayMethods.includes(held, key));
+			for (let ofIndex = 0; ofIndex < held.length; ofIndex++)
+				if (!ArrayMethods.includes(inOrder, held[ofIndex])) listPush(inOrder, held[ofIndex]);
+			return inOrder;
+		}
 		const keys = Reflect.ownKeys(state.original);
 		if (state.pinned)
 			for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
@@ -3195,6 +3426,8 @@ export function MembraneLayer(Base) {
 		class Membrane extends Base {
 			static {
 				Base.define("membrane", {
+					reconcileMade,
+					runMirrored,
 					INSPECT_CUSTOM,
 					SEALED_SHELL_READER,
 					behindGivenView,

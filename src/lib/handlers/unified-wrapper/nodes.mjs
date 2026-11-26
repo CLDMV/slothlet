@@ -108,7 +108,8 @@ let trustedRootOwn,
 	isClassInstance,
 	resolveWrapper,
 	registeredWrapper,
-	isWrapper;
+	isWrapper,
+	inRunTree;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -546,6 +547,8 @@ function nodePrimitive(wrapper) {
 function followModuleObject(wrapper, target, prop, integrity = true) {
 	const internal = wrapper.____slothletInternal;
 	if (internal.moduleObject === null || internal.moduleObject === undefined) return;
+	// A node of a run's tree holds what the run reads: the tree as of the run's start and what the run wrote since.
+	if (inRunTree(wrapper)) return;
 	if (prop !== undefined && typeof prop !== "string") return;
 	if (
 		internal.followingModule ||
@@ -1481,6 +1484,7 @@ export function NodesLayer(Base) {
 				Base.define("instance", { classNode: instanceClassNode });
 				Base.define("captured", { viewNodes: capturedViewNodes });
 				Base.linkLayer(this, (methods, registered) => {
+					inRunTree = methods.run.inRunTree;
 					realClass = registered;
 					INTRINSICS = methods.values.INTRINSICS;
 					NODE_VALUE_OFS = methods.values.NODE_VALUE_OFS;
@@ -1665,7 +1669,7 @@ export function NodesLayer(Base) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
 				const wrapper = this;
 				const internal = wrapper.____slothletInternal;
-				if (internal.moduleObject === null || internal.moduleObject === undefined) return;
+				if (internal.moduleObject === null || internal.moduleObject === undefined || inRunTree(wrapper)) return;
 				if (
 					internal.followingModule ||
 					internal.integritySyncing ||

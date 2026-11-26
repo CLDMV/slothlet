@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:48-08:00 (1794882528)
+ *	@Last modified time: 2026-11-25T13:41:25-08:00 (1795642885)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -577,8 +577,9 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 		// api.utils.sharedKey should be root version (first registered, skip keeps existing)
 		expect(typeof _api.utils).toBe("object");
 		expect(typeof _api.utils?.sharedKey).toBe("function");
-		// api.utils.uniqueKey from utils/utils.mjs was assigned without collision
-		expect(typeof _api.utils?.uniqueKey).toBe("function");
+		// The utils/ folder clashes with utils.mjs as a whole: skip keeps only the file, so the folder's
+		// uniqueKey is not added (O04, #1004).
+		expect(_api.utils?.uniqueKey).toBeUndefined();
 	});
 
 	it("eager skip collision with debug.modes=true also covers all debug branches (line 546)", async () => {
@@ -672,10 +673,14 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 				loader: {
 					materialize: true
 				},
-				base: DIRS.MULTI_EXPORT_SKIP
+				// manufacturer/lg/app.mjs and get-info.mjs both export retrieveCurrentApp, with no file and
+				// folder of the same name: get-info.mjs's candidate is built, then rejected by skip. (A folder
+				// clashing with a file is skipped whole and builds no candidate, #1004.)
+				base: TEST_DIRS.API_TV_TEST
 			});
 
-			expect(await _api.utils.sharedKey()).toBe("root-shared");
+			const kept = resolveWrapper(_api.manufacturer.lg.retrieveCurrentApp);
+			expect(kept.____slothletInternal.filePath.endsWith("app.mjs")).toBe(true);
 			expect(invalidateSpy).toHaveBeenCalled();
 		} finally {
 			invalidateSpy.mockRestore();

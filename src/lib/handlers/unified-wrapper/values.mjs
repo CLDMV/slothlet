@@ -117,7 +117,7 @@ import {
 	WeakSet,
 	WeakSetMethods
 } from "#helpers/intrinsics";
-import { isLanguagePrototype, rawContent } from "#helpers/run-snapshot";
+import { anyRunOpen, isLanguagePrototype, rawContent } from "#helpers/run-snapshot";
 import { isEngineStackAccessor, runUnformatted } from "#helpers/stack-read";
 
 import { internals as sharedValuesInternals } from "#handlers/shared-values";
@@ -163,7 +163,9 @@ let trustedRootOwn,
 	capturedViewChildren,
 	TYPE_STATES,
 	WAITING_CHAINS,
-	resolveWrapper;
+	resolveWrapper,
+	snapshotBarrier,
+	definesOnInstance;
 /** The proxy registry's accessors (see `Values.#proxyRegistry`), set when the class is defined. */
 let registeredWrapper, isRegisteredProxy, registerProxy;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
@@ -673,8 +675,14 @@ function frontedDataMember(wrapper, prop) {
 		WeakMapMethods.set(SELF_DATA_METHODS, impl, byObject);
 	}
 	let method = MapMethods.get(byObject, prop);
-	if (method?.fn !== member) {
-		method = { fn: member, call: (...args) => Reflect.apply(member, impl, args) };
+	if (method?.fn !== member || method.wrapper !== wrapper) {
+		// A method running on the object can change it: while a run is open, the node and the object are saved first, as
+		// before any other change to the node (see snapshotBarrier).
+		const call = (...args) => {
+			if (anyRunOpen()) snapshotBarrier(wrapper);
+			return Reflect.apply(member, impl, args);
+		};
+		method = { fn: member, wrapper, call };
 		MapMethods.set(byObject, prop, method);
 	}
 	return method.call;
@@ -689,7 +697,7 @@ const SELF_DATA_VALUES = new WeakMap();
 
 /**
  * The methods {@link frontedDataMember} made to run on a data object itself, per object and key.
- * @type {WeakMap<object, Map<string|symbol, {fn: Function, call: Function}>>}
+ * @type {WeakMap<object, Map<string|symbol, {fn: Function, wrapper: object, call: Function}>>}
  * @private
  */
 const SELF_DATA_METHODS = new WeakMap();
@@ -1145,7 +1153,7 @@ function isBindingMethod(fn, holder) {
 
 /**
  * The prototypes of Node's data classes (`URL`, `Blob`, `TextDecoder` …) and of what Node keeps inside the objects
- * {@link recordNodeObjectPrototypes} samples (a key's native `KeyObjectHandle` on Node 22): data of Node's whose
+ * {@link recordNodeObjectPrototypes} samples (a key's native `KeyObjectHandle` on Node 24): data of Node's whose
  * every behaviour is on its prototype. Only an object of
  * one of these is plain data for its prototype being Node's; another built-in's instance (a `vm.Script`) can hold a
  * module's code in a slot no member shows.
@@ -1382,6 +1390,19 @@ function isModuleProxy(value) {
 }
 
 /**
+ * The language's `%ThrowTypeError%`: the getter and setter of a strict arguments object's `callee`, taken at load.
+ * @type {Function}
+ * @private
+ */
+const THROW_TYPE_ERROR = Reflect.getOwnPropertyDescriptor(
+	(function () {
+		"use strict";
+		return arguments;
+	})(),
+	"callee"
+).get;
+
+/**
  * Whether a function is one of the engine's own (a builtin), which runs none of a module's code. Decided from
  * `Function.prototype.toString` alone, so nothing of the function runs: a builtin reports itself as native code
  * under its own non-empty name (`function push() { [native code] }`), while a bound function — a module's function
@@ -1391,6 +1412,9 @@ function isModuleProxy(value) {
  * @private
  */
 function isBuiltinFunction(fn) {
+	// The language's own thrower behind a strict arguments object's `callee` reports native code with no name, as a bound
+	// function does; it is told by identity.
+	if (fn === THROW_TYPE_ERROR) return true;
 	// This copy's wrapper of `Function.prototype.toString` (see helpers/function-source-context) stands in for the
 	// engine's own while an instance is up, and runs none of a module's code. It is told by identity, never by its text.
 	if (isFunctionSourcePatch(fn)) return true;
@@ -1742,7 +1766,7 @@ function holdsCode(value, depth, budget) {
 		// What one of the language's own iterators has left cannot be read without stepping it.
 		if (isNativeIterator(value)) return true;
 		const prototype = Reflect.getPrototypeOf(value);
-		// Node's own data (the `KeyObjectHandle` a key holds on Node 22) runs none of a module's code; its own members are
+		// Node's own data (the `KeyObjectHandle` a key holds on Node 24) runs none of a module's code; its own members are
 		// still read below.
 		if (
 			prototype !== null &&
@@ -2211,9 +2235,13 @@ function isRestartStale(wrapper) {
 	// While copies hold trees of their own (#876), a node answers for the tree of the code reading it: the reading
 	// code's tree is the one whose epoch it reads, so a node of any other tree forwards to the node at its path there.
 	if (slothlet._treeCopies !== 0) {
-		const epoch = wrapper.____slothletInternal.epoch;
+		const internal = wrapper.____slothletInternal;
+		const epoch = internal.epoch;
 		// The tree being built for the reader's set (a restart's, while it builds) answers as itself too.
-		return epoch !== slothlet._treeEpoch && epoch !== slothlet._buildEpoch;
+		if (epoch === slothlet._treeEpoch || epoch === slothlet._buildEpoch) return false;
+		// A copy kept for runs when the instance changed their start tree in place: that tree's nodes answer the runs as
+		// themselves while they stand, and a removed one from the copy.
+		return epoch !== slothlet._startTreeEpoch || internal.invalid === true || internal.removed === true;
 	}
 	return wrapper.____slothletInternal.epoch < slothlet._liveEpoch;
 }
@@ -2266,6 +2294,31 @@ function isArrayIndex(prop) {
  */
 function isPosition(key) {
 	return isArrayIndex(key) && Number(key) < 4294967295;
+}
+
+/**
+ * Keys in the order an ordinary object lists its own (#971): array positions ascending, then the other string keys,
+ * then symbols, each of those two kept in the order given, which is the order they were made.
+ *
+ * @param {Array<string|symbol>} keys - The keys, in the order they were made.
+ * @returns {Array<string|symbol>} The same keys, ordered.
+ * @private
+ *
+ * @example
+ * ordinaryKeyOrder(["b", "2", Symbol.for("s"), "a", "0"]); // ["0", "2", "b", "a", Symbol(s)]
+ */
+function ordinaryKeyOrder(keys) {
+	const positions = [];
+	const strings = [];
+	const symbols = [];
+	for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) {
+		const key = keys[ofIndex];
+		if (typeof key === "symbol") listPush(symbols, key);
+		else if (isPosition(key)) listPush(positions, key);
+		else listPush(strings, key);
+	}
+	ArrayMethods.sort(positions, (a, b) => Number(a) - Number(b));
+	return concatLists(positions, strings, symbols);
 }
 
 /**
@@ -2349,7 +2402,9 @@ function inspectLabel(text) {
 function inspectShown(wrapper, args, forModule = wrapper.___inspectReaderIsModule()) {
 	const internal = wrapper.____slothletInternal;
 	const childKeys = filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k));
-	if (childKeys.length > 0 && !internal.isCallable) return wrapper.___inspectMembers();
+	// A class instance the node holds as it is holds every member written or defined through the node (see
+	// definesOnInstance): it is shown as the instance, below, as it was before anything was written (#971).
+	if (childKeys.length > 0 && !internal.isCallable && !definesOnInstance(wrapper)) return wrapper.___inspectMembers();
 	// A lazy node not loaded yet shows as the function stand-in it is, `[Function: name]` — the form a module's view of
 	// it shows (#824) — not as the Proxy around it, which `util.inspect` prints as `Proxy([Function: name])`. Its members
 	// are not read: reading them would load it. A node on an object shell that holds nothing (a loaded node removed, #811) shows what it holds, as eager's
@@ -2364,8 +2419,12 @@ function inspectShown(wrapper, args, forModule = wrapper.___inspectReaderIsModul
 	// A function the node composed its members onto is a layer, which `util.inspect` would show as its bare shell: it is
 	// shown by its form and members, as to a module.
 	const layered = isCompositionLayer(internal.impl) && typeof internal.impl === "function";
+	// A function node holding members of its own, beside its function's, shows them with its form, as a function shows
+	// the members written onto it (#971): its function alone would leave them out.
+	const holdsOwnMembers = typeof internal.impl === "function" && childKeys.length > 0;
 	if (
 		!layered &&
+		!holdsOwnMembers &&
 		(!forModule || !memberHoldsCode(internal.impl, searchDepth(wrapper.____slothlet) + 1, searchBudget(wrapper.____slothlet)))
 	)
 		return internal.impl;
@@ -2576,6 +2635,7 @@ export function ValuesLayer(Base) {
 					refusal: isRefusal
 				});
 				Base.define("has", { internalSlots: hasInternalSlots });
+				Base.define("ordinary", { keyOrder: ordinaryKeyOrder });
 				Base.define("inherited", { engineMember: inheritedEngineMember, private: inheritedPrivate, atStart: inheritedAtStart });
 				Base.define("holds", {
 					dataKind: holdsDataKind,
@@ -2588,6 +2648,8 @@ export function ValuesLayer(Base) {
 				Base.define("inspect", { label: inspectLabel, shown: inspectShown, safe: inspectSafe });
 				Base.define("is", { wrapper: (value) => value !== null && typeof value === "object" && #brand in value });
 				Base.linkLayer(this, (methods, registered) => {
+					definesOnInstance = methods.rules.definesOnInstance;
+					snapshotBarrier = methods.run.snapshotBarrier;
 					realClass = registered;
 					moduleKey = methods.module.key;
 					moduleObjectOf = methods.module.objectOf;
@@ -2917,14 +2979,16 @@ export function ValuesLayer(Base) {
 
 				const node = wrapper.____slothletInternal.proxy;
 				const shown = {};
-				for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
+				// Every enumerable member, a symbol-keyed one included, as `util.inspect` shows an object's own (#971).
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(node); ofIndex < ofList.length; ofIndex++) {
 					const key = ofList[ofIndex];
 					// A member listed that the caller may not read after all (one the module's Proxy among the value's prototypes
 					// answers, which reading runs as a call of the node) is left out as well.
 					try {
 						// An accessor is shown by its form, as `util.inspect` shows one, and not run: it is the module's code.
 						const descriptor = Reflect.getOwnPropertyDescriptor(node, key);
-						shown[key] = descriptor && !("value" in descriptor) ? accessorLabel(descriptor) : node[key];
+						if (!descriptor?.enumerable) continue;
+						shown[key] = !("value" in descriptor) ? accessorLabel(descriptor) : node[key];
 					} catch (error) {
 						if (error?.code !== "PERMISSION_DENIED") throw error;
 					}
