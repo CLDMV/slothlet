@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T08:39:11-08:00 (1795624751)
+ *	@Last modified time: 2026-11-25T10:51:25-08:00 (1795632685)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -7964,7 +7964,7 @@ if (isNode)
 
 /**
  * The prototypes of Node's data classes (`URL`, `Blob`, `TextDecoder` …) and of what Node keeps inside the objects
- * {@link runtime_recordNodeObjectPrototypes} samples (a key's native `KeyObjectHandle` on Node 22): data of Node's whose
+ * {@link runtime_recordNodeObjectPrototypes} samples (a key's native `KeyObjectHandle` on Node 24): data of Node's whose
  * every behaviour is on its prototype. Only an object of
  * one of these is plain data for its prototype being Node's; another built-in's instance (a `vm.Script`) can hold a
  * module's code in a slot no member shows.
@@ -8994,7 +8994,7 @@ function runtime_holdsCode(value, depth, budget) {
 		// What one of the language's own iterators has left cannot be read without stepping it.
 		if (runtime_isNativeIterator(value)) return true;
 		const prototype = Reflect.getPrototypeOf(value);
-		// Node's own data (the `KeyObjectHandle` a key holds on Node 22) runs none of a module's code; its own members are
+		// Node's own data (the `KeyObjectHandle` a key holds on Node 24) runs none of a module's code; its own members are
 		// still read below.
 		if (
 			prototype !== null &&
@@ -9499,7 +9499,7 @@ function runtime_isCodeObject(value) {
  * intrinsic one and it has no members of its own that reading what it settles to could reach, so that read runs none
  * of a module's code. Members under symbols of no registry and none of the language's are left out: `then` reads none
  * of them, its stand-in carries none of them, and Node keeps its own there on every promise made while an
- * `AsyncLocalStorage` runs on async hooks (Node 22's async ids and stores).
+ * `AsyncLocalStorage` runs on async hooks (its async ids and stores, while `AsyncContextFrame` is off).
  * @param {object} value - An object that is not a Proxy.
  * @returns {boolean} True for such a promise.
  * @private
@@ -19484,7 +19484,7 @@ class UnifiedWrapper extends ComponentBase {
 			// A function's non-enumerable own properties are its own surface, not child endpoints — the
 			// same rule the get trap applies (#304). Beyond `length`/`name`/`prototype` (skipped above),
 			// this covers a module's own `Object.defineProperty(fn, k, { enumerable: false })` and the own
-			// `arguments`/`caller` every sloppy-mode (CommonJS) function carries on Node 22; adopting them
+			// `arguments`/`caller` every sloppy-mode (CommonJS) function carries; adopting them
 			// made them enumerable api children that `Object.keys()` and typegen reported.
 			if (typeof this.____slothletInternal.impl === "function" && !descriptor.enumerable) {
 				continue;
@@ -24701,6 +24701,31 @@ export function readApiMember(container, key) {
 	return (
 		(member !== null && (typeof member === "object" || typeof member === "function") && WeakMapMethods.get(capturedViewTargets, member)) ||
 		member
+	);
+}
+
+/**
+ * Whether an api node still holds any member, as the node itself holds them: the members on its wrapper and its
+ * impl's own enumerable keys, whoever is running. Composition code deciding whether a namespace is empty asks this
+ * instead of listing the node through a read: a listing made while a module's call is executing goes through that
+ * module's view, which withholds the members the module may not read and resolves who is reading once for every
+ * member it describes (#625). A plain object's own enumerable keys are its members.
+ * @param {object|Function} node - Api node (a wrapper proxy) or plain object.
+ * @returns {boolean} True when the node holds at least one member.
+ * @internal
+ *
+ * @example
+ * holdsApiMembers(api.plugins); // false once its last member is removed
+ */
+export function holdsApiMembers(node) {
+	const wrapper = resolveWrapper(node);
+	if (!wrapper) return Objects.keys(node).length > 0;
+	const keys = Objects.keys(wrapper);
+	for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) if (!isFrameworkReservedKey(keys[ofIndex])) return true;
+	const impl = wrapper.____slothletInternal.impl;
+	if (impl === null || (typeof impl !== "object" && typeof impl !== "function")) return false;
+	return runtime_onImpl(wrapper, (held) =>
+		ArrayMethods.some(Objects.keys(held), (key) => !SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, key))
 	);
 }
 

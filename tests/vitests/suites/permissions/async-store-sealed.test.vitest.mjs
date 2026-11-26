@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:26:24-08:00 (1794929184)
+ *	@Last modified time: 2026-11-25T11:47:04-08:00 (1795636024)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  *
  * @description
  * Under the async runtime slothlet keeps each call's identity in an `AsyncLocalStorage` store. Node keeps the value a
- * store holds on async resources where `AsyncContextFrame` is off (Node 22, or a later Node run with
+ * store holds on async resources where `AsyncContextFrame` is off (Node run with
  * `--no-async-context-frame`): `async_hooks.executionAsyncResource()`, every promise a module makes and every
  * `AsyncResource` hold it under a symbol a module can list. And a module can replace `AsyncLocalStorage`'s methods on
  * its prototype, on every Node version, and see what slothlet passes to them.
@@ -155,7 +155,7 @@ function probe(nodeFlags, mode, patch) {
 	return JSON.parse(result.stdout.trim().split("\n").pop());
 }
 
-// Node 24 and later switch AsyncContextFrame off with this flag; Node 22 runs without it by default.
+// Node 24 and later switch AsyncContextFrame off with this flag.
 const FRAMES = process.allowedNodeEnvironmentFlags.has("--no-async-context-frame")
 	? [
 			["default async context", []],

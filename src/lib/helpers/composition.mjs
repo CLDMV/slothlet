@@ -243,11 +243,12 @@ function setApiNodeCheck(check) {
  * Whether a value is an object with a prototype of its own (a class instance or a built-in such as a
  * `Map`), which may carry private fields or internal slots that no property copy reproduces.
  * @param {unknown} value - The value.
- * @returns {boolean} True for a class instance or built-in object (not an array or a Proxy).
+ * @returns {boolean} True for a class instance or built-in object. The value is an object that is neither an array nor a
+ *   Proxy: the caller has checked.
  * @private
  */
 function hasOwnClass(value) {
-	if (value === null || typeof value !== "object" || Arrays.isArray(value) || util.types.isProxy(value)) return false;
+	// The one caller has ruled out null, non-objects, arrays and Proxies already.
 	const proto = Objects.getPrototypeOf(value);
 	return proto !== null && proto !== Objects.prototype;
 }
