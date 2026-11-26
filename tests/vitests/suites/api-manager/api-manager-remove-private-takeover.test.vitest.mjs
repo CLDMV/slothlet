@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:38-08:00 (1794882518)
+ *	@Last modified time: 2026-11-25T13:35:38-08:00 (1795642538)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -99,7 +99,7 @@ describe.each(configs)("removing a takeover of private members > $mode / $runtim
 		expect(Object.keys(await api.billing.internals).sort()).toEqual(
 			Object.keys(internals)
 				.sort()
-				.filter((key) => config.host === "allow" || !key.startsWith("_") || typeof internals[key] === "function")
+				.filter((key) => config.host === "allow" || !key.startsWith("_"))
 		);
 	});
 

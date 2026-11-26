@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
+ *	@Last modified time: 2026-11-25T13:36:36-08:00 (1795642596)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -80,9 +80,9 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		}
 		expect(read, "direct host read refused").toBe("THREW:PERMISSION_DENIED");
 		const internals = mode === "lazy" ? await api.billing.internals : api.billing.internals;
-		expect(Object.keys(internals).sort(), "privates redacted, public member remains").toEqual(["_scale", "currency"]);
-		// A private FUNCTION is not a terminal data value, so its KEY stays listed (traversal is free);
-		// what the host cannot do is CALL it — asserted below.
+		expect(Object.keys(internals).sort(), "privates redacted, public member remains").toEqual(["currency"]);
+		// A private FUNCTION is hidden like any private member: its key is left out of the host's listing, as a private
+		// value's is.
 	});
 
 	it("opens the host through permissions.private.host allow", async () => {

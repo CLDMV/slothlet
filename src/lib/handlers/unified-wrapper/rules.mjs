@@ -128,7 +128,8 @@ let trustedRootOwn,
 	registeredWrapper,
 	isWrapper,
 	isClassInstance,
-	inherits;
+	inherits,
+	isPrivateFunctionMember;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -992,7 +993,7 @@ function enforceRead(wrapper, prop, resolvedValue, callerOverride, kept = null, 
 	const pm = wrapper.____slothlet.handlers?.permissionManager;
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
-	if (!isTerminalData(resolvedValue)) return;
+	if (!isTerminalData(resolvedValue) && !isPrivateFunctionMember(wrapper, prop, resolvedValue)) return;
 	// A function's own `name` and `length` are read as plain JS reads them, whatever the rules say of the function.
 	if (isBuiltinFunctionMember(wrapper, prop)) return;
 
@@ -2122,6 +2123,7 @@ export function RulesLayer(Base) {
 				Base.define("impl", { default: implDefault });
 				Base.define("has", { ownMember: hasOwnMember });
 				Base.linkLayer(this, (methods, registered) => {
+					isPrivateFunctionMember = methods.is.privateFunctionMember;
 					inherits = methods.values.inherits;
 					isClassInstance = methods.is.classInstance;
 					realClass = registered;

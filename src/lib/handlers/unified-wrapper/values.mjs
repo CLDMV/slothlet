@@ -863,6 +863,27 @@ function isTerminalData(value) {
 }
 
 /**
+ * Whether a member is a module-private function (#260): a `_`/`__`-named member of a node whose value is a function, or
+ * a node standing for one. Its read is decided by module privacy as a private value's is, so another module is refused
+ * the node, and with it the function's source text and the members it carries, not only the call. A folder named that
+ * way holding no function of its own is a public mount and stays traversable.
+ * @param {object} wrapper - The node holding the member.
+ * @param {string|symbol} prop - The member's key.
+ * @param {*} value - The member's value, or the node standing for it.
+ * @returns {boolean} True for a module-private function member.
+ * @private
+ *
+ * @example
+ * // tool.mjs: export function _secret() {}
+ * isPrivateFunctionMember(toolWrapper, "_secret", toolWrapper._secret); // true
+ */
+function isPrivateFunctionMember(wrapper, prop, value) {
+	if (typeof prop !== "string" || typeof value !== "function") return false;
+	if (!wrapper.____slothlet.handlers.permissionManager.isPrivateTarget?.(memberPathOf(wrapper, prop))) return false;
+	return functionOf(unwrapLeafValue(value)) !== null;
+}
+
+/**
  * The enforcement options of a read of data, per instance: they ask the permission manager for the read (the rules
  * whose level covers it), and tell it which paths above the target are object members of a module's data, so a deny
  * naming one of them exactly covers what it holds.
@@ -2076,7 +2097,11 @@ function isReadRedacted(wrapper, prop, kept = null, access = null, listing = fal
 			return answersWithModuleCode(member) && !readGateDecision(wrapper, targetPath, undefined, kept, access, null, "call").allowed;
 		}
 	}
-	if (!isAccessor && (!("value" in desc) || !isTerminalData(unwrapLeafValue(desc.value)))) return false;
+	if (
+		!isAccessor &&
+		(!("value" in desc) || (!isTerminalData(unwrapLeafValue(desc.value)) && !isPrivateFunctionMember(wrapper, prop, desc.value)))
+	)
+		return false;
 	if (!readGateDecision(wrapper, targetPath, undefined, kept, access).allowed) return true;
 	// Reading a getter runs it, which is a call of the module's code: it is listed only to a caller that may also call
 	// its path, as running it is refused otherwise (a rule level with the read and not the call, such as `:write`).
@@ -2604,6 +2629,7 @@ export function ValuesLayer(Base) {
 					engineMember: isEngineMember,
 					apiNode: isApiNode,
 					terminalData: isTerminalData,
+					privateFunctionMember: isPrivateFunctionMember,
 					dataMemberNode: isDataMemberNode,
 					builtinFunctionMember: isBuiltinFunctionMember,
 					codeMemberWithheld: isCodeMemberWithheld,
