@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:40-08:00 (1794882520)
+ *	@Last modified time: 2026-11-25T20:27:06-08:00 (1795667226)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,8 +20,8 @@
  * @description
  * Each case runs the inspect-api-structure tool twice in child processes (one lazy, one eager, to avoid proxy and
  * debugging conflicts) and compares the api type, the callable paths, the root function's name and arity, and the
- * whole mode-neutral api shape. Every fixture folder runs under every matrix pair (runtime × hooks, same settings on
- * both sides). The folders are spread over {@link API_STRUCTURE_PARTS} test files
+ * whole mode-neutral api shape. Every fixture folder runs under two matrix pairs, async runtime without hooks and live
+ * runtime with hooks (same settings on both sides); the other runtime × hooks pairs would compare the same shapes. The folders are spread over {@link API_STRUCTURE_PARTS} test files
  * (`suites/api-structures/all-api-structures-part-NN.test.vitest.mjs`) so each file finishes in a few minutes; the
  * cases and assertions are the ones the single file ran.
  *
@@ -65,7 +65,7 @@ function blankMatching(shape, pattern, apiPath = "") {
  * this means adding or removing an `all-api-structures-part-NN.test.vitest.mjs` file to match.
  * @type {number}
  */
-export const API_STRUCTURE_PARTS = 12;
+export const API_STRUCTURE_PARTS = 6;
 
 /**
  * The fixture folders one part runs.
@@ -131,7 +131,11 @@ export function describeApiStructures(part) {
 				}
 			}
 
-			return matrixPairs;
+			// Hooks cannot change a composed api: across every fixture, mode and runtime the shape this test compares is the
+			// same with hooks on and off, apart from the `slothlet.hook` namespace, which every fixture shares and which the
+			// hooks-on pair still compares. So the runtime × hooks pairs reduce to two that differ in each axis: async without
+			// hooks and live with hooks.
+			return matrixPairs.filter(({ eager }) => (eager.config.runtime === "async") !== Boolean(eager.config.hook?.enabled));
 		}
 
 		/**

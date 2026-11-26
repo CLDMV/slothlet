@@ -7,18 +7,18 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T20:27:18-08:00 (1795667238)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview API structures, lazy against eager, for part 4 of 12 of the api_tests folders.
+ * @fileoverview API structures, lazy against eager, for part 4 of 6 of the api_tests folders.
  *
  * @description
  * The cases and assertions live in `tests/vitests/setup/all-api-structures.mjs`; this file runs its part of the sorted
- * fixture folders (a contiguous slice), under every matrix pair.
+ * fixture folders (a contiguous slice), under the matrix pairs it keeps.
  * @module tests/vitests/suites/api-structures/all-api-structures-part-04
  */
 
