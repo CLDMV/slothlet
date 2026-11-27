@@ -122,6 +122,9 @@ export default defineConfig({
 	},
 	test: {
 		// maxWorkers: 4,
+		// vitest's on-disk module cache never serves slothlet's suite: every file slothlet loads ends with a value drawn
+		// for that load, and tests write fresh fixtures each run, so the cache only grows (93 GB in one checkout).
+		fsModuleCache: false,
 		include: ["tests/vitests/**/*.vest.{js,mjs}", "tests/vitests/**/*.test.vitest.{js,mjs}"],
 		exclude: ["node_modules"],
 		environment: "node",
