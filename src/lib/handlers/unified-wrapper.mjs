@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T21:07:50-08:00 (1795669670)
+ *	@Last modified time: 2026-11-27T15:00:41-08:00 (1795820441)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15838,10 +15838,17 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		const chain = WeakMapMethods.get(WAITING_CHAINS, child);
 		return chain && chain.length > 0 ? runtime_standInPath(inner, chain) : undefined;
 	};
-	// A call through a stand-in is checked by the stand-in, against the member its chain reaches once loaded: before the
-	// load nothing owns that member yet, so the owner grant would refuse a module its own leaf (#509). A stand-in that
-	// forwards to a restarted tree is checked here, against the path its chain names.
-	const deferToStandIn = () => calledPath() !== undefined && !runtime_isRestartStale(inner);
+	// Under the owner grant (#509), a call through a stand-in to a member nothing owns yet (its node has not loaded) is
+	// checked by the stand-in, against the member its chain reaches once loaded: checked now, the grant would refuse a
+	// module its own leaf. Every other call is checked here, at once, against the path the chain names. A stand-in that
+	// forwards to a restarted tree is always checked here.
+	const deferToStandIn = () => {
+		const path = calledPath();
+		if (path === undefined || runtime_isRestartStale(inner)) return false;
+		const handlers = inner.slothlet.handlers;
+		if (!handlers?.permissionManager?.isOwnerGrantEnabled?.()) return false;
+		return !handlers.ownership?.getCurrentOwner?.(path);
+	};
 	const throughStandIn = (access) => {
 		standInViewCall = { standIn: child, reader: capturedCaller, ceiling };
 		try {
