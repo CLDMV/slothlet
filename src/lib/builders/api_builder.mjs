@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-28T04:30:36-08:00 (1795869036)
+ *	@Last modified time: 2026-11-28T12:14:47-08:00 (1795896887)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -201,9 +201,7 @@ const ACCESS_QUERY = Objects.freeze({ operation: "access" });
 
 function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 	const history = slothlet.handlers?.apiManager?.state?.addHistory;
-	// reload/remove are always called after at least one add(), so addHistory is always populated;
-	// the false branch (no history → return pathOrModuleId unchanged) is never triggered in tests.
-	/* v8 ignore next */
+	// Without an ApiManager there is no add log, and the key is taken as a path.
 	if (history) {
 		let match = null;
 		for (let i = history.length - 1; i >= 0; i--) {
@@ -664,13 +662,10 @@ export class ApiBuilder extends ComponentBase {
 
 		// Save user's shutdown/destroy functions if they exist (to call them during lifecycle)
 		// Store these on the instance so they can be updated during add/remove API operations
-		// All built API fixtures define shutdown and destroy functions; the null fallback arm is never taken.
-		/* v8 ignore start */
 		this.slothlet.userHooks = {
 			shutdown: typeof userApi.shutdown === "function" ? userApi.shutdown : null,
 			destroy: typeof userApi.destroy === "function" ? userApi.destroy : null
 		};
-		/* v8 ignore stop */
 		// The api's `shutdown` / `destroy` are the lifecycle methods, so a user module at either root name
 		// is held here off the api surface and loads only when the lifecycle calls it. Loading the api can
 		// never reach it, so a lazy one must not count toward the materialization total, or remaining
@@ -807,12 +802,13 @@ export class ApiBuilder extends ComponentBase {
 			}
 
 			const permissionManager = slothlet.handlers?.permissionManager;
-			/* v8 ignore start */
 			if (!permissionManager?.enforceAccess) {
 				throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 			}
-			/* v8 ignore stop */
 
+			// Defensive reads of the caller's record and context: every wrapper the framework builds carries its apiPath
+			// and the leaves that get here their filePath, and every call store has a context, so the fallbacks only
+			// guard a malformed record. The suite builds no such caller.
 			/* v8 ignore start */
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
@@ -877,8 +873,7 @@ export class ApiBuilder extends ComponentBase {
 			if (slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) return false;
 
 			const permissionManager = slothlet.handlers?.permissionManager;
-			// Defensive guard: this proxy helper runs only when permissionManager is initialized.
-			/* v8 ignore next */
+			// A PermissionManager without these methods can't open a refused read.
 			if (!permissionManager?.getRulesForCaller || !permissionManager?.checkAccess) {
 				return false;
 			}
@@ -1667,7 +1662,6 @@ export class ApiBuilder extends ComponentBase {
 		let version = "unknown";
 		if (isNode) {
 			const pkg = loadJson(new URL("../../../package.json", import.meta.url));
-			/* v8 ignore else - node-only defensive: the else-arm is unreachable; this block runs only under Node where the repo's own package.json always has a version */
 			if (pkg?.version) version = pkg?.version;
 		}
 
@@ -1854,8 +1848,7 @@ export class ApiBuilder extends ComponentBase {
 					// to an already-established routine chain — re-derive every chain's stacked callable
 					// and root cascade so they reflect the newly mounted module(s). Does not re-fire
 					// `mode: "startup"` routines (those run once, at the end of initial compose).
-					// routineManager is always auto-registered (slothletProperty); the false arm is unreachable.
-					/* v8 ignore next */
+					// Without a RoutineManager there are no chains to rebuild.
 					if (slothlet.handlers.routineManager) {
 						await slothlet.handlers.routineManager.rebuildStacks(slothlet.api);
 					}
@@ -2634,11 +2627,7 @@ export class ApiBuilder extends ComponentBase {
 				}
 				// The live runtime binds through its own manager: the flow and caller bound in are what the callback runs in.
 				if (slothlet.contextManager?.kind === "live") return pinScopeToCurrentCaller(fn);
-				// No AsyncResource where there is no node:async_hooks, so bind is identity (`: fn`). This nested
-				// method lives outside api_builder's instrumented coverage region (the v8 map stops inside
-				// createSlothletNamespace, before its returned object's methods), so neither the node run nor
-				// the browser merge can count this arm — mark the `: fn` honestly.
-				/* v8 ignore next - no node:async_hooks: `: fn` identity bind; outside the file's instrumented region */
+				// A host whose node:async_hooks has no AsyncResource has nothing to bind with, so bind is identity (`: fn`).
 				return AsyncResource ? AsyncResource.bind(fn, "slothlet-bound") : fn;
 			},
 
@@ -2678,15 +2667,15 @@ export class ApiBuilder extends ComponentBase {
 
 						// Fallback to base instance
 						const store = MapMethods.get(slothlet.contextManager.instances, slothlet.instanceID);
-						// unreachable via tests (2026-03-05): instances map always contains the base
-						// instanceID after initialization; only fires if store was externally deleted.
-						/* v8 ignore next */
+						// The instance's record is gone after shutdown: answer from its own context.
 						if (!store) {
+							// slothlet.context is set by load() and stays set after shutdown, so `|| {}` guards a read before
+							// load, which no caller can make.
+							/* v8 ignore start */
 							const baseContext = slothlet.context || {};
+							/* v8 ignore stop */
 							return key ? baseContext[key] : { ...baseContext };
 						}
-						// live-mode context; spread (no-key) form never requested in tests.
-						/* v8 ignore next */
 						return key ? store.context[key] : { ...store.context };
 					}
 
@@ -2698,11 +2687,9 @@ export class ApiBuilder extends ComponentBase {
 						// If we're not in .run(), get base store for this instance
 						if (!currentStore) {
 							const baseStore = MapMethods.get(slothlet.contextManager.instances, slothlet.instanceID);
-							// baseStore always has context; || {} fallback and spread form never triggered.
-							/* v8 ignore start */
+							// The instance's base record; none after shutdown.
 							const baseContext = baseStore?.context || {};
 							return key ? baseContext[key] : { ...baseContext };
-							/* v8 ignore stop */
 						}
 
 						// Check if current store belongs to this instance (base or child)
@@ -2721,20 +2708,19 @@ export class ApiBuilder extends ComponentBase {
 
 						// We're in a different instance's context - return our base context
 						const baseStore = MapMethods.get(slothlet.contextManager.instances, slothlet.instanceID);
-						// baseStore always has context; || {} fallback and cross-instance path not exercised in tests.
-						/* v8 ignore start */
+						// None after this instance's shutdown.
 						const baseContext = baseStore?.context || {};
 						return key ? baseContext[key] : { ...baseContext };
-						/* v8 ignore stop */
 					}
 
 					// Fallback for unknown context manager type — only reachable if a
 					// third-party contextManager is injected that is neither AsyncContextManager
-					// nor LiveContextManager. Never exercised in the current test suite.
+					// nor LiveContextManager. slothlet.context is set by load(), so `|| {}` guards a read before load, which no
+					// caller can make.
 					/* v8 ignore start */
 					const baseContext = slothlet.context || {};
-					return key ? baseContext[key] : { ...baseContext };
 					/* v8 ignore stop */
+					return key ? baseContext[key] : { ...baseContext };
 				},
 
 				/**
@@ -2797,8 +2783,8 @@ export class ApiBuilder extends ComponentBase {
 						for (let i = 0; i < entries.length; i++) trustedRootOwn.enforceContextKeyWrite(active, entries[i][0]);
 					}
 					const base = MapMethods.get(instances, instanceID);
-					// The base context is the instance's own: plain assignment, as on any object.
-					/* v8 ignore next -- the base store exists from load() until shutdown(). */
+					// The base context is the instance's own: plain assignment, as on any object. After shutdown the instance
+					// has no record, and its own context takes the write.
 					const baseContext = base ? base.context : slothlet.context;
 					for (let i = 0; i < entries.length; i++) baseContext[entries[i][0]] = entries[i][1];
 					if (slothlet.context !== baseContext && slothlet.context) {
@@ -2816,10 +2802,7 @@ export class ApiBuilder extends ComponentBase {
 				 * @internal
 				 */
 				diagnostics: () => {
-					// config.diagnostics is always enabled in the instances that expose the
-					// diagnostics() function; the guard only fires if called on an instance
-					// without the diagnostics feature enabled.
-					/* v8 ignore next */
+					// Answers undefined on an instance configured without diagnostics.
 					if (!slothlet.config?.diagnostics) return undefined;
 					// This instance only (#837): the manager is process-wide, so nothing about the other instances it
 					// serves is reported. `context` is the context data alone; the manager's own state is `runtime`.
@@ -3168,11 +3151,9 @@ export class ApiBuilder extends ComponentBase {
 					// Defensive: metadata handler is always registered during load().
 					// This guard fires only if metadata.global is called before load() completes
 					// or on an instance that explicitly omits the metadata handler.
-					/* v8 ignore start */
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {});
 					}
-					/* v8 ignore stop */
 
 					/**
 					 * Validate a metadata key path and reject prototype-pollution segments.
@@ -3344,7 +3325,6 @@ export class ApiBuilder extends ComponentBase {
 						if (nodePath !== null) slothlet.handlers.apiManager.assertModuleWrite(nodePath);
 						return slothlet.handlers.metadata.removeUserMetadata(target, key);
 					}
-					/* v8 ignore next */
 					if (!slothlet.handlers?.metadata) return;
 					// Module code removes metadata only where it may write (#625).
 					slothlet.handlers.apiManager.assertModuleWrite(path);
@@ -3371,7 +3351,6 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.metadata.get("auth", { version: "v1" }); // { stable: true }
 				 */
 				get: function slothlet_metadata_get(target, options) {
-					/* v8 ignore next */
 					if (!slothlet.handlers?.metadata) return {};
 					const version = options && typeof options === "object" ? options.version : undefined;
 					if (version !== undefined) {
@@ -3616,13 +3595,11 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				const waitForMaterialization = async () => {
 					enforceInternalPermission("slothlet.materialize.wait");
-					// MaterializeManager is always auto-registered via slothletProperty; mgr is never null here.
-					/* v8 ignore next */
+					// No MaterializeManager: nothing to wait for.
 					if (!mgr) return;
 					return mgr.wait();
 				};
-				// materialize handler is always auto-registered via slothletProperty; if (!mgr) is unreachable.
-				/* v8 ignore start */
+				// No MaterializeManager: the same members, answering from the fallbacks above.
 				if (!mgr) {
 					return {
 						get complete() {
@@ -3632,7 +3609,6 @@ export class ApiBuilder extends ComponentBase {
 						wait: waitForMaterialization
 					};
 				}
-				/* v8 ignore stop */
 				// Not frozen: a frozen member is handed to a module as it is, so a module could change `get` / `wait`
 				// themselves; as configurable members they come to it as the framework's view of them, which refuses
 				// any change and runs a kept one as the module that read it (#625).
@@ -3688,9 +3664,8 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			event: (() => {
 				const handler = slothlet.handlers?.eventManager;
-				// eventManager is always registered (slothletProperty); this guard mirrors lifecycle's and
-				// is unreachable in practice — the defensive no-op surface (incl. `noop`) is never built.
-				/* v8 ignore start */
+				// Without an EventManager the members are inert, as lifecycle's are: a subscription is denied and an emit
+				// delivers nothing.
 				if (!handler) {
 					const noop = () => {};
 					return {
@@ -3704,7 +3679,6 @@ export class ApiBuilder extends ComponentBase {
 						rules: { add: noop, remove: noop }
 					};
 				}
-				/* v8 ignore stop */
 				// Each call goes to the handler the calling code answers from: a run() / scope() subscribes, emits to and
 				// delivers from its own copy.
 				return {
@@ -3729,11 +3703,9 @@ export class ApiBuilder extends ComponentBase {
 								throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "event", "rules", "add"] });
 							}
 							const permissionManager = slothlet.handlers?.permissionManager;
-							/* v8 ignore start */
 							if (!permissionManager?.addEventRule) {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
-							/* v8 ignore stop */
 							// The rule is read once; module code's is placed as its call rules are, at the module layer, and
 							// its condition runs as the module.
 							rule = permissionManager.snapshotEventRule(rule);
@@ -3763,11 +3735,9 @@ export class ApiBuilder extends ComponentBase {
 								throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "event", "rules", "remove"] });
 							}
 							const permissionManager = slothlet.handlers?.permissionManager;
-							/* v8 ignore start */
 							if (!permissionManager?.removeEventRule) {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
-							/* v8 ignore stop */
 							// Code supplied to another module's call removes for both modules (#597).
 							const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 							permissionManager.assertModuleEventRuleRemoval(ruleId);
@@ -3836,7 +3806,6 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				list: function slothlet_version_list(logicalPath) {
 					// versionManager is always registered when versioning is used; guard for completeness
-					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return undefined;
 					// A copy: changing it never changes the registry a version dispatcher routes by (#625).
 					return slothlet.helpers.utilities.deepClone(slothlet.handlers.versionManager.list(logicalPath));
@@ -3853,7 +3822,6 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				default: function slothlet_version_default(logicalPath, versionTag) {
 					// versionManager is always registered when versioning is used; guard for completeness
-					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return;
 					// Module code points the dispatcher at a version only where it may write (#625).
 					slothlet.handlers.apiManager.assertModuleWrite(logicalPath);
@@ -3872,7 +3840,6 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				remove: async function slothlet_version_remove(logicalPath, versionTag) {
 					// versionManager is always registered when versioning is used; guard for completeness
-					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return false;
 					// The module asking for the removal, read before anything awaits (#625).
 					const writer = selfModuleReader(slothlet);
@@ -3909,7 +3876,6 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					get: function slothlet_version_metadata_get(logicalPath, versionTag) {
 						// versionManager is always registered when versioning is used; guard for completeness
-						/* v8 ignore next */
 						if (!slothlet.handlers?.versionManager) return undefined;
 						// A copy: changing it never changes the stored version metadata, which only versioning.metadata.set does (#625).
 						return slothlet.helpers.utilities.deepClone(slothlet.handlers.versionManager.getVersionMetadataByPath(logicalPath, versionTag));
@@ -3929,7 +3895,6 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					set: function slothlet_version_metadata_set(logicalPath, versionTag, patch) {
 						// versionManager is always registered when versioning is used; guard for completeness
-						/* v8 ignore next */
 						if (!slothlet.handlers?.versionManager) return;
 						// Module code changes a version's metadata only where it may write: that version's mount (#625).
 						slothlet.handlers.apiManager.assertModuleWrite(
@@ -3972,11 +3937,9 @@ export class ApiBuilder extends ComponentBase {
 
 						// Check if permission manager is available
 						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
 						if (!permissionManager?.addRule) {
 							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
-						/* v8 ignore stop */
 
 						// The rule is read once, and that copy is what is placed, registered, and replayed (#625). A rule module
 						// code adds is held to its own subtree unless an explicit allow lifts the built-in reach default, and is
@@ -4018,11 +3981,9 @@ export class ApiBuilder extends ComponentBase {
 
 						// Check if permission manager is available
 						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
 						if (!permissionManager?.removeRule) {
 							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
-						/* v8 ignore stop */
 
 						// Per-flow identity: this moduleID decides whether the caller owns the rule it is
 						// removing, so attributing it to a concurrently-suspended module would let one
@@ -4080,11 +4041,9 @@ export class ApiBuilder extends ComponentBase {
 							});
 						}
 						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
 						if (!permissionManager?.registerPrincipal) {
 							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
-						/* v8 ignore stop */
 
 						// Per-flow identity: the registrant becomes the name's owner, so attributing it to a
 						// concurrently-suspended module would hand that module the name.
@@ -4130,11 +4089,9 @@ export class ApiBuilder extends ComponentBase {
 							});
 						}
 						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
 						if (!permissionManager?.unregisterPrincipal) {
 							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
-						/* v8 ignore stop */
 
 						// Code supplied to another module's call has to own the name as both modules (#597).
 						const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
@@ -4164,11 +4121,9 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					invalidate: function slothlet_permissions_principal_invalidate(name, identityKey) {
 						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
 						if (!permissionManager?.invalidatePrincipal) {
 							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
-						/* v8 ignore stop */
 
 						// Code supplied to another module's call has to own the name as both modules (#597).
 						const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
@@ -4194,11 +4149,9 @@ export class ApiBuilder extends ComponentBase {
 					access: function slothlet_permissions_self_access(target) {
 						// Check if permission manager is available
 						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
 						if (!permissionManager?.checkAccess) {
 							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
-						/* v8 ignore stop */
 
 						const ctx = slothlet.contextManager?.tryGetContext?.();
 						// Per-flow identity — otherwise this answers for whichever module entered last.
@@ -4234,11 +4187,9 @@ export class ApiBuilder extends ComponentBase {
 					rules: function slothlet_permissions_self_rules() {
 						// Check if permission manager is available
 						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
 						if (!permissionManager?.getRulesForCaller) {
 							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
-						/* v8 ignore stop */
 
 						// Per-flow identity: this returns the caller's own rules, so mis-attribution would
 						// disclose another module's rule set.
@@ -4284,11 +4235,9 @@ export class ApiBuilder extends ComponentBase {
 						access: function slothlet_permissions_global_check_access(caller, target) {
 							// Check if permission manager is available
 							const permissionManager = slothlet.handlers?.permissionManager;
-							/* v8 ignore start */
 							if (!permissionManager?.checkAccess) {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
-							/* v8 ignore stop */
 
 							const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
 							return slothlet.handlers.permissionManager.checkAccess(caller, target, null, null, runtimeContext, ACCESS_QUERY);
@@ -4319,11 +4268,9 @@ export class ApiBuilder extends ComponentBase {
 						call: function slothlet_permissions_global_check_call(caller, target, args) {
 							// Check if permission manager is available
 							const permissionManager = slothlet.handlers?.permissionManager;
-							/* v8 ignore start */
 							if (!permissionManager?.checkCall) {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
-							/* v8 ignore stop */
 
 							const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
 							return slothlet.handlers.permissionManager.checkCall(caller, target, args, runtimeContext);
@@ -4347,11 +4294,9 @@ export class ApiBuilder extends ComponentBase {
 						path: function slothlet_permissions_global_rules_path(path) {
 							// Check if permission manager is available
 							const permissionManager = slothlet.handlers?.permissionManager;
-							/* v8 ignore start */
 							if (!permissionManager?.getRulesForPath) {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
-							/* v8 ignore stop */
 
 							return slothlet.handlers.permissionManager.getRulesForPath(path);
 						},
@@ -4368,11 +4313,9 @@ export class ApiBuilder extends ComponentBase {
 						module: function slothlet_permissions_global_rules_module(moduleID) {
 							// Check if permission manager is available
 							const permissionManager = slothlet.handlers?.permissionManager;
-							/* v8 ignore start */
 							if (!permissionManager?.getRulesByModule) {
 								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 							}
-							/* v8 ignore stop */
 
 							return slothlet.handlers.permissionManager.getRulesByModule(moduleID);
 						}
@@ -4442,11 +4385,9 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					seal: function slothlet_permissions_control_seal() {
 						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
 						if (!permissionManager?.seal) {
 							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
-						/* v8 ignore stop */
 
 						slothlet.handlers.permissionManager.seal();
 					},
@@ -4479,11 +4420,9 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					get sealed() {
 						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
 						if (!permissionManager?.isSealed) {
 							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {});
 						}
-						/* v8 ignore stop */
 
 						return permissionManager.isSealed();
 					}
@@ -4635,8 +4574,7 @@ export class ApiBuilder extends ComponentBase {
 				 * Hook system diagnostics (only when hooks enabled)
 				 * @type {object}
 				 */
-				// hookManager is always auto-registered via slothletProperty; false arm is unreachable.
-				/* v8 ignore start */
+				// Without a HookManager there is no hook member.
 				hook: slothlet.handlers?.hookManager
 					? {
 							/**
@@ -4657,7 +4595,6 @@ export class ApiBuilder extends ComponentBase {
 							}
 						}
 					: undefined
-				/* v8 ignore stop */
 			};
 		}
 
@@ -5350,11 +5287,8 @@ export class ApiBuilder extends ComponentBase {
 			configurable: true
 		});
 
-		// Note: destroy is always attached separately after api is built via
-		// Object.defineProperty directly (needs api reference for createDestroyFunction).
-		// The only current call site passes destroy: null, so this block is never reached.
-		// Kept as a fallback for any future caller that pre-builds the destroy fn.
-		/* v8 ignore start */
+		// The build passes destroy: null and attaches destroy itself once the api exists (createDestroyFunction needs
+		// it); a caller that has already built destroy gets it attached here.
 		if (builtins.destroy !== null) {
 			Objects.defineProperty(userApi, "destroy", {
 				__proto__: null,
@@ -5364,6 +5298,5 @@ export class ApiBuilder extends ComponentBase {
 				configurable: true
 			});
 		}
-		/* v8 ignore stop */
 	}
 }
