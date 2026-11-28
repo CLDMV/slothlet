@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T02:11:58-08:00 (1795601518)
+ *	@Last modified time: 2026-11-25T21:09:25-08:00 (1795669765)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -131,12 +131,10 @@ describe("permission baseline > the browser checks with the default probes", () 
 describe("permission baseline > the Node checks on other hosts", () => {
 	const frameOff = { asyncContextFrameOn: () => false, vitestWorker: null, viteRecords: () => 0 };
 
-	it("on Node 22 the reason names --experimental-async-context-frame", async () => {
+	it("on an older reported Node the reason still names --no-async-context-frame", async () => {
 		const { runBaseline } = await loadWith(() => ({ NativeProcess: processAt("22.4.0") }));
 		const { checks } = await runBaseline("node", frameOff);
-		expect(checks).toEqual([
-			{ id: "async-context-frame", met: false, reason: expect.stringContaining("--experimental-async-context-frame") }
-		]);
+		expect(checks).toEqual([{ id: "async-context-frame", met: false, reason: expect.stringContaining("--no-async-context-frame") }]);
 	});
 
 	it("on Node 24 the reason names --no-async-context-frame", async () => {
