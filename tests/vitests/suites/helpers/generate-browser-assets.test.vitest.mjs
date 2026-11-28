@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/generate-browser-assets.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/generate-browser-assets.test.vitest.mjs
  *	@Date: 2026-05-31T08:04:06-07:00 (1780239846)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
+ *	@Last modified time: 2026-11-28T04:31:48-08:00 (1795869108)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  *
  * @description
  * Covers the one-call browser-asset generator: it returns both the API manifest and slothlet's
- * own importmap, with the importmap rebased onto a configurable `slothletBase` (default the
+ * own importmap, with the importmap rebased onto a configurable `base` (default the
  * conventional node_modules location). Verifies the default, overrides, the string guard, the
  * i18n locale enumeration, and that `generateManifest` still returns the bare manifest.
  *
@@ -35,11 +35,19 @@ import {
 	generateManifest,
 	collectSlothletSpecifiers,
 	collectPackageSpecifiers
-} from "@cldmv/slothlet/helpers/generate-manifest";
+} from "#helpers/generate-manifest";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const API_DIR = "api_tests/api_test_browser";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
+
+/**
+ * What slothlet's own files resolve through an importmap: its top-level `imports` and the `scopes` that map
+ * slothlet's own specifiers for them.
+ * @param {{imports: Record<string,string>, scopes?: Record<string, Record<string,string>>}} importmap - The importmap.
+ * @returns {Record<string,string>} The specifiers slothlet's own files resolve, by specifier.
+ */
+const ownResolution = (importmap) => Object.assign({}, importmap.imports, ...Object.values(importmap.scopes ?? {}));
 
 describe("generateBrowserAssets (#123)", () => {
 	it("returns both the API manifest and slothlet's own importmap", async () => {
@@ -52,20 +60,20 @@ describe("generateBrowserAssets (#123)", () => {
 
 		// Importmap covers slothlet's own modules.
 		expect(importmap.imports["@cldmv/slothlet"]).toBeDefined();
-		expect(importmap.imports["@cldmv/slothlet/helpers/config"]).toBeDefined();
+		expect(ownResolution(importmap)["#helpers/config"]).toBeDefined();
 		// Every entry is a real module/locale URL.
 		for (const url of Object.values(importmap.imports)) {
 			expect(url.endsWith(".mjs") || url.endsWith(".json")).toBe(true);
 		}
 	});
 
-	it("defaults slothletBase to the conventional node_modules location", async () => {
+	it("defaults base to the conventional node_modules location", async () => {
 		const { importmap } = await generateBrowserAssets(API_DIR);
 		expect(importmap.imports["@cldmv/slothlet"]).toMatch(/^\/node_modules\/@cldmv\/slothlet\//);
 	});
 
-	it("rebases every entry onto an explicit slothletBase ('/')", async () => {
-		const { importmap } = await generateBrowserAssets(API_DIR, { slothletBase: "/" });
+	it("rebases every entry onto an explicit base ('/')", async () => {
+		const { importmap } = await generateBrowserAssets(API_DIR, { base: "/" });
 		expect(importmap.imports["@cldmv/slothlet"]).toBe("/index.mjs");
 		for (const url of Object.values(importmap.imports)) {
 			expect(url.startsWith("/")).toBe(true);
@@ -75,19 +83,19 @@ describe("generateBrowserAssets (#123)", () => {
 
 	it("rebases onto a CDN base and normalizes a missing trailing slash", async () => {
 		const base = "https://cdn.example.com/@cldmv/slothlet@3"; // no trailing slash
-		const { importmap } = await generateBrowserAssets(API_DIR, { slothletBase: base });
+		const { importmap } = await generateBrowserAssets(API_DIR, { base });
 		expect(importmap.imports["@cldmv/slothlet"]).toBe(`${base}/index.mjs`);
 	});
 
 	it("includes every shipped i18n locale", async () => {
-		const { importmap } = await generateBrowserAssets(API_DIR, { slothletBase: "/" });
-		const locales = Object.keys(importmap.imports).filter((k) => k.startsWith("@cldmv/slothlet/i18n/language/"));
+		const { importmap } = await generateBrowserAssets(API_DIR, { base: "/" });
+		const locales = Object.keys(ownResolution(importmap)).filter((k) => k.startsWith("@cldmv/slothlet/i18n/language/"));
 		expect(locales.length).toBeGreaterThanOrEqual(10);
-		expect(importmap.imports["@cldmv/slothlet/i18n/language/en-us.json"]).toMatch(/en-us\.json$/);
+		expect(ownResolution(importmap)["@cldmv/slothlet/i18n/language/en-us.json"]).toMatch(/en-us\.json$/);
 	});
 
-	it("throws when slothletBase is provided but not a string", async () => {
-		await expect(generateBrowserAssets(API_DIR, { slothletBase: 42 })).rejects.toThrow(/slothletBase must be a string/);
+	it("throws when base is provided but not a string", async () => {
+		await expect(generateBrowserAssets(API_DIR, { base: 42 })).rejects.toThrow(/options\.base must be a string/);
 	});
 });
 
@@ -105,7 +113,7 @@ describe("generateImportMap (#123)", () => {
 	it("maps every public module export — flat and per-file wildcard — so no browser endpoint 404s (#137)", async () => {
 		const { readFileSync, readdirSync } = await import("node:fs");
 		const pkg = JSON.parse(readFileSync(new URL("../../../../package.json", import.meta.url), "utf8"));
-		const { imports } = await generateImportMap("/");
+		const imports = ownResolution(await generateImportMap("/"));
 
 		// (a) Every flat (non-wildcard) module export resolves — including the bare runtime aggregator,
 		// which slothlet's internals never import directly. The JSON schema export is tooling-only (not a
@@ -140,14 +148,14 @@ describe("generateImportMap (#123)", () => {
 			}
 		}
 		// Guard against a no-op: we must have actually enumerated real wildcard modules.
-		expect(imports["@cldmv/slothlet/helpers/config"]).toMatch(/\.mjs$/);
+		expect(imports["#helpers/config"]).toMatch(/\.mjs$/);
 		expect(wildcardMissing).toEqual([]);
 	});
 
 	it("maps the internal-only `imports` field (#handlers/* #factories/*) so the browser resolves slothlet's private specifiers (H1)", async () => {
 		const { readFileSync } = await import("node:fs");
 		const pkg = JSON.parse(readFileSync(new URL("../../../../package.json", import.meta.url), "utf8"));
-		const { imports } = await generateImportMap("/");
+		const imports = ownResolution(await generateImportMap("/"));
 
 		// The package `imports` field carries `#handlers/*` / `#factories/*`. Browsers accept
 		// `#`-prefixed importmap keys, so every internal module must appear keyed by its literal
@@ -157,6 +165,33 @@ describe("generateImportMap (#123)", () => {
 		expect(hashKeys.length).toBeGreaterThan(0);
 		expect(imports["#handlers/context-async"]).toMatch(/\.mjs$/);
 		expect(imports["#factories/context"]).toMatch(/\.mjs$/);
+	});
+
+	it("maps slothlet's own specifiers for slothlet's own files alone, and the main entry and the runtime for every script", async () => {
+		const { imports, scopes } = await generateImportMap("/");
+		expect(Object.keys(imports).sort()).toEqual(
+			[
+				"@cldmv/slothlet",
+				"@cldmv/slothlet/files",
+				"@cldmv/slothlet/runtime",
+				"@cldmv/slothlet/runtime/async",
+				"@cldmv/slothlet/runtime/live"
+			]
+				.concat(Object.keys(imports).filter((k) => k.startsWith("@cldmv/slothlet-i18n/")))
+				.sort()
+		);
+		// Every scope is one of slothlet's code folders or entry files, served under the base.
+		expect(Object.keys(scopes).length).toBeGreaterThan(0);
+		for (const prefix of Object.keys(scopes)) expect(prefix).toMatch(/^\/(?:(?:src|dist)\/|index\.[cm]js$)/);
+		// What a scope maps resolves only for those files: none of it is in the page-wide `imports`.
+		for (const scope of Object.values(scopes)) {
+			expect(scope["#helpers/instance-imports"]).toMatch(/\.mjs$/);
+			expect(scope["#handlers/context-async"]).toMatch(/\.mjs$/);
+			for (const spec of Object.keys(scope)) expect(imports[spec]).toBeUndefined();
+		}
+		// The files slothlet's own entries live in are all inside a scope, so they resolve slothlet's other specifiers.
+		for (const url of Object.values(imports).filter((u) => !u.includes("slothlet-i18n")))
+			expect(Object.keys(scopes).some((prefix) => (prefix.endsWith("/") ? url.startsWith(prefix) : url === prefix))).toBe(true);
 	});
 });
 
@@ -272,7 +307,7 @@ describe("third-party package exports in the consumer graph (#297)", () => {
 		const fs = await import("node:fs/promises");
 		const { root, api } = await stageGraphFixture();
 		try {
-			const { importmap } = await generateBrowserAssets(api, { slothletBase: "/node_modules/@cldmv/slothlet/" });
+			const { importmap } = await generateBrowserAssets(api, { base: "/node_modules/@cldmv/slothlet/" });
 			// The exact subpath keys an import map's prefix substitution can never produce.
 			expect(importmap.imports["@fixture/ext-storage/errors"]).toBe("/node_modules/@fixture/ext-storage/src/lib/errors.mjs");
 			// Conditional export → the browser/default target is chosen, not the node one.
@@ -296,23 +331,23 @@ describe("third-party package exports in the consumer graph (#297)", () => {
 		}
 	});
 
-	it("derives the sibling-package base from a CDN slothletBase (unpkg-style layout)", async () => {
+	it("derives the sibling-package base from a CDN base (unpkg-style layout)", async () => {
 		const fs = await import("node:fs/promises");
 		const { root, api } = await stageGraphFixture();
 		try {
-			const { importmap } = await generateBrowserAssets(api, { slothletBase: "https://cdn.example.com/@cldmv/slothlet@3/" });
+			const { importmap } = await generateBrowserAssets(api, { base: "https://cdn.example.com/@cldmv/slothlet@3/" });
 			expect(importmap.imports["@fixture/ext-storage/errors"]).toBe("https://cdn.example.com/@fixture/ext-storage/src/lib/errors.mjs");
 		} finally {
 			await fs.rm(root, { recursive: true, force: true });
 		}
 	});
 
-	it("falls back to the conventional /node_modules/ root when slothletBase isn't the standard package layout", async () => {
+	it("falls back to the conventional /node_modules/ root when base isn't the standard package layout", async () => {
 		const fs = await import("node:fs/promises");
 		const { root, api } = await stageGraphFixture();
 		try {
-			// slothletBase "/" (slothlet served at the web root) → no `@cldmv/slothlet/` segment to strip.
-			const { importmap } = await generateBrowserAssets(api, { slothletBase: "/" });
+			// base "/" (slothlet served at the web root) → no `@cldmv/slothlet/` segment to strip.
+			const { importmap } = await generateBrowserAssets(api, { base: "/" });
 			expect(importmap.imports["@fixture/ext-storage/errors"]).toBe("/node_modules/@fixture/ext-storage/src/lib/errors.mjs");
 		} finally {
 			await fs.rm(root, { recursive: true, force: true });
@@ -477,8 +512,8 @@ describe("exports packaging (#209)", () => {
 	// on disk. Together with the whitelist test above (exists in repo + ships in the tarball), a
 	// generated importmap can never carry a URL that 404s by construction.
 	it("every slothlet importmap URL maps to a file that exists on disk", async () => {
-		const { importmap } = await generateBrowserAssets(API_DIR, { slothletBase: "/pkg/" });
-		const entries = Object.entries(importmap.imports).filter(([, url]) => url.startsWith("/pkg/"));
+		const { importmap } = await generateBrowserAssets(API_DIR, { base: "/pkg/" });
+		const entries = Object.entries(ownResolution(importmap)).filter(([, url]) => url.startsWith("/pkg/"));
 		expect(entries.length).toBeGreaterThan(0);
 		for (const [spec, url] of entries) {
 			const rel = url.slice("/pkg/".length);

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-file-validation.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-file-validation.test.vitest.mjs
  *	@Date: 2026-02-27T20:33:02-08:00 (1772253182)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-28T04:31:10-08:00 (1795869070)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  *
  * @description
  * Covers the uncovered branches in api-manager.mjs:
- * 1. `INVALID_CONFIG_FILE_TYPE` (lines 1104-1109): adding a file with an unsupported extension
+ * 1. `FILE_TYPE_UNSUPPORTED` (lines 1104-1109): adding a file with an unsupported extension
  * 2. `debug.api = true` syncWrapper debug blocks (lines 413-699): triggered when resolving
  *    collisions between existing and new API trees with debug logging enabled.
  *
@@ -69,11 +69,11 @@ describe.each(getMatrixConfigs())("API Manager File Validation > Config: '$name'
 
 	// ─── File extension validation ───────────────────────────────────────────────
 
-	describe("Unsupported file extension (INVALID_CONFIG_FILE_TYPE)", () => {
+	describe("Unsupported file extension (FILE_TYPE_UNSUPPORTED)", () => {
 		it("should reject adding a .txt file (unsupported extension)", async () => {
 			api = await createApiInstance(config, { base: TEST_DIRS.API_TEST });
 			await withSuppressedSlothletErrorOutput(async () => {
-				await expect(api.slothlet.api.add("extra", FIXTURE_TXT_FILE)).rejects.toThrow("INVALID_CONFIG_FILE_TYPE");
+				await expect(api.slothlet.api.add("extra", FIXTURE_TXT_FILE)).rejects.toThrow("FILE_TYPE_UNSUPPORTED");
 			});
 		});
 	});
@@ -98,7 +98,6 @@ describe.each(getMatrixConfigs({ mode: "eager" }))("API Manager File Validation 
 			// Create with debug.api = true — covers debug blocks in syncWrapper and mutateApiValue
 			api = await createApiInstance(config, {
 				base: TEST_DIRS.API_TEST,
-				allowMutation: true,
 				debug: { api: true }
 			});
 
@@ -110,7 +109,6 @@ describe.each(getMatrixConfigs({ mode: "eager" }))("API Manager File Validation 
 		it("should execute debug logging for addition at a nested namespace when debug.api=true", async () => {
 			api = await createApiInstance(config, {
 				base: TEST_DIRS.API_TEST_MIXED,
-				allowMutation: true,
 				debug: { api: true }
 			});
 

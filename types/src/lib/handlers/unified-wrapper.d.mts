@@ -1,287 +1,14 @@
 /**
- * Make one write of the framework's own to a node: a mount, removal, or rebuild step of `api.add` /
- * `remove` / `reload`, or the framework fixing a node's integrity to match its module's value.
- *
- * Such a write runs through the same traps a module's `self.X.Y = …` reaches, and in whatever context the
- * operation was started from, often a module's. It is not that module's write, so the ownership rule
- * ({@link runtime_assertOwnedWrite}) lets it through, for this node and only while `write` runs.
- *
- * @param {object} node - The node written: a wrapper proxy or wrapper. Anything else needs no exemption.
- * @param {function(): *} write - The write; synchronous.
- * @returns {*} What `write` returns.
+ * Whether a value is a stand-in a lazy node handed out for a member it has not loaded (#653): a change made through
+ * one is made on the node it stands for once that node loads.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a stand-in.
  * @internal
  *
  * @example
- * runtime_frameworkWrite(parent, () => { parent[key] = value; });
+ * if (isLazyStandIn(parent)) parent = walkAgain();
  */
-export function runtime_frameworkWrite(node: object, write: () => any): any;
-/**
- * The node behind a value: a view `self` handed out ({@link runtime_selfView}), or a member it handed out as the node
- * holds it fixed, stands for its node, which is what is stored when the view is written into the api. Anything
- * else is returned as is.
- *
- * @param {*} value - A value about to be stored.
- * @returns {*} The node a view stands for, or `value`.
- * @internal
- *
- * @example
- * runtime_unwrapSelfView(self.callee.ops) === api.callee.ops; // true
- */
-export function runtime_unwrapSelfView(value: any): any;
-/**
- * The module code reading the api right now, for a value the framework hands out (#625): the executing
- * module's wrapper, the reader that owns nothing for code the live runtime could not attribute, or null
- * for host code, which is handed the api itself.
- *
- * @param {object} slothlet - Instance the api belongs to.
- * @returns {object|null} The module reader, or null for the host.
- * @internal
- *
- * @example
- * const reader = runtime_selfModuleReader(slothlet);
- * return reader ? runtime_selfRootView(slothlet, reader) : slothlet.api;
- */
-export function runtime_selfModuleReader(slothlet: object): object | null;
-/**
- * The calls the code running now acts under besides its own module, when it is code a caller supplied to another
- * module's call (#597): each has to be allowed a change the module makes as well. Empty for a module's own code and
- * for the host.
- *
- * @param {object} slothlet - Instance the code runs in.
- * @param {object|null} [writer] - The module the change is made as; the ceilings are read only while it is the one
- *   executing, so a writer captured earlier gets none from whatever runs now.
- * @returns {ReadonlyArray<object>} The ceiling's calls.
- * @internal
- *
- * @example
- * for (const call of [writer, ...runtime_selfModuleCeilings(slothlet, writer)]) apiManager.assertOwnedWrite(parts, call);
- */
-export function runtime_selfModuleCeilings(slothlet: object, writer?: object | null): ReadonlyArray<object>;
-/**
- * Hand out a node of the api reached through `self` as a view that keeps who read it (#625).
- *
- * `self.X = …` with no module executing is refused (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`): nobody is there to
- * own the write. A node a module took through `self` and wrote into later from outside any call would
- * otherwise reach the node with no caller, which is the host's standing. So a write through the view made
- * with no module executing (outside a `run()` / `scope()` the host opened) is held to the module that read
- * the node: it goes through when that module owns the node's path, and is refused when it does not. A
- * module's own node therefore stays writable from a callback it hands the host, and the host can write
- * through a node a module handed back from its own subtree; another module's node cannot be written that
- * way. While a module is executing the write reaches the node, whose own rule then applies.
- *
- * The view reads, calls, and enumerates as the node does. What it hands back of the node — a member read,
- * a property descriptor's value, what a method returns — comes back as a view for the same reader, also a
- * view another reader handed back (a module returning its own node). A method called through it runs as
- * its own module: called on the node it was read from, it gets that module's view of the node as its
- * receiver, the one it reads through `self` itself, so it can keep its receiver and write its own node
- * later. A receiver supplied for another node and every argument reach it as the caller passed them, so a
- * node lent to it, even one of its own module's, stays held to the caller. A class instance or EventEmitter a method gets as
- * its receiver (#590, #340) comes back as a view of the node it was called on. The same node reached
- * through the host's `api` is not a view and is not affected. One view per node and reader, so a module
- * comparing what it read twice sees the same object. A node inside a plain object or array a module
- * returns is handed over as it is: the module chose to share it.
- *
- * @param {*} node - Value read through `self`.
- * @param {object} [reader] - Who read it; the code executing now when omitted.
- * @returns {*} A view of an api node, or `node` unchanged.
- * @internal
- *
- * @example
- * const ops = self.callee.ops; // a view of api.callee.ops
- * ops.note = "x"; // inside a call: the node's own ownership rule decides
- */
-export function runtime_selfView(node: any, reader?: object): any;
-/**
- * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
- * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
- * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
- *
- * @param {object} copy - The stand-in.
- * @param {*} member - The value it stands in for.
- * @returns {object} `copy`.
- * @internal
- *
- * @example
- * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
- */
-export function runtime_registerFrameworkMemberCopy(copy: object, member: any): object;
-/**
- * Record one of the framework's own root members of an instance's api, so module code reading it through
- * `self` is handed a view of it ({@link runtime_selfFrameworkView}).
- *
- * @param {object|Function} member - The `slothlet` namespace, `shutdown`, or `destroy`.
- * @param {object} slothlet - Instance it belongs to.
- * @param {string} name - The name it is served under on the api.
- * @returns {object|Function} `member`.
- * @internal
- *
- * @example
- * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
- */
-export function runtime_registerFrameworkMember(member: object | Function, slothlet: object, name: string): object | Function;
-/**
- * The framework's own namespace (`self.slothlet`) and root functions (`self.shutdown`, `self.destroy`) as a
- * module reads them (#625).
- *
- * What they do depends on who calls: `diag.getAPI()` hands module code a view of the api and the host the
- * api itself, `hook.on()` / `lifecycle.on()` register for the module calling or for the host. A function a
- * module read and kept, called later from outside any call, would run as the host. Through the view it runs
- * as the module that read it, and so does every other use of the view — a member read, a write — made with
- * no standing of its own. While a module executes, or inside a `run()` / `scope()` the host opened, the view
- * behaves as the member itself. The host is handed the member itself.
- *
- * A module never changes them (#625): they are shared by every module and the host, so an assignment,
- * definition, or deletion of a member at any depth, or a change to a member's prototype or extensibility
- * (freezing, sealing), meets the built-in write rules of the permission system (`slothlet.**:write` and the
- * like), which refuse it with `PERMISSION_DENIED` unless a host rule lifted them. A symbol key is held to the
- * same rules as a string key: a change under one meets the rules of the member it is made on.
- *
- * @param {*} member - A root member read through `self`.
- * @param {object} [reader] - Who read it; the code executing now when omitted.
- * @param {object} [slothlet] - Instance it belongs to; looked up when omitted.
- * @returns {*} A view of the member, or `member` unchanged.
- * @internal
- *
- * @example
- * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.getAPI() still answers the module
- */
-export function runtime_selfFrameworkView(member: any, reader?: object, slothlet?: object): any;
-/**
- * Refuse replacing one of the framework's root members (`self.slothlet`, `self.shutdown`, `self.destroy`)
- * through the runtime `self` (#625); a definition or deletion goes through {@link runtime_selfChangeTarget}.
- * While the permission system is on, module code meets the write rules first; the names are reserved for
- * everyone, so the assignment is refused either way, in an isolated scope as outside one.
- *
- * @param {object} slothlet - Instance the change is made on.
- * @param {string|symbol} prop - Member of `self` changed.
- * @returns {void}
- * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
- *   rules protect, `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, and
- *   `INVALID_CONFIG_API_PATH_INVALID` for the reserved name otherwise.
- * @internal
- *
- * @example
- * runtime_assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
- */
-export function runtime_assertFrameworkRootChange(slothlet: object, prop: string | symbol): void;
-/**
- * Where a change to `self` itself lands, once the code running now may make it (#625): defining or deleting a
- * member of `self`, or a symbol-keyed member of it.
- *
- * `self` is one object shared by every module of every instance; it stands for the api of the instance the
- * running code belongs to. A change to it follows the rule a top-level `self.X = …` does: a module changes
- * only what it owns (the framework's own members never, by the built-in write rules), a symbol key or a change
- * to `self` as a whole is held to the root of the tree, and code the live runtime cannot attribute is refused.
- * The change is made on that instance's api — or on the isolated scope's own view of it — never on the object
- * behind `self`.
- *
- * @param {object} ctx - The active context store (`self`, `slothlet`).
- * @param {string|symbol|null} prop - Member of `self` changed, or null for `self` as a whole.
- * @returns {object} The object the change is made on.
- * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` / `PERMISSION_DENIED` when module code changes a member it may
- *   not, and `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
- * @internal
- *
- * @example
- * return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
- */
-export function runtime_selfChangeTarget(ctx: object, prop: string | symbol | null): object;
-/**
- * The module a framework view runs the executing code as, when that view was used with no caller of its
- * own (a function of `self.slothlet` a module kept, called later from outside any call) (#625).
- *
- * Run that way the code has no caller, which reads as "called from the host". What pins the caller
- * (`lockCaller.caller`) pins this module instead, so a kept function never acts as the host.
- *
- * @param {object} slothlet - Instance the executing code runs in.
- * @returns {object|null} The reader's wrapper, or null when the executing code is no such use.
- * @internal
- *
- * @example
- * const pinned = metadata.callerWrapper() ?? runtime_frameworkViewCaller(slothlet);
- */
-export function runtime_frameworkViewCaller(slothlet: object): object | null;
-/**
- * The whole api as a reader reads it through `self`, for a payload the framework hands a module (#625): the
- * `api` a hook handler a module registered is handed. Every member read through it is the reader's view
- * ({@link runtime_selfView}), and a change to a root member follows the rule a top-level `self.X = …` does:
- * made while a module executes, it is that module's; made later from outside any call, it is held to the
- * reader, so a module cannot keep the `api` a hook was handed and write another module's subtree through it
- * once the host calls it back.
- *
- * @param {object} slothlet - Instance the api belongs to.
- * @param {object} reader - The module the view belongs to.
- * @returns {object} The root view.
- * @internal
- *
- * @example
- * const api = runtime_selfRootView(slothlet, moduleWrapper);
- * api.callee.ops; // the module's view of api.callee.ops
- */
-export function runtime_selfRootView(slothlet: object, reader: object): object;
-/**
- * Record a function the framework pinned to a caller (see {@link runtime_isCallerLocked}).
- *
- * @param {Function} fn - The pinned function.
- * @returns {Function} `fn`.
- * @internal
- *
- * @example
- * return runtime_markCallerLocked(locked);
- */
-export function runtime_markCallerLocked(fn: Function): Function;
-/**
- * Whether the framework pinned `fn` to a caller ({@link runtime_markCallerLocked}).
- *
- * @param {*} fn - Candidate.
- * @returns {boolean} True for a function the framework pinned.
- * @internal
- *
- * @example
- * if (runtime_isCallerLocked(handler)) return handler;
- */
-export function runtime_isCallerLocked(fn: any): boolean;
-/**
- * A hook handler a module registered, handed its payload as that module reads the api through `self` (#625).
- *
- * The pipeline hands a hook the call's own values: the arguments as the caller passed them, the result as
- * the method returned it (its own module's view of a node, for one), what `next()` hands back, and the
- * whole api. Kept by a handler a module registered, any of them would let that module write another
- * module's node later, with the standing of whoever's view it is. So the handler gets its own module's
- * view of every node among them, and a root view ({@link runtime_selfRootView}) as `api`. What it hands
- * back — the args or result it was given, or an array of them — reaches the pipeline as the call's own
- * values again, and a change it makes to the `args` array in place reaches the call too.
- *
- * @param {Function} handler - The handler, pinned to its module.
- * @param {object} slothlet - Instance the hook is registered on.
- * @param {object} reader - The module that registered the hook.
- * @returns {Function} The handler with its payload viewed for the module.
- * @internal
- *
- * @example
- * hook.handler = runtime_selfHookHandler(pinned, slothlet, ownerWrapper);
- */
-export function runtime_selfHookHandler(handler: Function, slothlet: object, reader: object): Function;
-/**
- * Drop the record of what a module made (#597): a module removed whole, or — with no module given — every module of
- * an instance that shut down. Stand-ins already handed out keep working; the module's next value is a new stand-in.
- * @param {object} slothlet - The instance.
- * @param {string} [moduleID] - The module, or every module of the instance when omitted.
- * @returns {void}
- * @internal
- * @example
- * releaseModuleMakers(slothlet, "plugins-core");
- */
-export function releaseModuleMakers(slothlet: object, moduleID?: string): void;
-/**
- * How many module records an instance holds (see {@link runtime_makerOf}).
- * @param {object} slothlet - The instance.
- * @returns {number} The count.
- * @internal
- * @example
- * moduleMakerCount(slothlet); // 3
- */
-export function moduleMakerCount(slothlet: object): number;
+export function isLazyStandIn(value: any): boolean;
 /**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
  * chain, as a descriptor, so that a getter is never run to find it. A Proxy may report a prototype chain
@@ -358,19 +85,6 @@ export function isThenableModuleValue(value: object | Function): boolean;
  */
 export function isClassInstance(value: unknown): boolean;
 /**
- * Resolves a value to its backing UnifiedWrapper instance.
- * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
- * Returns null for any other value.
- *
- * @param {unknown} value - Value to resolve
- * @returns {UnifiedWrapper|null} The backing wrapper, or null
- *
- * @example
- * const wrapper = resolveWrapper(someProxy);
- * if (wrapper) wrapper.____slothletInternal.impl = newImpl;
- */
-export function resolveWrapper(value: unknown): UnifiedWrapper | null;
-/**
  * Whether `key` is one of the names a wrapper answers itself when it has no member of that name
  * (`name`, `length`, `prototype`, …; see {@link WRAPPER_ANSWERED_PROPS}).
  * @param {string} key - Member name.
@@ -381,17 +95,6 @@ export function resolveWrapper(value: unknown): UnifiedWrapper | null;
  * isWrapperAnsweredName("name"); // true
  */
 export function isWrapperAnsweredName(key: string): boolean;
-/**
- * The node behind a value read out of the api: a per-reader view a read under a module's identity hands back stands
- * for the node it was built over; anything else is the value itself (#625).
- * @param {*} value - A value read out of the api.
- * @returns {*} The node behind it.
- * @internal
- *
- * @example
- * runtime_nodeBehind(heldReference) === api.victim.v; // true for a view of victim.v
- */
-export function runtime_nodeBehind(value: any): any;
 /**
  * Read `key` off `container` as an api member: what `container[key]` holds, or `undefined` when there
  * is no member of that name.
@@ -447,13 +150,518 @@ export function loadApiMember(container: object | Function, key: string): Promis
  * if (await isCallableValue(slothlet.userHooks.shutdown)) await slothlet.userHooks.shutdown();
  */
 export function isCallableValue(value: unknown): Promise<boolean>;
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+export { IMPL_METADATA_KEYS } from "#helpers/reserved-keys";
 export namespace TYPE_STATES {
     let UNMATERIALIZED: symbol;
     let IN_FLIGHT: symbol;
 }
+import { isFrameworkReservedKey } from "#helpers/reserved-keys";
+/** @type {typeof runtime_frameworkWrite} */
+declare const guarded_runtime_frameworkWrite: typeof runtime_frameworkWrite;
+/** @type {typeof runtime_unwrapSelfView} */
+declare const guarded_runtime_unwrapSelfView: typeof runtime_unwrapSelfView;
+/** @type {typeof runtime_selfModuleReader} */
+declare const guarded_runtime_selfModuleReader: typeof runtime_selfModuleReader;
+/** @type {typeof runtime_selfModuleCeilings} */
+declare const guarded_runtime_selfModuleCeilings: typeof runtime_selfModuleCeilings;
+/** @type {typeof runtime_selfView} */
+declare const guarded_runtime_selfView: typeof runtime_selfView;
+/** @type {typeof runtime_registerFrameworkMemberCopy} */
+declare const guarded_runtime_registerFrameworkMemberCopy: typeof runtime_registerFrameworkMemberCopy;
+/** @type {typeof runtime_registerFrameworkMember} */
+declare const guarded_runtime_registerFrameworkMember: typeof runtime_registerFrameworkMember;
+/** @type {typeof runtime_selfFrameworkView} */
+declare const guarded_runtime_selfFrameworkView: typeof runtime_selfFrameworkView;
+/** @type {typeof runtime_assertFrameworkRootChange} */
+declare const guarded_runtime_assertFrameworkRootChange: typeof runtime_assertFrameworkRootChange;
+/** @type {typeof runtime_selfChangeTarget} */
+declare const guarded_runtime_selfChangeTarget: typeof runtime_selfChangeTarget;
+/** @type {typeof runtime_frameworkViewCaller} */
+declare const guarded_runtime_frameworkViewCaller: typeof runtime_frameworkViewCaller;
+/** @type {typeof runtime_selfRootView} */
+declare const guarded_runtime_selfRootView: typeof runtime_selfRootView;
+/** @type {typeof runtime_markCallerLocked} */
+declare const guarded_runtime_markCallerLocked: typeof runtime_markCallerLocked;
+/** @type {typeof runtime_isCallerLocked} */
+declare const guarded_runtime_isCallerLocked: typeof runtime_isCallerLocked;
+/** @type {typeof runtime_selfHookHandler} */
+declare const guarded_runtime_selfHookHandler: typeof runtime_selfHookHandler;
+/** @type {typeof settleStandInChanges} */
+declare const guarded_settleStandInChanges: typeof settleStandInChanges;
+/** @type {typeof releaseStandInChanges} */
+declare const guarded_releaseStandInChanges: typeof releaseStandInChanges;
+/** @type {typeof refusedChangeCount} */
+declare const guarded_refusedChangeCount: typeof refusedChangeCount;
+/** @type {typeof runtime_resolvedAccess} */
+declare const guarded_runtime_resolvedAccess: typeof runtime_resolvedAccess;
+/** @type {typeof releaseModuleMakers} */
+declare const guarded_releaseModuleMakers: typeof releaseModuleMakers;
+/** @type {typeof moduleMakerCount} */
+declare const guarded_moduleMakerCount: typeof moduleMakerCount;
+/** @type {typeof registerRuntimeSelf} */
+declare const guarded_registerRuntimeSelf: typeof registerRuntimeSelf;
+/** @type {typeof runtime_selfReadAsDefiner} */
+declare const guarded_runtime_selfReadAsDefiner: typeof runtime_selfReadAsDefiner;
+/** @type {typeof runtime_contextReadAsDefiner} */
+declare const guarded_runtime_contextReadAsDefiner: typeof runtime_contextReadAsDefiner;
+/** @type {typeof registerRuntimeContext} */
+declare const guarded_registerRuntimeContext: typeof registerRuntimeContext;
+/** @type {typeof runtime_contextWritten} */
+declare const guarded_runtime_contextWritten: typeof runtime_contextWritten;
+/** @type {typeof runtime_contextRead} */
+declare const guarded_runtime_contextRead: typeof runtime_contextRead;
+/** @type {typeof runtime_eventPayloadFor} */
+declare const guarded_runtime_eventPayloadFor: typeof runtime_eventPayloadFor;
+/** @type {typeof UnifiedWrapper} */
+declare const guarded_UnifiedWrapper: typeof UnifiedWrapper;
+/** @type {typeof resolveWrapper} */
+declare const guarded_resolveWrapper: typeof resolveWrapper;
+/** @type {typeof runtime_nodeBehind} */
+declare const guarded_runtime_nodeBehind: typeof runtime_nodeBehind;
+/**
+ * Make one write of the framework's own to a node: a mount, removal, or rebuild step of `api.add` /
+ * `remove` / `reload`, or the framework fixing a node's integrity to match its module's value.
+ *
+ * Such a write runs through the same traps a module's `self.X.Y = …` reaches, and in whatever context the
+ * operation was started from, often a module's. It is not that module's write, so the ownership rule
+ * ({@link runtime_assertOwnedWrite}) lets it through, for this node and only while `write` runs.
+ *
+ * @param {object} node - The node written: a wrapper proxy or wrapper, or an instance's api root. Anything else needs
+ *   no exemption.
+ * @param {function(): *} write - The write; synchronous.
+ * @returns {*} What `write` returns.
+ * @internal
+ *
+ * @example
+ * runtime_frameworkWrite(parent, () => { parent[key] = value; });
+ */
+declare function runtime_frameworkWrite(node: object, write: () => any): any;
+/**
+ * The node behind a value: a view `self` handed out ({@link runtime_selfView}), or a member it handed out as the node
+ * holds it fixed, stands for its node, which is what is stored when the view is written into the api. Anything
+ * else is returned as is.
+ *
+ * @param {*} value - A value about to be stored.
+ * @returns {*} The node a view stands for, or `value`.
+ * @internal
+ *
+ * @example
+ * runtime_unwrapSelfView(self.callee.ops) === api.callee.ops; // true
+ */
+declare function runtime_unwrapSelfView(value: any): any;
+/**
+ * The module code reading the api right now, for a value the framework hands out (#625): the executing
+ * module's wrapper, the reader that owns nothing for code the live runtime could not attribute, or null
+ * for host code, which is handed the api itself.
+ *
+ * @param {object} slothlet - Instance the api belongs to.
+ * @returns {object|null} The module reader, or null for the host.
+ * @internal
+ *
+ * @example
+ * const reader = runtime_selfModuleReader(slothlet);
+ * return reader ? runtime_selfRootView(slothlet, reader) : slothlet.api;
+ */
+declare function runtime_selfModuleReader(slothlet: object): object | null;
+/**
+ * The calls the code running now acts under besides its own module, when it is code a caller supplied to another
+ * module's call (#597): each has to be allowed a change the module makes as well. Empty for a module's own code and
+ * for the host.
+ *
+ * @param {object} slothlet - Instance the code runs in.
+ * @param {object|null} [writer] - The module the change is made as; the ceilings are read only while it is the one
+ *   executing, so a writer captured earlier gets none from whatever runs now.
+ * @returns {ReadonlyArray<object>} The ceiling's calls.
+ * @internal
+ *
+ * @example
+ * for (const call of [writer, ...runtime_selfModuleCeilings(slothlet, writer)]) apiManager.assertOwnedWrite(parts, call);
+ */
+declare function runtime_selfModuleCeilings(slothlet: object, writer?: object | null): ReadonlyArray<object>;
+/**
+ * Hand out a node of the api reached through `self` as a view that keeps who read it (#625).
+ *
+ * `self.X = …` with no module executing is refused (`CONTEXT_NOT_ACTIVE_SELF`): nobody is there to
+ * own the write. A node a module took through `self` and wrote into later from outside any call would
+ * otherwise reach the node with no caller, which is the host's standing. So a write through the view made
+ * with no module executing (outside a `run()` / `scope()` the host opened) is held to the module that read
+ * the node: it goes through when that module owns the node's path, and is refused when it does not. A
+ * module's own node therefore stays writable from a callback it hands the host, and the host can write
+ * through a node a module handed back from its own subtree; another module's node cannot be written that
+ * way. While a module is executing the write reaches the node, whose own rule then applies.
+ *
+ * The view reads, calls, and enumerates as the node does. What it hands back of the node — a member read,
+ * a property descriptor's value, what a method returns — comes back as a view for the same reader, also a
+ * view another reader handed back (a module returning its own node). A method called through it runs as
+ * its own module: called on the node it was read from, it gets that module's view of the node as its
+ * receiver, the one it reads through `self` itself, so it can keep its receiver and write its own node
+ * later. A receiver supplied for another node and every argument reach it as the caller passed them, so a
+ * node lent to it, even one of its own module's, stays held to the caller. A class instance or EventEmitter a method gets as
+ * its receiver (#590, #340) comes back as a view of the node it was called on. The same node reached
+ * through the host's `api` is not a view and is not affected. One view per node and reader, so a module
+ * comparing what it read twice sees the same object. A node inside a plain object or array a module
+ * returns is handed over as it is: the module chose to share it.
+ *
+ * @param {*} node - Value read through `self`.
+ * @param {object} [reader] - Who read it; the code executing now when omitted.
+ * @param {object|null} [from=null] - The module handing the value on, when one is.
+ * @param {object|null} [access=null] - The read of `self` this is part of, when who is making it was resolved already
+ *   (see {@link runtime_resolvedAccess}); used only to tell the reader, within this call.
+ * @returns {*} A view of an api node, or `node` unchanged.
+ * @internal
+ *
+ * @example
+ * const ops = self.callee.ops; // a view of api.callee.ops
+ * ops.note = "x"; // inside a call: the node's own ownership rule decides
+ */
+declare function runtime_selfView(node: any, reader?: object, from?: object | null, access?: object | null): any;
+/**
+ * Record a stand-in for one of the framework's root members (a view of the
+ * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
+ * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
+ *
+ * @param {object} copy - The stand-in.
+ * @param {*} member - The value it stands in for.
+ * @returns {object} `copy`.
+ * @internal
+ *
+ * @example
+ * runtime_registerFrameworkMemberCopy(viewOf(api.slothlet), api.slothlet);
+ */
+declare function runtime_registerFrameworkMemberCopy(copy: object, member: any): object;
+/**
+ * Record one of the framework's own root members of an instance's api, so module code reading it through
+ * `self` is handed a view of it ({@link runtime_selfFrameworkView}).
+ *
+ * @param {object|Function} member - The `slothlet` namespace, `shutdown`, or `destroy`.
+ * @param {object} slothlet - Instance it belongs to.
+ * @param {string} name - The name it is served under on the api.
+ * @returns {object|Function} `member`.
+ * @internal
+ *
+ * @example
+ * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
+ */
+declare function runtime_registerFrameworkMember(member: object | Function, slothlet: object, name: string): object | Function;
+/**
+ * The framework's own namespace (`self.slothlet`) and root functions (`self.shutdown`, `self.destroy`) as a
+ * module reads them (#625).
+ *
+ * What they do depends on who calls: `diag.api()` hands module code a view of the api and the host the
+ * api itself, `hook.on()` / `lifecycle.on()` register for the module calling or for the host. A function a
+ * module read and kept, called later from outside any call, would run as the host. Through the view it runs
+ * as the module that read it, and so does every other use of the view — a member read, a write — made with
+ * no standing of its own. While a module executes, or while the host's own code runs inside a `run()` / `scope()`
+ * it opened, the view behaves as the member itself; a module's code running in such a flow uses it as the reader
+ * (see {@link runtime_selfWriteHasStanding}). The host is handed the member itself.
+ *
+ * A module never changes them (#625): they are shared by every module and the host, so an assignment,
+ * definition, or deletion of a member at any depth, or a change to a member's prototype or extensibility
+ * (freezing, sealing), meets the built-in write rules of the permission system (`slothlet.**:write` and the
+ * like), which refuse it with `PERMISSION_DENIED` unless a host rule lifted them. A symbol key is held to the
+ * same rules as a string key: a change under one meets the rules of the member it is made on.
+ *
+ * @param {*} member - A root member read through `self`.
+ * @param {object} [reader] - Who read it; the code executing now when omitted.
+ * @param {object} [slothlet] - Instance it belongs to; looked up when omitted.
+ * @returns {*} A view of the member, or `member` unchanged.
+ * @internal
+ *
+ * @example
+ * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.api() still answers the module
+ */
+declare function runtime_selfFrameworkView(member: any, reader?: object, slothlet?: object): any;
+/**
+ * Refuse replacing one of the framework's root members (`self.slothlet`, `self.shutdown`, `self.destroy`)
+ * through the runtime `self` (#625); a definition or deletion goes through {@link runtime_selfChangeTarget}.
+ * While the permission system is on, module code meets the write rules first; the names are reserved for
+ * everyone, so the assignment is refused either way, in an isolated scope as outside one.
+ *
+ * @param {object} slothlet - Instance the change is made on.
+ * @param {string|symbol} prop - Member of `self` changed.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
+ *   rules protect, `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, and
+ *   `API_PATH_INVALID` for the reserved name otherwise.
+ * @internal
+ *
+ * @example
+ * runtime_assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
+ */
+declare function runtime_assertFrameworkRootChange(slothlet: object, prop: string | symbol): void;
+/**
+ * Where a change to `self` itself lands, once the code running now may make it (#625): defining or deleting a
+ * member of `self`, or a symbol-keyed member of it.
+ *
+ * `self` is one object shared by every module of every instance; it stands for the api of the instance the
+ * running code belongs to. A change to it follows the rule a top-level `self.X = …` does: a module changes
+ * only what it owns (the framework's own members never, by the built-in write rules), a symbol key or a change
+ * to `self` as a whole is held to the root of the tree, and code the live runtime cannot attribute is refused.
+ * The change is made on that instance's api — or on the isolated scope's own view of it — never on the object
+ * behind `self`.
+ *
+ * @param {object} ctx - The active context store (`self`, `slothlet`).
+ * @param {string|symbol|null} prop - Member of `self` changed, or null for `self` as a whole.
+ * @returns {object} The object the change is made on.
+ * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` / `PERMISSION_DENIED` when module code changes a member it may
+ *   not, and `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
+ * @internal
+ *
+ * @example
+ * return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
+ */
+declare function runtime_selfChangeTarget(ctx: object, prop: string | symbol | null): object;
+/**
+ * The module a framework view runs the executing code as, when that view was used with no caller of its
+ * own (a function of `self.slothlet` a module kept, called later from outside any call) (#625).
+ *
+ * Run that way the code has no caller, which reads as "called from the host". What pins the caller
+ * (`pin.caller`) pins this module instead, so a kept function never acts as the host.
+ *
+ * @param {object} slothlet - Instance the executing code runs in.
+ * @returns {object|null} The reader's wrapper, or null when the executing code is no such use.
+ * @internal
+ *
+ * @example
+ * const pinned = metadata.callerWrapper() ?? runtime_frameworkViewCaller(slothlet);
+ */
+declare function runtime_frameworkViewCaller(slothlet: object): object | null;
+/**
+ * The whole api as a reader reads it through `self`, for a payload the framework hands a module (#625): the
+ * `api` a hook handler a module registered is handed. Every member read through it is the reader's view
+ * ({@link runtime_selfView}), and a change to a root member follows the rule a top-level `self.X = …` does:
+ * made while a module executes, it is that module's; made later from outside any call, it is held to the
+ * reader, so a module cannot keep the `api` a hook was handed and write another module's subtree through it
+ * once the host calls it back.
+ *
+ * @param {object} slothlet - Instance the api belongs to.
+ * @param {object} reader - The module the view belongs to.
+ * @returns {object} The root view.
+ * @internal
+ *
+ * @example
+ * const api = runtime_selfRootView(slothlet, moduleWrapper);
+ * api.callee.ops; // the module's view of api.callee.ops
+ */
+declare function runtime_selfRootView(slothlet: object, reader: object): object;
+/**
+ * Record a function the framework pinned to a caller (see {@link runtime_isCallerLocked}).
+ *
+ * @param {Function} fn - The pinned function.
+ * @returns {Function} `fn`.
+ * @internal
+ *
+ * @example
+ * return runtime_markCallerLocked(locked);
+ */
+declare function runtime_markCallerLocked(fn: Function): Function;
+/**
+ * Whether the framework pinned `fn` to a caller ({@link runtime_markCallerLocked}).
+ *
+ * @param {*} fn - Candidate.
+ * @returns {boolean} True for a function the framework pinned.
+ * @internal
+ *
+ * @example
+ * if (runtime_isCallerLocked(handler)) return handler;
+ */
+declare function runtime_isCallerLocked(fn: any): boolean;
+/**
+ * A hook handler a module registered, handed its payload as that module reads the api through `self` (#625).
+ *
+ * The pipeline hands a hook the call's own values: the arguments as the caller passed them, the result as
+ * the method returned it (its own module's view of a node, for one), what `next()` hands back, and the
+ * whole api. Kept by a handler a module registered, any of them would let that module write another
+ * module's node later, with the standing of whoever's view it is. So the handler gets its own module's
+ * view of every node among them, and a root view ({@link runtime_selfRootView}) as `api`. What it hands
+ * back — the args or result it was given, or an array of them — reaches the pipeline as the call's own
+ * values again, and a change it makes to the `args` array in place reaches the call too.
+ *
+ * @param {Function} handler - The handler, pinned to its module.
+ * @param {object} slothlet - Instance the hook is registered on.
+ * @param {object} reader - The module that registered the hook.
+ * @returns {Function} The handler with its payload viewed for the module.
+ * @internal
+ *
+ * @example
+ * hook.handler = runtime_selfHookHandler(pinned, slothlet, ownerWrapper);
+ */
+declare function runtime_selfHookHandler(handler: Function, slothlet: object, reader: object): Function;
+/**
+ * Make the changes queued through stand-ins of an instance by loading the nodes that hold them (#653), as a module
+ * reload is about to rebuild those nodes: in eager mode the changes were already made, and the reload keeps them as it
+ * keeps any change made on a node. A node that fails to load drops its changes, as its load does.
+ * @param {object} slothlet - The instance.
+ * @param {string|null} [scope=null] - The api path reloaded; only changes made at or below it are made. Null, or `"."`,
+ *   for the whole instance.
+ * @returns {Promise<void>}
+ * @internal
+ * @example
+ * await settleStandInChanges(slothlet);
+ */
+declare function settleStandInChanges(slothlet: object, scope?: string | null): Promise<void>;
+/**
+ * Drop the changes queued through stand-ins of an instance, and the refusals of those already made, when the whole
+ * instance reloads or shuts down (#653): the nodes they were made on are gone, as eager mode's changes are.
+ * @param {object} slothlet - The instance.
+ * @returns {void}
+ * @internal
+ * @example
+ * releaseStandInChanges(slothlet);
+ */
+declare function releaseStandInChanges(slothlet: object): void;
+/**
+ * How many refusals of queued changes an instance holds (see {@link runtime_takeRefusedChange}).
+ * @param {object} slothlet - The instance.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * refusedChangeCount(slothlet); // 0
+ */
+declare function refusedChangeCount(slothlet: object): number;
+/**
+ * An access whose identity its caller resolved already, on the store it read it from.
+ * @param {object} contextManager - The context manager that resolved it.
+ * @param {object|null|undefined} store - The store it was resolved on.
+ * @param {object|undefined} identity - The identity.
+ * @returns {object} The access.
+ * @internal
+ *
+ * @example
+ * runtime_selfView(value, undefined, null, runtime_resolvedAccess(liveRuntime, store, identity));
+ */
+declare function runtime_resolvedAccess(contextManager: object, store: object | null | undefined, identity: object | undefined): object;
+/**
+ * Drop the record of what a module made (#597): a module removed whole, or — with no module given — every module of
+ * an instance that shut down. Stand-ins already handed out keep working; the module's next value is a new stand-in.
+ * @param {object} slothlet - The instance.
+ * @param {string} [moduleID] - The module, or every module of the instance when omitted.
+ * @returns {void}
+ * @internal
+ * @example
+ * releaseModuleMakers(slothlet, "plugins-core");
+ */
+declare function releaseModuleMakers(slothlet: object, moduleID?: string): void;
+/**
+ * How many module records an instance holds (see {@link runtime_makerOf}).
+ * @param {object} slothlet - The instance.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * moduleMakerCount(slothlet); // 3
+ */
+declare function moduleMakerCount(slothlet: object): number;
+/**
+ * Record a runtime's `self` for the context manager it reads its context from: a read of `self` made while no call
+ * runs is read through the `self` of the runtime the definer's instance runs, whichever runtime's `self` it was made
+ * through (#726). With no call running, the runtime-agnostic `self` hands every read to the async runtime's.
+ * @param {object} contextManager - The runtime's context manager.
+ * @param {object} selfProxy - The runtime's `self`.
+ * @param {Function|null} [callableSelf=null] - The runtime's callable `self` (#803).
+ * @returns {void}
+ * @internal
+ */
+declare function registerRuntimeSelf(contextManager: object, selfProxy: object, callableSelf?: Function | null): void;
+/**
+ * A read of `self` made while no call runs — the host running code a module handed out, or code nested in data it
+ * returned (#726) — by code whose frames place it in a module's file: read as that code's definer, the leaf whose
+ * source range holds it (or the file's module, for code outside every export), so the definer's rules hold for it and
+ * the host's standing adds nothing. Code whose definer the frames cannot tell (evaluated code, a file several instances
+ * load untold apart, code outside every export where no node was built for the file) is refused with
+ * `PERMISSION_DENIED`, naming the identity it was read as. Code of the host's own gets `null`: `self` is not for it.
+ * @param {object} selfProxy - The runtime's `self`.
+ * @param {string|symbol} prop - The member.
+ * @param {string|null} [loadingInstanceID=null] - The instance whose file load the flow belongs to, when the read is
+ *   made in such a flow with no module to run as: that instance's own code gets `null` there, another instance's is
+ *   read as its definer.
+ * @param {string|null} [hostFlowInstanceID=null] - The instance whose `run()` / `scope()` flow the host opened, when
+ *   the read is made in one: a module's code running there (a function it handed out) is read as its definer, as it
+ *   is outside the flow, and the host's own code gets `null` and reads `self` as the host.
+ * @param {function(object): *|null} [use=null] - What is done with the runtime's `self` as the definer instead of
+ *   reading `prop` (a call of `self` itself, #803), or null to read it.
+ * @returns {{value: *}|null} The member read as the definer, or null when the host's own code is doing the read.
+ * @internal
+ */
+declare function runtime_selfReadAsDefiner(selfProxy: object, prop: string | symbol, loadingInstanceID?: string | null, hostFlowInstanceID?: string | null, use?: (arg0: object) => any | null): {
+    value: any;
+} | null;
+/**
+ * A member of the runtime `context` read by code a module handed out while no call runs (the host running a closure, a
+ * method of returned data, a generator): read in the context of the instance its definer belongs to, as `self` is
+ * ({@link runtime_selfReadAsDefiner}), so the code reads the context it was made in instead of nothing. Code whose
+ * definer the frames cannot tell, the host's own code, and any code while `provenance` is off, read nothing.
+ * @param {object} contextProxy - The runtime's `context`.
+ * @param {string|symbol} prop - The member read.
+ * @returns {*} The member, or undefined.
+ * @internal
+ *
+ * @example
+ * if (!ctx) return runtime_contextReadAsDefiner(context, prop);
+ */
+declare function runtime_contextReadAsDefiner(contextProxy: object, prop: string | symbol): any;
+/**
+ * Register a runtime's `context`.
+ * @param {object} contextManager - The runtime's context manager.
+ * @param {object} contextProxy - Its `context`.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * registerRuntimeContext(asyncRuntime, context);
+ */
+declare function registerRuntimeContext(contextManager: object, contextProxy: object): void;
+/**
+ * Record the module storing a value in the runtime `context`, so another module reading it gets it as a value that
+ * module handed it ({@link runtime_contextRead}). What the host stores, and what a module stores again after reading it
+ * from the host, is the host's and is recorded for no one.
+ * @param {object} ctx - The active context store.
+ * @param {*} value - The value being stored.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * runtime_contextWritten(ctx, value);
+ * ctx.context[prop] = value;
+ */
+declare function runtime_contextWritten(ctx: object, value: any): void;
+/**
+ * A value read from the runtime `context`, as whoever reads it gets it: what the host stored is the value itself, shared
+ * as the host meant it to be; what a module stored reaches another module through the class prototype guard
+ * ({@link runtime_crossTo}), and the host and the module that stored it as itself. Only the value stored under a key is
+ * covered: what a module puts into an object the host shares there is plain JavaScript between the modules holding it.
+ * @param {object} ctx - The active context store.
+ * @param {*} value - The value read.
+ * @returns {*} What the reader gets.
+ * @internal
+ *
+ * @example
+ * return runtime_contextRead(ctx, ctx.context[prop]);
+ */
+declare function runtime_contextRead(ctx: object, value: any): any;
+/**
+ * What an event's payload reaches a listener as (#667): slothlet's event dispatcher hands it from the module that
+ * emitted it to the module that registered the listener, so it crosses between modules as an argument does
+ * ({@link runtime_carryTo}). A listener the host registered, and one of the emitting module's own, gets it as it was
+ * emitted, as does everyone while the permission system is off.
+ * @param {*} payload - The payload.
+ * @param {object|null} listener - The wrapper of the module that registered the listener, or null for the host.
+ * @param {object|null} emitter - The wrapper of the module that emitted it, or null for the host.
+ * @param {object} slothlet - The instance.
+ * @returns {*} What the listener is handed.
+ * @public
+ */
+declare function runtime_eventPayloadFor(payload: any, listener: object | null, emitter: object | null, slothlet: object): any;
 /**
  * Unified wrapper class that handles all proxy concerns in one place:
- * - __impl pattern for reload support
+ * - ____impl pattern for reload support
  * - Lazy/eager mode materialization
  * - Recursive waiting proxy for deep lazy loading
  * - Context binding through contextManager
@@ -462,7 +670,16 @@ export namespace TYPE_STATES {
  * @extends ComponentBase
  * @public
  */
-export class UnifiedWrapper extends ComponentBase {
+declare class UnifiedWrapper extends ComponentBase {
+    /**
+     * Whether `value` is a UnifiedWrapper instance itself, by the class's own brand: no Proxy passes it and none of a
+     * Proxy's traps run to tell (#632), where `instanceof` would walk a node's prototype chain.
+     * @param {*} value - The value.
+     * @returns {boolean} True for a wrapper instance.
+     * @private
+     * @internal
+     */
+    private static ____isWrapperInstance;
     /**
      * The version of an object implementation adoption may change. `___adoptImplChildren` deletes the
      * members it moves onto the wrapper (`delete this.____slothletInternal.impl[key]`); done on the module's
@@ -513,20 +730,67 @@ export class UnifiedWrapper extends ComponentBase {
      */
     static _memberDescriptor(source: object, key: PropertyKey): PropertyDescriptor;
     /**
-     * Reconstruct a full implementation object from a wrapper whose _impl may have
+     * Index a lazy folder's node at the file its function was written in: the folder's only file, self-named or of a
+     * generic name, whose default export is a function. The node keeps the folder as its own path; code written in the
+     * file is then placed at the file, as eager mode places it.
+     * @param {object} wrapper - The folder's wrapper.
+     * @param {string} filePath - The file.
+     * @returns {void}
+     * @static
+     * @package
+     */
+    static _recordSourceFile(wrapper: object, filePath: string): void;
+    /**
+     * Whether a member stays a value rather than becoming a node of its own, as a wrapper's member does: `null`,
+     * a primitive, a built-in that carries data (a `Map`, a `Date`, a typed array, …), or an error.
+     * @param {unknown} value - The member's value.
+     * @returns {boolean} True when the member is held as it is.
+     * @static
+     * @package
+     */
+    static _staysValue(value: unknown): boolean;
+    /**
+     * The node for one member of a file's export that no wrapper holds (the members of the function the api root is),
+     * built as a wrapper builds the node of one of its own members: an object is held through a copy, so the
+     * module's own object is never written to, and the node records the file and the export it came from.
+     * @param {object} slothlet - The instance.
+     * @param {object} options - Where the member is placed and where it came from.
+     * @param {string} options.key - The member's key in the export.
+     * @param {unknown} options.value - The member's value.
+     * @param {string} options.apiPath - The path it is placed at.
+     * @param {string} options.filePath - The file it was written in.
+     * @param {string} options.moduleID - The module it belongs to.
+     * @param {string|null} options.sourceFolder - The folder the file was scanned from.
+     * @returns {object|Function|null} The node's proxy, or null when the member stays a value.
+     * @static
+     * @package
+     */
+    static _memberNode(slothlet: object, { key, value, apiPath, filePath, moduleID, sourceFolder }: {
+        key: string;
+        value: unknown;
+        apiPath: string;
+        filePath: string;
+        moduleID: string;
+        sourceFolder: string | null;
+    }): object | Function | null;
+    /**
+     * Reconstruct a full implementation object from a wrapper whose ____impl may have
      * been depleted by ___adoptImplChildren.
      *
      * @description
-     * After ___adoptImplChildren runs, children are moved from _impl onto the wrapper as
-     * own properties and deleted from _impl. This helper reconstructs the original
-     * impl by merging the remaining _impl keys with the adopted children extracted
+     * After ___adoptImplChildren runs, children are moved from ____impl onto the wrapper as
+     * own properties and deleted from ____impl. This helper reconstructs the original
+     * impl by merging the remaining ____impl keys with the adopted children extracted
      * from the wrapper.
      *
-     * Recursively walks the wrapper tree so nested objects whose _impl was also
+     * Recursively walks the wrapper tree so nested objects whose ____impl was also
      * depleted are properly reconstructed. For callable (function) impls, returns
      * the function directly since keepImplProperties prevents depletion.
      *
      * @param {Object} wrapper - The UnifiedWrapper instance to extract from
+     * @param {?function(Object, PropertyKey): {value: *, withheld: boolean}} [readMember=null] - Given when the
+     *   result is serialized: reads an accessor member of a wrapper as its node answers it, or reports it withheld.
+     *   The object is then built in the order its node lists its members (#747).
      * @returns {*} The reconstructed implementation mirroring original module exports
      * @static
      * @private
@@ -579,7 +843,6 @@ export class UnifiedWrapper extends ComponentBase {
      * @param {Function|Object|null} [options.initialImpl=null] - Initial implementation (null for lazy mode)
      * @param {Function} [options.materializeFunc=null] - Async function to materialize lazy modules
      * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
-     * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
      * @param {string} [options.filePath=null] - File path of the module source
      * @param {string[]|null} [options.exportPath] - Access path within `filePath`'s module namespace
      *   that produced `initialImpl` (#484). When omitted it is looked up from the ownership export index
@@ -616,13 +879,12 @@ export class UnifiedWrapper extends ComponentBase {
      * 	materializeFunc: async () => import("./math.mjs")
      * });
      */
-    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt, __position }: {
+    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt, __position, nullishDefault }: {
         mode: string;
         apiPath: string;
         initialImpl?: Object | Function | null | undefined;
         materializeFunc?: Function | undefined;
         isCallable?: boolean | undefined;
-        materializeOnCreate?: boolean | undefined;
         filePath?: string | undefined;
         exportPath?: string[] | null | undefined;
         moduleID?: string | undefined;
@@ -664,15 +926,15 @@ export class UnifiedWrapper extends ComponentBase {
     ____inspectCustom(____depth: any, ____options: any, ____inspect: any): any;
     /**
      * Get current implementation
-     * @returns {Function|Object|null} Current __impl value
+     * @returns {Function|Object|null} Current ____impl value
      * @public
      */
-    public get __impl(): Function | Object | null;
+    public get ____impl(): Function | Object | null;
     /**
      * Core implementation-application logic shared by ___setImpl and lazy materialization.
      * Clones the implementation (protecting the API cache from ___adoptImplChildren's
-     * delete operations), clears the invalid flag, upgrades __isCallable when a
-     * callable impl arrives on a configurable wrapper, updates __filePath for lazy
+     * delete operations), clears the invalid flag, upgrades callability when a
+     * callable impl arrives on a configurable wrapper, updates ____filePath for lazy
      * folder wrappers, and adopts children.
      *
      * @param {*} newImpl - The new implementation value.
@@ -716,7 +978,7 @@ export class UnifiedWrapper extends ComponentBase {
      * to the live namespace — but stays non-callable itself and keeps `typeof` "object".
      *
      * The upgrade is one-way: when the function later goes away (a remove or a reload), the callable
-     * proxy stays and a call throws `INVALID_CONFIG_NOT_A_FUNCTION`, the same as for a namespace that
+     * proxy stays and a call throws `API_PATH_NOT_CALLABLE`, the same as for a namespace that
      * was callable from the start.
      *
      * @returns {void}
@@ -731,11 +993,12 @@ export class UnifiedWrapper extends ComponentBase {
      *
      * @description
      * A lazy node's proxy is built on a function target, since what the node holds is unknown until it
-     * loads, and a Proxy's target is fixed when it is created. Eager builds an array on the array itself
-     * (so `Array.isArray` sees it) and any other non-callable value on the wrapper. Once a lazy node loads
-     * an array or a primitive, a proxy is built from the same handler on that target and put in the parent
-     * in place of the lazy one, which forwards every operation to it from then on, as a namespace upgraded
-     * to callable does (#533).
+     * loads, and a Proxy's target is fixed when it is created. Eager builds an array on an array shell (so
+     * `Array.isArray` sees it) and any other non-callable value, a namespace object included (#811), on an
+     * object shell. Once a lazy node loads such a value, a proxy is built from the same handler on that
+     * target and put in the parent in place of the lazy one, which forwards every operation to it from then
+     * on, as a namespace upgraded to callable does (#533). A reference taken before the load keeps the lazy
+     * proxy's form (`typeof` reads `"function"`) and reads through to the node.
      *
      * @returns {void}
      * @private
@@ -744,6 +1007,44 @@ export class UnifiedWrapper extends ComponentBase {
      * if (Array.isArray(internal.impl)) wrapper.___settleLazyProxy();
      */
     private ___settleLazyProxy;
+    /**
+     * Give a settled lazy node its lazy proxy back once a reload resets it to unloaded (#811).
+     *
+     * @description
+     * {@link UnifiedWrapper#___settleLazyProxy} rebuilt the loaded node on eager's target. A node reset to unloaded
+     * holds nothing again, so it takes the form an unloaded lazy node has: its lazy proxy, on a function target, since
+     * what it loads next may be callable. That proxy runs its own traps again and is put back in the parent, so a
+     * reference taken before the first load is the node again, as before the load; the settled proxy forwards to the
+     * node's proxy from then on. A node upgraded to callable since it settled keeps its callable proxy (see
+     * {@link UnifiedWrapper#___upgradeToCallableProxy}).
+     *
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * wrapper.___unsettleLazyProxy(); // in ___resetLazy
+     */
+    private ___unsettleLazyProxy;
+    /**
+     * Put this wrapper's current proxy in `container[key]` where that slot still holds one of its earlier proxies.
+     *
+     * @description
+     * A node that loads while the build that made it still runs (a file+folder collision slot the build loads to settle
+     * its surface) is rebuilt on another proxy (see {@link UnifiedWrapper#___settleLazyProxy},
+     * {@link UnifiedWrapper#___upgradeToCallableProxy}) before its tree is the instance's api, so
+     * {@link UnifiedWrapper#___replaceInParent}, which walks from the api root, finds nothing to swap. The build calls
+     * this on the object it assigned the node to, so the node it hands on is the one eager builds. A slot that holds
+     * anything else, or an accessor, is left alone.
+     *
+     * @param {object} container - The object the node was assigned to: a raw object or a wrapper's proxy.
+     * @param {string} key - The node's key there.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * wrapper.___settleInHolder(targetApi, "math");
+     */
+    private ___settleInHolder;
     /**
      * Swap the proxy the parent node holds for this wrapper at its apiPath (#533).
      *
@@ -801,21 +1102,23 @@ export class UnifiedWrapper extends ComponentBase {
      */
     private ___materialize;
     /**
+     * Hand the value a lazy node just loaded to the routine manager as its module's contribution at this
+     * path (#754). An eager node's value reaches it through the construction's internal `impl:created`;
+     * a lazy node is built with no value, so its own function (a callable folder's `default`) would never
+     * join a routine that names its path. Only the routine manager is told: ownership and metadata already
+     * hold this node from its construction, and the public `impl:created` for it has already fired.
+     * @returns {void}
      * @private
-     * @returns {Promise<void>}
-     *
-     * @description
-     * Exposes lazy materialization for waiting proxies and nested wrappers.
      *
      * @example
-     * await wrapper._materialize();
+     * this.___reportLoadedContribution();
      */
-    private _materialize;
+    private ___reportLoadedContribution;
     /**
      * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
      * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
      * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
-     * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
+     * re-arms or discards it. A wrapper from a tree a restart or a full reload replaced leaves the new tree's count alone.
      * A member a forced replace hides from the api is `parked`: nothing can reach it to load it, so it is
      * not counted until it is put back (`unpark`), and loading or re-arming it meanwhile leaves it parked.
      * One hidden after it loaded is `parked-loaded`: out of the total while hidden, and back in it, loaded,
@@ -873,6 +1176,26 @@ export class UnifiedWrapper extends ComponentBase {
      */
     private ___adoptImplChildren;
     /**
+     * Adopt one member of another value (a collision's losing callable) onto this node the way the node's own
+     * members are adopted: an accessor stays an accessor, run on every read with the node as `this`; an object or
+     * function becomes a child node at this node's path and the member's key; anything else is held as it is.
+     *
+     * @private
+     * @param {string} key - The member's key.
+     * @param {object|Function} source - The value holding the member.
+     * @returns {void}
+     *
+     * @description
+     * A callable folder module that puts members on its own function (`fn.live` as a getter, `fn.me = fn`) keeps
+     * them on its impl, where the get trap serves them live and wraps a function or object as a child. When that
+     * folder loses its slot in a collision, its members move to the node that kept the slot; copying their values
+     * would freeze a getter at the value it had and hand out a self-reference as the bare function (#874).
+     *
+     * @example
+     * keptWrapper.___adoptForeignMember("live", losingFn);
+     */
+    private ___adoptForeignMember;
+    /**
      * @private
      * @param {string|symbol} key - Child property name
      * @param {unknown} value - Child value
@@ -918,8 +1241,30 @@ export class UnifiedWrapper extends ComponentBase {
     public createProxy(): ProxyConstructor;
     #private;
 }
-import { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
-import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+/**
+ * Resolves a value to its backing UnifiedWrapper instance.
+ * Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
+ * Returns null for any other value.
+ *
+ * @param {unknown} value - Value to resolve
+ * @returns {UnifiedWrapper|null} The backing wrapper, or null
+ *
+ * @example
+ * const wrapper = resolveWrapper(someProxy);
+ * if (wrapper) wrapper.____slothletInternal.impl = newImpl;
+ */
+declare function resolveWrapper(value: unknown): UnifiedWrapper | null;
+/**
+ * The node behind a value read out of the api: a per-reader view a read under a module's identity hands back stands
+ * for the node it was built over; anything else is the value itself (#625).
+ * @param {*} value - A value read out of the api.
+ * @returns {*} The node behind it.
+ * @internal
+ *
+ * @example
+ * runtime_nodeBehind(heldReference) === api.victim.v; // true for a view of victim.v
+ */
+declare function runtime_nodeBehind(value: any): any;
 import { ComponentBase } from "#factories/component-base";
-export { IMPL_METADATA_KEYS, isFrameworkReservedKey };
+export { isFrameworkReservedKey, guarded_runtime_frameworkWrite as runtime_frameworkWrite, guarded_runtime_unwrapSelfView as runtime_unwrapSelfView, guarded_runtime_selfModuleReader as runtime_selfModuleReader, guarded_runtime_selfModuleCeilings as runtime_selfModuleCeilings, guarded_runtime_selfView as runtime_selfView, guarded_runtime_registerFrameworkMemberCopy as runtime_registerFrameworkMemberCopy, guarded_runtime_registerFrameworkMember as runtime_registerFrameworkMember, guarded_runtime_selfFrameworkView as runtime_selfFrameworkView, guarded_runtime_assertFrameworkRootChange as runtime_assertFrameworkRootChange, guarded_runtime_selfChangeTarget as runtime_selfChangeTarget, guarded_runtime_frameworkViewCaller as runtime_frameworkViewCaller, guarded_runtime_selfRootView as runtime_selfRootView, guarded_runtime_markCallerLocked as runtime_markCallerLocked, guarded_runtime_isCallerLocked as runtime_isCallerLocked, guarded_runtime_selfHookHandler as runtime_selfHookHandler, guarded_settleStandInChanges as settleStandInChanges, guarded_releaseStandInChanges as releaseStandInChanges, guarded_refusedChangeCount as refusedChangeCount, guarded_runtime_resolvedAccess as runtime_resolvedAccess, guarded_releaseModuleMakers as releaseModuleMakers, guarded_moduleMakerCount as moduleMakerCount, guarded_registerRuntimeSelf as registerRuntimeSelf, guarded_runtime_selfReadAsDefiner as runtime_selfReadAsDefiner, guarded_runtime_contextReadAsDefiner as runtime_contextReadAsDefiner, guarded_registerRuntimeContext as registerRuntimeContext, guarded_runtime_contextWritten as runtime_contextWritten, guarded_runtime_contextRead as runtime_contextRead, guarded_runtime_eventPayloadFor as runtime_eventPayloadFor, guarded_UnifiedWrapper as UnifiedWrapper, guarded_resolveWrapper as resolveWrapper, guarded_runtime_nodeBehind as runtime_nodeBehind };
 //# sourceMappingURL=unified-wrapper.d.mts.map

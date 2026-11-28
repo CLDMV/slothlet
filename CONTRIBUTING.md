@@ -18,7 +18,7 @@ Slothlet uses the CLDMV v4 staging-branch flow — work integrates on `next`, an
 1. Branch from **`next`**, not `master`, using a conventional-commit prefix: `fix/…`, `feat/…`, `docs/…`, `test/…`, `chore/…`, `refactor/…`, `perf/…`, or `ci/…`.
 2. Make your changes and add or update tests as needed (test files are named `*.test.vitest.mjs` — see [Testing New Features](#testing-new-features)).
 3. Ensure the suite passes: `npm run vitest` (or a subset — see below).
-4. Run the formatter and linter before committing: `npm run format` then `npm run lint`. A precommit hook runs `lint` + `format:check` and rejects a commit that isn't clean, so running these first avoids a surprise.
+4. Run the formatter and linter before committing: `npm run format` then `npm run lint`. A precommit hook runs `lint` + `format:check` and rejects a commit that isn't clean, and `precommit:local` also rejects staged files whose standard file header is missing or malformed (fix with `npm run fix:headers`), so running these first avoids a surprise.
 5. Use [Conventional Commits](https://www.conventionalcommits.org/) for every commit message — the release automation derives the version bump from them (`feat` → minor, `fix`/`perf` → patch, a `!` / `BREAKING CHANGE:` → major).
 6. Push the branch and open a pull request **targeting `next`**. Maintainers pushing a prefixed branch to the repo get a PR auto-opened into `next`; external contributors open the PR from their fork against `next`. Never push directly to `next` or `master`.
 
@@ -37,7 +37,9 @@ Run tests through the npm scripts, never `npx vitest` directly — the runner ca
 | `npm run analyze`          | Code quality checks: translations, headers, debug conventions, throws |
 | `npm run test:node`        | Node.js integration tests                                             |
 | `npm run test:performance` | Performance benchmarks                                                |
-| `npm run test:types`       | TypeScript declaration validation                                     |
+| `npm run types:check`      | Build the declarations and compile consumer files against them (CI)   |
+| `npm run types:build`      | Emit the declarations into `types/`                                   |
+| `npm run test:types`       | Compile consumer files against the built declarations                 |
 | `npm run lint`             | ESLint across source and tests                                        |
 | `npm run format`           | Prettier write across the repo                                        |
 

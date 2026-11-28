@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-control-deny-default.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-control-deny-default.test.vitest.mjs
  *	@Date: 2026-04-14T17:15:46-07:00 (1776212146)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-28T04:32:23-08:00 (1795869143)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,23 +32,23 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
 		// The built-in deny rule should exist for control.**
-		const rules = api.slothlet.permissions.global.rulesForPath("slothlet.permissions.control.enable");
+		const rules = api.slothlet.permissions.global.rules.path("slothlet.permissions.control.mode");
 		const builtinDeny = rules.find((r) => r.caller === "**" && r.effect === "deny" && r.target === "slothlet.permissions.control.**");
 		expect(builtinDeny).toBeDefined();
 	});
 
-	it("built-in deny blocks inter-module call to control.enable() even when permissions are globally disabled", async () => {
+	it("built-in deny blocks inter-module call to control.mode('on') even when permissions are globally disabled", async () => {
 		// permissions.enabled: false means checkAccess() normally short-circuits to true,
 		// but control.** is carved out — the built-in deny still fires for callerWrapper calls.
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			permissions: { defaultPolicy: "allow", enabled: false }
+			permissions: { policy: "allow", mode: false }
 		});
 
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -61,12 +61,12 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 		});
 	});
 
-	it("built-in deny blocks inter-module call to control.disable() even when permissions are globally disabled", async () => {
+	it("built-in deny blocks inter-module call to control.mode('off') even when permissions are globally disabled", async () => {
 		// Mirrors the enable() test — the disable() enforcement path in api_builder is separate code.
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			permissions: { defaultPolicy: "allow", enabled: false }
+			permissions: { policy: "allow", mode: false }
 		});
 
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -86,8 +86,8 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
-				enabled: false,
+				policy: "allow",
+				mode: false,
 				rules: [{ caller: "controlCaller.*", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});

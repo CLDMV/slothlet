@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/smart-flattening/smart-flattening-self-value-siblings.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/smart-flattening/smart-flattening-self-value-siblings.test.vitest.mjs
  *	@Date: 2026-10-11T20:14:14-07:00 (1791774854)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T22:04:29-07:00 (1791781469)
+ *	@Last modified time: 2026-11-28T04:33:06-08:00 (1795869186)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,10 +74,12 @@ describe.each(getMatrixConfigs())("self-named value default beside sibling files
 		expect(await api.rack.slot()).toBe("rack.slot");
 	});
 
-	it("gives a lone primitive default the same node in both modes once loaded", async () => {
+	it("gives a lone primitive default the same value in both modes once loaded", async () => {
 		api = await slothlet({ ...config, base: BASE });
 		await api.count;
-		expect(typeof api.count).toBe("object");
+		// A file at the api root whose default export is a primitive is that value, as at a mount and in plain JavaScript.
+		expect(typeof api.count).toBe("number");
+		expect(api.count).toBe(7);
 		expect(JSON.stringify(api.count)).toBe("7");
 	});
 

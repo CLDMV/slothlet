@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/smart-flattening/flatten-coverage-gaps.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/smart-flattening/flatten-coverage-gaps.test.vitest.mjs
  *	@Date: 2026-03-13T18:32:34-07:00 (1773451954)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:46-07:00 (1791091726)
+ *	@Last modified time: 2026-11-28T04:33:02-08:00 (1795869182)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,7 +61,7 @@ afterEach(async () => {
 async function getFlattenProcessor() {
 	api = await slothlet({ base: API_TEST_IMPL, mode: "eager" });
 	// resolveWrapper retrieves the UnifiedWrapper; .slothlet is the Slothlet class instance
-	const slInstance = resolveWrapper(api.math).slothlet;
+	const slInstance = resolveWrapper(api.math).____slothlet;
 	return slInstance.processors.flatten;
 }
 
@@ -286,7 +286,7 @@ describe("flatten.mjs — line 301: collisionMode falls back to 'merge' when no 
 
 		// Verify the slothlet instance has no collision config (required for this test)
 		const slInstance = flatten.slothlet;
-		const hasCollision = Boolean(slInstance.config?.api?.collision || slInstance.config?.collision);
+		const hasCollision = Boolean(slInstance.config?.api?.collision?.mode);
 
 		const mainFn = function myService() {
 			return "service";

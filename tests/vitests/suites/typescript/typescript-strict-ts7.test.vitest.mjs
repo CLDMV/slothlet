@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/typescript-strict-ts7.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/typescript-strict-ts7.test.vitest.mjs
  *	@Date: 2026-09-28T00:00:00-07:00 (1790578800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:24-07:00 (1791090924)
+ *	@Last modified time: 2026-11-28T04:33:09-08:00 (1795869189)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -67,7 +67,7 @@ describe("TypeScript strict mode vs. a compiler-API-less 'typescript' install (#
 		vi.resetModules();
 		vi.doMock("typescript", () => ts7NamespaceShape("7.0.0-simulated"));
 
-		const { getTypeScript } = await import("@cldmv/slothlet/processors/typescript");
+		const { getTypeScript } = await import("#processors/typescript");
 
 		let caught;
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -104,7 +104,7 @@ describe("TypeScript strict mode vs. a compiler-API-less 'typescript' install (#
 			ScriptTarget: undefined
 		}));
 
-		const { getTypeScript } = await import("@cldmv/slothlet/processors/typescript");
+		const { getTypeScript } = await import("#processors/typescript");
 		const ts = await getTypeScript();
 
 		expect(ts).toBe(fakeCompilerApi);
@@ -114,7 +114,7 @@ describe("TypeScript strict mode vs. a compiler-API-less 'typescript' install (#
 	it("getTypeScript() still resolves the real TypeScript 6 compiler API unmodified (no mock)", async () => {
 		vi.resetModules();
 
-		const { getTypeScript } = await import("@cldmv/slothlet/processors/typescript");
+		const { getTypeScript } = await import("#processors/typescript");
 		const ts = await getTypeScript();
 
 		expect(typeof ts.createProgram).toBe("function");
@@ -126,7 +126,7 @@ describe("TypeScript strict mode vs. a compiler-API-less 'typescript' install (#
 		vi.resetModules();
 		vi.doMock("typescript", () => ts7NamespaceShape("7.0.0-simulated"));
 
-		const { transformTypeScriptStrict } = await import("@cldmv/slothlet/processors/typescript");
+		const { transformTypeScriptStrict } = await import("#processors/typescript");
 
 		const root = await makeTestTmpDir("ts7-strict");
 		tempRoots.push(root);
@@ -144,7 +144,7 @@ describe("TypeScript strict mode vs. a compiler-API-less 'typescript' install (#
 		vi.resetModules();
 		vi.doMock("typescript", () => ts7NamespaceShape("7.0.0-simulated"));
 
-		const { transformTypeScript } = await import("@cldmv/slothlet/processors/typescript");
+		const { transformTypeScript } = await import("#processors/typescript");
 
 		const root = await makeTestTmpDir("ts7-fast");
 		tempRoots.push(root);

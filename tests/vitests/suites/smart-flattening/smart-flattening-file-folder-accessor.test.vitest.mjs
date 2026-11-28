@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/smart-flattening/smart-flattening-file-folder-accessor.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/smart-flattening/smart-flattening-file-folder-accessor.test.vitest.mjs
  *	@Date: 2026-10-11T22:49:06-07:00 (1791784146)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T23:37:15-07:00 (1791787035)
+ *	@Last modified time: 2026-11-28T04:33:05-08:00 (1795869185)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs())("file and folder collision with getters > $nam
 	])(
 		"under %s keeps the file's getter reading writes made through the node, and answers %s for the shared getter",
 		async (mode, sharedWinner) => {
-			api = await slothlet({ ...config, base: BASE, collision: { initial: mode, api: mode } });
+			api = await slothlet({ ...config, base: BASE, api: { collision: { mode: { initial: mode, api: mode } } } });
 			await api.gauge;
 			expect(api.gauge.double).toBe(2);
 			api.gauge.level = 5;

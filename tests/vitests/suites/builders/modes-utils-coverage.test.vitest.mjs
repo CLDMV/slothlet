@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/builders/modes-utils-coverage.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/builders/modes-utils-coverage.test.vitest.mjs
  *	@Date: 2026-09-14T15:15:27-07:00 (1789424127)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:23-07:00 (1791091703)
+ *	@Last modified time: 2026-11-28T04:31:18-08:00 (1795869078)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { ModesUtils } from "@cldmv/slothlet/helpers/modes-utils";
+import { ModesUtils } from "#helpers/modes-utils";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 const makeUtils = () => new ModesUtils({ config: {}, debug: () => {}, SlothletError, SlothletWarning: class {}, handlers: {} });
@@ -27,8 +27,8 @@ const makeUtils = () => new ModesUtils({ config: {}, debug: () => {}, SlothletEr
 describe("ModesUtils.getOwnershipCollisionMode — config-default resolution", () => {
 	it("returns the configured mode for the given context", () => {
 		const u = makeUtils();
-		expect(u.getOwnershipCollisionMode({ collision: { initial: "replace", api: "skip" } }, "initial")).toBe("replace");
-		expect(u.getOwnershipCollisionMode({ collision: { initial: "replace", api: "skip" } }, "api")).toBe("skip");
+		expect(u.getOwnershipCollisionMode({ api: { collision: { mode: { initial: "replace", api: "skip" } } } }, "initial")).toBe("replace");
+		expect(u.getOwnershipCollisionMode({ api: { collision: { mode: { initial: "replace", api: "skip" } } } }, "api")).toBe("skip");
 	});
 
 	it("falls back to 'merge' when collision config is absent or lacks the context", () => {

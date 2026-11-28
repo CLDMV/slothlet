@@ -1,0 +1,34 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: api_tests/api_test_add_collision/core/shared.mjs
+ *	@Date: 2026-11-18T20:34:46-08:00 (1795062886)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-28T04:27:18-08:00 (1795868838)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview `core`'s shared leaf; `extra` exports a `shared` too, with one export in common (`who`).
+ */
+
+/**
+ * Name the module.
+ * @returns {string} `"core"`.
+ * @example
+ * who(); // "core"
+ */
+export const who = () => "core";
+
+/**
+ * Only in `core`'s shared.
+ * @returns {string} `"core-only"`.
+ * @example
+ * coreOnly(); // "core-only"
+ */
+export const coreOnly = () => "core-only";

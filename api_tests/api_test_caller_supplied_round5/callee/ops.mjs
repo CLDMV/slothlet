@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_caller_supplied_round5/callee/ops.mjs
+ *	@Filename: api_tests/api_test_caller_supplied_round5/callee/ops.mjs
  *	@Date: 2026-10-18T00:00:00-07:00 (1792306800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T00:00:00-07:00 (1792306800)
+ *	@Last modified time: 2026-11-28T04:27:41-08:00 (1795868861)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -227,7 +227,7 @@ export function passThrough() {
  * await api.callee.ops.addPlug(dir);
  */
 export async function addPlug(dir) {
-	await self.slothlet.api.add("plug", dir, { moduleID: "plug-mod" });
+	await self.slothlet.api.add("plug", dir, { id: "plug-mod" });
 }
 
 /**

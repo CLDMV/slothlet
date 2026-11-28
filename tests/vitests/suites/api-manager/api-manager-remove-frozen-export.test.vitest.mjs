@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-remove-frozen-export.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-remove-frozen-export.test.vitest.mjs
  *	@Date: 2026-09-27T21:37:01-07:00 (1790570221)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:20-07:00 (1791091700)
+ *	@Last modified time: 2026-11-28T04:31:12-08:00 (1795869072)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -73,7 +73,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api-manager — remove a m
 		await writeModule(store, "errors.mjs", FROZEN_ERRORS);
 
 		api = await slothlet({ mode, silent: true });
-		await api.slothlet.api.add(["store"], store, { moduleID: "m" });
+		await api.slothlet.api.add(["store"], store, { id: "m" });
 		expect(api.store.errors.CODES.NOT_FOUND).toBe("not-found");
 		expect(await api.store.errors.isStoreError(new Error("x"))).toBe(true);
 
@@ -90,7 +90,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api-manager — remove a m
 		}
 
 		// Re-adding the same moduleID restores a fully working module.
-		await api.slothlet.api.add(["store"], store, { moduleID: "m" });
+		await api.slothlet.api.add(["store"], store, { id: "m" });
 		expect(api.store.errors.CODES.NOT_FOUND).toBe("not-found");
 		expect(api.store.errors.CODES.CONFLICT).toBe("conflict");
 		expect(await api.store.errors.isStoreError(new Error("x"))).toBe(true);
@@ -103,7 +103,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api-manager — remove a m
 		await writeModule(cfg, "values.mjs", SEALED);
 
 		api = await slothlet({ mode, silent: true });
-		await api.slothlet.api.add(["cfg"], cfg, { moduleID: "sealed" });
+		await api.slothlet.api.add(["cfg"], cfg, { id: "sealed" });
 		expect(api.cfg.values.limits.max).toBe(10);
 		expect(api.cfg.values.fixed.answer).toBe(42);
 
@@ -119,7 +119,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api-manager — remove a m
 		await writeModule(store, "table.mjs", `export const table = { a: 1, b: 2 };`);
 
 		api = await slothlet({ mode, silent: true });
-		await api.slothlet.api.add(["store"], store, { moduleID: "m" });
+		await api.slothlet.api.add(["store"], store, { id: "m" });
 
 		// Frozen: the same strict-mode TypeError a direct delete on the frozen object throws, value kept.
 		const codes = api.store.errors.CODES;
@@ -146,8 +146,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api-manager — remove a m
 		await writeModule(other, "ping.mjs", "export function ping() { return 'pong'; }");
 
 		api = await slothlet({ mode, silent: true });
-		await api.slothlet.api.add(["store"], store, { moduleID: "m" });
-		await api.slothlet.api.add(["other"], other, { moduleID: "o" });
+		await api.slothlet.api.add(["store"], store, { id: "m" });
+		await api.slothlet.api.add(["other"], other, { id: "o" });
 
 		await api.slothlet.api.remove("m");
 		expect(api.store).toBeUndefined();

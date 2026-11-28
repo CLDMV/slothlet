@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/errors.mjs
+ *	@Filename: src/lib/errors.mjs
  *	@Date: 2026-01-20T20:25:54-08:00 (1768969554)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:53-07:00 (1791424193)
+ *	@Last modified time: 2026-11-28T04:30:36-08:00 (1795869036)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,124 +18,75 @@
  * @module @cldmv/slothlet/errors
  * @internal
  */
-import { translate } from "@cldmv/slothlet/i18n";
-import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
+import { translate, registerWarningClass } from "#i18n";
+import { detectHint } from "#helpers/hint-detector";
+import {
+	ArrayMethods,
+	describeThrown,
+	Error,
+	Errors,
+	filterList,
+	Objects,
+	stringOf,
+	Symbols,
+	WeakMap,
+	WeakMapMethods
+} from "#helpers/intrinsics";
 
 /**
- * Custom error class for Slothlet-specific errors with context and i18n
+ * Custom error class for Slothlet-specific errors with details and i18n
  * @public
  */
 export class SlothletError extends Error {
 	/**
-	 * Create a new SlothletError with automatic translation and hint detection
-	 * @param {string} code - Error code identifier
-	 * @param {Object} context - Additional context about the error
-	 * @param {boolean} [context.validationError] - Mark as validation error (no originalError needed)
-	 * @param {boolean} [context.stub] - Mark as stub error (not-yet-implemented feature)
-	 * @param {unknown} [originalError] - What was originally thrown. Not necessarily an `Error`:
-	 *   application code may throw a structured payload, a string, or any other value, and all of
-	 *   them are rendered into the message and chained via `cause`. Only `null`/`undefined` mean
-	 *   "no original".
-	 * @param {Object} [options] - Additional options (alternative to embedding flags in context)
-	 * @param {boolean} [options.validationError] - Mark as validation error (no originalError needed)
-	 * @param {boolean} [options.stub] - Mark as stub error (not-yet-implemented feature)
-	 * @public
-	 */
-	/**
 	 * Renders a thrown value for message interpolation.
 	 *
 	 * @param {unknown} thrown - Whatever the guarded code threw.
-	 * @returns {string} A human-readable rendering: an Error's message, a string as itself, and
-	 *   any other value JSON-serialized (falling back to String() for unserializable values).
+	 * @returns {string} A human-readable rendering: an Error's own message, a string as itself, and
+	 *   any other value's own data JSON-serialized (falling back to its `String()` text).
 	 */
 	static #describeThrown(thrown) {
-		if (thrown instanceof Error) return thrown.message;
-		if (typeof thrown === "string") return thrown;
-		try {
-			// Circular structures and BigInts refuse JSON serialization; String() below still
-			// yields a usable rendering for them, so the throw is guarded rather than surfaced.
-			return JSON.stringify(thrown) ?? String(thrown);
-		} catch {
-			/* v8 ignore next */
-			return String(thrown);
-		}
+		return describeThrown(thrown);
 	}
 
-	constructor(code, context = {}, originalError = null, options = {}) {
-		// Extract flags from context OR from the 4th options arg (backwards compat for the
-		// `new SlothletError("CODE", {}, null, { validationError: true })` calling convention)
-		const { validationError: ctxValidation, stub: ctxStub, ...contextData } = context;
-		const { validationError: optsValidation, stub: optsStub } = options;
-		const validationError = ctxValidation ?? optsValidation;
-		const stub = ctxStub ?? optsStub;
-
-		// Enrich context with a rendering of the original throw. `.message` only exists on Error
-		// instances; a structured payload (`{ statusCode, key, … }` — the standard HTTP-mapping
-		// shape) used to interpolate as an empty slot, leaving the diagnostic that replaced the
-		// error unable to name it (#252).
-		// "Has an original" is the same test the `cause` chain below uses: anything that is not
-		// null/undefined counts. A truthiness test would drop `0`, `false` and `""` — all legal
-		// throws — and leave the diagnostic unable to name what it replaced, which is the very gap
-		// this rendering exists to close.
-		const hasOriginal = originalError !== null && originalError !== undefined;
-		const enrichedContext = hasOriginal ? { ...contextData, error: SlothletError.#describeThrown(originalError) } : contextData;
+	/**
+	 * Create a new SlothletError with automatic translation and hint detection.
+	 * @param {string} code - Error code identifier.
+	 * @param {Object} [details] - Structured details about the error, also the i18n interpolation params.
+	 * @param {Object} [options] - Error options.
+	 * @param {unknown} [options.cause] - What was originally thrown. Not necessarily an `Error`: application code may
+	 *   throw a structured payload, a string, or any other value, and all of them are rendered into the message (as
+	 *   `details.error`) and chained as the standard `cause`. Only `null`/`undefined` mean "no cause".
+	 * @public
+	 */
+	constructor(code, details = {}, options = {}) {
+		const cause = options?.cause;
+		// "Has a cause" is anything that is not null/undefined: `0`, `false` and `""` are legal throws, and the
+		// diagnostic that replaced one must still be able to name it (#252).
+		const hasCause = cause !== null && cause !== undefined;
+		const enrichedDetails = hasCause ? { ...details, error: SlothletError.#describeThrown(cause) } : { ...details };
 
 		// Translate message synchronously (translations already loaded at module init)
-		const translatedMessage = translate(code, enrichedContext);
+		const translatedMessage = translate(code, enrichedDetails);
 
-		// Auto-detect and translate hint if originalError provided (skip for stubs/validations)
-		const skipHint = stub || validationError;
-		const hintKey = hasOriginal && !skipHint ? detectHint(originalError, code) : undefined;
-		let translatedHint = hintKey ? translate(hintKey, enrichedContext) : undefined;
+		// The hint is always a translated sentence: detected from the cause when there is one (pattern rules, then the
+		// code's own HINT_<code>), otherwise the code's own HINT_<code> when it has one, otherwise none.
+		const hintKey = hasCause ? detectHint(cause, code) : `HINT_${code}`;
+		const hintText = translate(hintKey, enrichedDetails);
+		// translate() answers "Error: <key>" for a key it has no sentence for: that is "no hint".
+		const translatedHint = hintText === `Error: ${hintKey}` ? undefined : hintText;
 
-		// For validation errors, still check for static HINT_ translation
-		// The false path of this && triggers when translatedHint is already set; V8's fork-based
-		// coverage merging produces a negative branch count for this path due to range arithmetic
-		// underflow across 199 test workers — the branch IS covered but cannot be reliably tracked.
-		/* v8 ignore next */
-		if (!translatedHint && validationError) {
-			const staticHintKey = `HINT_${code}`;
-			const staticHint = translate(staticHintKey, enrichedContext);
-			// Only use it if it's not the fallback format (Error: HINT_...)
-			if (staticHint && !staticHint.startsWith("Error:")) {
-				translatedHint = staticHint;
-			}
-		}
-
-		// Include error code in message for better debugging and test matching.
-		// Chain the original via the standard `cause` (ES2022) — it is the channel util.inspect,
-		// serializers, and cause-walking tooling follow; `originalError` below stays as the
-		// compatibility channel (#252).
-		const messageWithCode = `[${code}] ${translatedMessage}`;
-		super(messageWithCode, hasOriginal ? { cause: originalError } : undefined);
+		// Include error code in message for better debugging and test matching; chain the cause via the standard
+		// `cause` (ES2022), the channel util.inspect, serializers and cause-walking tooling follow.
+		super(`[${code}] ${translatedMessage}`, hasCause ? { cause } : undefined);
 		this.name = "SlothletError";
 
-		// Make code and context non-enumerable to prevent them from being dumped
-		Object.defineProperty(this, "code", {
-			value: code,
-			enumerable: false,
-			writable: false
-		});
+		// Non-enumerable so they are not dumped with the error
+		Objects.defineProperty(this, "code", { __proto__: null, value: code, enumerable: false, writable: false });
+		Objects.defineProperty(this, "details", { __proto__: null, value: enrichedDetails, enumerable: false, writable: false });
+		Objects.defineProperty(this, "hint", { __proto__: null, value: translatedHint, enumerable: false, writable: false });
 
-		Object.defineProperty(this, "context", {
-			value: context,
-			enumerable: false,
-			writable: false
-		});
-
-		Object.defineProperty(this, "originalError", {
-			value: originalError,
-			enumerable: false,
-			writable: false
-		});
-
-		Object.defineProperty(this, "hint", {
-			value: translatedHint,
-			enumerable: false,
-			writable: false
-		});
-
-		Error.captureStackTrace(this, SlothletError);
+		Errors.captureStackTrace(this, SlothletError);
 	}
 
 	/**
@@ -151,13 +102,14 @@ export class SlothletError extends Error {
 		}
 
 		// Add only critical details
-		const criticalKeys = ["modulePath", "moduleID", "apiPath"];
-		const detailKeys = Object.keys(this.context).filter((k) => criticalKeys.includes(k));
+		const criticalKeys = ["file", "module", "path"];
+		const detailKeys = filterList(Objects.keys(this.details), (k) => ArrayMethods.includes(criticalKeys, k));
 
 		if (detailKeys.length > 0) {
 			output += "\nDetails:\n";
-			for (const key of detailKeys) {
-				output += `  ${key}: ${this.context[key]}\n`;
+			for (let ofIndex = 0, ofList = detailKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				output += `  ${key}: ${stringOf(this.details[key])}\n`;
 			}
 		}
 
@@ -168,12 +120,12 @@ export class SlothletError extends Error {
 	 * Custom inspect for console.log/console.error
 	 * @returns {string} Formatted error for display
 	 */
-	[Symbol.for("nodejs.util.inspect.custom")]() {
+	[Symbols.for("nodejs.util.inspect.custom")]() {
 		return this.toString() + `\n${this.stack}`;
 	}
 
 	/**
-	 * Prevent JSON serialization of context (cleaner error display)
+	 * JSON form: name, code, message and the translated hint (details are left out for a cleaner display).
 	 * @returns {Object} Simplified error object
 	 */
 	toJSON() {
@@ -181,44 +133,78 @@ export class SlothletError extends Error {
 			name: this.name,
 			code: this.code,
 			message: this.message,
-			hint: this.context.hint
+			hint: this.hint
 		};
 	}
 }
+
+/**
+ * The recorder each per-instance warning class hands its warnings to (see {@link SlothletWarning.forInstance}).
+ * @type {WeakMap<Function, (warning: SlothletWarning) => void>}
+ * @private
+ */
+const RECORDERS = new WeakMap();
 
 /**
  * Warning class for non-fatal issues with i18n support
  * @public
  */
 export class SlothletWarning {
-	// Static array to capture warnings for testing
-	static captured = [];
-	static suppressConsole = false;
+	/**
+	 * Whether a warning raised through this class stays off the console. The process-level class prints every warning;
+	 * an instance's class reads its instance's `silent` option.
+	 * @type {boolean}
+	 */
+	static get silent() {
+		return false;
+	}
+
+	/**
+	 * Create the warning class for one slothlet instance (#819). Every warning raised through it is handed to
+	 * `record` (the instance keeps them; `api.slothlet.warnings.get()` reads them), printed or not, and it is printed
+	 * unless `isSilent()` says the instance is silent (#838). Warnings on one instance never reach another, and they
+	 * are still `instanceof SlothletWarning`.
+	 * @param {function(): boolean} [isSilent] - Whether the instance's `silent` option is on, read as each warning is raised.
+	 * @param {(warning: SlothletWarning) => void} [record] - Called with each warning raised through the class.
+	 * @returns {Function} The per-instance class (a subclass of `SlothletWarning`).
+	 * @public
+	 */
+	static forInstance(isSilent = () => false, record) {
+		class InstanceSlothletWarning extends SlothletWarning {
+			static get silent() {
+				return isSilent() === true;
+			}
+		}
+		if (typeof record === "function") WeakMapMethods.set(RECORDERS, InstanceSlothletWarning, record);
+		return InstanceSlothletWarning;
+	}
 
 	/**
 	 * Create and emit a warning with automatic translation
 	 * @param {string} code - Warning code identifier
-	 * @param {Object} context - Additional context about the warning
-	 * @param {string} [context.key] - Optional translation key override. When provided, this key
-	 *   is used for translation instead of `code`. All other context properties are used as
+	 * @param {Object} [details] - Structured details about the warning, also the i18n interpolation params.
+	 * @param {string} [details.key] - Optional translation key override. When provided, this key
+	 *   is used for translation instead of `code`. All other details are used as
 	 *   interpolation params. Allows sub-key variants without changing the warning code.
-	 * @param {*} [cause] - What caused the warning, typically an error a handler threw. Exposed as
+	 * @param {Object} [options] - Warning options.
+	 * @param {*} [options.cause] - What caused the warning, typically an error a handler threw. Exposed as
 	 *   `cause` and printed with its stack, so the warning never hides the failure it reports (#578).
 	 * @public
 	 */
-	constructor(code, context = {}, cause) {
-		// Allow context.key to override the translation key (key: "WARNING_FOO_VARIANT", ...params)
-		const { key: msgKey, ...contextData } = context;
+	constructor(code, details = {}, options = {}) {
+		const cause = options?.cause;
+		// Allow details.key to override the translation key (key: "WARNING_FOO_VARIANT", ...params)
+		const { key: msgKey, ...detailData } = details;
 		const translationKey = msgKey ?? code;
 
 		// Translate message synchronously
-		const translatedMessage = translate(translationKey, contextData);
+		const translatedMessage = translate(translationKey, detailData);
 
 		this.name = "SlothletWarning";
 		this.code = code;
 		/** @type {string} */
 		this.message = translatedMessage;
-		this.context = context;
+		this.details = details;
 		// Same "has a cause" test SlothletError uses: anything but null/undefined, so a thrown `0`,
 		// `false` or `""` is still reported.
 		const hasCause = cause !== null && cause !== undefined;
@@ -227,22 +213,25 @@ export class SlothletWarning {
 			this.cause = cause;
 		}
 
-		// Emit warning to console unless suppressed
-		if (!SlothletWarning.suppressConsole) {
-			console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
+		// `Home` is the instance's class for a warning raised through an instance (#819), or this class for one raised
+		// outside any instance. Whether it is printed is that class's `silent`, decided here and nowhere else (#838).
+		const Home = this.constructor;
+		if (!Home.silent) {
+			// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
+			globalThis.console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
 
-			// Show context if provided (exclude synthetic 'key' field from display)
-			if (Object.keys(contextData).length > 0) {
-				console.warn("Context:", contextData);
+			// Show details if provided (exclude synthetic 'key' field from display)
+			if (Objects.keys(detailData).length > 0) {
+				globalThis.console.warn("Details:", detailData);
 			}
 
 			if (hasCause) {
-				console.warn("Cause:", cause instanceof Error ? cause.stack : cause);
+				globalThis.console.warn("Cause:", cause instanceof Error ? cause.stack : cause);
 			}
-		} else {
-			// Only capture when console is suppressed (for testing)
-			SlothletWarning.captured.push(this);
 		}
+		// A warning raised through an instance is kept by that instance, printed or not.
+		const record = WeakMapMethods.get(RECORDERS, Home);
+		if (record !== undefined) record(this);
 	}
 
 	/**
@@ -252,102 +241,7 @@ export class SlothletWarning {
 	toString() {
 		return `[${this.code}] ${this.name}: ${this.message}`;
 	}
-
-	/**
-	 * Clear captured warnings (for testing)
-	 * @public
-	 */
-	static clearCaptured() {
-		SlothletWarning.captured = [];
-	}
 }
 
-/**
- * Debug utility class for centralized conditional console output with i18n
- * @public
- */
-export class SlothletDebug {
-	/**
-	 * Create a debug logger instance bound to a config
-	 * @param {Object} config - Configuration object (typically slothlet.config)
-	 * @public
-	 */
-	constructor(config = {}) {
-		this.config = config;
-		this.debugFlags = config.debug || {};
-	}
-
-	/**
-	 * Log a debug message if the code's debug flag is enabled
-	 * @param {string} code - Debug code/category (e.g., "modes", "wrapper", "api")
-	 * @param {Object} context - Contextual information to display
-	 * @param {string} [context.key] - Translation key for the message (e.g. "DEBUG_MODE_FLATTENING").
-	 *   When provided, translates via i18n using the remaining context properties as interpolation
-	 *   params - no `await t()` needed at the call site. Falls back to `DEBUG_{CODE}` category key
-	 *   if omitted, then to `context.message` for backwards compatibility.
-	 * @param {string} [context.message] - Raw message string (backwards-compat fallback).
-	 *   Prefer `context.key` for new call sites so messages are translatable.
-	 * @public
-	 *
-	 * @description
-	 * Centralized debug logging that respects debug configuration flags.
-	 * Only outputs when the specified code matches a truthy debug flag.
-	 * Translates messages using i18n system with the following key resolution order:
-	 * 1. `context.key` - explicit per-message translation key (preferred)
-	 * 2. `DEBUG_{CODE}` - category-level key (e.g. DEBUG_MODES)
-	 * 3. `context.message` - raw string fallback for backwards compatibility
-	 *
-	 * @example
-	 * // Preferred: pass translation key directly - no await needed
-	 * this.debug("modes", { key: "DEBUG_MODE_FLATTENING", mode, categoryName });
-	 *
-	 * @example
-	 * // Legacy: raw message string (still works, but not translatable)
-	 * this.debug("wrapper", { message: "Category reuse - using existing wrapper", apiPath });
-	 */
-	log(code, context = {}) {
-		// Only log if debug flag for this code is enabled
-		// this.debugFlags is always a truthy object ({} at minimum) — constructor sets `config.debug || {}`,
-		// so the `!this.debugFlags` left-hand branch of || is structurally unreachable.
-		/* v8 ignore next */
-		if (!this.debugFlags || !this.debugFlags[code]) {
-			return;
-		}
-
-		// Extract key and message; remaining props are i18n interpolation params / extra context
-		const { key: msgKey, message, ...contextParams } = context;
-
-		// Key resolution: explicit key > category key (DEBUG_{CODE}) > raw message fallback
-		const translationKey = msgKey ?? `DEBUG_${code.toUpperCase()}`;
-		const translatedMessage = translate(translationKey, contextParams);
-		const hasTranslation = translatedMessage && !translatedMessage.startsWith("Error:");
-
-		// Format label
-		const label = `[DEBUG:${code.toUpperCase()}]`;
-
-		if (hasTranslation) {
-			console.log(`${label} ${translatedMessage}`);
-		} else if (message) {
-			// Backwards compat: raw message string (no key provided, no category key found)
-			console.log(`${label} ${message}`);
-		} else {
-			// No message or translation - dump raw context
-			console.log(label, contextParams);
-		}
-
-		// Show interpolation params / extra context if present (never show 'key' or 'message')
-		if ((hasTranslation || message) && Object.keys(contextParams).length > 0) {
-			console.log(`${label} Context:`, contextParams);
-		}
-	}
-
-	/**
-	 * Custom string representation
-	 * @returns {string} Debug info
-	 */
-	toString() {
-		return `[SlothletDebug] flags: ${Object.keys(this.debugFlags)
-			.filter((k) => this.debugFlags[k])
-			.join(", ")}`;
-	}
-}
+// The i18n module cannot import this one, so the process-level class is handed to it for the warnings it raises (#820).
+registerWarningClass(SlothletWarning);

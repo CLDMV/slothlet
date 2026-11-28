@@ -19,6 +19,8 @@ Slothlet's module loader automatically transforms your file structure into a cle
 - [Hidden Entries](#hidden-entries)
 - [Utility Modules](#utility-modules)
 - [Helper Modules Are Per Instance](#helper-modules-are-per-instance)
+- [Leaf Files Are Not Imported](#leaf-files-are-not-imported)
+- [What a Module Imports From slothlet](#what-a-module-imports-from-slothlet)
 - [Smart Function Naming](#smart-function-naming)
 - [TypeScript Modules](#typescript-modules)
 
@@ -160,7 +162,7 @@ export function add(a, b) {
 }
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 const result = api.rootMath.add(2, 3); // 5
 ```
 
@@ -191,7 +193,7 @@ export function subtract(a, b) {
 }
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 const sum = api.math.add(2, 3); // ✅ not api.math.math.add()
 const diff = api.math.subtract(5, 2);
 ```
@@ -230,7 +232,7 @@ function processGamma(data) {
 module.exports = { processGamma };
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.multi.alpha.processAlpha("test");
 api.multi.beta.processBeta("test");
 api.multi.gamma.processGamma("test"); // CJS works seamlessly
@@ -268,7 +270,7 @@ module.exports = function(value) {
 };
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.funcmod("Alice");         // "Hello, Alice!"
 api.multi_func.alpha(5);      // 10
 api.multi_func.beta(5);       // 15
@@ -310,7 +312,7 @@ export function callBoth(data) {
 }
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.interop.esmModule.esmFunction("test");
 api.interop.cjsModule.cjsFunction("test");
 api.interop.mixed.callBoth("test");
@@ -358,7 +360,7 @@ logger.error = (msg) => console.error(`[ERROR] ${msg}`);
 export { logger };
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.exportDefault("Hello"); // Direct call
 api.exportDefault.info("Info"); // Method call
 api.exportDefault.error("Error"); // Method call
@@ -371,7 +373,7 @@ A default object, or a default class instance, answers through the api what it a
 - **Getters stay live.** A getter runs on every read; it is not read once at load.
 - **A class instance keeps its prototype.** Its methods and getters live on the prototype and read and write the instance's own fields through `this`. Through the api they run on the instance itself, so a method that changes a field is seen by every later read of that field, method or getter.
 - **Named exports are added alongside.** The module's own default is not changed. A plain object is copied (prototype and property descriptors kept) and the named exports are merged onto the copy. A default that a copy cannot reproduce gets a layer instead, which holds the named exports and answers everything else from the default itself: an object `Proxy`, whose traps keep working even when it is read-only or frozen (Node only: a browser cannot tell an object `Proxy` from its target, see [BROWSER.md](./BROWSER.md#runtime-behaviour-in-the-browser)), and a class instance or built-in such as a `Map`, whose private fields and internal slots stay reachable because its methods run on the instance. A function default, a callable `Proxy` included, always gets a callable layer when it has named exports, in every host: the call runs the module's function, and nothing is written to it.
-- **A named export conflicts with the default's members, and only those.** A member is an own property of the default, enumerable or not, or one its class provides (its methods and getters). `Object.prototype`, `Function.prototype` and `Array.prototype` are not the default's, so a named `toString`, `call` or `map` is not a conflict. A conflict resolves by collision mode: `merge` and `skip` keep the default's member, `error` throws, `warn` warns and takes the named export, `replace` and `merge-replace` take the named export.
+- **A named export conflicts with the default's members, and only those.** A member is an own property of the default, enumerable or not, or one its class provides (its methods and getters). `Object.prototype`, `Function.prototype` and `Array.prototype` are not the default's, so a named `toString`, `call` or `map` is not a conflict, and neither are the `name`, `length` and `prototype` the language gives every function: beside `export default function calc`, `export const name = "N"` makes `api.calc.name` read `"N"`, as `ns.name` does in the module's namespace. A `static name()` method, a `name` getter or a property the module assigned to its function is the module's own and conflicts. A conflict resolves by collision mode: `merge` and `skip` keep the default's member, `error` throws, `warn` warns and takes the named export, `replace` and `merge-replace` take the named export.
 - **An `addapi` file composes as the file named after its level.** It is flattened into the folder it sits in (or, at the root of an `api.slothlet.api.add()` mount, into the mount), which is the promotion a file named after its folder gets, so its default is the node exactly as a self-named file's is: a function default is callable, a class instance or `Map` keeps working as itself, and an array keeps its elements, with the named exports and sibling files beside it. A folder that has both an `addapi` file and a file named after the folder merges the `addapi` file's members into it, bringing a class instance's fields, getters and prototype methods, not only its own enumerable keys.
 
 ```javascript
@@ -395,6 +397,34 @@ await api.tools.store.size; // 2
 await api.tools.store.add("c"); // 3
 await api.tools.store.size; // 3
 (await api.tools.store.items).length; // 3
+```
+
+### An exported function's source reads as the function's
+
+`Function.prototype.toString.call(api.m.fn)` answers the source of the module's function, as `api.m.fn.toString()` and `String(api.m.fn)` do, for a function, an async function and a class, in eager and lazy mode and both runtimes, with the permission system off or on. An api node is a Proxy, for which the language itself answers `function () { [native code] }`, so slothlet wraps `Function.prototype.toString` while an instance is up; the wrapper changes nothing for any other value. See [PERMISSIONS.md](./PERMISSIONS.md#values-that-cross-between-modules) for how it is installed and removed.
+
+### An exported data object answers as the module's own object
+
+A plain object a module exports (`export const config = { … }`, an object default, a CommonJS `module.exports` member), and any plain object held inside it, answers through the api as the object does in plain JavaScript, in eager and lazy mode and both runtimes, with the permission system off or on:
+
+- **A write through the api reaches the module's own object.** `api.m.config.port = 81`, `delete api.m.config.port` and `Object.defineProperty(api.m.config, …)` change the object the module itself holds, so the module's code reads what was written, as it does after the same statement on the object. A member keeps its place among the object's keys when it is replaced. A write the object refuses (a frozen object, a read-only member) is refused through the api too. A setter runs as it does on the object.
+- **A change the module makes to its own object is seen through the api.** `config.port = 90` in the module's own code reads back `90` through `api.m.config.port`, and a member the module adds, deletes, replaces with another object or turns from a getter into a value is listed, described and read through the api as the object holds it. A module freezing or sealing its own object closes the api node with it.
+- **Closing it or giving it a prototype reaches the module's own object.** `Object.freeze(api.m.config)`, `Object.seal`, `Object.preventExtensions` and `Reflect.setPrototypeOf(api.m.config, proto)` change the object the module holds, as the same call on the object does, and `api.m.config.__proto__ = proto` sets its prototype as the language's own `__proto__` setter does, rather than adding a member named `__proto__`. The node reports the object's prototype (`Object.prototype` for an object literal), and a member the object inherits from a prototype set on it reads through the node. While the permission system is on these are writes at the node's path, held to the same checks as an assignment: a module that may not write it is refused and the module's object is unchanged.
+- **Every other node takes a prototype too.** A node backed by a value the module holds as it is (an emitter, a class instance) sets the prototype on that value, so the node reports it and its members inherit from it, as setting it on the value does. A function node starts with its function's prototype and a namespace slothlet composed (a file's or a folder's node) with `Object.prototype`, as a plain function and a plain object have, and either keeps a new one on the node itself: `Object.setPrototypeOf(api.math, proto)` changes what `Object.getPrototypeOf(api.math)` and `api.math.__proto__` report, what `api.math.inherited`, `"inherited" in api.math` and `for…in` find, and what `instanceof` answers, exactly as on a plain object or function, while the module's own function keeps the prototype it had. A member the node holds itself still wins over an inherited one, `null` removes the prototype (and with it `toString`, `call` and the rest), and a node sealed or frozen afterwards keeps the prototype it had and takes no other (it then reports a view of it, to the host too: see [PERMISSIONS.md](PERMISSIONS.md#read-level-gating)). The prototype belongs to the node's value: a reload or an `api.add` that gives the node a value gives it that value's own prototype again, and removing the node removes it. A lazy node that has not loaded refuses a prototype until it has. The api root follows the same rule: an object root takes a prototype as an object does, and a root that is a function takes one on the root, as a function node does, while the root file's function keeps its own; a full reload gives the root its function's prototype again. Module code is held to the node's write rules before any of this, and a member a node inherits is read under the rules a member of its own by that name is read under (see [Read-Level Gating](PERMISSIONS.md#read-level-gating)).
+- **A named export stays the file's binding.** A named export merged beside an object default's members (`api.settings.read` for `export default settings; export const read = …`) is not a member of the default object, so a value assigned over it through the api is held by the api node alone.
+- **A member is described as the object describes it.** `Object.getOwnPropertyDescriptor(api.m.config, "port")` reports `writable: true` for a member that takes a write and `false` for one the object keeps read-only or that was defined read-only through the api, and its `value` is the member's value, a primitive as the primitive. A member defined read-only through the api takes no assignment afterwards, as on an object.
+- **`JSON.stringify` serializes it as the object.** The members come in the object's own order, and a getter runs with the object's members in reach through `this` (`get computed() { return this.port + 1; }` serializes as `81`), as the module that defined it. While the permission system is on, a member the serializing module may not read is left out, a getter included, as `Object.keys`, a spread and the node's `toJSON` leave it out for that module.
+- **The platform's cloning functions copy it.** `structuredClone(api.m.config)`, `v8.serialize` and `postMessage` give a copy of the data, as they do for the object: the object's own enumerable members, a getter's value, nested objects, arrays, dates, maps, sets, errors, patterns, buffers, typed arrays and boxed primitives, and a class instance as a plain object. A date, map, error or other built-in data object is copied the same way when it is a file's default export or reaches a module through `self`, with the permission system on or off. The copy is made by reading each member through the api node, so it is never the module's object, and while the permission system is on it holds nothing the cloning module may not read. A function is refused with a `DataCloneError`, as in plain JavaScript, and so is a lazy node that has not loaded yet. See [PERMISSIONS.md](./PERMISSIONS.md#values-that-cross-between-modules) for how the functions are wrapped.
+- **Writes are still checked.** While the permission system is on, a write through the api is a write at that path: a module that neither owns it nor has a `:write` rule for it is refused, and the module's object is unchanged (see [PERMISSIONS.md](./PERMISSIONS.md)).
+
+```javascript
+// api/m.mjs
+export const config = { port: 80 };
+export const port = () => config.port;
+
+// Usage
+api.m.config.port = 81;
+api.m.port(); // 81
 ```
 
 ---
@@ -426,7 +456,7 @@ function parseDate(str) {
 module.exports = { parseDate };
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 const formatted = api.nested.date.formatDate(new Date());
 const parsed = api.nested.dateUtil.parseDate("2025-12-30");
 ```
@@ -437,14 +467,14 @@ const parsed = api.nested.dateUtil.parseDate("2025-12-30");
 
 Files **and folders** whose names start with `.` or `__` are excluded from the API scan — use the `__` prefix for JSDoc-only helpers, scratch folders, or anything that should live inside the API tree without becoming an endpoint. Additional entries can be hidden per project with the [`hidden` config option](./CONFIGURATION.md#hidden) (globs relative to the API root, also accepted per-call by `api.slothlet.api.add`). A folder that ends up with no loadable contents — empty, or everything inside it hidden — creates no API key at all.
 
-If you depended on the pre-v3.11 behavior where `.`/`__`-prefixed **folders** were still scanned, the deprecated [`scanHiddenFolders`](./CONFIGURATION.md#scanhiddenfolders) escape hatch restores it while you migrate (removed in v4).
+A `hidden` glob starting with `!` brings a hidden entry back: `hidden: "!**/__*"` loads every `__`-prefixed file and folder, and `hidden: ["!**/.*/", "!**/__*/"]` the folders only (what v3's removed `scanHiddenFolders: true` did). See [`hidden`](./CONFIGURATION.md#hidden) for the order rules.
 
 Adjacent naming rules complete the picture:
 
 - **`_`/`__`-prefixed EXPORT names** are api members — the hidden-entry rule covers file and folder names only. With permissions enabled they are [module-private](PERMISSIONS.md#module-private-exports): reachable through `self` by the other files of the same directory, denied to other modules and (by default) the host.
-- **Framework-reserved names** (`_materialize`, `_impl`, `__impl`, …) may not be used as module file or export names, because they collide with the framework's own wrapper handles. A reserved **file** name is refused by the directory scan (`MODULE_RESERVED_FILENAME`), and so is a reserved **folder** name (`MODULE_RESERVED_DIRNAME`) — on disk and in a browser manifest alike, and for the entries a given mount actually loads, so a single-file `api.add` is not blocked by a reserved-name sibling it filters out. A reserved **export** name is refused when the module is read, which is at boot in eager mode and at first touch in lazy mode (`MODULE_RESERVED_EXPORT`). Either way the refusal is a named error, never a silent drop. (`__`-prefixed files were already hidden; the rejection covers the single-underscore reserved names that would otherwise load.) `slothlet.defaults.reservedExports` exposes the exact frozen `Set` of these names.
-- **An export named `__proto__`** is refused when the module is read, with the same error an `api.add` mount path naming it gives (`INVALID_CONFIG_API_PATH_INVALID`): composing it would set the node's prototype instead of adding a member, and no api path can hold that segment.
-- **Members named like a function's own properties** (`name`, `length`, `prototype`, `toString`, `valueOf`, `toJSON`, `constructor`, …) are ordinary api members. That covers a module's exports, a file or folder of that name (`session/name/set.mjs` → `api.session.name.set()`), and a mount made with `api.slothlet.api.add("profile.name", …)` (`api.add` refuses `constructor` and `prototype` as path segments). Reading one is permission-gated like any other member. A file or folder is known from the directory scan, so it is reachable in every mode straight away. A module's **exports** are only known once it has loaded: until then the api node answers these names itself, because an **unloaded lazy** module has no members yet and finding out would mean loading it. In lazy mode, read such an export after the module has loaded (any other member access, a call, or `await self.owner` loads it). Without a member of that name, the api node keeps its own answers: `name` is its last api-path segment and `length` the callable's arity (`0` for a namespace), so `api.profile.name` is `"profile"`. A primitive member cannot be nested under: with `export const name = "x"`, `api.slothlet.api.add("label.name.deep", …)` is refused. A `then` that holds data (a JSON Schema `if` / `then` / `else`, a `then: 1`) is an ordinary member and reads back as itself; it does not make anything awaitable. A **callable** `then`, a method or a getter, is refused (a setter-only `then`, which an `await` reads as `undefined`, is not), because slothlet awaits api nodes and module values: `await api.x` resolves the node, and lazy mode loads a node by awaiting it, so a node cannot also be a value's own thenable. A file or folder named `then` is refused by the directory scan (`MODULE_THENABLE_NAME`), and an `api.add` path with a `then` segment, or a `then` version tag, is refused (`INVALID_CONFIG_API_PATH_INVALID`). A value with a callable `then` of its own or inherited (a class's `then` method, a static `then`, a `then` getter) is refused where it becomes an api node, with `MODULE_THENABLE_EXPORT` naming its api path or file. That includes a value assigned under an api node (`api.svc.client = …`), which is wrapped as a node of its own; a value assigned on the api root is stored as it is and awaits as it would anywhere. So is a CommonJS module exporting a callable `then`, and a callable `then` assigned or defined on an api node (`API_MEMBER_THEN_RESERVED`). A Proxy that answers `then` only from its `get` trap (an RPC client answering every name) is used as it is, except where slothlet would await it: as the value a folder resolves to (its same-named file's, or an `index` file's, default), it is refused, in eager and lazy mode alike. An ES module exporting a `then` function cannot be refused by name: JavaScript's own rules make the module itself awaitable, so `import()` calls its `then` while loading it, before slothlet sees its exports. Do not export a `then` function from an api module.
+- **Framework-reserved names** — every name that starts with three underscores (`___materialize`, `____impl`, …) — may not be used as module file or export names, because they collide with the framework's own wrapper handles. A member with such a name inside an exported value is not adopted, a write of one through `self` is absorbed, and an `api.add` mount path with such a segment is refused (`API_PATH_INVALID`). A reserved **file** name is refused by the directory scan (`MODULE_RESERVED_FILE`), and so is a reserved **folder** name (`MODULE_RESERVED_FOLDER`) — on disk and in a browser manifest alike, and for the entries a given mount actually loads, so a single-file `api.add` is not blocked by a reserved-name sibling it filters out. A reserved **export** name is refused when the module is read, which is at boot in eager mode and at first touch in lazy mode (`MODULE_RESERVED_EXPORT`). Either way the refusal is a named error, never a silent drop. (`__`-prefixed files and folders are hidden at scan, so the rejection is reached through a name a `hidden` glob brought back, or one that sanitizes into a reserved one, such as `-____impl.mjs`.) `slothlet.defaults.reserved` exposes a frozen `Set` of the names the framework looks up by name; the prefix rule covers the rest.
+- **An export named `__proto__`** is refused when the module is read, with the same error an `api.add` mount path naming it gives (`API_PATH_INVALID`): composing it would set the node's prototype instead of adding a member, and no api path can hold that segment.
+- **Members named like a function's own properties** (`name`, `length`, `prototype`, `toString`, `valueOf`, `toJSON`, `constructor`, …) are ordinary api members. That covers a module's exports, a file or folder of that name (`session/name/set.mjs` → `api.session.name.set()`), and a mount made with `api.slothlet.api.add("profile.name", …)` (`api.add` refuses `constructor` and `prototype` as path segments). Reading one is permission-gated like any other member. A file or folder is known from the directory scan, so it is reachable in every mode straight away. A module's **exports** are only known once it has loaded: until then the api node answers these names itself, because an **unloaded lazy** module has no members yet and finding out would mean loading it. In lazy mode, read such an export after the module has loaded (any other member access, a call, or `await self.owner` loads it). Without a member of that name, the api node keeps its own answers: `name` is its last api-path segment and `length` the callable's arity (`0` for a namespace), so `api.profile.name` is `"profile"`. Those answers of a callable node are its function's built-in `name` and `length`, which any module reads without a permission check (see [PERMISSIONS.md](PERMISSIONS.md#read-level-gating)); a member of that name is the module's data and stays gated. A value that is no function and holds such a name through its prototype chain answers it as a member as well, as the value does: a file whose default export is `new RangeError("…")` reads `name` as `"RangeError"`, and a class instance with a `name` getter runs it. A node of a `Map`, a `Set` or another built-in data object answers the tag the language gives its kind, so `Object.prototype.toString.call(node)` and `String(node)` read `[object Map]`; a tag the engine takes from an internal slot (an error's, a date's, a boxed primitive's) reads `[object Object]`, as it does for any Proxy, and for the same reason `Error.isError(node)` is `false` for an error's node while `node instanceof Error` holds. Such a node fronts the value as data: it iterates (`[...api.cache.entries]`, `for…of`), answers `instanceof Map` and `size`, and runs the methods its kind defines (`get`, `entries`, `forEach`, a date's `getTime`) on the value itself, as the value does. Those methods are no api paths of their own: a hook on `cache.entries.get` never runs, and a rule naming it decides nothing; a rule on `cache.entries` (or `cache.entries.**`) is the rule for every member read through the node. A default-exported `Error` (a subclass, an `AggregateError`) and a boxed primitive (`new String("s")`, `new Number(5)`, `new Boolean(false)`, `Object(1n)`, `Object(Symbol())`) are such values too: `Object.keys()` lists none of `toString` or `valueOf`, `instanceof Error` holds of the error's node, `` `${node}` `` and `node + 1` convert as the value does, and an error's `cause` and `errors` read as data, listed nowhere. A primitive member cannot be nested under: with `export const name = "x"`, `api.slothlet.api.add("label.name.deep", …)` is refused. A `then` that holds data (a JSON Schema `if` / `then` / `else`, a `then: 1`) is an ordinary member and reads back as itself; it does not make anything awaitable. A **callable** `then`, a method or a getter, is refused (a setter-only `then`, which an `await` reads as `undefined`, is not), because slothlet awaits api nodes and module values: `await api.x` resolves the node, and lazy mode loads a node by awaiting it, so a node cannot also be a value's own thenable. A file or folder named `then` is refused by the directory scan (`MODULE_THENABLE_NAME`), and an `api.add` path with a `then` segment, or a `then` version tag, is refused (`API_PATH_INVALID`). A value with a callable `then` of its own or inherited (a class's `then` method, a static `then`, a `then` getter) is refused where it becomes an api node, with `MODULE_THENABLE_EXPORT` naming its api path or file. That includes a value assigned under an api node (`api.svc.client = …`), which is wrapped as a node of its own, as is one the host assigns on the api root. So is a CommonJS module exporting a callable `then`, and a callable `then` assigned or defined on an api node (`API_MEMBER_THEN_RESERVED`). A Proxy that answers `then` only from its `get` trap (an RPC client answering every name) is used as it is, except where slothlet would await it: as the value a folder resolves to (its same-named file's, or an `index` file's, default), it is refused, in eager and lazy mode alike. An ES module exporting a `then` function cannot be refused by name: JavaScript's own rules make the module itself awaitable, so `import()` calls its `then` while loading it, before slothlet sees its exports. Do not export a `then` function from an api module.
 - **Configured [routine](LIFECYCLE.md#routines) names** (`initialize` and `shutdown` by default) are a related but distinct special-name category — a module may export one freely, side by side with ordinary leaves. Rather than the refusal above, every module contributing the same routine name at the same composed api path is stacked into one callable that runs each contributor in registration order, instead of an ordinary leaf's recursive-merge silently keeping only the first writer.
 
 ---
@@ -487,7 +517,7 @@ function buildUrl(base, path) {
 module.exports = { buildUrl };
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.util.controller.handleRequest({ data: "test" });
 api.util.extract.extractData({ key: "value" }, "key");
 api.util.url.parser.parseUrl("https://example.com");
@@ -524,7 +554,7 @@ a.plugins.extra.count(); // 4  — api.add mounts share the same instance copy
 b.tally.count(); // 1  — instance b has its own copy
 ```
 
-A helper is one copy per **instance** — the base leaves and every `api.slothlet.api.add` mount of that instance share it, and it lives as long as the instance ID does:
+A helper is one copy per **instance** — the base leaves and every `api.slothlet.api.add` mount of that instance share it, and it lives as long as the instance ID does. (The [`helpers: "module"`](CONFIGURATION.md#helpers) option loads a copy per importing api file instead, so api files no longer share a helper's state; what follows about reloads holds for each of those copies.)
 
 - **Partial reload** — `api.slothlet.api.reload()`, `api.slothlet.api.reload(path)` or a reload by moduleID re-imports the reloaded leaves, but they link against the instance's **existing** helper copy. Helper state is preserved, and reloaded and untouched leaves keep sharing it.
 - **Full reload** — `api.slothlet.reload()` (or a restart) gives the instance a new ID, and every leaf shares one **fresh** helper copy.
@@ -533,23 +563,120 @@ Edits to a helper's code therefore take effect on a full reload, not a partial o
 
 Shared across instances, never duplicated:
 
-- **Bare specifiers** — `node_modules` packages, `node:` builtins, subpath `#imports`, and `@cldmv/slothlet` itself (its runtime, `@cldmv/slothlet/runtime`, stays the single live-binding runtime every instance uses).
-- **Files inside another `node_modules` package**, even when reached by a relative path. A leaf that lives inside an installed package (a plugin mounted from `node_modules`) still gets its own package's relative helpers per instance.
+- **Bare specifiers into another package** — `node_modules` packages, `node:` builtins, a `#imports` entry that points into another package, and `@cldmv/slothlet` itself (its runtime, `@cldmv/slothlet/runtime`, stays the single live-binding runtime every instance uses).
+- **Files inside another package**, however the import is spelled. A package is a `node_modules` package or, outside `node_modules`, the folder of the nearest `package.json` with a `name` (a pnpm workspace package linked into `node_modules` resolves to its real path there). A relative path or `file:` URL into such a package reaches the same module as the package's name does: one file is one module, under one URL, inside an instance. Sharing between modules goes through `self` and `context`, not through copies of another package's files.
 
-How it works: the loader imports each leaf with a per-instance query (`?slothlet_instance=…`, plus `&module=…` for `api.slothlet.api.add` mounts and `&_reload=…` during a reload). Under Node, a resolve hook slothlet registers once per process copies the instance parameter — not the mount or the reload stamp — onto every relative / `file:` import below the leaf. CommonJS code runs through a private `require` cache per instance for the files it reaches. When leaves load through a vite module graph instead — slothlet's `import` hook or `server.deps.inline` under vitest — add the `slothletInstanceImports()` plugin; see [TESTING.md](TESTING.md#per-instance-helpers-under-vitest-slothletinstanceimports).
+The same rule holds inside the leaf's own package: a file of it is one module per instance however the leaf spells the import. A relative path, a subpath `#imports` entry and a self-reference by the package's own name (`import "my-pkg/lib/h"` from inside `my-pkg`) all reach the instance's copy, so a leaf `a` importing `../../lib/h.mjs` and a leaf `b` importing `#h` share one `h.mjs` per instance, and each instance has its own. A leaf that lives inside a package of its own (a plugin mounted from `node_modules`, or a module folder with its own named `package.json`) gets its own package's helpers per instance this way.
+
+A module folder with its own named `package.json` is a package of its own, so a relative import from it to a file outside that folder (a helper in the host's `lib/`, say) reaches another package and is shared across instances, where it used to be copied per instance. Move such a helper into the module's package, or drop the folder's `name`, to keep it per instance: a `package.json` without a `name` (a `{"type": "module"}` marker) leaves its folder in the package above. Which package each folder belongs to is read once and cached for the life of the process, so a `package.json` added, renamed or removed while the process runs takes effect on the next start.
+
+How it works: the loader imports each leaf with a per-instance query (`?slothlet_instance=…`, plus `&module=…` for `api.slothlet.api.add` mounts and `&_reload=…` during a reload). Under Node, a resolve hook slothlet registers once per process copies the instance parameter — not the mount or the reload stamp — onto every relative / `file:` import below the leaf, and onto every bare one (`#imports`, a self-reference) that resolves into the leaf's own package. CommonJS code runs through a private `require` cache per instance for the files it reaches. When leaves load through a vite module graph instead — slothlet's `import` hook or `server.deps.inline` under vitest — add the `@cldmv/slothlet/vite` plugin; see [TESTING.md](TESTING.md#per-instance-helpers-under-vitest-the-cldmvslothletvite-plugin). The same plugin registers the host's own vite-transformed files, so that with permissions on their code inside a module's call is attributed as it is under Node; see [TESTING.md](TESTING.md#the-hosts-own-files-under-vitest).
 
 Node caches CommonJS by file path and loads a `require()`d ES module under its plain file URL, so a query alone cannot separate instances where the two module systems meet. A load hook covers both directions:
 
 - **ES module → `.cjs` helper.** The helper is served as a small ES module wrapper that runs the file through the instance's CommonJS cache — the same copy the instance's `.cjs` leaves `require()`. The import keeps Node's shape: `default` is `module.exports`, and the named exports are the ones Node finds by reading the source (`exports.x = …`, `module.exports = { a, b }`, `Object.defineProperty(exports, "x", …)`, re-exports of other CommonJS files). Slothlet reads them with its own static scan, which can find a few more names than Node does — those read `undefined`, as a missing key would — but never fewer. Once the instance has already loaded the helper, its actual `module.exports` keys count too, as they do in Node.
-- **`.cjs` code → ES module.** While a CommonJS leaf (or a CommonJS helper of the instance) is being loaded, a relative `require()` that resolves to an ES module returns the instance's copy — the same module an ES module leaf of the instance imports. The value is what Node's `require(esm)` returns: the namespace, its `"module.exports"` export if it has one, or for a module with a default export the namespace with `__esModule: true`.
+- **`.cjs` code → ES module.** While a CommonJS leaf (or a CommonJS helper of the instance) is being loaded, a `require()` that resolves to an ES module of the leaf's own package returns the instance's copy — the same module an ES module leaf of the instance imports. That holds for a relative path, a subpath `#imports` entry and a self-reference by the package's name alike, so `require("./h.mjs")`, `require("#h")` and an ES module leaf's `import "#h"` reach one `h.mjs` per instance. A `.cjs` helper of the package is one copy per instance however it is required too, since the instance's CommonJS cache holds it by its path. The value is what Node's `require(esm)` returns: the namespace, its `"module.exports"` export if it has one, or for a module with a default export the namespace with `__esModule: true`.
+
+- **ES module → `require()`.** A `require` an ES module of the instance makes itself, with `createRequire(import.meta.url)`, reaches the instance's copy as well: the copy an `import` of the same file from that module gives, in every instance built over the folder, whether or not an earlier instance has shut down. The host's own `require()` of the file is a copy of its own. A `.json` file and a native addon (`.node`) are the exceptions: Node reads those by their extension and keeps one per process, so they are shared, as a `require` of them always was. If the host has itself required the same file before the module does, Node answers the module's `require` from its cache with the host's copy, which is not the instance's code.
 
 Limits of the rule:
 
-- **Helper code edits need a full reload.** A partial reload keeps the instance's helper copy (see above); `api.slothlet.reload({ keepInstanceID: true })` keeps the instance ID and so keeps the helper copy too.
-- **Node 22.15 or later.** Helper isolation uses `module.registerHooks()`, the synchronous in-thread resolve hook added in Node 22.15 / 23.5, so slothlet requires Node 22.15+. It adds no measurable overhead. The off-thread `module.register()` is not used: it puts a cross-thread round trip on every import in the process (roughly 1.5–2× the cost of an uncached import) and changes evaluation timing enough that a leaf starting a fire-and-forget `import("@cldmv/slothlet/runtime")` could be called before the import settles.
+- **Helper code edits need a full reload.** A partial reload keeps the instance's helper copy (see above); `api.slothlet.reload({ instance: "keep" })` keeps the instance ID and so keeps the helper copy too.
+- **Synchronous resolve hooks.** Helper isolation uses `module.registerHooks()`, Node's synchronous in-thread resolve hook, which slothlet's Node floor (24.15) also asks for a `require.resolve()`. It adds no measurable overhead. The off-thread `module.register()` is not used: it puts a cross-thread round trip on every import in the process (roughly 1.5–2× the cost of an uncached import) and changes evaluation timing enough that a leaf starting a fire-and-forget `import("@cldmv/slothlet/runtime")` could be called before the import settles.
 - **Requires that run after a CommonJS module has loaded.** The per-instance `require` cache is in place only while a CommonJS leaf or helper is being loaded. A `require()` — or `import()` — that a CommonJS module makes later, inside a function the api calls, reaches the shared copy. Require helpers at the top of the file.
 - **ES modules required under vitest.** A `.cjs` leaf always loads natively, so an ES module it `require()`s is Node's per-instance copy, while the instance's ES module leaves import their copy through vite's module graph — two copies within one instance (each still separate from other instances). `.cjs` helpers do not have this split: the plugin serves them through the same per-instance CommonJS cache.
 - Browser mode loads leaves from the manifest without a per-instance query, so neither leaves nor their helpers are per instance there.
+
+---
+
+## Leaf Files Are Not Imported
+
+Module code imports lib files, never a leaf file. A leaf file is any file slothlet composes into an api tree: a loadable file (`.mjs`, `.cjs`, `.js`, and `.ts` / `.mts` with TypeScript on) under an instance's base folder or under an `api.slothlet.api.add()` mount, that the hidden rules (`.` / `__` prefixes, `hidden` globs) and the depth limit leave in the tree. Module code is the code slothlet loads for an instance: its leaf files, and every file they load in turn. An import, re-export or `require()` module code makes of a leaf file is refused with `MODULE_LEAF_IMPORT_REFUSED`, whose message names the importing file and the leaf file. A leaf is reached through `self`, at the api path slothlet composes it to; code two leaves share goes in a lib folder outside the api tree.
+
+```text
+project/
+├── lib/
+│   └── shape.mjs      export const shape = (x) => ({ x });
+└── api/
+    ├── point/
+    │   └── point.mjs  import { shape } from "../../lib/shape.mjs";  // loads: a lib file
+    └── report/
+        └── report.mjs import { make } from "../point/point.mjs";   // refused: a leaf file
+```
+
+```javascript
+// api/report/report.mjs, reaching the leaf through self instead
+import { self } from "@cldmv/slothlet/runtime";
+export const report = async (x) => self.point(x);
+```
+
+The rule holds always: with permissions on, off or `"disabled"`, and whatever the rules say. It holds for a sibling in the same folder, a file in a subfolder, another folder of the tree and another mount, by every route: a static `import`, `export … from`, `import()`, `import.meta.resolve()`, a `require()` or `require.resolve()` (also one made by `createRequire`), and a TypeScript leaf's relative imports. A lib file is held to it too once module code has loaded it, so a lib file cannot pass a leaf file on. Code module code compiles from a string (`new Function` and the other function constructors, `eval`, the `vm` functions) is held to it as well, whatever importer Node names for that code and whoever calls it: code a module compiled stays the module's when it hands the code to the host and the host calls it. Other compiled code is placed by the code calling it, and one that cannot be placed on the host's code (a compiled function a scheduler calls) is refused. The host's own imports are unchanged: the host and its tests import leaf files as before, and a file no live instance composes is a lib file.
+
+The refusal is made as the import resolves, so the leaf file's copy is never evaluated. An eager build of a tree whose file imports a leaf file fails with that file's `MODULE_IMPORT_FAILED`, the refusal as its cause; in a lazy tree the folder holding the file fails as it loads, and no other folder is built for it. An `import()` or `require()` made inside a function fails when it runs.
+
+Which files are leaf files is read from slothlet's folder scan of each tree, the same walk that composes it; a lazy tree is scanned without being built. Where slothlet cannot see the import:
+
+- **Source read and compiled.** A module that reads a leaf file's source and compiles it (`vm`, `new Function`, `eval`) is not importing it. That code is evaluated code, which slothlet attributes to the module that compiled it, never to the leaf (see [PERMISSIONS.md](PERMISSIONS.md#file-level-code-has-its-own-permission-path)), and with permissions on it needs `capability:code`.
+- **A bare name only known as it runs, under vite's module runner.** An `import()` whose specifier is computed as it runs and is a bare name vite resolves (a package subpath, an `#imports` entry) is not checked there; a literal one is, and under Node's own loader both are.
+- **In the browser** no import is seen; leaves load from the manifest without the hooks. A module that imports a leaf file there (a sibling, say) is not refused: it gets a copy of the file of its own, whose URL carries none of the tags slothlet imports a leaf under, so the copy is never the leaf and its module state is not the leaf's. Under Node's loader and under vite's module runner (vitest included) the same import is refused with `MODULE_LEAF_IMPORT_REFUSED`, so a tree that loads in the browser can still fail there; reach the leaf through `self` in both.
+
+A function of a leaf that still reaches module code another way is checked as a call of its node (see [PERMISSIONS.md](PERMISSIONS.md)).
+
+---
+
+## What a Module Imports From slothlet
+
+An api file, and every file it loads, imports slothlet by two names: the package itself (`@cldmv/slothlet`, which creates instances of its own) and the runtime (`@cldmv/slothlet/runtime`, `/runtime/async`, `/runtime/live`), which gives it `self`, `context` and `instance`. Everything else of slothlet's is slothlet's own: its helpers, processors, builders, modes, handlers, errors and translations resolve only for slothlet's own files.
+
+```js
+// api/report.mjs
+import { self, context } from "@cldmv/slothlet/runtime"; // loads
+import slothlet from "@cldmv/slothlet"; // loads
+
+await import("@cldmv/slothlet/sanitize"); // refused: MODULE_INTERNAL_NOT_IMPORTABLE
+```
+
+The rule holds however the file is named and however it is loaded: a package subpath, a `#imports` specifier, a file URL, an absolute or relative path into slothlet's `src/` or `dist/`, a static `import`, `import()`, `import.meta.resolve()`, a `require()` or `require.resolve()` from `createRequire` (whatever path the `require` is made from, slothlet's own included), and a CommonJS file's own `require`. It holds for the api file's helpers too: a helper it imports, one of its own package that it requires through a `require` made from a plain path, and a `data:` module it imports. It holds for code a module compiles from a string too, whoever calls that code, as for leaf files (see [Code a module compiles](#code-a-module-compiles)). An api file that imports one of slothlet's own files at its top does not load (`MODULE_IMPORT_FAILED`, with the refusal as its cause).
+
+The host's own imports are unchanged: the host, its tools and its tests import any of slothlet's files they did before (`@cldmv/slothlet/sanitize`, `@cldmv/slothlet/files`, the `@cldmv/slothlet/vite` plugin). So does a package the host installed, imported by a module: a file of another package is the host's code, whoever imports it.
+
+Where slothlet cannot tell who is loading a file, it leaves the load to the host:
+
+- **Under vite's module runner**, the plugin sees an import a module's file makes as it resolves it, and an `import()` or `import.meta.resolve()` a module makes by a name only known as it runs is checked as it runs. A function that resolves a specifier the module handed it (`import.meta.resolve` read into a variable and called later) is not seen; the import that follows is.
+- **In the browser** the generated importmap maps slothlet's own specifiers only for slothlet's own files (see [BROWSER.md](BROWSER.md#generatebrowserassetsapidir-options)), so a page script or an api file resolving one of them by its specifier fails. A browser loads any served file by its URL, so a file imported by its URL still loads there; what it exports is held as described next.
+
+### Code a module compiles
+
+An `import()` or `require()` made by code compiled from a string (`new Function`, `AsyncFunction`, `GeneratorFunction`, `AsyncGeneratorFunction`, `eval`, the `vm` functions) names an importer that says nothing about who runs the code: the engine gives such code the importer of whatever first compiled the same text, and a `vm` compile names none. So slothlet places the import by the code itself. Code a module compiled is the module's: its import of a leaf file is refused with `MODULE_LEAF_IMPORT_REFUSED`, and of one of slothlet's own files with `MODULE_INTERNAL_NOT_IMPORTABLE`, when the module calls it and when the host does.
+
+```js
+// api/report.mjs (capability:code opened for it)
+export const give = () => new Function('return import("#helpers/flow-stores")');
+
+// host
+await api.report.give()(); // refused: MODULE_INTERNAL_NOT_IMPORTABLE
+```
+
+With the permission system on, the function constructors and the `vm` functions are wrapped (see `capability:code` in [PERMISSIONS.md](PERMISSIONS.md#built-in-capabilities)), and code a module compiles through them ends with a `sourceURL` comment of slothlet's (`//# sourceURL=slothlet-module-code/<n>`): every frame of the code, and of code `eval` compiles inside it, names it, whoever calls it. The comment shows in the compiled function's `toString()` and in its stack frames. Code the host compiles is left as it is. Code `eval` compiles in a module (not wrapped) names the module's file as its origin.
+
+The `vm` functions are wrapped while any instance is up, in every permission mode: with the permission system off (the default) or disabled, the wrapper refuses nothing and only marks the code as the module's, so the import rule holds for it whoever calls it and whatever file name (`filename`) it is compiled under.
+
+### Using what slothlet's own files export
+
+Every export of slothlet's own files that hands out a live part of slothlet (a context manager, the wrapper behind an api node, a registry, a frame reader) or changes slothlet's state (a setter, a patch switch, anything acting on an instance ID) answers only slothlet's own files and the host. Code of a module that comes to hold one anyway (an import by URL in a browser, a value the host left on `globalThis` or passed in as an argument) is refused every use of it with `MODULE_INTERNAL_NOT_IMPORTABLE`: calling it, constructing it, reading or changing it.
+
+```js
+// api/report.mjs, in a browser: the file loads by its URL
+const { resolveWrapper } = await import("/node_modules/@cldmv/slothlet/dist/lib/handlers/unified-wrapper.mjs");
+resolveWrapper(self.report); // refused: MODULE_INTERNAL_NOT_IMPORTABLE
+
+// the page's own script, or the host under Node
+resolveWrapper(api.report); // the wrapper, as before
+```
+
+Who is using it is read from the stack, from the frame that called it outward. slothlet's own frames, built-in functions (a callback of `Array.prototype.map`), Node's own frames and files of packages pass the answer to the frame further out, so a module handing the export to slothlet (`self.slothlet.context.run({}, held)`), to a built-in or to a library to call is still the module. The first frame of a module's code refuses (code it compiled with `eval` or `new Function` counts as the file that compiled it); the first frame of the host's answers; code that cannot be placed (a promise job with no frame of its own, a function handed to a scheduler) is refused. slothlet's own files do not go through this check: each takes the other files' bindings once, as it loads, through a channel that answers nobody afterwards, so the check costs slothlet's own calls nothing.
+
+In a browser, a frame tells a module's code by the instance query on its URL, or by the folder the instance loaded the module's api files from: a helper file a leaf imports carries no query, and one inside that folder (`api/__helper.mjs`, which the manifest leaves out by its prefix) is the module's code, held as the leaf is. A helper outside every such folder (`../shared/format.mjs`), or one the leaves load from a URL that does not end in their manifest path (a resolver's `blob:` or `data:` URL), carries nothing that tells it from the page's own code, and is placed as the page's code: its use of an export is answered. So is code in a folder at the root of its origin (an api served from `/`), since the page's own files sit there too. The browser has no resolve hook to follow a leaf's imports, so the boundary there stays cooperative (see [PERMISSIONS.md](PERMISSIONS.md#why-the-browser-cannot-be-made-a-hard-boundary)).
 
 ---
 
@@ -584,7 +711,7 @@ export function getHTTPStatus(code) {
 }
 
 // Usage
-const api = await slothlet({ dir: "./api" });
+const api = await slothlet({ base: "./api" });
 api.task.autoIP({ mode: "dhcp" }); // not .autoIp
 api.util.parseJSON('{"key": "value"}'); // not .parseJson
 api.api.getHTTPStatus(200); // not .getHttpStatus
@@ -621,7 +748,7 @@ export function multiply(a: number, b: number): number {
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: { mode: "fast" } // uses esbuild
 });
 
@@ -637,7 +764,7 @@ npm install typescript
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: { mode: "strict" } // uses tsc, respects tsconfig.json
 });
 ```
@@ -646,14 +773,14 @@ TypeScript modules (`.ts`) follow all the same structural rules as ESM modules -
 
 ### Runtime Imports from `.ts` / `.mts`
 
-`.ts` and `.mts` files can import `self`, `context`, and `instanceID` from `@cldmv/slothlet/runtime` exactly like `.mjs` files, along with other bare-specifier (package) imports. Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor those imports normally. Relative imports also resolve normally: specifiers to plain `.mjs` / `.cjs` / `.js` files (`./helper.mjs`, `../shared/util.cjs`) are anchored at the original source directory, and relative imports of other `.ts` / `.mts` modules are transpiled and linked automatically — import cycles included.
+`.ts` and `.mts` files can import `self`, `context`, and `instance` from `@cldmv/slothlet/runtime` exactly like `.mjs` files, along with other bare-specifier (package) imports. Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor those imports normally. Relative imports also resolve normally: specifiers to plain `.mjs` / `.cjs` / `.js` files (`./helper.mjs`, `../shared/util.cjs`) are anchored at the original source directory, and relative imports of other `.ts` / `.mts` modules are transpiled and linked automatically — import cycles included.
 
 ```typescript
 // api/utils.ts
-import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+import { self, context, instance } from "@cldmv/slothlet/runtime";
 
 export function ping() {
-	return `${instanceID}/${context?.requestId ?? "anon"} → ${self.math.add(1, 1)}`;
+	return `${instance.id}/${context?.requestId ?? "anon"} → ${self.math.add(1, 1)}`;
 }
 ```
 

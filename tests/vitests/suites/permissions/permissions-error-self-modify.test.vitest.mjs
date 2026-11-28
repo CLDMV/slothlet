@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-error-self-modify.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-error-self-modify.test.vitest.mjs
  *	@Date: 2026-04-14T17:19:49-07:00 (1776212389)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-28T04:32:25-08:00 (1795869145)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,26 +27,26 @@ describe.each(getMatrixConfigs())("Permissions > Error Self Modify > $name", ({ 
 		api = null;
 	});
 
-	it("removeRule returns true when removing a rule without an owner (public API path)", async () => {
+	it("rules.remove returns true when removing a rule without an owner (public API path)", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/payments`,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
-		// api.slothlet.permissions.addRule always registers with ownerModuleID=null,
+		// api.slothlet.permissions.rules.add always registers with ownerModuleID=null,
 		// so the self-modify guard (callerModuleID && ownerModuleID && match) never fires
 		// through the public API surface — it requires module-internal rule ownership.
-		// This test confirms the happy-path removeRule works correctly.
-		const ruleId = api.slothlet.permissions.addRule({
+		// This test confirms the happy-path rules.remove works correctly.
+		const ruleId = api.slothlet.permissions.rules.add({
 			caller: "untrusted.**",
 			target: "payments.**",
 			effect: "deny"
 		});
 
-		const result = api.slothlet.permissions.removeRule(ruleId);
+		const result = api.slothlet.permissions.rules.remove(ruleId);
 		expect(result).toBe(true);
 	});
 });

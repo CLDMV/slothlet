@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/metadata/user-metadata.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/metadata/user-metadata.test.vitest.mjs
  *	@Date: 2026-01-25T13:23:08-08:00 (1769376188)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-28T04:32:06-08:00 (1795869126)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,6 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }) => {
@@ -57,7 +56,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await materialize(api, "withMeta.config.settings.getPluginConfig");
-			const meta = api.withMeta.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.withMeta.config.settings.getPluginConfig);
 
 			expect(meta.version).toBe("1.0.0");
 			expect(meta.author).toBe("test-user");
@@ -73,7 +72,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await materialize(api, "inherited.config.settings.getPluginConfig");
-			const meta = api.inherited.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.inherited.config.settings.getPluginConfig);
 
 			expect(meta.inherited).toBe(true);
 			expect(meta.level).toBe("top");
@@ -92,7 +91,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 				const result = await materialize(api, "deepNest.config.settings.getPluginConfig");
 				expect(result).toBeDefined();
 
-				const meta = api.deepNest.config.settings.getPluginConfig.__metadata;
+				const meta = api.slothlet.metadata.get(api.deepNest.config.settings.getPluginConfig);
 				expect(meta.deep).toBe("metadata");
 				expect(meta.level).toBe(3);
 			}
@@ -107,7 +106,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await materialize(api, "immutable.config.settings.getPluginConfig");
-			const meta = api.immutable.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.immutable.config.settings.getPluginConfig);
 
 			// Try to modify
 			try {
@@ -137,7 +136,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
+			const meta = api.slothlet.metadata.get(api.rootMath.add);
 
 			// This test may fail if init metadata not implemented
 			if (meta.appVersion) {
@@ -166,7 +165,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await materialize(api, "merged.config.settings.getPluginConfig");
-			const meta = api.merged.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.merged.config.settings.getPluginConfig);
 
 			// Should have both init and add metadata
 			if (meta.appVersion && meta.moduleVersion) {
@@ -195,7 +194,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await materialize(api, "override.config.settings.getPluginConfig");
-			const meta = api.override.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.override.config.settings.getPluginConfig);
 
 			if (meta.version && meta.newKey) {
 				expect(meta.version).toBe("2.0.0"); // Overridden
@@ -223,12 +222,15 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await materialize(api, "separate.config.settings.getPluginConfig");
-			const meta = api.separate.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.separate.config.settings.getPluginConfig);
+			const metaNode = api.slothlet.node(api.separate.config.settings.getPluginConfig);
 
 			// System metadata should be correct, not overridden by user
-			expect(meta.moduleID).toMatch(new RegExp(`^separate_[a-z0-9]+${MODULE_ID_SEPARATOR}`));
-			expect(meta.filePath).toContain("settings.mjs");
-			expect(meta.apiPath).toBe("separate.config.settings.getPluginConfig");
+			expect(metaNode.module).toMatch(/^separate_[a-z0-9]+$/);
+			// The user's keys stay user metadata, apart from the node's report
+			expect(meta.moduleID).toBe("fake-id");
+			expect(metaNode.file).toContain("settings.mjs");
+			expect(metaNode.path.join(".")).toBe("separate.config.settings.getPluginConfig");
 		});
 	});
 
@@ -244,10 +246,11 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			await api.slothlet.api.add("empty", TEST_DIRS.API_SMART_FLATTEN, {});
 			await materialize(api, "empty.config.settings.getPluginConfig");
 
-			const meta = api.empty.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.empty.config.settings.getPluginConfig);
+			const metaNode = api.slothlet.node(api.empty.config.settings.getPluginConfig);
 			expect(meta).toBeDefined();
 			// Should still have system metadata
-			expect(meta.moduleID).toBeDefined();
+			expect(metaNode.module).toBeDefined();
 		});
 
 		it("should handle null/undefined metadata values", async () => {
@@ -260,7 +263,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await materialize(api, "nulls.config.settings.getPluginConfig");
-			const meta = api.nulls.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.nulls.config.settings.getPluginConfig);
 
 			expect(meta.nullValue).toBeNull();
 			expect(meta.undefinedValue).toBeUndefined();
@@ -285,13 +288,13 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await materialize(api, "stable.config.settings.getPluginConfig");
-			const meta1 = api.stable.config.settings.getPluginConfig.__metadata;
+			const meta1 = api.slothlet.metadata.get(api.stable.config.settings.getPluginConfig);
 
 			await materialize(api, "stable.config.settings.getPluginConfig");
-			const meta2 = api.stable.config.settings.getPluginConfig.__metadata;
+			const meta2 = api.slothlet.metadata.get(api.stable.config.settings.getPluginConfig);
 
 			await materialize(api, "stable.config.settings.getPluginConfig");
-			const meta3 = api.stable.config.settings.getPluginConfig.__metadata;
+			const meta3 = api.slothlet.metadata.get(api.stable.config.settings.getPluginConfig);
 
 			expect(meta1.callCount).toBe(0);
 			expect(meta2.callCount).toBe(0);
@@ -324,7 +327,8 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 				expect(meta).toBeDefined();
 				expect(meta.fromGet).toBe(true);
 				expect(meta.version).toBe("1.0.0");
-				expect(meta.moduleID).toContain("lookup");
+				expect(meta.moduleID).toBeUndefined();
+				expect((await api.metadataTestHelper.getNode("lookup.config.settings.getPluginConfig")).path[0]).toBe("lookup");
 			}
 		});
 
@@ -334,8 +338,9 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 				const meta = await api.metadataTestHelper.getSelfMetadata();
 
 				expect(meta).toBeDefined();
-				expect(meta.moduleID).toBeDefined();
-				expect(meta.apiPath).toContain("getSelfMetadata");
+				expect(meta.path).toContain("getSelfMetadata");
+				expect(typeof meta.module).toBe("string");
+				expect(typeof meta.metadata).toBe("object");
 			}
 		});
 
@@ -348,7 +353,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 				expect(result.callerMeta).toBeDefined();
 				// Caller should be testCaller function itself
 				if (result.callerMeta) {
-					expect(result.callerMeta.apiPath).toContain("testCaller");
+					expect(result.callerMeta.path).toContain("testCaller");
 				}
 			}
 		});
@@ -392,7 +397,12 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 			expect(metadata).toBeDefined();
 			expect(metadata.depth).toBe("very_deep");
-			expect(metadata.apiPath).toBe("deep.config.settings.getPluginConfig");
+			expect((await api.metadataTestHelper.getNode("deep.config.settings.getPluginConfig")).path).toEqual([
+				"deep",
+				"config",
+				"settings",
+				"getPluginConfig"
+			]);
 		});
 
 		it("should return undefined for partial paths that don't have metadata", async () => {
@@ -427,16 +437,18 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 			expect(meta1.id).toBe("first");
 			expect(meta2.id).toBe("second");
-			expect(meta1.moduleID).not.toBe(meta2.moduleID);
+			const node1 = await api.metadataTestHelper.getNode("similar1.config.settings.getPluginConfig");
+			const node2 = await api.metadataTestHelper.getNode("similar2.config.settings.getPluginConfig");
+			expect(node1.module).not.toBe(node2.module);
 		});
 
 		it("should handle root-level functions via internal API", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
 
-			const metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
+			const report = await api.metadataTestHelper.getNode("rootMath.add");
 
-			expect(metadata.apiPath).toBe("rootMath.add");
-			expect(metadata.moduleID).toContain("rootMath/add");
+			expect(report.path).toEqual(["rootMath", "add"]);
+			expect(report.module).toMatch(/^base_[a-z0-9]+$/);
 		});
 
 		it("should verify metadata existence for various path types", async () => {
@@ -480,9 +492,10 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			// Access via internal API
 			const metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
 
-			// Should have both system and user metadata
-			expect(metadata.moduleID).toBeDefined(); // System
-			expect(metadata.apiPath).toBeDefined(); // System
+			// User metadata only; the node's facts come from node()
+			expect(metadata.moduleID).toBeUndefined();
+			expect(metadata.apiPath).toBeUndefined();
+			expect((await api.metadataTestHelper.getNode("rootMath.add")).module).toBeDefined();
 			expect(metadata.userKey).toBe("userValue"); // User
 			expect(metadata.timestamp).toBeDefined(); // User
 		});

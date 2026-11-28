@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/runtime/self-intrinsics-global.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/runtime/self-intrinsics-global.test.vitest.mjs
  *	@Date: 2026-10-23T23:35:11-07:00 (1792823711)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:40:14-07:00 (1792824014)
+ *	@Last modified time: 2026-11-28T04:33:01-08:00 (1795869181)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,8 +23,7 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`.
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
-import path from "node:path";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 const GLOBAL_KEY = Symbol.for("slothlet.test.i625.trapping-global");
@@ -59,9 +58,9 @@ describe.each(CONFIGS)("a Proxy on the global object (#625) — $mode / $runtime
 		);
 		vi.resetModules();
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: {} });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, permissions: {} });
+		await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
 		expect(await api.victim.v.writeOwnSymbol()).toEqual({ assign: "done", read: 1, define: "done", remove: "done", gone: true });
 		expect(api.victim.v.useOwnMembers().constructed).toBe(100);
 		expect(traps).toEqual([]);

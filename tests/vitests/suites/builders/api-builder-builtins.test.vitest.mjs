@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/builders/api-builder-builtins.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/builders/api-builder-builtins.test.vitest.mjs
  *	@Date: 2026-02-27T22:37:47-08:00 (1772260667)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-28T04:31:18-08:00 (1795869078)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  * @description
  * Covers:
  *   lines 590,610,637,659,679,700,728,762 – hook functions throw when hookManager not initialized
- *   lines 829,866  – metadata.setFor (not-available throw), metadata.removeFor (resolvedPath)
+ *   lines 829,866  – metadata.set (not-available throw), metadata.remove (resolvedPath)
  *   lines 921      – ownership.get (ownership handler exists path)
  *   lines 948,950,977 – materialize namespace getter (get() / materialized)
  *   lines 1039,1040,1042,1068,1076,1077,1079,1091 – diagnostics namespace (owner/caches)
@@ -33,7 +33,6 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -149,10 +148,10 @@ describe("api_builder – materialize namespace methods", () => {
 		expect("total" in stats || "percentage" in stats || "materialized" in stats).toBe(true);
 	});
 
-	it("api.slothlet.materialize.materialized getter returns boolean (line 950)", async () => {
+	it("api.slothlet.materialize.complete getter returns boolean (line 950)", async () => {
 		api = await makeApi();
 
-		const mat = api.slothlet.materialize.materialized;
+		const mat = api.slothlet.materialize.complete;
 		expect(typeof mat).toBe("boolean");
 	});
 
@@ -165,9 +164,9 @@ describe("api_builder – materialize namespace methods", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Group C: metadata.setFor / removeFor paths (lines 829, 866)
+// Group C: metadata.set / removeFor paths (lines 829, 866)
 // ---------------------------------------------------------------------------
-describe("api_builder – metadata.setFor and removeFor", () => {
+describe("api_builder – metadata.set and removeFor", () => {
 	let api;
 
 	afterEach(async () => {
@@ -177,29 +176,29 @@ describe("api_builder – metadata.setFor and removeFor", () => {
 		}
 	});
 
-	it("metadata.setFor sets path metadata (line 835+)", async () => {
+	it("metadata.set sets path metadata (line 835+)", async () => {
 		api = await makeApi();
 
 		// Call setFor with a valid path - covers line 835 (resolvedPath) and metadata.setPathMetadata
 		// This should not throw
-		expect(() => api.slothlet.metadata.setFor("math", "testKey", "testValue")).not.toThrow();
+		expect(() => api.slothlet.metadata.set("math", "testKey", "testValue")).not.toThrow();
 	});
 
-	it("metadata.removeFor removes path metadata (line 866 resolvedPath)", async () => {
+	it("metadata.remove removes path metadata (line 866 resolvedPath)", async () => {
 		api = await makeApi();
 
 		// First set, then remove
-		api.slothlet.metadata.setFor("math", "tempKey", "tempVal");
+		api.slothlet.metadata.set("math", "tempKey", "tempVal");
 		// removeFor covers line 866 path (resolvedPath = _resolvePathOrModuleId(...))
-		api.slothlet.metadata.removeFor("math", "tempKey");
+		api.slothlet.metadata.remove("math", "tempKey");
 		// Just verify no error thrown
 	});
 
-	it("metadata.removeFor without key removes all path metadata", async () => {
+	it("metadata.remove without key removes all path metadata", async () => {
 		api = await makeApi();
 
-		api.slothlet.metadata.setFor("math", "k1", "v1");
-		api.slothlet.metadata.removeFor("math"); // no key = remove all
+		api.slothlet.metadata.set("math", "k1", "v1");
+		api.slothlet.metadata.remove("math"); // no key = remove all
 		// No error = success
 	});
 });
@@ -263,10 +262,10 @@ describe("api_builder – diagnostics namespace (diag.*)", () => {
 
 		const diag = api.slothlet.diag.caches.get();
 		expect(typeof diag).toBe("object");
-		expect("totalCaches" in diag || "caches" in diag).toBe(true);
+		expect(Array.isArray(diag.caches)).toBe(true);
 	});
 
-	it("diagnostics.caches.getAllModuleIDs returns array (line 1079)", async () => {
+	it("diagnostics.caches.ids returns array (line 1079)", async () => {
 		api = await slothlet({
 			mode: "eager",
 			runtime: "async",
@@ -275,7 +274,7 @@ describe("api_builder – diagnostics namespace (diag.*)", () => {
 			base: TEST_DIRS.API_TEST
 		});
 
-		const ids = api.slothlet.diag.caches.getAllModuleIDs();
+		const ids = api.slothlet.diag.caches.ids();
 		expect(Array.isArray(ids)).toBe(true);
 	});
 
@@ -306,39 +305,41 @@ describe("api_builder – run() and scope() validation throws", () => {
 		}
 	});
 
-	it("run() with non-object contextData throws SCOPE_INVALID_CONTEXT (line 1156)", async () => {
+	it("run() with non-object contextData throws SCOPE_CONTEXT_INVALID (line 1156)", async () => {
 		api = await makeApi();
-		await expect(api.slothlet.run("not-an-object", () => {})).rejects.toThrow();
+		await expect(api.slothlet.context.run("not-an-object", () => {})).rejects.toThrow();
 	});
 
-	it("run() with non-function callback throws SCOPE_INVALID_CALLBACK (line 1183)", async () => {
+	it("run() with non-function callback throws SCOPE_CALLBACK_INVALID (line 1183)", async () => {
 		api = await makeApi();
-		await expect(api.slothlet.run({ userId: 1 }, "not-a-function")).rejects.toThrow();
+		await expect(api.slothlet.context.run({ userId: 1 }, "not-a-function")).rejects.toThrow();
 	});
 
-	it("scope() with non-object options throws SCOPE_INVALID_OPTIONS (line 1214)", async () => {
+	it("scope() with non-object options throws SCOPE_OPTIONS_INVALID (line 1214)", async () => {
 		api = await makeApi();
-		await expect(api.slothlet.scope("not-options")).rejects.toThrow();
+		await expect(api.slothlet.context.scope("not-options")).rejects.toThrow();
 	});
 
-	it("scope() with missing fn throws SCOPE_INVALID_FN (line 1219)", async () => {
+	it("scope() with missing fn throws SCOPE_FUNCTION_INVALID (line 1219)", async () => {
 		api = await makeApi();
-		await expect(api.slothlet.scope({ context: {}, fn: "not-a-function" })).rejects.toThrow();
+		await expect(api.slothlet.context.scope({ context: {}, fn: "not-a-function" })).rejects.toThrow();
 	});
 
-	it("scope() with missing context throws SCOPE_INVALID_CONTEXT_OBJECT (line 1234)", async () => {
+	it("scope() with missing context throws SCOPE_CONTEXT_OBJECT_INVALID (line 1234)", async () => {
 		api = await makeApi();
-		await expect(api.slothlet.scope({ fn: () => {}, context: "not-object" })).rejects.toThrow();
+		await expect(api.slothlet.context.scope({ fn: () => {}, context: "not-object" })).rejects.toThrow();
 	});
 
-	it("scope() with invalid merge strategy throws SCOPE_INVALID_MERGE_STRATEGY (line 1242)", async () => {
+	it("scope() with invalid merge strategy throws SCOPE_MERGE_STRATEGY_INVALID (line 1242)", async () => {
 		api = await makeApi();
-		await expect(api.slothlet.scope({ fn: () => {}, context: { x: 1 }, merge: "invalid-strategy" })).rejects.toThrow();
+		await expect(api.slothlet.context.scope({ fn: () => {}, context: { x: 1 }, merge: "invalid-strategy" })).rejects.toThrow();
 	});
 
-	it("scope() with invalid isolation mode throws SCOPE_INVALID_ISOLATION_MODE (line 1248)", async () => {
+	it("scope() with invalid isolation mode throws SCOPE_ISOLATION_MODE_INVALID (line 1248)", async () => {
 		api = await makeApi();
-		await expect(api.slothlet.scope({ fn: () => {}, context: { x: 1 }, merge: "shallow", isolation: "not-valid" })).rejects.toThrow();
+		await expect(
+			api.slothlet.context.scope({ fn: () => {}, context: { x: 1 }, merge: "shallow", isolation: "not-valid" })
+		).rejects.toThrow();
 	});
 
 	it("run() with scope disabled throws SCOPE_DISABLED (line 1126)", async () => {
@@ -349,7 +350,7 @@ describe("api_builder – run() and scope() validation throws", () => {
 			scope: false,
 			base: TEST_DIRS.API_TEST
 		});
-		await expect(api.slothlet.run({ userId: 1 }, () => {})).rejects.toThrow();
+		await expect(api.slothlet.context.run({ userId: 1 }, () => {})).rejects.toThrow();
 	});
 });
 
@@ -407,9 +408,6 @@ describe("api_builder – WARNING_RESERVED_PROPERTY_CONFLICT (line 108)", () => 
 	it("loading an API folder with a file named 'slothlet' emits a reserved-name warning (line 108)", async () => {
 		// api_test_reserved_name/slothlet.mjs causes userApi.slothlet to be set
 		// before the built-in slothlet namespace is attached, triggering the warning.
-		// Clear captured warnings before test to avoid interference from other tests
-		SlothletWarning.clearCaptured();
-
 		// Built WITHOUT `silent` on purpose: the reserved-property console warning now honors `silent`
 		// (like every other SlothletWarning site — #196 review), so a silent build no longer emits it.
 		// This test verifies the warning IS emitted for a reserved name; the silent-gating + the
@@ -422,17 +420,17 @@ describe("api_builder – WARNING_RESERVED_PROPERTY_CONFLICT (line 108)", () => 
 		});
 
 		// WARNING_RESERVED_PROPERTY_CONFLICT captured by SlothletWarning
-		const warnings = Array.from(SlothletWarning.captured || []);
+		const warnings = Array.from(api.slothlet.warnings.get() || []); // per instance (#819)
 		const hasReservedWarning = warnings.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT");
 		expect(hasReservedWarning).toBe(true);
 	});
 });
 // ---------------------------------------------------------------------------
-// Group I: diagnostics.hook.compilePattern — api_builder.mjs line 1135
+// Group I: diagnostics.hook.compile — api_builder.mjs line 1135
 //   Calls hookManager.getCompilePatternForDiagnostics()(pattern) and returns the
 //   compiled matcher function for a given hook glob pattern.
 // ---------------------------------------------------------------------------
-describe("api_builder – diag.hook.compilePattern (line 1135)", () => {
+describe("api_builder – diag.hook.compile (line 1135)", () => {
 	let api;
 
 	afterEach(async () => {
@@ -450,9 +448,9 @@ describe("api_builder – diag.hook.compilePattern (line 1135)", () => {
 			base: TEST_DIRS.API_TEST
 		});
 
-		// api.slothlet.diag.hook.compilePattern(pattern) calls
+		// api.slothlet.diag.hook.compile(pattern) calls
 		// hookManager.getCompilePatternForDiagnostics()(pattern) → line 1135
-		const matcher = api.slothlet.diag.hook.compilePattern("math.*");
+		const matcher = api.slothlet.diag.hook.compile("math.*");
 
 		// Result is a compiled matcher function
 		expect(typeof matcher).toBe("function");
@@ -466,7 +464,7 @@ describe("api_builder – diag.hook.compilePattern (line 1135)", () => {
 			base: TEST_DIRS.API_TEST
 		});
 
-		const matcher = api.slothlet.diag.hook.compilePattern("**");
+		const matcher = api.slothlet.diag.hook.compile("**");
 		expect(typeof matcher).toBe("function");
 	});
 });

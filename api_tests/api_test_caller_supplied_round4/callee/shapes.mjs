@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_caller_supplied_round4/callee/shapes.mjs
+ *	@Filename: api_tests/api_test_caller_supplied_round4/callee/shapes.mjs
  *	@Date: 2026-10-17T00:00:00-07:00 (1792220400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-11-28T04:27:40-08:00 (1795868860)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,7 +46,7 @@ function read(dotted) {
  * @returns {boolean} True.
  * @public
  * @example
- * api.callee.shapes.keep("scope");
+ * api.callee.shapes.keep("context.scope");
  */
 export function keep(dotted) {
 	kept.set(dotted, read(dotted));
@@ -60,7 +60,7 @@ export function keep(dotted) {
  * @returns {object} The report.
  * @public
  * @example
- * api.callee.shapes.report("scope");
+ * api.callee.shapes.report("context.scope");
  */
 export function report(dotted, key) {
 	return describeFunction(kept.get(dotted) ?? read(dotted), key);
@@ -73,7 +73,7 @@ export function report(dotted, key) {
  * @returns {object} The function's report for the member.
  * @public
  * @example
- * api.callee.shapes.define("scope", "extra");
+ * api.callee.shapes.define("context.scope", "extra");
  */
 export function define(dotted, key) {
 	const fn = read(dotted);
@@ -87,7 +87,7 @@ export function define(dotted, key) {
  * @returns {boolean} Whether the prototype was set.
  * @public
  * @example
- * api.callee.shapes.reparent("scope");
+ * api.callee.shapes.reparent("context.scope");
  */
 export function reparent(dotted) {
 	return Reflect.setPrototypeOf(read(dotted), Function.prototype);

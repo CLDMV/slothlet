@@ -1,20 +1,20 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/unified-wrapper/unified-wrapper-materialize-nofunc.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/unified-wrapper/unified-wrapper-materialize-nofunc.test.vitest.mjs
  *	@Date: 2026-09-14T15:15:27-07:00 (1789424127)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:48-07:00 (1791091728)
+ *	@Last modified time: 2026-11-28T04:33:14-08:00 (1795869194)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Coverage for _materialize's no-materializeFunc path (unified-wrapper.mjs:1385
+ * @fileoverview Coverage for ___materialize's no-materializeFunc path (unified-wrapper.mjs:1385
  * else). materializeFunc defaults to null, so a lazy wrapper constructed without one exercises the
  * branch where the materialize block is skipped entirely.
  * @module tests/vitests/suites/unified-wrapper/unified-wrapper-materialize-nofunc
@@ -32,14 +32,14 @@ afterEach(async () => {
 	api = null;
 });
 
-describe("UnifiedWrapper._materialize no-func coverage", () => {
-	it("_materialize on a lazy wrapper with no materializeFunc skips the materialize block (unified-wrapper.mjs:1385 else)", async () => {
+describe("UnifiedWrapper.___materialize no-func coverage", () => {
+	it("___materialize on a lazy wrapper with no materializeFunc skips the materialize block (unified-wrapper.mjs:1385 else)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		const sl = resolveWrapper(api.math).slothlet;
-		// materializeFunc defaults to null; a lazy, not-yet-materialized wrapper reaches _materialize's
+		const sl = resolveWrapper(api.math).____slothlet;
+		// materializeFunc defaults to null; a lazy, not-yet-materialized wrapper reaches ___materialize's
 		// promise body and takes the `if (materializeFunc)` FALSE path (the block is skipped).
 		const wrapper = new UnifiedWrapper(sl, { mode: "lazy", apiPath: "coverage.nofunc" });
 		expect(wrapper.____slothletInternal.materializeFunc).toBe(null);
-		await expect(wrapper._materialize()).resolves.toBeUndefined();
+		await expect(wrapper.___materialize()).resolves.toBeUndefined();
 	});
 });

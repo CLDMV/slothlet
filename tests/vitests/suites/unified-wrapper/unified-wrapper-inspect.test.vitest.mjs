@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/unified-wrapper/unified-wrapper-inspect.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/unified-wrapper/unified-wrapper-inspect.test.vitest.mjs
  *	@Date: 2026-03-03T12:00:00-08:00 (1772568000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-28T04:33:14-08:00 (1795869194)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -102,7 +102,7 @@ describe("util.inspect.custom on non-callable wrapper with children", () => {
 
 // ---------------------------------------------------------------------------
 // 2. util.inspect.custom — callable wrapper (returns impl, not children)
-//    Covers line 2163 (return _impl path)
+//    Covers line 2163 (return ____impl path)
 // ---------------------------------------------------------------------------
 describe("util.inspect.custom on callable leaf wrapper", () => {
 	it("util.inspect(api.math.add) returns the function impl (eager)", async () => {
@@ -110,7 +110,7 @@ describe("util.inspect.custom on callable leaf wrapper", () => {
 		expect(api.math.add).toBeDefined();
 
 		// api.math.add is a callable wrapper — childKeys will be 0 or isCallable=true
-		// → inspect fall-through path returns _impl
+		// → inspect fall-through path returns ____impl
 		const inspected = util.inspect(api.math.add);
 		expect(typeof inspected).toBe("string");
 	});

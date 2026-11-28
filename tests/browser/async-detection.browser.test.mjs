@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/browser/async-detection.browser.test.mjs
+ *	@Filename: tests/browser/async-detection.browser.test.mjs
  *	@Date: 2026-08-04T12:00:00-07:00 (1785870000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-28T04:30:47-08:00 (1795869047)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { util } from "@cldmv/slothlet/helpers/platform";
+import { util } from "#helpers/platform";
 
 describe("browser platform shim > util.types.isAsyncFunction", () => {
 	it("detects a native async function", () => {

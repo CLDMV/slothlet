@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/type-generator.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/type-generator.test.vitest.mjs
  *	@Date: 2026-02-22T18:20:44-08:00 (1771813244)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:17:57-07:00 (1791821877)
+ *	@Last modified time: 2026-11-28T04:33:07-08:00 (1795869187)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@ import fs from "fs";
 import path from "path";
 import ts from "typescript";
 import slothlet from "@cldmv/slothlet";
-import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
+import { generateTypes } from "#processors/type-generator";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
@@ -343,8 +343,8 @@ describe("generateTypes – direct unit tests", () => {
 			const apiWithPrefixed = {
 				_private: member,
 				__modulePrivate: member,
-				__impl: member,
-				_materialize: member
+				____impl: member,
+				___materialize: member
 			};
 
 			const outputPath = nextOutputPath();
@@ -357,8 +357,8 @@ describe("generateTypes – direct unit tests", () => {
 			expect(output).toContain("_private");
 			expect(output).toContain("__modulePrivate");
 			// The framework's reserved names are its own, never the module's.
-			expect(output).not.toContain("__impl");
-			expect(output).not.toContain("_materialize");
+			expect(output).not.toContain("____impl");
+			expect(output).not.toContain("___materialize");
 		});
 
 		it("should skip the 'slothlet', 'shutdown', and 'destroy' reserved keys", async () => {
@@ -410,8 +410,9 @@ describe("generateTypes – direct unit tests", () => {
 		});
 
 		it("should emit unknown when __metadata.filePath does not exist", async () => {
-			// Points to a file that doesn't exist — the path in __metadata is not a module origin, so the
-			// function is typed unknown rather than from any file, and generation does not throw.
+			// Points to a file that doesn't exist — the path in __metadata is not a module origin, so nothing is typed from
+			// any file, and generation does not throw. `__metadata` is the function's own member like any other (v4 keeps
+			// no framework keys on nodes), so the function is typed by its members, each with no module origin.
 			function ghostFn() {}
 			ghostFn.__metadata = { filePath: "/nonexistent/path/that/does/not/exist.ts" };
 
@@ -426,7 +427,8 @@ describe("generateTypes – direct unit tests", () => {
 			);
 
 			expect(output).toContain("export interface TestAPI");
-			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\tghostFn: unknown;/);
+			expect(output).toMatch(/\/\*\* Callable with no module origin: [^\n]*\*\/\n\tghostFn: \{/);
+			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\t+filePath: unknown;/);
 			expect(output).not.toContain("does/not/exist");
 		});
 
@@ -588,8 +590,10 @@ describe("generateTypes – direct unit tests", () => {
 				}
 			);
 
-			// Typed unknown with the explanatory comment, never another export's type.
-			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\tsum: unknown;/);
+			// Typed by its members (`__metadata` is the function's own member in v4), each with no module origin and the
+			// explanatory comment, never another export's type.
+			expect(output).toMatch(/\/\*\* Callable with no module origin: [^\n]*\*\/\n\tsum: \{/);
+			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\t+filePath: unknown;/);
 			expect(output).not.toContain("typeof import");
 		});
 	});

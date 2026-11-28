@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/hooks/hook-pattern-filter.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/hooks/hook-pattern-filter.test.vitest.mjs
  *	@Date: 2026-05-31T08:04:06-07:00 (1780239846)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-28T04:31:53-08:00 (1795869113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,8 +21,8 @@
  * filter controlling which API paths hooks apply to ("Only intercept database functions by
  * default"). It was parsed and stored on the HookManager but never read at runtime, so it
  * silently filtered nothing. These tests assert it now genuinely gates hook execution by API
- * path — both the static config form and the runtime `enablePattern`/`disablePattern`/
- * `resetPatternFilter` methods — for matching and non-matching paths.
+ * path — both the static config form and the runtime `pattern.enable`/`pattern.disable`/
+ * `pattern.reset` methods — for matching and non-matching paths.
  *
  * @module tests/vitests/suites/hooks/hook-pattern-filter.test.vitest
  */
@@ -107,12 +107,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook pattern filte
 		expect(fired).not.toContain("string.upper");
 	});
 
-	it("enablePattern restricts at runtime, disablePattern lifts it", async () => {
+	it("pattern.enable restricts at runtime, pattern.disable lifts it", async () => {
 		await createApi({ enabled: true, pattern: "**" });
 		const fired = recordFiredPaths();
 
 		// Restrict to math.* at runtime.
-		api.slothlet.hook.enablePattern("math.*");
+		api.slothlet.hook.pattern.enable("math.*");
 		await api.math.add(1, 2);
 		await api.string.upper("x");
 		expect(fired).toContain("math.add");
@@ -120,21 +120,21 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook pattern filte
 
 		// Lift the restriction — string.* fires again.
 		fired.length = 0;
-		api.slothlet.hook.disablePattern("math.*");
+		api.slothlet.hook.pattern.disable("math.*");
 		await api.math.add(1, 2);
 		await api.string.upper("x");
 		expect(fired).toContain("math.add");
 		expect(fired).toContain("string.upper");
 	});
 
-	it("disablePattern with multiple active patterns keeps the remaining filter", async () => {
+	it("pattern.disable with multiple active patterns keeps the remaining filter", async () => {
 		await createApi({ enabled: true, pattern: "**" });
 		const fired = recordFiredPaths();
 
 		// Two active patterns; removing one leaves the filter active with the other.
-		api.slothlet.hook.enablePattern("math.*");
-		api.slothlet.hook.enablePattern("string.*");
-		api.slothlet.hook.disablePattern("string.*");
+		api.slothlet.hook.pattern.enable("math.*");
+		api.slothlet.hook.pattern.enable("string.*");
+		api.slothlet.hook.pattern.disable("string.*");
 
 		await api.math.add(1, 2);
 		await api.string.upper("x");
@@ -142,14 +142,14 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook pattern filte
 		expect(fired).not.toContain("string.upper");
 	});
 
-	it("resetPatternFilter with a '**' default returns to fully unrestricted", async () => {
+	it("pattern.reset with a '**' default returns to fully unrestricted", async () => {
 		await createApi({ enabled: true, pattern: "**" });
 		const fired = recordFiredPaths();
 
 		// Restrict at runtime, then reset — the configured default is the catch-all,
 		// so reset leaves the filter inactive (every path fires again).
-		api.slothlet.hook.enablePattern("math.*");
-		api.slothlet.hook.resetPatternFilter();
+		api.slothlet.hook.pattern.enable("math.*");
+		api.slothlet.hook.pattern.reset();
 
 		await api.math.add(1, 2);
 		await api.string.upper("x");
@@ -157,18 +157,18 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook pattern filte
 		expect(fired).toContain("string.upper");
 	});
 
-	it("resetPatternFilter reverts runtime changes to the configured default", async () => {
+	it("pattern.reset reverts runtime changes to the configured default", async () => {
 		await createApi({ enabled: true, pattern: "math.*" });
 		const fired = recordFiredPaths();
 
 		// Widen at runtime so everything fires...
-		api.slothlet.hook.enablePattern("**");
+		api.slothlet.hook.pattern.enable("**");
 		await api.string.upper("x");
 		expect(fired).toContain("string.upper");
 
 		// ...then reset back to the configured "math.*" default.
 		fired.length = 0;
-		api.slothlet.hook.resetPatternFilter();
+		api.slothlet.hook.pattern.reset();
 		await api.math.add(1, 2);
 		await api.string.upper("x");
 		expect(fired).toContain("math.add");

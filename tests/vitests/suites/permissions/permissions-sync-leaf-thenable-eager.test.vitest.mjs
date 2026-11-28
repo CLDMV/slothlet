@@ -1,0 +1,28 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: tests/vitests/suites/permissions/permissions-sync-leaf-thenable-eager.test.vitest.mjs
+ *	@Date: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-28T04:32:42-08:00 (1795869162)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview #599 — code a synchronous leaf hands back runs as that leaf's module, not as the caller awaiting it:
+ * the EAGER and EAGER_HOOKS matrix configs.
+ *
+ * @description
+ * The cases and assertions live in `tests/vitests/setup/permissions-sync-leaf-thenable.mjs`; this file runs them under
+ * the EAGER and EAGER_HOOKS configs.
+ * @module tests/vitests/suites/permissions/permissions-sync-leaf-thenable-eager
+ */
+
+import { describeSyncLeafThenable } from "../../setup/permissions-sync-leaf-thenable.mjs";
+
+describeSyncLeafThenable(["EAGER", "EAGER_HOOKS"]);

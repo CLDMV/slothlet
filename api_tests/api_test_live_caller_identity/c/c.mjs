@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_live_caller_identity/c/c.mjs
+ *	@Filename: api_tests/api_test_live_caller_identity/c/c.mjs
  *	@Date: 2026-10-09T18:00:00-07:00 (1791594000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T18:00:00-07:00 (1791594000)
+ *	@Last modified time: 2026-11-28T04:28:41-08:00 (1795868921)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import { self } from "@cldmv/slothlet/runtime";
  * @returns {string|null} `metadata.caller()`'s api path, or null for the host.
  */
 export function probe() {
-	return self.slothlet.metadata.caller()?.apiPath ?? null;
+	return self.slothlet.metadata.caller()?.path?.join(".") ?? null;
 }
 
 /**
@@ -32,7 +32,7 @@ export function probe() {
  * @returns {string|null} The api path the pinned callback runs as, or null for the host.
  */
 export function pinCaller() {
-	const pinned = self.slothlet.lockCaller.caller(() => self.slothlet.metadata.self()?.apiPath ?? null);
+	const pinned = self.slothlet.pin.caller(() => self.slothlet.metadata.self()?.path?.join(".") ?? null);
 	try {
 		return pinned();
 	} catch (error) {

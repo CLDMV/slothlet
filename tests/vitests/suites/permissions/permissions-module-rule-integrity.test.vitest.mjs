@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-module-rule-integrity.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-module-rule-integrity.test.vitest.mjs
  *	@Date: 2026-10-18T22:14:30-07:00 (1792386870)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:54-07:00 (1793008374)
+ *	@Last modified time: 2026-11-28T04:32:35-08:00 (1795869155)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,12 @@ import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { self } from "@cldmv/slothlet/runtime";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 
@@ -43,7 +48,7 @@ const CONFIGS = [
 ];
 
 const HOST_DENY = { caller: "guest.**", target: "victim.**", effect: "deny" };
-const DELEGATE = { caller: "mgr.**", target: "slothlet.permissions.addRule", effect: "allow" };
+const DELEGATE = { caller: "mgr.**", target: "slothlet.permissions.rules.add", effect: "allow" };
 const GUEST_ALLOW_VICTIM = { caller: "guest.**", target: "victim.**:write", effect: "allow" };
 
 /**
@@ -67,10 +72,10 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 	 * @param {object} [options] - Further slothlet options.
 	 * @returns {Promise<object>} The composed api.
 	 */
-	async function load(options = { permissions: { defaultPolicy: "allow", rules: [HOST_DENY] } }) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		for (const name of ["guest", "mgr"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { moduleID: name });
+	async function load(options = { permissions: { policy: "allow", rules: [HOST_DENY] } }) {
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+		for (const name of ["guest", "mgr"]) await api.slothlet.api.add(name, apiPart(FIXTURE, "guest"), { id: name });
 		return api;
 	}
 
@@ -78,31 +83,31 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		it.each([
 			["a call target", "victim.v.secret"],
 			["a write target", "victim.**:write"],
-			["the rule-manager target", "slothlet.permissions.addRule"]
+			["the rule-manager target", "slothlet.permissions.rules.add"]
 		])("refuses a rule whose target turns into %s after the check", async (_label, late) => {
 			await load();
 			const outcome = withSuppressedSlothletErrorOutputSync(() => api.guest.x.addShiftingRule("guest.**", late));
-			expect(outcome === "INVALID_PERMISSION_RULE" || /^perm-/.test(outcome)).toBe(true);
+			expect(outcome === "PERMISSION_RULE_INVALID" || /^perm-/.test(outcome)).toBe(true);
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.callVictimSecret())).toBe("PERMISSION_DENIED");
 			const writes = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(writes).toEqual(every(writes, "LOOSE_SET_NOT_OWNED"));
 			expect(
 				withSuppressedSlothletErrorOutputSync(() => api.guest.x.addRuleFor({ caller: "guest.**", target: "victim.**", effect: "allow" }))
-			).toBe("INVALID_PERMISSION_RULE");
+			).toBe("PERMISSION_RULE_INVALID");
 		});
 
 		it("refuses a rule whose fields are accessors", async () => {
 			await load();
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.addShiftingRule("guest.**", "guest.**"))).toBe(
-				"INVALID_PERMISSION_RULE"
+				"PERMISSION_RULE_INVALID"
 			);
 		});
 
 		it.each([["array"], ["entry"]])("refuses an api.add whose permissions option changes after the check (%s)", async (how) => {
 			await load();
-			const outcome = await withSuppressedSlothletErrorOutput(() => api.guest.x.mountShifting(path.join(FIXTURE, "guest"), how));
-			expect(["done", "INVALID_PERMISSION_RULE"]).toContain(outcome);
-			expect(api.slothlet.permissions.global.rulesForPath("victim.v.secret").some((rule) => rule.effect === "allow")).toBe(false);
+			const outcome = await withSuppressedSlothletErrorOutput(() => api.guest.x.mountShifting(apiPart(FIXTURE, "guest"), how));
+			expect(["done", "PERMISSION_RULE_INVALID"]).toContain(outcome);
+			expect(api.slothlet.permissions.global.rules.path("victim.v.secret").some((rule) => rule.effect === "allow")).toBe(false);
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.callVictimSecret())).toBe("PERMISSION_DENIED");
 		});
 
@@ -115,13 +120,13 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 
 		it("replays a module's own rule across a reload exactly as before", async () => {
-			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
+			await load({ permissions: { policy: "allow", rules: [] } });
 			expect(await api.victim.v.grant(GUEST_ALLOW_VICTIM)).toMatch(/^perm-/);
 			await api.slothlet.reload();
 			const granted = await api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
 			// Still at the module layer: an equally specific host deny added after the reload wins.
-			api.slothlet.permissions.addRule({ caller: "guest.**", target: "victim.**:write", effect: "deny" });
+			api.slothlet.permissions.rules.add({ caller: "guest.**", target: "victim.**:write", effect: "deny" });
 			const denied = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(denied).toEqual(every(denied, "PERMISSION_DENIED"));
 		});
@@ -129,7 +134,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 
 	describe("a condition of a rule module code adds runs as that module", () => {
 		it("keeps the condition to the module's own writes when another module's call is checked", async () => {
-			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
+			await load({ permissions: { policy: "allow", rules: [] } });
 			expect(api.guest.x.addWritingCondition("victim.v")).toMatch(/^perm-/);
 			api.guest.x.takeConditionWrites();
 			await withSuppressedSlothletErrorOutput(() => api.victim.v.callAt("guest.x.listSelf"));
@@ -140,7 +145,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 
 		it("keeps it so for a rule in the permissions option of an api.add module code makes", async () => {
-			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
+			await load({ permissions: { policy: "allow", rules: [] } });
 			// The condition writes the calling module's own node: run as that caller it could, run as the module that
 			// mounted the rule it may not.
 			const writes = [];
@@ -154,7 +159,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 				return true;
 			};
 			const permissions = { allow: [{ target: "guest.**", condition }] };
-			expect(await api.guest.x.addAt("guest.sub", path.join(FIXTURE, "victim"), { moduleID: "gsub", permissions })).toBe("done");
+			expect(await api.guest.x.addAt("guest.sub", apiPart(FIXTURE, "victim"), { id: "gsub", permissions })).toBe("done");
 			await withSuppressedSlothletErrorOutput(() => api.guest.sub.v.callAt("guest.x.listSelf"));
 			expect(writes.length).toBeGreaterThan(0);
 			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
@@ -162,8 +167,8 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 
 		it("stops running it once that module is removed, even when another module takes its moduleID", async () => {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: {} });
-			await api.slothlet.api.add("g", path.join(FIXTURE, "guest"), { moduleID: "gA" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, permissions: {} });
+			await api.slothlet.api.add("g", apiPart(FIXTURE, "guest"), { id: "gA" });
 			const runs = [];
 			const condition = () => {
 				try {
@@ -175,9 +180,9 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 				return true;
 			};
 			const permissions = { allow: [{ target: "g.kid.**:write", condition }] };
-			expect(await api.g.x.addAt("g.kid", path.join(FIXTURE, "guest"), { moduleID: "kid", permissions })).toBe("done");
+			expect(await api.g.x.addAt("g.kid", apiPart(FIXTURE, "guest"), { id: "kid", permissions })).toBe("done");
 			await api.slothlet.api.remove("gA");
-			await api.slothlet.api.add("z", path.join(FIXTURE, "victim"), { moduleID: "gA" });
+			await api.slothlet.api.add("z", apiPart(FIXTURE, "victim"), { id: "gA" });
 			await withSuppressedSlothletErrorOutput(() => api.g.kid.x.writeAt("g.kid.x"));
 			expect(runs).not.toContain("done");
 			expect(api.z.v.viaStale).toBeUndefined();
@@ -185,7 +190,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 
 		it("keeps it so for an event rule's condition", async () => {
 			await load({
-				permissions: { defaultPolicy: "allow", rules: [{ caller: "guest.**", target: "slothlet.event.rules.add", effect: "allow" }] }
+				permissions: { policy: "allow", rules: [{ caller: "guest.**", target: "slothlet.event.rules.add", effect: "allow" }] }
 			});
 			expect(api.guest.x.addWritingEventCondition("victim.v")).toMatch(/^evt-/);
 			api.guest.x.takeConditionWrites();
@@ -199,7 +204,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 
 		it("keeps it so across a reload", async () => {
-			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
+			await load({ permissions: { policy: "allow", rules: [] } });
 			expect(api.guest.x.addWritingCondition("victim.v")).toMatch(/^perm-/);
 			await api.slothlet.reload();
 			api.guest.x.takeConditionWrites();
@@ -211,42 +216,48 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 	});
 
-	describe("event rules module code adds, with the permission system off", () => {
+	// Event rules are part of the permission system: they are evaluated only while it is on (see events/event-permission-mode).
+	describe("event rules module code adds", () => {
+		// The system on, with the module allowed the event-rule functions it is asked to use.
+		const EVENT_RULES_ON = {
+			permissions: { policy: "allow", rules: [{ caller: "guest.**", target: "slothlet.event.**", effect: "allow" }] }
+		};
+
 		it("refuses an event rule beyond the module's own events", async () => {
-			await load({});
-			const before = api.slothlet.event.resolveLevel("victim.v", "victim.ping");
-			expect(api.guest.x.addEventRuleFor({ caller: "**", event: "**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
-			expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
-			expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe(before);
+			await load(EVENT_RULES_ON);
+			const before = api.slothlet.event.level("victim.v", "victim.ping");
+			expect(api.guest.x.addEventRuleFor({ caller: "**", event: "**", effect: "deny" })).toBe("PERMISSION_RULE_INVALID");
+			expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("PERMISSION_RULE_INVALID");
+			expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe(before);
 		});
 
 		it("lets a module add and remove event rules for its own events", async () => {
-			await load({});
+			await load(EVENT_RULES_ON);
 			const ruleId = api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.**", effect: "deny" });
 			expect(ruleId).toMatch(/^evt-/);
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 			expect(api.guest.x.removeEventRuleFor(ruleId)).toBe(true);
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).not.toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).not.toBe("deny");
 		});
 
 		it("refuses a module removing the host's event rule, even for its own events", async () => {
-			await load({});
+			await load(EVENT_RULES_ON);
 			const hostId = api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.*", effect: "deny" });
-			expect(api.guest.x.removeEventRuleFor(hostId)).toBe("INVALID_PERMISSION_RULE");
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.guest.x.removeEventRuleFor(hostId)).toBe("PERMISSION_RULE_INVALID");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 		});
 
 		it("ranks the module's event rule below the host's, across a reload too", async () => {
-			await load({});
+			await load(EVENT_RULES_ON);
 			api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.*", effect: "deny" });
 			expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.*", effect: "allow" })).toMatch(/^evt-/);
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 			await api.slothlet.reload();
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 		});
 
-		it("lets the condition of a module's event rule write anywhere, as nothing decides writes", async () => {
-			await load({});
+		it("holds the condition of a module's event rule to that module's own writes", async () => {
+			await load(EVENT_RULES_ON);
 			expect(api.guest.x.addWritingEventCondition("victim.v")).toMatch(/^evt-/);
 			api.guest.x.takeConditionWrites();
 			api.victim.v.listen("guest.zap");
@@ -254,8 +265,19 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			await new Promise((resolve) => setTimeout(resolve, 20));
 			const writes = api.guest.x.takeConditionWrites();
 			expect(writes.length).toBeGreaterThan(0);
-			expect([...new Set(writes)]).toEqual(["done"]);
-			expect(api.victim.v.viaCondition).toBe(1);
+			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
+			expect(api.victim.v.viaCondition).toBeUndefined();
+		});
+
+		it("does not run the condition of a module's event rule while the permission system is off", async () => {
+			await load({});
+			expect(api.guest.x.addWritingEventCondition("victim.v")).toMatch(/^evt-/);
+			api.guest.x.takeConditionWrites();
+			api.victim.v.listen("guest.zap");
+			await api.guest.x.shout("guest.zap", { n: 1 });
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(api.guest.x.takeConditionWrites()).toEqual([]);
+			expect(api.victim.v.viaCondition).toBeUndefined();
 		});
 	});
 
@@ -263,7 +285,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		it("computes its key as that module, whichever caller's call is checked", async () => {
 			await load({
 				permissions: {
-					defaultPolicy: "allow",
+					policy: "allow",
 					rules: [
 						{ caller: "guest.**", target: "slothlet.permissions.principal.register", effect: "allow" },
 						{ caller: "victim.**", target: "guest.**", effect: "allow", requires: ["writer"] }
@@ -287,8 +309,8 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			["nested in an event rule's", "nested", "event"],
 			["as an event rule's", "whole", "event"]
 		])("refuses a Proxy %s condition, and nothing it could do runs at a later check", async (_label, where, kind) => {
-			await load(kind === "event" ? {} : { permissions: { defaultPolicy: "allow", rules: [] } });
-			expect(api.guest.x.addProxyCondition("victim.v", where, kind)).toBe("INVALID_PERMISSION_RULE");
+			await load(kind === "event" ? {} : { permissions: { policy: "allow", rules: [] } });
+			expect(api.guest.x.addProxyCondition("victim.v", where, kind)).toBe("PERMISSION_RULE_INVALID");
 			api.guest.x.takeConditionWrites();
 			if (kind === "event") {
 				api.victim.v.listen("guest.zap");
@@ -302,27 +324,29 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 
 		it("refuses a Proxy in a condition the host adds", async () => {
-			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
+			await load({ permissions: { policy: "allow", rules: [] } });
 			const condition = { tenant: new Proxy({}, {}) };
-			expect(() => api.slothlet.permissions.addRule({ caller: "**", target: "guest.**", effect: "allow", condition })).toThrow(
-				expect.objectContaining({ code: "INVALID_PERMISSION_RULE" })
+			expect(() => api.slothlet.permissions.rules.add({ caller: "**", target: "guest.**", effect: "allow", condition })).toThrow(
+				expect.objectContaining({ code: "PERMISSION_RULE_INVALID" })
 			);
 		});
 	});
 
 	describe("a removed module's event rules", () => {
 		it("go with it, and stay gone across a reload", async () => {
-			await load({});
-			const before = api.slothlet.event.resolveLevel("victim.v", "guest.ping");
+			await load({
+				permissions: { policy: "allow", rules: [{ caller: "guest.**", target: "slothlet.event.**", effect: "allow" }] }
+			});
+			const before = api.slothlet.event.level("victim.v", "guest.ping");
 			expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.**", effect: "deny" })).toMatch(/^evt-/);
 			const hostId = api.slothlet.event.rules.add({ caller: "victim.**", event: "victim.*", effect: "deny" });
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 			await api.slothlet.api.remove("guest");
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe(before);
-			expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe(before);
+			expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe("deny");
 			await api.slothlet.reload();
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe(before);
-			expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe(before);
+			expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe("deny");
 			expect(typeof hostId).toBe("string");
 		});
 	});
@@ -330,26 +354,26 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 	describe("removing rules from module code", () => {
 		it("refuses a module removing a host rule in its own subtree", async () => {
 			await load();
-			const ruleId = api.slothlet.permissions.addRule({ caller: "victim.**", target: "guest.x.writeAt", effect: "deny" });
-			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.removeRuleFor(ruleId))).toBe("INVALID_PERMISSION_RULE");
-			expect(api.slothlet.permissions.global.rulesForPath("guest.x.writeAt").some((rule) => rule.id === ruleId)).toBe(true);
+			const ruleId = api.slothlet.permissions.rules.add({ caller: "victim.**", target: "guest.x.writeAt", effect: "deny" });
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.removeRuleFor(ruleId))).toBe("PERMISSION_RULE_INVALID");
+			expect(api.slothlet.permissions.global.rules.path("guest.x.writeAt").some((rule) => rule.id === ruleId)).toBe(true);
 		});
 
 		it("refuses a module removing another module's rule in its own subtree", async () => {
 			await load();
 			const ruleId = await api.mgr.x.addRuleFor({ caller: "mgr.**", target: "mgr.**:write", effect: "deny" });
 			expect(ruleId).toMatch(/^perm-/);
-			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.removeRuleFor(ruleId))).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.removeRuleFor(ruleId))).toBe("PERMISSION_RULE_INVALID");
 		});
 
 		it("refuses a rule manager removing a host rule or a built-in one, and lets it remove a module's", async () => {
-			await load({ permissions: { defaultPolicy: "allow", rules: [HOST_DENY, DELEGATE] } });
-			const hostRule = api.slothlet.permissions.addRule({ caller: "guest.**", target: "victim.v.secret", effect: "deny" });
-			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.removeRuleFor(hostRule))).toBe("INVALID_PERMISSION_RULE");
-			const builtinRule = api.slothlet.permissions.global
-				.rulesForPath("slothlet.restart")
+			await load({ permissions: { policy: "allow", rules: [HOST_DENY, DELEGATE] } });
+			const hostRule = api.slothlet.permissions.rules.add({ caller: "guest.**", target: "victim.v.secret", effect: "deny" });
+			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.removeRuleFor(hostRule))).toBe("PERMISSION_RULE_INVALID");
+			const builtinRule = api.slothlet.permissions.global.rules
+				.path("slothlet.restart")
 				.find((rule) => rule.ownerModuleID === "__builtin__").id;
-			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.removeRuleFor(builtinRule))).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.removeRuleFor(builtinRule))).toBe("PERMISSION_RULE_INVALID");
 			const victimRule = await api.victim.v.grant(GUEST_ALLOW_VICTIM);
 			expect(await api.mgr.x.removeRuleFor(victimRule)).toBe(true);
 		});
@@ -362,9 +386,9 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function nest() {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { defaultPolicy: "allow" } });
-			await api.slothlet.api.add("outer", path.join(FIXTURE, "guest"), { moduleID: "outer" });
-			await api.slothlet.api.add("outer.inner", path.join(FIXTURE, "guest"), { moduleID: "inner" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, permissions: { policy: "allow" } });
+			await api.slothlet.api.add("outer", apiPart(FIXTURE, "guest"), { id: "outer" });
+			await api.slothlet.api.add("outer.inner", apiPart(FIXTURE, "guest"), { id: "inner" });
 			return api;
 		}
 
@@ -384,13 +408,13 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 				withSuppressedSlothletErrorOutputSync(() =>
 					api.outer.x.addRuleFor({ caller: "**", target: "outer.inner.**:write", effect: "allow" })
 				)
-			).toBe("INVALID_PERMISSION_RULE");
+			).toBe("PERMISSION_RULE_INVALID");
 		});
 
 		it("leaves two modules mounted at the same point sharing it", async () => {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
-			await api.slothlet.api.add("co", path.join(FIXTURE, "guest"), { moduleID: "co-guest" });
-			await api.slothlet.api.add("co", path.join(FIXTURE, "victim"), { moduleID: "co-victim" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true });
+			await api.slothlet.api.add("co", apiPart(FIXTURE, "guest"), { id: "co-guest" });
+			await api.slothlet.api.add("co", apiPart(FIXTURE, "victim"), { id: "co-victim" });
 			const report = await api.co.x.writeAt("co.v");
 			expect(report).toEqual(every(report, "done"));
 		});
@@ -398,7 +422,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 
 	describe("a removed module's rules", () => {
 		it("go with a rule manager that is removed, and stay gone across a reload", async () => {
-			await load({ permissions: { defaultPolicy: "allow", rules: [DELEGATE] } });
+			await load({ permissions: { policy: "allow", rules: [DELEGATE] } });
 			expect(await api.mgr.x.addRuleFor(GUEST_ALLOW_VICTIM)).toMatch(/^perm-/);
 			const granted = await api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
@@ -411,9 +435,9 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 
 		it("go with a manifest module that is removed", async () => {
-			await load({ permissions: { defaultPolicy: "allow", rules: [] } });
-			await api.slothlet.api.modules.addModule("@local/vault-grant-other", {
-				discover: { scanRoot: path.join(FIXTURE, "modules", "vault-grant-other") }
+			await load({ permissions: { policy: "allow", rules: [] } });
+			await api.slothlet.api.modules.add("@local/vault-grant-other", {
+				discover: { root: path.join(FIXTURE, "modules", "vault-grant-other") }
 			});
 			const granted = await api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
@@ -424,12 +448,12 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 
 		it("leave the host's rules naming the module's paths in place", async () => {
 			await load({
-				permissions: { defaultPolicy: "allow", rules: [GUEST_ALLOW_VICTIM, { caller: "mgr.**", target: "mgr.**", effect: "allow" }] }
+				permissions: { policy: "allow", rules: [GUEST_ALLOW_VICTIM, { caller: "mgr.**", target: "mgr.**", effect: "allow" }] }
 			});
 			await api.slothlet.api.remove("mgr");
 			const granted = await api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
-			expect(api.slothlet.permissions.global.rulesForPath("mgr.x").some((rule) => rule.caller === "mgr.**")).toBe(true);
+			expect(api.slothlet.permissions.global.rules.path("mgr.x").some((rule) => rule.caller === "mgr.**")).toBe(true);
 		});
 	});
 });

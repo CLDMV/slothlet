@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/browser/browser-events.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/browser/browser-events.test.vitest.mjs
  *	@Date: 2026-05-30T00:00:00-07:00 (1780124400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-28T04:31:16-08:00 (1795869076)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@
  * - `impl:removed` fires when `api.slothlet.api.remove` removes a mounted path (full matrix —
  *   see the resolved note below; eager+browser previously no-op'd)
  * - `materialized:complete` fires after lazy background materialization completes
- *   (lazy-only; requires `tracking: { materialization: true }`; triggered by calling a leaf)
+ *   (lazy-only; requires `loader: { materialize: true }`; triggered by calling a leaf)
  * - modules:* events — FINDING: node-only; documented below
  *
  * RESOLVED — impl:removed now fires in eager+browser mode:
@@ -57,7 +57,7 @@
  * `process.cwd()`. The helper is dynamically imported inside `discover()` precisely
  * so it does not execute at module-parse time in a browser — but calling it still
  * requires a Node filesystem. There is no browser shim for `fsp`, so invoking
- * `discover()` / `addModule()` / `addModules()` in a browser throws immediately.
+ * `discover()` / `modules.add()` / `modules.add()` in a browser throws immediately.
  * Coverage of `modules:*` events is therefore impossible in browser mode and is
  * intentionally omitted here. The node-side suite
  * (`tests/vitests/suites/modules/lifecycle-events.test.vitest.mjs`) covers all five
@@ -112,7 +112,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
 
 		expect(received).not.toBeNull();
-		expect(received).toHaveProperty("apiPath");
+		expect(received).toHaveProperty("path");
 	});
 
 	it("lifecycle.off — callback does NOT fire after being unsubscribed", async () => {
@@ -154,10 +154,10 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 
 		const results = [];
 		api.slothlet.lifecycle.on("impl:created", (data) => {
-			results.push("a:" + data.apiPath);
+			results.push("a:" + data.path.join("."));
 		});
 		api.slothlet.lifecycle.on("impl:created", (data) => {
-			results.push("b:" + data.apiPath);
+			results.push("b:" + data.path.join("."));
 		});
 
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
@@ -206,8 +206,8 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 
 		expect(events.length).toBeGreaterThan(0);
 		// Each event must identify the api path that was created
-		expect(events[0]).toHaveProperty("apiPath");
-		expect(typeof events[0].apiPath).toBe("string");
+		expect(events[0]).toHaveProperty("path");
+		expect(Array.isArray(events[0].path)).toBe(true);
 	});
 
 	it("impl:created — event payload identifies a path under the mounted namespace", async () => {
@@ -215,7 +215,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 
 		const paths = [];
 		api.slothlet.lifecycle.on("impl:created", (data) => {
-			paths.push(data.apiPath);
+			paths.push(data.path.join("."));
 		});
 
 		await api.slothlet.api.add("ns", `${FIXTURE_DIR}/utils`);
@@ -241,7 +241,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
 
 		expect(changed.length).toBeGreaterThan(0);
-		expect(changed[0]).toHaveProperty("apiPath");
+		expect(changed[0]).toHaveProperty("path");
 	});
 });
 
@@ -273,17 +273,17 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > impl
 		await api.slothlet.api.remove("extra");
 
 		expect(removed.length).toBeGreaterThan(0);
-		expect(removed[0]).toHaveProperty("apiPath");
+		expect(removed[0]).toHaveProperty("path");
 	});
 
-	it("impl:removed — payload apiPath matches a path under the removed namespace", async () => {
+	it("impl:removed — payload path matches a path under the removed namespace", async () => {
 		api = await slothlet(browserCfg(config));
 
 		await api.slothlet.api.add("removeme", `${FIXTURE_DIR}/utils`);
 
 		const paths = [];
 		api.slothlet.lifecycle.on("impl:removed", (data) => {
-			paths.push(data.apiPath);
+			paths.push(data.path.join("."));
 		});
 
 		await api.slothlet.api.remove("removeme");
@@ -311,7 +311,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > impl
 
 // ─── Lazy-only tests: materialized:complete ───────────────────────────────────
 //
-// materialized:complete only fires in lazy mode with `tracking: { materialization: true }`.
+// materialized:complete only fires in lazy mode with `loader: { materialize: true }`.
 // The trigger is actual leaf materialization — either calling a leaf function or accessing
 // a property, which causes the lazy wrapper to fetch its underlying impl.
 // We call `api.slothlet.materialize.wait()` to await full materialization after manually
@@ -328,7 +328,7 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 		});
 
 		it("materialized:complete — fires after lazy materialization completes", async () => {
-			api = await slothlet(browserCfg(config, { tracking: { materialization: true } }));
+			api = await slothlet(browserCfg(config, { loader: { files: BROWSER_MANIFEST, materialize: true } }));
 
 			let eventFired = false;
 			let eventData = null;
@@ -348,28 +348,15 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 			expect(eventData).toBeDefined();
 			expect(typeof eventData.total).toBe("number");
 			expect(eventData.total).toBeGreaterThan(0);
-			expect(typeof eventData.timestamp).toBe("number");
+			expect(typeof eventData.at).toBe("number");
 		});
 
-		it("materialized:complete — does NOT fire when tracking.materialization is omitted (backgroundMaterialize path)", async () => {
-			// backgroundMaterialize: true forces all lazy wrappers to materialize immediately on creation,
-			// so materialize.wait() resolves promptly. The emit is still gated by
-			// `this.config?.tracking?.materialization`, which is only set when tracking is explicitly
-			// requested (or when backgroundMaterialize auto-enables it — but here we test that explicit
-			// `tracking: { materialization: false }` prevents the event even when backgroundMaterialize
-			// causes all wrappers to materialize).
-			//
-			// NOTE: backgroundMaterialize: true auto-enables tracking, so we cannot test the
-			// "no tracking + backgroundMaterialize" combination directly — the two flags are mutually
-			// inclusive by design (config.mjs lines 422-425). What we CAN test is that subscribing
-			// to `materialized:complete` on a non-lazy (eager) instance never fires — but that belongs
-			// in a separate suite. Here we verify the API surface (on/off) is available and callable
-			// even when the event won't fire, which is covered by the "off prevents callback" test.
-			//
-			// This test body is intentionally a no-op: the negative assertion ("event did NOT fire after
-			// wait()") is architecturally impossible to express without backgroundMaterialize (which
-			// forces tracking on) or without accessing every single lazy leaf (impractical). The finding
-			// is documented in the @fileoverview instead.
+		it("materialized:complete — does NOT fire when loader.materialize is omitted", async () => {
+			// The emit is gated by `this.config?.loader?.materialize`, and loader.materialize is also
+			// what makes every lazy wrapper materialize in the background, so "everything materialized
+			// without loader.materialize" can only be reached by touching every lazy leaf by hand
+			// (impractical here). This test only checks the lifecycle API is available with the switch
+			// off; the event-not-firing path is covered by the "off prevents callback" test above.
 			api = await slothlet(browserCfg(config));
 			// Just verify the lifecycle API is accessible — the event-not-firing path is covered
 			// by the "off prevents callback" test above, which subscribes then immediately unsubscribes.
@@ -378,7 +365,7 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 		});
 
 		it("materialized:complete — unsubscribing via off() prevents callback", async () => {
-			api = await slothlet(browserCfg(config, { tracking: { materialization: true } }));
+			api = await slothlet(browserCfg(config, { loader: { files: BROWSER_MANIFEST, materialize: true } }));
 
 			let callCount = 0;
 			const handler = () => {
@@ -395,7 +382,7 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 		});
 
 		it("materialized:complete — fires only once even after multiple leaf accesses", async () => {
-			api = await slothlet(browserCfg(config, { tracking: { materialization: true } }));
+			api = await slothlet(browserCfg(config, { loader: { files: BROWSER_MANIFEST, materialize: true } }));
 
 			let fireCount = 0;
 			api.slothlet.lifecycle.on("materialized:complete", () => {

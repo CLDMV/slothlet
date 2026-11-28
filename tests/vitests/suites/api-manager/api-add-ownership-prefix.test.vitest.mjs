@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-add-ownership-prefix.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-add-ownership-prefix.test.vitest.mjs
  *	@Date: 2026-08-08T22:30:00-07:00 (1786253400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:56-07:00 (1791090896)
+ *	@Last modified time: 2026-11-28T04:31:08-08:00 (1795869068)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,7 +49,7 @@ const ADD_DIR = new URL("../../../../api_tests/api_test_add_prefix", import.meta
  * @returns {string[]} Sorted owned paths.
  */
 function ownedPaths(node, moduleID) {
-	const ownership = resolveWrapper(node).slothlet.handlers.ownership;
+	const ownership = resolveWrapper(node).____slothlet.handlers.ownership;
 	return [...(ownership.moduleToPath.get(moduleID) ?? [])].sort();
 }
 
@@ -101,7 +101,7 @@ describe("ApiManager > api.add ownership prefix — base load is unaffected", ()
 		// The fix routes record paths through buildApiPath, which is a no-op when there is no prefix.
 		// Loaded as the base, the same fixture must record bare paths exactly as before.
 		api = await slothlet({ mode: "eager", base: ADD_DIR });
-		const ownership = resolveWrapper(api.single).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(api.single).____slothlet.handlers.ownership;
 		const all = [...ownership.moduleToPath.values()].flatMap((set) => [...set]);
 		expect(all, "base load records the file's own leaf, unprefixed").toContain("single");
 		expect(all).toContain("nested.alpha");

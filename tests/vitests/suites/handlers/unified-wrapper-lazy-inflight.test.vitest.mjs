@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/handlers/unified-wrapper-lazy-inflight.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/handlers/unified-wrapper-lazy-inflight.test.vitest.mjs
  *	@Date: 2026-02-27T22:17:01-08:00 (1772259421)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-28T04:31:46-08:00 (1795869106)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -64,9 +64,9 @@ describe("lazy ___materialize – in-flight deduplication", () => {
 		api = await makeLazyApi();
 
 		// api.math is the real math wrapper proxy (lazy, unmaterialized)
-		// Call _materialize() twice synchronously - second call should detect in-flight
-		const p1 = api.math._materialize();
-		const p2 = api.math._materialize(); // second call hits in-flight deduplication
+		// Call ___materialize() twice synchronously - second call should detect in-flight
+		const p1 = api.math.___materialize();
+		const p2 = api.math.___materialize(); // second call hits in-flight deduplication
 
 		// Both promises resolve to same value (deduplication means same work, same result)
 		await Promise.all([p1, p2]);
@@ -79,11 +79,11 @@ describe("lazy ___materialize – in-flight deduplication", () => {
 		api = await makeLazyApi();
 
 		// Materialize once
-		await api.math._materialize();
+		await api.math.___materialize();
 		expect(typeof api.math.add).toBe("function");
 
 		// Re-materialize – should return immediately (early return on materialized=true)
-		const result = api.math._materialize();
+		const result = api.math.___materialize();
 		await result; // resolves immediately
 		expect(typeof api.math.add).toBe("function");
 	});
@@ -141,7 +141,7 @@ describe("lazy ___materialize – invalid wrapper early-return", () => {
 		api = await makeLazyApi();
 
 		// Standard materialization with an active lazy API does not throw
-		await expect(api.math._materialize()).resolves.toBeUndefined();
+		await expect(api.math.___materialize()).resolves.toBeUndefined();
 	});
 });
 
@@ -159,7 +159,7 @@ describe("___resetLazy via reload (line 606)", () => {
 		api = await makeLazyApi();
 
 		// Materialize math first
-		await api.math._materialize();
+		await api.math.___materialize();
 		const addResult = await api.math.add(1, 2);
 		expect(addResult).toBe(1003);
 

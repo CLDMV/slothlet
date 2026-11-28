@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/smart-flattening/c03-116-wrapper-apipath.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/smart-flattening/c03-116-wrapper-apipath.test.vitest.mjs
  *	@Date: 2026-05-28T00:00:00-07:00 (1779951600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-28T04:33:02-08:00 (1795869182)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,9 +56,10 @@ describe.each(HOOK_MATRIX)("C03_116 wrapper apiPath - $name", ({ config }) => {
 		await api.notifications.formatPhone("5555555555");
 
 		const meta = await api.slothlet.metadata.get("notifications.formatPhone");
+		const metaNode = api.slothlet.node("notifications.formatPhone");
 
 		expect(meta).not.toBeNull();
-		expect(meta.apiPath).toBe("notifications.formatPhone");
+		expect(metaNode.path.join(".")).toBe("notifications.formatPhone");
 
 		await api.shutdown();
 	});

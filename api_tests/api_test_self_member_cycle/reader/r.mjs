@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_self_member_cycle/reader/r.mjs
+ *	@Filename: api_tests/api_test_self_member_cycle/reader/r.mjs
  *	@Date: 2026-11-01T17:13:39-08:00 (1793582019)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T18:26:39-08:00 (1793586399)
+ *	@Last modified time: 2026-11-28T04:29:43-08:00 (1795868983)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -84,7 +84,7 @@ export function writeLap() {
  * @param {string} key - The global to leave it under.
  * @returns {void}
  * @example
- * stashLap("lap"); // globalThis.lap.later = 1 from host code: RUNTIME_NO_ACTIVE_CONTEXT_SELF without a grant
+ * stashLap("lap"); // globalThis.lap.later = 1 from host code: CONTEXT_NOT_ACTIVE_SELF without a grant
  */
 export function stashLap(key) {
 	globalThis[key] = self.things.x.conn.self.self;

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/listener-cleanup/third-party-cleanup.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/listener-cleanup/third-party-cleanup.test.vitest.mjs
  *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-28T04:32:04-08:00 (1795869124)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,14 +37,14 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
  * Count the listeners on `emitter` for `events` that are still slothlet wrappers. A slothlet wrapper,
- * `on` or `once`, carries `_slothletOriginal`; the plain one-shot wrapper that replaces a `once` wrapper at
+ * `on` or `once`, carries `____slothletOriginal`; the plain one-shot wrapper that replaces a `once` wrapper at
  * shutdown does not.
  * @param {import("node:events").EventEmitter} emitter - Emitter.
  * @param {string[]} events - Event names.
  * @returns {number} Wrapped listeners still attached.
  */
 const wrappedListeners = (emitter, events) =>
-	events.reduce((sum, event) => sum + emitter.rawListeners(event).filter((fn) => fn._slothletOriginal !== undefined).length, 0);
+	events.reduce((sum, event) => sum + emitter.rawListeners(event).filter((fn) => fn.____slothletOriginal !== undefined).length, 0);
 
 const POOL_EVENTS = ["connect", "query", "error", "disconnect"];
 const WATCHER_EVENTS = ["add", "change", "unlink", "error", "ready"];

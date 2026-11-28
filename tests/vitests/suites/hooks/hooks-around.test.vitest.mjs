@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/hooks/hooks-around.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/hooks/hooks-around.test.vitest.mjs
  *	@Date: 2026-09-28T12:00:00-07:00 (1790622000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:07-07:00 (1791090907)
+ *	@Last modified time: 2026-11-28T04:31:54-08:00 (1795869114)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -187,7 +187,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		const always = [];
 		api.slothlet.hook.on("svc.mul:before", () => log.push("before"), { id: "be" });
 		api.slothlet.hook.on("svc.mul:after", () => log.push("after"), { id: "af" });
-		api.slothlet.hook.on("svc.mul:always", ({ result, hasError }) => always.push({ result, hasError }), { id: "al" });
+		api.slothlet.hook.on("svc.mul:always", ({ result, errors, hasError = errors.length > 0 }) => always.push({ result, hasError }), {
+			id: "al"
+		});
 		api.slothlet.hook.on("svc.mul:around", () => "cached", { id: "ar" });
 
 		expect(await api.svc.mul(2, 3)).toBe("cached");
@@ -200,7 +202,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		const errors = [];
 		const always = [];
 		api.slothlet.hook.on("svc.fail:error", ({ error }) => errors.push(error.message), { id: "er" });
-		api.slothlet.hook.on("svc.fail:always", ({ result, hasError }) => always.push({ result, hasError }), { id: "al" });
+		api.slothlet.hook.on("svc.fail:always", ({ result, errors, hasError = errors.length > 0 }) => always.push({ result, hasError }), {
+			id: "al"
+		});
 		api.slothlet.hook.on(
 			"svc.fail:around",
 			({ next }) => {
@@ -222,8 +226,14 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		api = await boot(config);
 		const errors = [];
 		const always = [];
-		api.slothlet.hook.on("svc.fail:error", ({ error, source }) => errors.push({ message: error.message, type: source.type }), { id: "er" });
-		api.slothlet.hook.on("svc.fail:always", ({ hasError, errors: errs }) => always.push({ hasError, count: errs.length }), { id: "al" });
+		api.slothlet.hook.on("svc.fail:error", ({ error, origin: source }) => errors.push({ message: error.message, type: source.type }), {
+			id: "er"
+		});
+		api.slothlet.hook.on(
+			"svc.fail:always",
+			({ errors: errs, hasError = errs.length > 0 }) => always.push({ hasError, count: errs.length }),
+			{ id: "al" }
+		);
 		api.slothlet.hook.on(
 			"svc.fail:around",
 			({ next }) => {
@@ -248,7 +258,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 	it("an around hook's own error is reported with an `around` source", async () => {
 		api = await boot(config);
 		const sources = [];
-		api.slothlet.hook.on("svc.mul:error", ({ source }) => sources.push(source), { id: "er" });
+		api.slothlet.hook.on("svc.mul:error", ({ origin: source }) => sources.push(source), { id: "er" });
 		api.slothlet.hook.on(
 			"svc.mul:around",
 			() => {
@@ -260,8 +270,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		const result = await outcome(() => api.svc.mul(1, 2));
 		expect(result.error.message).toBe("denied");
 		expect(sources).toHaveLength(1);
-		expect(sources[0]).toMatchObject({ type: "around", hookId: "gate", hookTag: "gate", subset: "before" });
-		expect(typeof sources[0].timestamp).toBe("number");
+		expect(sources[0]).toMatchObject({ type: "around", hook: "gate", subset: "before" });
+		expect(typeof sources[0].at).toBe("number");
 		expect(log, "target never ran").toEqual([]);
 	});
 
@@ -269,7 +279,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		api = await boot(config);
 		const sources = [];
 		const caught = [];
-		api.slothlet.hook.on("svc.mul:error", ({ source }) => sources.push(source.type), { id: "er" });
+		api.slothlet.hook.on("svc.mul:error", ({ origin: source }) => sources.push(source.type), { id: "er" });
 		api.slothlet.hook.on(
 			"svc.mul:before",
 			() => {
@@ -300,7 +310,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		api = await boot(config);
 		const sources = [];
 		const caught = [];
-		api.slothlet.hook.on("svc.mul:error", ({ source }) => sources.push({ type: source.type, hookId: source.hookId }), { id: "er" });
+		api.slothlet.hook.on("svc.mul:error", ({ origin: source }) => sources.push({ type: source.type, hookId: source.hook }), { id: "er" });
 		api.slothlet.hook.on(
 			"svc.mul:after",
 			() => {
@@ -328,7 +338,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 	});
 
 	it("suppressErrors applies to what escapes the around chain", async () => {
-		api = await boot(config, { suppressErrors: true });
+		api = await boot(config, { errors: "suppress" });
 		const errors = [];
 		api.slothlet.hook.on("svc.fail:error", ({ error }) => errors.push(error.message), { id: "er" });
 		api.slothlet.hook.on("svc.fail:around", ({ next }) => next(), { id: "ar" });
@@ -381,7 +391,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		api.slothlet.hook.on(
 			"svc.**:around",
 			({ path, entry, caller, next }) => {
-				seen.push({ path, entry, caller: caller ? caller.apiPath : caller });
+				seen.push({ path, entry, caller: caller ? caller.path.join(".") : caller });
 				return next();
 			},
 			{ id: "ar" }
@@ -407,7 +417,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 	it("calling next() twice throws HOOK_AROUND_NEXT_CALLED_TWICE (reported as an around failure)", async () => {
 		api = await boot(config);
 		const sources = [];
-		api.slothlet.hook.on("svc.mul:error", ({ error, source }) => sources.push({ code: error.code, type: source.type }), { id: "er" });
+		api.slothlet.hook.on("svc.mul:error", ({ error, origin: source }) => sources.push({ code: error.code, type: source.type }), {
+			id: "er"
+		});
 		api.slothlet.hook.on(
 			"svc.mul:around",
 			({ next }) => {
@@ -458,10 +470,10 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		api.slothlet.hook.on("svc.**:around", ({ next }) => next() * 2, { id: "double" });
 		expect(await api.svc.mul(2, 3)).toBe(12);
 
-		api.slothlet.hook.enablePattern("other.**");
+		api.slothlet.hook.pattern.enable("other.**");
 		expect(await api.svc.mul(2, 3), "path excluded by the filter").toBe(6);
 
-		api.slothlet.hook.resetPatternFilter();
+		api.slothlet.hook.pattern.reset();
 		expect(await api.svc.mul(2, 3)).toBe(12);
 	});
 });
@@ -490,8 +502,7 @@ describe("Hooks > around (#496) > versioned registration", () => {
 						}
 					}
 				},
-				{},
-				{ version, default: version === "v1" }
+				{ version: { tag: version, default: version === "v1" } }
 			);
 		}
 		const fired = [];
@@ -501,7 +512,7 @@ describe("Hooks > around (#496) > versioned registration", () => {
 				fired.push({ version, path });
 				return `${next()}!`;
 			},
-			{ id: "audit", versionDispatcher: () => ["v1", "v2"] }
+			{ id: "audit", versioning: { dispatcher: () => ["v1", "v2"] } }
 		);
 
 		expect(api.v1.auth.login()).toBe("login-v1!");

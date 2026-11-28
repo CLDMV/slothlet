@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-audit-verbose.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-audit-verbose.test.vitest.mjs
  *	@Date: 2026-04-14T17:20:32-07:00 (1776212432)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-28T04:32:19-08:00 (1795869139)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Audit Verbose > $name", ({ conf
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				audit: "verbose",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}

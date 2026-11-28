@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/browser/i18n.browser.test.mjs
+ *	@Filename: tests/browser/i18n.browser.test.mjs
  *	@Date: 2026-06-16T19:29:13-07:00 (1781663353)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-28T04:30:50-08:00 (1795869050)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,26 +28,26 @@ describe("i18n browser-only paths", () => {
 
 		// Importing the module already ran the init arm: translations_dirname = isNode ? … : null.
 		// initI18n() runs i18n_detectLanguage() → navigator.languages browser arm.
-		i18n.initI18n();
-		expect(typeof i18n.getLanguage()).toBe("string");
+		i18n.init();
+		expect(typeof i18n.language.get()).toBe("string");
 
 		// setLanguage() in a browser hits the fire-and-forget async arm (can't read locale sync).
-		i18n.setLanguage("es-mx");
+		i18n.language.set("es-mx");
 		// en-us short-circuits before the browser arm — exercise that path too.
-		i18n.setLanguage("en-us");
-		expect(i18n.getLanguage()).toBe("en-us");
+		i18n.language.set("en-us");
+		expect(i18n.language.get()).toBe("en-us");
 		// A falsy lang reaches the browser arm but skips the async load (the `if (lang && …)` false arm).
-		i18n.setLanguage("");
-		expect(i18n.getLanguage()).toBe("en-us");
+		i18n.language.set("");
+		expect(i18n.language.get()).toBe("en-us");
 
 		// setLanguageAsync() is the browser-capable path: dynamic import of the locale JSON
 		// (i18n_localeRef returns a package specifier, resolved via the importmap).
-		await i18n.setLanguageAsync("es-mx");
-		expect(["es-mx", "en-us"]).toContain(i18n.getLanguage());
+		await i18n.language.set("es-mx");
+		expect(["es-mx", "en-us"]).toContain(i18n.language.get());
 
 		// A bad locale warns + keeps en-us (the failed-load branch).
-		await i18n.setLanguageAsync("zz-zz");
-		expect(typeof i18n.getLanguage()).toBe("string");
+		await i18n.language.set("zz-zz");
+		expect(typeof i18n.language.get()).toBe("string");
 
 		// translate() reads the current table; a param with an undefined value hits the
 		// `value !== undefined ? … : ""` fallback arm.
@@ -68,13 +68,13 @@ describe("i18n browser-only paths", () => {
 			// languages[0] falsy → `|| navigator.language` fallback arm.
 			Object.defineProperty(navigator, "languages", { get: () => [], configurable: true });
 			Object.defineProperty(navigator, "language", { get: () => "fr-FR", configurable: true });
-			i18n.initI18n();
-			expect(typeof i18n.getLanguage()).toBe("string");
+			i18n.init();
+			expect(typeof i18n.language.get()).toBe("string");
 
 			// both empty → navLang falsy → the `: "en-us"` arm.
 			Object.defineProperty(navigator, "language", { get: () => "", configurable: true });
-			i18n.initI18n();
-			expect(i18n.getLanguage()).toBe("en-us");
+			i18n.init();
+			expect(i18n.language.get()).toBe("en-us");
 		} finally {
 			if (hadOwnLangs) Object.defineProperty(navigator, "languages", ownLangs);
 			else delete navigator.languages;

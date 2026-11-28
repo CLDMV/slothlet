@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-hook-receiver.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-hook-receiver.test.vitest.mjs
  *	@Date: 2026-10-26T11:04:09-07:00 (1793037849)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T20:52:50-07:00 (1793505170)
+ *	@Last modified time: 2026-11-28T04:32:29-08:00 (1795869149)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,6 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothletInstance from "@cldmv/slothlet";
 
 /**
@@ -35,8 +34,8 @@ import slothletInstance from "@cldmv/slothlet";
  * @returns {Promise<object>} The api.
  */
 const slothlet = (config) =>
-	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
+import { TEST_DIRS, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 const PROBE = "slothlet.test.i625.hookReceiver";
@@ -58,16 +57,16 @@ describe.each(CONFIGS)("hook handler receiver (#625) — $mode / $runtime", ({ m
 	});
 
 	it.each([
-		["permissions on", { permissions: { defaultPolicy: "allow" } }],
+		["permissions on", { permissions: { policy: "allow" } }],
 		["permissions off", {}]
 	])("calls a module's handler with no receiver, so it cannot change its own registration (%s)", async (_label, options) => {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: { enabled: true }, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, hook: { enabled: true }, ...options });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+		await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 		const seen = [];
 		let handedApi = null;
 		globalThis[Symbol.for(PROBE)] = (self) => {
-			self.slothlet.hook.on("before:victim.v.echo", function handler({ api: given }) {
+			self.slothlet.hook.on("victim.v.echo:before", function handler({ api: given }) {
 				seen.push(this === undefined ? "none" : typeof this);
 				if (this && typeof this === "object") {
 					this.handler = function swapped({ api: raw }) {

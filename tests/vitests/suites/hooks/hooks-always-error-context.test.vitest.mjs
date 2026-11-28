@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/hooks/hooks-always-error-context.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/hooks/hooks-always-error-context.test.vitest.mjs
  *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-28T04:31:53-08:00 (1795869113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,7 +45,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST,
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 	});
 
@@ -62,7 +67,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 
 		api.slothlet.hook.on(
 			"math.add:always",
-			({ path, result, hasError, errors }) => {
+			({ path, result, errors, hasError = errors.length > 0 }) => {
 				alwaysContext = { path, result, hasError, errors };
 			},
 			{ id: "observe-execution" }
@@ -93,7 +98,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 
 		api.slothlet.hook.on(
 			"math.add:always",
-			({ result, hasError, errors }) => {
+			({ result, errors, hasError = errors.length > 0 }) => {
 				alwaysContext = { result, hasError, errors };
 			},
 			{ id: "observe-execution" }
@@ -118,14 +123,19 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 			base: TEST_DIRS.API_TEST,
 			hook: {
 				enabled: true,
-				suppressErrors: true
+				errors: true
 			},
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 
 		api.slothlet.hook.on(
 			"math.divide:always",
-			({ path, result, hasError, errors }) => {
+			({ path, result, errors, hasError = errors.length > 0 }) => {
 				alwaysContext = { path, result, hasError, errors };
 			},
 			{ id: "observe-execution" }
@@ -155,15 +165,20 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 			base: TEST_DIRS.API_TEST,
 			hook: {
 				enabled: true,
-				suppressErrors: true
+				errors: true
 			},
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 
 		// Single always hook handles both success and error logging
 		api.slothlet.hook.on(
 			"math.*:always",
-			({ path, result, hasError, errors }) => {
+			({ path, result, errors, hasError = errors.length > 0 }) => {
 				if (hasError) {
 					logs.push({
 						type: "error",
@@ -218,13 +233,18 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST,
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 			// suppressErrors: false (default)
 		});
 
 		api.slothlet.hook.on(
 			"math.divide:always",
-			({ path, result, hasError, errors, self, context }) => {
+			({ path, result, errors, self, context, hasError = errors.length > 0 }) => {
 				alwaysContext = { path, result, hasError, errors, self, context };
 			},
 			{ id: "observe-execution" }
@@ -259,14 +279,19 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 			base: TEST_DIRS.API_TEST,
 			hook: {
 				enabled: true,
-				suppressErrors: true
+				errors: true
 			},
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 
 		api.slothlet.hook.on(
 			"**:always",
-			({ hasError }) => {
+			({ errors, hasError = errors.length > 0 }) => {
 				metrics.calls++;
 				if (hasError) {
 					metrics.errors++;
@@ -302,14 +327,19 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 			base: TEST_DIRS.API_TEST,
 			hook: {
 				enabled: true,
-				suppressErrors: true
+				errors: true
 			},
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 
 		api.slothlet.hook.on(
 			"**:always",
-			({ path, hasError, errors }) => {
+			({ path, errors, hasError = errors.length > 0 }) => {
 				if (hasError) {
 					errorLog.push({
 						path: path,

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/diagnostics/diagnostics-endpoint-availability.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/diagnostics/diagnostics-endpoint-availability.test.vitest.mjs
  *	@Date: 2026-02-21T10:42:58-08:00 (1771699378)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-28T04:31:43-08:00 (1795869103)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,29 +17,32 @@
  * @fileoverview Verifies the complete endpoint availability of `api.slothlet` under
  * all combinations of `diagnostics` and `hook.enabled` configuration flags.
  *
- * ## What is always present on `api.slothlet` (18 keys)
+ * ## What is always present on `api.slothlet` (16 keys; 17 with `hook`)
  *
  * Regardless of diagnostics or hook configuration, these namespaces and values
- * must always be available:
+ * must always be available (`hook` is conditional, see below):
  *
  *   version       - semver string from package.json
- *   versioning    - VersionManager API: { list, setDefault, unregister, getVersionMetadata, setVersionMetadata }
+ *   versioning    - VersionManager API: { list, default, remove, metadata: { get, set } }
  *   instanceID    - unique instance identifier string
  *   types         - TYPE_STATES symbol map ({ UNMATERIALIZED, IN_FLIGHT })
  *   api           - mutation control: { add, remove, reload }
  *   sanitize      - sanitize a string using API path rules
- *   lockCaller    - pin the registering module's caller identity onto a callback
+ *   pin           - pin the registering module's caller identity onto a callback
  *   bind          - freeze the whole async context onto a callback (AsyncResource.bind)
  *   context       - per-request context: { get, diagnostics, run, scope }
- *   hook          - hook registration: { on, remove, clear, off, enable, disable, list }
- *   metadata      - metadata API: { setGlobal, set, remove, setFor, removeFor }
- *   scope         - run a function with current context
- *   run           - run a function with provided context
+ *   metadata      - metadata API: { global, set, remove }
  *   reload        - reload entire instance
  *   shutdown      - shutdown instance
  *   owner         - ownership query: { get }
- *   materialize   - lazy materialization tracking: { materialized, get, wait }
+ *   materialize   - lazy materialization state: { complete, get, wait }
+ *   warnings      - this instance's warnings: { get, clear }
  *   lifecycle     - lifecycle event emitter: { on, off }
+ *
+ * ## Present only when hooks are enabled or `diagnostics: true` (#821)
+ *
+ *   hook          - hook registration: { on, remove, clear, off, enable, disable, list }
+ *                   absent when `hook` is off and `diagnostics` is not true
  *
  * ## Only present when `diagnostics: true` (adds `diag`)
  *
@@ -48,18 +51,15 @@
  *     reference       - reference object passed at init (or null)
  *     context         - context object from config
  *     inspect         - returns full getDiagnostics() snapshot
- *     owner           - ownership diagnostics: { get }
- *     caches          - cache diagnostics: { get, getAllModuleIDs, has }
- *     SlothletWarning - SlothletWarning class (for captured-warning access in tests)
- *     hook            - hook manager introspection: { enabled, compilePattern }
- *                       always present (hookManager is always instantiated, even when
- *                       hook.enabled: false - it's just in disabled state)
+ *     owner           - ownership diagnostics: { get, list }
+ *     caches          - cache diagnostics: { get, ids, has }
+ *     hook            - hook manager introspection: { enabled, compile }
+ *                       present whenever diagnostics is on (hookManager is always instantiated,
+ *                       even when hook.enabled: false - it's just in disabled state)
  *
  * ## Never present (regardless of any config)
  *
- *   hooks (plural) - there is a `delete namespace.hooks` in api_builder.mjs but
- *                    `namespace.hooks` is never assigned, making it a no-op dead code
- *                    path. `api.slothlet.hooks` is always undefined.
+ *   hooks (plural) - `namespace.hooks` is never assigned. `api.slothlet.hooks` is always undefined.
  *
  * @see src/lib/builders/api_builder.mjs - namespace construction and conditional logic
  */
@@ -82,29 +82,32 @@ const BASE_DIR = TEST_DIRS.API_TEST;
 const ALWAYS_PRESENT_KEYS = [
 	"version",
 	"versioning",
-	"instanceID",
+	"instance",
 	"types",
 	"api",
 	"sanitize",
-	"lockCaller",
+	"pin",
 	"bind",
 	"context",
-	"hook",
 	"metadata",
-	"scope",
-	"run",
 	"reload",
 	"shutdown",
 	"owner",
 	"materialize",
-	"lifecycle"
+	"lifecycle",
+	"warnings"
 ];
 
 /**
+ * `hook` is on every instance (#821); the `hook` option only sets whether hooks start enabled.
+ * @returns {boolean} Whether `api.slothlet.hook` is expected.
+ */
+const hookExpected = () => true;
+
+/**
  * Keys that must NEVER be present on `api.slothlet` regardless of any config.
- * `hooks` (plural) is never assigned to the namespace - `delete namespace.hooks`
- * in api_builder.mjs is a no-op dead code path. The actual hook API is `hook`
- * (singular), which is always present.
+ * `hooks` (plural) is never assigned to the namespace. The actual hook API is `hook`
+ * (singular), present on every instance.
  * @type {string[]}
  */
 const NEVER_PRESENT_KEYS = ["hooks"];
@@ -120,14 +123,14 @@ const DIAG_ONLY_KEYS = ["diag"];
 const EXPECTED_API_SUBKEYS = ["add", "remove", "reload"];
 const EXPECTED_CONTEXT_SUBKEYS = ["get", "diagnostics", "run", "scope"];
 const EXPECTED_HOOK_SUBKEYS = ["on", "remove", "clear", "off", "enable", "disable", "list"];
-const EXPECTED_METADATA_SUBKEYS = ["setGlobal", "set", "remove", "setFor", "removeFor"];
+const EXPECTED_METADATA_SUBKEYS = ["global", "set", "remove"];
 const EXPECTED_OWNER_SUBKEYS = ["get"];
-const EXPECTED_MATERIALIZE_SUBKEYS = ["materialized", "get", "wait"];
+const EXPECTED_MATERIALIZE_SUBKEYS = ["complete", "get", "wait"];
 const EXPECTED_LIFECYCLE_SUBKEYS = ["on", "off"];
 
-const EXPECTED_DIAG_SUBKEYS = ["describe", "reference", "context", "inspect", "owner", "caches", "SlothletWarning", "hook"];
-const EXPECTED_DIAG_CACHES_SUBKEYS = ["get", "getAllModuleIDs", "has"];
-const EXPECTED_DIAG_OWNER_SUBKEYS = ["get"];
+const EXPECTED_DIAG_SUBKEYS = ["describe", "reference", "context", "inspect", "owner", "caches", "hook"];
+const EXPECTED_DIAG_CACHES_SUBKEYS = ["get", "ids", "has"];
+const EXPECTED_DIAG_OWNER_SUBKEYS = ["get", "list"];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -168,6 +171,7 @@ const MATRIX = [
 
 describe("api.slothlet - diagnostics endpoint availability", () => {
 	describe.each(MATRIX)("$label", ({ diagnostics, hook }) => {
+		const withHook = hookExpected();
 		let api;
 
 		beforeEach(async () => {
@@ -178,7 +182,9 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				hook,
 				base: BASE_DIR,
 				api: {
-					collision: { initial: "replace", api: "replace" }
+					collision: {
+						mode: { initial: "replace", api: "replace" }
+					}
 				}
 			});
 		});
@@ -193,7 +199,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 		// ─── Always-present endpoints ─────────────────────────────────────
 
 		describe("always-present top-level keys", () => {
-			it("should have all 18 always-present keys defined on api.slothlet", () => {
+			it("should have all 16 always-present keys defined on api.slothlet", () => {
 				expectKeysPresent(api.slothlet, ALWAYS_PRESENT_KEYS, "api.slothlet");
 			});
 
@@ -205,15 +211,15 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 			it("api.slothlet.versioning should be the VersionManager API namespace", () => {
 				expect(typeof api.slothlet.versioning).toBe("object");
 				expect(typeof api.slothlet.versioning.list).toBe("function");
-				expect(typeof api.slothlet.versioning.setDefault).toBe("function");
-				expect(typeof api.slothlet.versioning.unregister).toBe("function");
-				expect(typeof api.slothlet.versioning.getVersionMetadata).toBe("function");
-				expect(typeof api.slothlet.versioning.setVersionMetadata).toBe("function");
+				expect(typeof api.slothlet.versioning.default).toBe("function");
+				expect(typeof api.slothlet.versioning.remove).toBe("function");
+				expect(typeof api.slothlet.versioning.metadata.get).toBe("function");
+				expect(typeof api.slothlet.versioning.metadata.set).toBe("function");
 			});
 
-			it("api.slothlet.instanceID should be a non-empty string", () => {
-				expect(typeof api.slothlet.instanceID).toBe("string");
-				expect(api.slothlet.instanceID.length).toBeGreaterThan(0);
+			it("api.slothlet.instance.id should be a non-empty string", () => {
+				expect(typeof api.slothlet.instance.id).toBe("string");
+				expect(api.slothlet.instance.id.length).toBeGreaterThan(0);
 			});
 
 			it("api.slothlet.types should have UNMATERIALIZED and IN_FLIGHT symbols", () => {
@@ -232,8 +238,8 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				expect(typeof api.slothlet.sanitize).toBe("function");
 			});
 
-			it("api.slothlet.lockCaller should be a function", () => {
-				expect(typeof api.slothlet.lockCaller).toBe("function");
+			it("api.slothlet.pin should be a function", () => {
+				expect(typeof api.slothlet.pin).toBe("function");
 			});
 
 			it("api.slothlet.bind should be a function", () => {
@@ -244,26 +250,26 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				expectKeysPresent(api.slothlet.context, EXPECTED_CONTEXT_SUBKEYS, "api.slothlet.context");
 			});
 
-			it("api.slothlet.hook should have on, remove, clear, off, enable, disable, list", () => {
+			it("api.slothlet.hook should have on, remove, clear, off, enable, disable, list (on every instance, #821)", () => {
 				expectKeysPresent(api.slothlet.hook, EXPECTED_HOOK_SUBKEYS, "api.slothlet.hook");
 				for (const key of EXPECTED_HOOK_SUBKEYS) {
 					expect(typeof api.slothlet.hook[key], `api.slothlet.hook.${key} should be a function`).toBe("function");
 				}
 			});
 
-			it("api.slothlet.metadata should have setGlobal, set, remove, setFor, removeFor", () => {
+			it("api.slothlet.metadata should have global, set, remove", () => {
 				expectKeysPresent(api.slothlet.metadata, EXPECTED_METADATA_SUBKEYS, "api.slothlet.metadata");
 				for (const key of EXPECTED_METADATA_SUBKEYS) {
 					expect(typeof api.slothlet.metadata[key], `api.slothlet.metadata.${key} should be a function`).toBe("function");
 				}
 			});
 
-			it("api.slothlet.scope should be a function", () => {
-				expect(typeof api.slothlet.scope).toBe("function");
+			it("api.slothlet.context.scope should be a function", () => {
+				expect(typeof api.slothlet.context.scope).toBe("function");
 			});
 
-			it("api.slothlet.run should be a function", () => {
-				expect(typeof api.slothlet.run).toBe("function");
+			it("api.slothlet.context.run should be a function", () => {
+				expect(typeof api.slothlet.context.run).toBe("function");
 			});
 
 			it("api.slothlet.reload should be a function", () => {
@@ -279,7 +285,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				expect(typeof api.slothlet.owner.get).toBe("function");
 			});
 
-			it("api.slothlet.materialize should have materialized, get, wait", () => {
+			it("api.slothlet.materialize should have complete, get, wait", () => {
 				expectKeysPresent(api.slothlet.materialize, EXPECTED_MATERIALIZE_SUBKEYS, "api.slothlet.materialize");
 			});
 
@@ -291,7 +297,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 		// ─── Never-present endpoints ──────────────────────────────────────
 
 		describe("never-present keys", () => {
-			it("api.slothlet.hooks (plural) should never be defined - it is a dead code path in api_builder.mjs", () => {
+			it("api.slothlet.hooks (plural) should never be defined", () => {
 				expectKeysAbsent(api.slothlet, NEVER_PRESENT_KEYS, "api.slothlet");
 			});
 		});
@@ -304,8 +310,9 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					expectKeysAbsent(api.slothlet, DIAG_ONLY_KEYS, "api.slothlet");
 				});
 
-				it("api.slothlet should have exactly the 18 always-present keys and no more", () => {
+				it("api.slothlet should have exactly the always-present keys (plus hook when expected) and no more", () => {
 					const actualKeys = Object.keys(api.slothlet);
+					expect(actualKeys.includes("hook")).toBe(withHook);
 					for (const key of ALWAYS_PRESENT_KEYS) {
 						expect(actualKeys, `key "${key}" should be in Object.keys`).toContain(key);
 					}
@@ -325,7 +332,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					expect(api.slothlet.diag).toBeDefined();
 				});
 
-				it("api.slothlet.diag should have describe, reference, context, inspect, owner, caches, SlothletWarning", () => {
+				it("api.slothlet.diag should have describe, reference, context, inspect, owner, caches, hook", () => {
 					expectKeysPresent(api.slothlet.diag, EXPECTED_DIAG_SUBKEYS, "api.slothlet.diag");
 				});
 
@@ -342,28 +349,29 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					expect(typeof api.slothlet.diag.owner.get).toBe("function");
 				});
 
-				it("api.slothlet.diag.caches should have get, getAllModuleIDs, has", () => {
+				it("api.slothlet.diag.caches should have get, ids, has", () => {
 					expectKeysPresent(api.slothlet.diag.caches, EXPECTED_DIAG_CACHES_SUBKEYS, "api.slothlet.diag.caches");
 					for (const key of EXPECTED_DIAG_CACHES_SUBKEYS) {
 						expect(typeof api.slothlet.diag.caches[key], `api.slothlet.diag.caches.${key} should be a function`).toBe("function");
 					}
 				});
 
-				it("api.slothlet.diag.SlothletWarning should be a class/function", () => {
-					expect(typeof api.slothlet.diag.SlothletWarning).toBe("function");
+				it("api.slothlet.diag has no SlothletWarning (warnings are api.slothlet.warnings)", () => {
+					expect(api.slothlet.diag.SlothletWarning).toBeUndefined();
 				});
 
-				it("api.slothlet.diag.hook should always be defined (hookManager is always instantiated) and reflect hook.enabled state", () => {
+				it("api.slothlet.diag.hook should be defined (hookManager is always instantiated) and reflect hook.enabled state", () => {
 					// The hookManager is always created regardless of hook.enabled - it's just
 					// disabled (intercepting nothing) when hook.enabled: false. Therefore
-					// api.slothlet.diag.hook is always present when diagnostics is on, and its
+					// api.slothlet.diag.hook is present whenever diagnostics is on, and its
 					// `enabled` property mirrors the hook.enabled config value.
 					expect(api.slothlet.diag.hook).toBeDefined();
 					expect(api.slothlet.diag.hook.enabled).toBe(hook.enabled);
 				});
 
-				it("api.slothlet should have exactly the 18 always-present keys plus diag", () => {
+				it("api.slothlet should have exactly the always-present keys plus hook and diag", () => {
 					const actualKeys = Object.keys(api.slothlet);
+					expect(actualKeys).toContain("hook");
 					for (const key of ALWAYS_PRESENT_KEYS) {
 						expect(actualKeys, `key "${key}" should be in Object.keys`).toContain(key);
 					}

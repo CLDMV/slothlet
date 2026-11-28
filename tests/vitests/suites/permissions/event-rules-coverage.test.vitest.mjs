@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/event-rules-coverage.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/event-rules-coverage.test.vitest.mjs
  *	@Date: 2026-09-20T15:33:32+00:00 (1789918412)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:37-07:00 (1791091717)
+ *	@Last modified time: 2026-11-28T04:32:14-08:00 (1795869134)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			api: { mutations: { events: true } },
-			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
 		const id = api.slothlet.event.rules.add({ caller: "subscriber.**", event: "evt.*", effect: "allow" });
 		expect(typeof id).toBe("string");
@@ -53,31 +53,31 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			api: { mutations: { events: false } },
-			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
-		expect(() => api.slothlet.event.rules.remove("anything")).toThrow(/MUTATIONS_DISABLED/);
+		expect(() => api.slothlet.event.rules.remove("anything")).toThrow(/API_MUTATION_DISABLED/);
 	});
 
 	it("rules.add rejects malformed event rules (#validateEventRule)", async () => {
 		api = await slothlet({
 			base: BASE,
 			api: { mutations: { events: true } },
-			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
 		const add = (rule) => () => api.slothlet.event.rules.add(rule);
-		expect(add(null)).toThrow(/INVALID_PERMISSION_RULE/); // not an object
-		expect(add({ event: "x", effect: "allow" })).toThrow(/INVALID_PERMISSION_RULE/); // caller missing
-		expect(add({ caller: "**", effect: "allow" })).toThrow(/INVALID_PERMISSION_RULE/); // event missing
-		expect(add({ caller: "**", event: "x", effect: "bogus" })).toThrow(/INVALID_PERMISSION_RULE/); // bad effect
+		expect(add(null)).toThrow(/PERMISSION_RULE_INVALID/); // not an object
+		expect(add({ event: "x", effect: "allow" })).toThrow(/PERMISSION_RULE_INVALID/); // caller missing
+		expect(add({ caller: "**", effect: "allow" })).toThrow(/PERMISSION_RULE_INVALID/); // event missing
+		expect(add({ caller: "**", event: "x", effect: "bogus" })).toThrow(/PERMISSION_RULE_INVALID/); // bad effect
 	});
 
 	it("a conditional event rule marks the pool conditional and still resolves a subscriber", async () => {
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [{ caller: "subscriber.**", event: "cond.*", effect: "allow", condition: { tenant: "tenant-a" } }]
 				}
 			}
@@ -93,7 +93,7 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			api: { mutations: { events: true } },
-			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
 		const id = api.slothlet.event.rules.add({ caller: "subscriber.**", event: "rm.*", effect: "allow" });
 		expect(await api.subscriber.subscribe("rm.data")).toBe("allow");
@@ -111,9 +111,9 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [
 						{ caller: "**", event: "**", effect: "deny" }, // broad — matches everything
 						{ caller: "**", event: "open.*", effect: "allow" } // more specific for open.*
@@ -132,8 +132,8 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 			base: BASE,
 			api: { mutations: { events: true } },
 			permissions: {
-				defaultPolicy: "allow",
-				events: { default: "notify", rules: [{ caller: "**", event: "tie.*", effect: "deny" }] }
+				policy: "allow",
+				events: { policy: "notify", rules: [{ caller: "**", event: "tie.*", effect: "deny" }] }
 			}
 		});
 		// A runtime rule with IDENTICAL specificity but a higher layer must win the equal-specificity tiebreak.
@@ -145,9 +145,9 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					// Two instance-layer rules of identical specificity → equal spec AND equal layer, so the
 					// comparator falls to the registration-order tiebreak (last-registered wins).
 					rules: [

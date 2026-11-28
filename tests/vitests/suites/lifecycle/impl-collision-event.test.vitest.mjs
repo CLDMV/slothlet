@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/lifecycle/impl-collision-event.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/lifecycle/impl-collision-event.test.vitest.mjs
  *	@Date: 2026-09-21T08:57:29-07:00 (1790006249)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-28T04:32:02-08:00 (1795869122)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,11 +48,11 @@ afterEach(async () => {
 });
 
 /** Compose pkg_a, subscribe, add pkg_b under `mode`, and return the collision events. */
-async function composeAndAdd({ mode, apiMode = "merge", addOpts = { collisionMode: "merge" } }) {
+async function composeAndAdd({ mode, apiMode = "merge", addOpts = { collision: { mode: "merge" } } }) {
 	const events = [];
-	api = await slothlet({ base: PKG_A, mode, collision: { initial: "merge", api: apiMode }, silent: true });
+	api = await slothlet({ base: PKG_A, mode, api: { collision: { mode: { initial: "merge", api: apiMode } } }, silent: true });
 	api.slothlet.lifecycle.on("impl:collision", (d) => events.push(d));
-	await api.slothlet.api.add("", PKG_B, { moduleID: "pkgB", ...addOpts });
+	await api.slothlet.api.add("", PKG_B, { id: "pkgB", ...addOpts });
 	// Force lazy materialization of the composed surface so every resolved leaf is realized.
 	const shared = await api.shared;
 	void shared?.alpha;
@@ -63,7 +63,7 @@ async function composeAndAdd({ mode, apiMode = "merge", addOpts = { collisionMod
 	return events;
 }
 
-const byPath = (events, apiPath) => events.filter((e) => e.apiPath === apiPath);
+const byPath = (events, apiPath) => events.filter((e) => e.path.join(".") === apiPath);
 
 describe("impl:collision — dropped value leaf (merge)", () => {
 	for (const mode of ["eager", "lazy"]) {
@@ -72,11 +72,11 @@ describe("impl:collision — dropped value leaf (merge)", () => {
 			const dropped = byPath(events, "shared.alpha");
 			expect(dropped.length).toBe(1);
 			expect(dropped[0]).toMatchObject({
-				apiPath: "shared.alpha",
+				path: ["shared", "alpha"],
 				resolution: "dropped",
 				incoming: "pkgB",
 				kind: "value",
-				collisionMode: "merge"
+				collision: "merge"
 			});
 			// owner is the retained (first) writer — a real module id, distinct from the incoming one.
 			expect(typeof dropped[0].owner).toBe("string");
@@ -100,7 +100,7 @@ describe("impl:collision — merged namespace", () => {
 				resolution: "merged",
 				incoming: "pkgB",
 				kind: "namespace",
-				collisionMode: "merge"
+				collision: "merge"
 			});
 		});
 	}
@@ -115,7 +115,7 @@ describe("impl:collision — merged namespace", () => {
 
 describe("impl:collision — replaced", () => {
 	it("fires when an incoming module replaces an occupied slot, tagging value vs namespace", async () => {
-		const events = await composeAndAdd({ mode: "eager", apiMode: "replace", addOpts: { collisionMode: "replace" } });
+		const events = await composeAndAdd({ mode: "eager", apiMode: "replace", addOpts: { collision: { mode: "replace" } } });
 
 		// A callable leaf slot (`shared`) is replaced as a value.
 		const replacedLeaf = byPath(events, "shared");
@@ -124,7 +124,7 @@ describe("impl:collision — replaced", () => {
 			resolution: "replaced",
 			incoming: "pkgB",
 			kind: "value",
-			collisionMode: "replace"
+			collision: "replace"
 		});
 		expect(typeof replacedLeaf[0].owner).toBe("string");
 		expect(replacedLeaf[0].owner).not.toBe("pkgB");
@@ -142,7 +142,11 @@ describe("impl:collision — folded self-named namespace (the invisible case)", 
 		api = await slothlet({
 			base: COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			silent: true,
 			lifecycle: { "impl:collision": (d) => events.push(d) }
 		});
@@ -151,21 +155,21 @@ describe("impl:collision — folded self-named namespace (the invisible case)", 
 		JSON.stringify(await api.pair?.frog);
 		JSON.stringify(await api.pair?.crog);
 		// A folded member the survivor already owns is dropped — impl:created never announced it.
-		const folded = events.filter((e) => e.resolution === "dropped" && e.apiPath.startsWith("pair."));
+		const folded = events.filter((e) => e.resolution === "dropped" && e.path[0] === "pair" && e.path.length > 1);
 		expect(folded.length).toBeGreaterThan(0);
 		for (const e of folded) {
-			expect(e).toMatchObject({ resolution: "dropped", kind: "value", collisionMode: "merge" });
+			expect(e).toMatchObject({ resolution: "dropped", kind: "value", collision: "merge" });
 			expect(typeof e.owner).toBe("string");
 		}
 	});
 });
 
 describe("impl:collision — payload shape", () => {
-	it("carries apiPath, resolution, incoming, owner, kind, collisionMode", async () => {
+	it("carries path, resolution, incoming, owner, kind, collision", async () => {
 		const events = await composeAndAdd({ mode: "eager" });
 		expect(events.length).toBeGreaterThan(0);
 		for (const e of events) {
-			expect(Object.keys(e).sort()).toEqual(["apiPath", "collisionMode", "incoming", "kind", "owner", "resolution"]);
+			expect(Object.keys(e).sort()).toEqual(["collision", "incoming", "kind", "owner", "path", "resolution"]);
 			expect(["dropped", "replaced", "merged", "stacked"]).toContain(e.resolution);
 			expect(["value", "namespace"]).toContain(e.kind);
 		}

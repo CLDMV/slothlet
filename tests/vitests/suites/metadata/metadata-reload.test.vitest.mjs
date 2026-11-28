@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/metadata/metadata-reload.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/metadata/metadata-reload.test.vitest.mjs
  *	@Date: 2026-01-25T13:23:08-08:00 (1769376188)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-28T04:32:06-08:00 (1795869126)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,19 +55,21 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 	describe("api.slothlet.reload() - Full Reload", () => {
 		it("should refresh system metadata after full reload", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const metaBefore = api.rootMath.add.__metadata;
+			const metaBefore = api.slothlet.metadata.get(api.rootMath.add);
+			const metaBeforeNode = api.slothlet.node(api.rootMath.add);
 			expect(metaBefore).toBeDefined();
 
 			// Perform full reload
 			await api.slothlet.reload();
 
 			await materialize(api, "rootMath.add", 1, 2);
-			const metaAfter = api.rootMath.add.__metadata;
+			const metaAfter = api.slothlet.metadata.get(api.rootMath.add);
+			const metaAfterNode = api.slothlet.node(api.rootMath.add);
 
 			// System metadata should be refreshed
 			expect(metaAfter).toBeDefined();
-			expect(metaAfter.filePath).toBe(metaBefore.filePath);
-			expect(metaAfter.apiPath).toBe(metaBefore.apiPath);
+			expect(metaAfterNode.file).toBe(metaBeforeNode.file);
+			expect(metaAfterNode.path.join(".")).toBe(metaBeforeNode.path.join("."));
 			// moduleID may change after reload
 		});
 
@@ -80,14 +82,13 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			});
 
 			await materialize(api, "persistent.config.settings.getPluginConfig");
-			const ____metaBefore = api.persistent.config.settings.getPluginConfig.__metadata;
 
 			await api.slothlet.reload();
 
 			// Check if user metadata persisted
 			if (api.persistent?.config?.settings?.getPluginConfig) {
 				await materialize(api, "persistent.config.settings.getPluginConfig");
-				const metaAfter = api.persistent.config.settings.getPluginConfig.__metadata;
+				const metaAfter = api.slothlet.metadata.get(api.persistent.config.settings.getPluginConfig);
 
 				// User metadata should persist across reload
 				expect(metaAfter.shouldPersist).toBe(true);
@@ -98,21 +99,22 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 		it("should handle reload with metadata changes", async () => {
 			// Before reload
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta1 = api.rootMath.add.__metadata;
+			const meta1 = api.slothlet.metadata.get(api.rootMath.add);
 			// Reload (simulates file changes on disk)
 			await api.slothlet.reload();
 
 			// After reload
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta2 = api.rootMath.add.__metadata;
+			const meta2 = api.slothlet.metadata.get(api.rootMath.add);
+			const meta2Node = api.slothlet.node(api.rootMath.add);
 
 			// Both should have metadata
 			expect(meta1).toBeDefined();
 			expect(meta2).toBeDefined();
 
 			// System metadata should be correct
-			expect(meta2.filePath).toBeDefined();
-			expect(meta2.apiPath).toBe("rootMath.add");
+			expect(meta2Node.file).toBeDefined();
+			expect(meta2Node.path.join(".")).toBe("rootMath.add");
 		});
 	});
 
@@ -130,17 +132,18 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			});
 
 			await materialize(api, "reloadable.config.settings.getPluginConfig");
-			const metaBefore = api.reloadable.config.settings.getPluginConfig.__metadata;
+			const metaBeforeNode = api.slothlet.node(api.reloadable.config.settings.getPluginConfig);
 
 			// Reload just this API path
 			await api.slothlet.api.reload("reloadable");
 
 			await materialize(api, "reloadable.config.settings.getPluginConfig");
-			const metaAfter = api.reloadable.config.settings.getPluginConfig.__metadata;
+			const metaAfter = api.slothlet.metadata.get(api.reloadable.config.settings.getPluginConfig);
+			const metaAfterNode = api.slothlet.node(api.reloadable.config.settings.getPluginConfig);
 
 			// Metadata should be refreshed
 			expect(metaAfter).toBeDefined();
-			expect(metaAfter.filePath).toBe(metaBefore.filePath);
+			expect(metaAfterNode.file).toBe(metaBeforeNode.file);
 			expect(metaAfter.version).toBe("1.0.0");
 		});
 
@@ -164,17 +167,18 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			await materialize(api, "stable.config.settings.getPluginConfig");
 			await materialize(api, "reloadTarget.config.settings.getPluginConfig");
 
-			const stableMetaBefore = api.stable.config.settings.getPluginConfig.__metadata;
+			const stableMetaBeforeNode = api.slothlet.node(api.stable.config.settings.getPluginConfig);
 
 			// Reload only reloadTarget
 			await api.slothlet.api.reload("reloadTarget");
 
 			// Stable should be unchanged
 			await materialize(api, "stable.config.settings.getPluginConfig");
-			const stableMetaAfter = api.stable.config.settings.getPluginConfig.__metadata;
+			const stableMetaAfter = api.slothlet.metadata.get(api.stable.config.settings.getPluginConfig);
+			const stableMetaAfterNode = api.slothlet.node(api.stable.config.settings.getPluginConfig);
 
 			expect(stableMetaAfter.stable).toBe(true);
-			expect(stableMetaAfter.moduleID).toBe(stableMetaBefore.moduleID);
+			expect(stableMetaAfterNode.module).toBe(stableMetaBeforeNode.module);
 		});
 
 		it("should handle reload of nested paths", async () => {
@@ -189,14 +193,13 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			});
 
 			await materialize(api, "nested.config.settings.getPluginConfig");
-			const ____metaBefore = api.nested.config.settings.getPluginConfig.__metadata;
 
 			// Reload nested path
 			await api.slothlet.api.reload("nested.config");
 
 			if (api.nested?.config?.settings?.getPluginConfig) {
 				await materialize(api, "nested.config.settings.getPluginConfig");
-				const metaAfter = api.nested.config.settings.getPluginConfig.__metadata;
+				const metaAfter = api.slothlet.metadata.get(api.nested.config.settings.getPluginConfig);
 
 				expect(metaAfter).toBeDefined();
 				expect(metaAfter.nested).toBe(true);
@@ -216,11 +219,12 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 				await api.slothlet.reload();
 
 				await materialize(api, "rootMath.add", 1, 2);
-				const meta = api.rootMath.add.__metadata;
+				const meta = api.slothlet.metadata.get(api.rootMath.add);
+				const metaNode = api.slothlet.node(api.rootMath.add);
 
 				expect(meta).toBeDefined();
-				expect(meta.apiPath).toBe("rootMath.add");
-				expect(meta.filePath).toContain("root-math.mjs");
+				expect(metaNode.path.join(".")).toBe("rootMath.add");
+				expect(metaNode.file).toContain("root-math.mjs");
 			}
 		});
 
@@ -242,7 +246,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 				if (api.multicycle?.config?.settings?.getPluginConfig) {
 					await materialize(api, "multicycle.config.settings.getPluginConfig");
-					const meta = api.multicycle.config.settings.getPluginConfig.__metadata;
+					const meta = api.slothlet.metadata.get(api.multicycle.config.settings.getPluginConfig);
 
 					expect(meta).toBeDefined();
 					expect(meta.cycles).toBe(0); // Should stay 0, not increment
@@ -274,7 +278,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 			if (api.updateable?.config?.settings?.getPluginConfig) {
 				await materialize(api, "updateable.config.settings.getPluginConfig");
-				const meta = api.updateable.config.settings.getPluginConfig.__metadata;
+				const meta = api.slothlet.metadata.get(api.updateable.config.settings.getPluginConfig);
 
 				// Metadata should reflect the values passed to reload
 				expect(meta.version).toBe("2.0.0");
@@ -290,7 +294,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 
 			await materialize(api, "rootMath.add", 1, 2);
-			const metaBefore = api.rootMath.add.__metadata;
+			const metaBeforeNode = api.slothlet.node(api.rootMath.add);
 
 			// Try to reload (may fail if files have issues)
 			try {
@@ -298,10 +302,11 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			} catch (____error) {
 				// Reload failed - metadata should still be accessible
 				await materialize(api, "rootMath.add", 1, 2);
-				const metaAfter = api.rootMath.add.__metadata;
+				const metaAfter = api.slothlet.metadata.get(api.rootMath.add);
+				const metaAfterNode = api.slothlet.node(api.rootMath.add);
 
 				expect(metaAfter).toBeDefined();
-				expect(metaAfter.apiPath).toBe(metaBefore.apiPath);
+				expect(metaAfterNode.path.join(".")).toBe(metaBeforeNode.path.join("."));
 			}
 		});
 
@@ -333,7 +338,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 			// Materialize once
 			await materialize(api, "lazyReload.config.settings.getPluginConfig");
-			const meta1 = api.lazyReload.config.settings.getPluginConfig.__metadata;
+			const meta1Node = api.slothlet.node(api.lazyReload.config.settings.getPluginConfig);
 
 			// Reload
 			await api.slothlet.api.reload("lazyReload");
@@ -341,11 +346,12 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			// Rematerialize
 			if (api.lazyReload?.config?.settings?.getPluginConfig) {
 				await materialize(api, "lazyReload.config.settings.getPluginConfig");
-				const meta2 = api.lazyReload.config.settings.getPluginConfig.__metadata;
+				const meta2 = api.slothlet.metadata.get(api.lazyReload.config.settings.getPluginConfig);
+				const meta2Node = api.slothlet.node(api.lazyReload.config.settings.getPluginConfig);
 
 				expect(meta2).toBeDefined();
 				expect(meta2.lazy).toBe(true);
-				expect(meta2.apiPath).toBe(meta1.apiPath);
+				expect(meta2Node.path.join(".")).toBe(meta1Node.path.join("."));
 			}
 		});
 	});
@@ -362,7 +368,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			api.slothlet.metadata.set(api.rootMath.add, "category", "math");
 			api.slothlet.metadata.set(api.rootMath.add, "version", "2.0.0");
 
-			const metaBefore = api.rootMath.add.__metadata;
+			const metaBefore = api.slothlet.metadata.get(api.rootMath.add);
 			expect(metaBefore.category).toBe("math");
 			expect(metaBefore.version).toBe("2.0.0");
 
@@ -373,23 +379,23 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			await materialize(api, "rootMath.add", 1, 2);
 
 			// User metadata should persist after reload
-			const metaAfter = api.rootMath.add.__metadata;
+			const metaAfter = api.slothlet.metadata.get(api.rootMath.add);
 			expect(metaAfter.category).toBe("math");
 			expect(metaAfter.version).toBe("2.0.0");
 		});
 
-		it("should preserve global metadata set via api.slothlet.metadata.setGlobal() after reload", async () => {
+		it("should preserve global metadata set via api.slothlet.metadata.global() after reload", async () => {
 			if (!api.slothlet?.reload) {
 				return;
 			}
 
 			// Set global metadata
-			api.slothlet.metadata.setGlobal("appVersion", "3.0.0");
-			api.slothlet.metadata.setGlobal("environment", "test");
+			api.slothlet.metadata.global("appVersion", "3.0.0");
+			api.slothlet.metadata.global("environment", "test");
 
 			await materialize(api, "rootMath.add", 1, 2);
-			expect(api.rootMath.add.__metadata.appVersion).toBe("3.0.0");
-			expect(api.rootMath.add.__metadata.environment).toBe("test");
+			expect(api.slothlet.metadata.get(api.rootMath.add).appVersion).toBe("3.0.0");
+			expect(api.slothlet.metadata.get(api.rootMath.add).environment).toBe("test");
 
 			// Full reload
 			await api.slothlet.reload();
@@ -398,8 +404,8 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			await materialize(api, "rootMath.add", 1, 2);
 
 			// Global metadata should still be applied
-			expect(api.rootMath.add.__metadata.appVersion).toBe("3.0.0");
-			expect(api.rootMath.add.__metadata.environment).toBe("test");
+			expect(api.slothlet.metadata.get(api.rootMath.add).appVersion).toBe("3.0.0");
+			expect(api.slothlet.metadata.get(api.rootMath.add).environment).toBe("test");
 		});
 
 		it("should allow updating metadata after api.slothlet.api.reload()", async () => {
@@ -412,7 +418,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 			// Set metadata before reload
 			api.slothlet.metadata.set(api.testReload.rootMath.add, "status", "initial");
-			expect(api.testReload.rootMath.add.__metadata.status).toBe("initial");
+			expect(api.slothlet.metadata.get(api.testReload.rootMath.add).status).toBe("initial");
 
 			// Partial reload
 			await api.slothlet.api.reload("testReload");
@@ -420,7 +426,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 			// Update metadata after reload
 			api.slothlet.metadata.set(api.testReload.rootMath.add, "status", "reloaded");
-			expect(api.testReload.rootMath.add.__metadata.status).toBe("reloaded");
+			expect(api.slothlet.metadata.get(api.testReload.rootMath.add).status).toBe("reloaded");
 		});
 
 		it("should remove metadata via api.slothlet.metadata.remove() after reload", async () => {
@@ -432,7 +438,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 			// Set metadata
 			api.slothlet.metadata.set(api.rootMath.add, "temp", "value");
-			expect(api.rootMath.add.__metadata.temp).toBe("value");
+			expect(api.slothlet.metadata.get(api.rootMath.add).temp).toBe("value");
 
 			// Reload
 			await api.slothlet.reload();
@@ -440,10 +446,10 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 			// Remove metadata after reload
 			api.slothlet.metadata.remove(api.rootMath.add, "temp");
-			expect(api.rootMath.add.__metadata.temp).toBeUndefined();
+			expect(api.slothlet.metadata.get(api.rootMath.add).temp).toBeUndefined();
 
 			// System metadata should remain
-			expect(api.rootMath.add.__metadata.moduleID).toBeDefined();
+			expect(api.slothlet.node(api.rootMath.add).module).toBeDefined();
 		});
 	});
 
@@ -462,8 +468,9 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			const metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
 
 			// Should have system metadata
-			expect(metadata.moduleID).toBeDefined();
-			expect(metadata.apiPath).toBe("rootMath.add");
+			const report = await api.metadataTestHelper.getNode("rootMath.add");
+			expect(report.module).toBeDefined();
+			expect(report.path).toEqual(["rootMath", "add"]);
 
 			// User metadata persistence depends on reload implementation
 			// Just verify internal API works after reload
@@ -490,10 +497,12 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			if (api.reloadInternal?.config?.settings?.getPluginConfig) {
 				await materialize(api, "reloadInternal.config.settings.getPluginConfig");
 				const afterReload = await api.metadataTestHelper.getMetadata("reloadInternal.config.settings.getPluginConfig");
+				expect(afterReload.persistValue).toBe("should_persist");
 
-				// System metadata should be refreshed
-				expect(afterReload.moduleID).toBeDefined();
-				expect(afterReload.apiPath).toBe("reloadInternal.config.settings.getPluginConfig");
+				// The node's report is refreshed
+				const report = await api.metadataTestHelper.getNode("reloadInternal.config.settings.getPluginConfig");
+				expect(report.module).toBeDefined();
+				expect(report.path.join(".")).toBe("reloadInternal.config.settings.getPluginConfig");
 			}
 		});
 
@@ -515,7 +524,9 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 				const metadata = await api.metadataTestHelper.getMetadata("partialReload.config.settings.getPluginConfig");
 
 				expect(metadata).toBeDefined();
-				expect(metadata.apiPath).toBe("partialReload.config.settings.getPluginConfig");
+				expect((await api.metadataTestHelper.getNode("partialReload.config.settings.getPluginConfig")).path.join(".")).toBe(
+					"partialReload.config.settings.getPluginConfig"
+				);
 			}
 		});
 
@@ -554,7 +565,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			expect(afterReload).toBeDefined();
 
 			// Both should reference the helper function
-			expect(afterReload.apiPath).toContain("metadataTestHelper");
+			expect((await api.metadataTestHelper.getNode()).path).toContain("metadataTestHelper");
 		});
 	});
 
@@ -595,7 +606,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 		it("config-level metadata survives reload (exercises importUserState merge branch)", async () => {
 			// Verify metadata is present before reload
 			await materialize(apiWithConfigMeta, "rootMath.add", 1, 2);
-			const before = apiWithConfigMeta.rootMath.add.__metadata;
+			const before = apiWithConfigMeta.slothlet.metadata.get(apiWithConfigMeta.rootMath.add);
 			expect(before.fromConfig).toBe(true);
 			expect(before.configVersion).toBe("1.0.0");
 
@@ -605,7 +616,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 			// Metadata must still be present after reload
 			await materialize(apiWithConfigMeta, "rootMath.add", 1, 2);
-			const after = apiWithConfigMeta.rootMath.add.__metadata;
+			const after = apiWithConfigMeta.slothlet.metadata.get(apiWithConfigMeta.rootMath.add);
 			expect(after.fromConfig).toBe(true);
 			expect(after.configVersion).toBe("1.0.0");
 		});

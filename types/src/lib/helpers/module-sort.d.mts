@@ -1,37 +1,9 @@
 /**
- *
- *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/module-sort.mjs
- *	@Date: 2026-05-27T11:22:33-07:00 (1779906153)
- *	@Author: Nate Corcoran <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- *
- */
-/**
- * @fileoverview Pure sort function for `DiscoverResult[]`.
- * @module @cldmv/slothlet/helpers/module-sort
- * @internal
- *
- * @description
- * Default comparator sorts by `manifest.priority` descending (higher first)
- * with `packageName` ascending as the tiebreak. Pass any custom comparator
- * matching `Array.prototype.sort`'s `(a, b) => number` signature to override.
- *
- * Pure function: returns a new array; never mutates the input. The
- * `DiscoverResult` entries are already deep-frozen by `discoverModules()`
- * per M3, so the comparator cannot mutate them through this surface either.
- */
-/**
  * @typedef {object} DiscoverResult
- * @property {string} packageName
- * @property {string} packageRoot
- * @property {string[]} mountPath
- * @property {string} apiDir
+ * @property {string} package
+ * @property {string} folder
+ * @property {string[]} mount
+ * @property {string} base
  * @property {object} manifest
  */
 /**
@@ -42,14 +14,14 @@
  * @returns {DiscoverResult[]} New array sorted by the chosen comparator. Input is not mutated.
  *
  * @example
- * import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
+ * import { sortModules } from "#helpers/module-sort";
  *
  * const sorted = sortModules(found);
- * // Default: priority desc, then packageName asc.
+ * // Default: priority desc, then package asc.
  *
  * @example
  * // Custom: alphabetical only.
- * const alpha = sortModules(found, (a, b) => a.packageName.localeCompare(b.packageName));
+ * const alpha = sortModules(found, (a, b) => a.package.localeCompare(b.package));
  *
  * @example
  * // Topological over manifest.dependencies (caller's responsibility to
@@ -58,10 +30,10 @@
  */
 export function sortModules(results: DiscoverResult[], comparator?: (a: DiscoverResult, b: DiscoverResult) => number): DiscoverResult[];
 export type DiscoverResult = {
-    packageName: string;
-    packageRoot: string;
-    mountPath: string[];
-    apiDir: string;
+    package: string;
+    folder: string;
+    mount: string[];
+    base: string;
     manifest: object;
 };
 //# sourceMappingURL=module-sort.d.mts.map

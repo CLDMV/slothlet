@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_permissions/callers/untrusted-caller.mjs
+ *	@Filename: api_tests/api_test_permissions/callers/untrusted-caller.mjs
  *	@Date: 2026-04-14T17:10:52-07:00 (1776211852)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:41-07:00 (1791090881)
+ *	@Last modified time: 2026-11-28T04:29:08-08:00 (1795868948)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,13 +15,14 @@
 
 import { self } from "@cldmv/slothlet/runtime";
 
-// Stash an api function while holding it, then invoke that stashed reference from a boundary slothlet
-// does not patch, so the invocation carries no caller of its own. Nothing reads `self` at call time —
-// the reference is already in hand — so the executing-module guard has nothing to refuse. What has to
-// stop it is the identity captured when the reference was taken.
+// Stash an api function while holding it, then invoke that stashed reference later. Nothing reads
+// `self` at call time — the reference is already in hand — so the executing-module guard has nothing
+// to refuse. What has to stop it is the identity captured when the reference was taken.
 //
-// `node:timers` is the unpatched boundary here because its ESM named exports are a snapshot taken at
-// first link, which no patch applied later can reach.
+// `invokeStashedFromUnpatched` calls it from an `fs` completion callback, a boundary slothlet does not
+// patch (see docs/PERMISSIONS.md). The callback is this file's own code, so the stack still names this
+// module as the caller. `handOutStashed` gives the reference to the host instead, so that when the host
+// calls it no module code is running at all and the only identity on the call is the captured one.
 let stashed = null;
 let stashedOutcome = null;
 export const stashInsertRef = () => {
@@ -29,17 +30,19 @@ export const stashInsertRef = () => {
 	return "stashed";
 };
 export const invokeStashedFromUnpatched = async () => {
-	const timers = await import("node:timers");
-	timers.setTimeout(async () => {
+	const fs = await import("node:fs");
+	stashedOutcome = null;
+	fs.stat(".", async () => {
 		try {
 			stashedOutcome = { ok: true, value: await stashed({ x: 1 }) };
 		} catch (err) {
 			stashedOutcome = { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
 		}
-	}, 5);
+	});
 	return "armed";
 };
 export const readStashedOutcome = () => stashedOutcome;
+export const handOutStashed = () => stashed;
 
 // Invoke a reference a DIFFERENT module captured and handed over. Binding the captured identity onto
 // a reference must not become a way to lend authority — this module is unprivileged, and calling it
@@ -98,7 +101,7 @@ export const gatedSibling = async (gate) => {
 export const gatedInternalRoute = async (gate) => {
 	await gate;
 	try {
-		return { ok: true, count: (await self.slothlet.permissions.global.rulesForPath("db.write.insert")).length };
+		return { ok: true, count: (await self.slothlet.permissions.global.rules.path("db.write.insert")).length };
 	} catch (err) {
 		return { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
 	}

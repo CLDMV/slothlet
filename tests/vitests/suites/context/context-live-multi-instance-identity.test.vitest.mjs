@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/context-live-multi-instance-identity.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/context-live-multi-instance-identity.test.vitest.mjs
  *	@Date: 2026-10-09T18:00:00-07:00 (1791594000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T18:00:00-07:00 (1791594000)
+ *	@Last modified time: 2026-11-28T04:31:25-08:00 (1795869085)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  * The live runtime keeps the active instance in one field shared by every instance, and restores it in
  * settle order. When an earlier call of an instance settles while a later one is still suspended, the
  * field goes back to whatever was active before — another instance. Readers that take no instance id
- * (`self`, `context`, the boundary pinner) and the instance's own `lockCaller()` / `metadata.self()`
+ * (`self`, `context`, the boundary pinner) and the instance's own `pin()` / `metadata.self()`
  * then resolved against that other instance. Each must resolve against the instance whose module is
  * running.
  *
@@ -106,7 +106,7 @@ describe.each(PLATFORMS)(
 		}
 
 		/**
-		 * Pin every function argument of a `svc` call with this instance's `lockCaller`, from an around hook,
+		 * Pin every function argument of a `svc` call with this instance's `pin`, from an around hook,
 		 * and record what the hook saw.
 		 * @param {object} api - Instance api.
 		 * @returns {Array<{hookCaller: string|null, lockCallerPinned: boolean}>} The records, filled as calls run.
@@ -114,14 +114,14 @@ describe.each(PLATFORMS)(
 		function pinServiceCallbacks(api) {
 			const seen = [];
 			api.slothlet.hook.on("svc.**:around", ({ args, next, caller }) => {
-				const pinned = args.map((arg) => (typeof arg === "function" ? api.slothlet.lockCaller(arg) : arg));
-				seen.push({ hookCaller: caller?.apiPath ?? null, lockCallerPinned: pinned.some((fn, index) => fn !== args[index]) });
+				const pinned = args.map((arg) => (typeof arg === "function" ? api.slothlet.pin(arg) : arg));
+				seen.push({ hookCaller: caller?.path.join(".") ?? null, lockCallerPinned: pinned.some((fn, index) => fn !== args[index]) });
 				return next(pinned);
 			});
 			return seen;
 		}
 
-		it("after an earlier call settles, self, context, metadata.self() and lockCaller() resolve against the resumed call's instance", async () => {
+		it("after an earlier call settles, self, context, metadata.self() and pin() resolve against the resumed call's instance", async () => {
 			await create(SECOND, SECOND_MANIFEST, "second"); // created first: the instance the field rests on
 			const api = await create(ROOT, MANIFEST, "main");
 			const seen = pinServiceCallbacks(api);

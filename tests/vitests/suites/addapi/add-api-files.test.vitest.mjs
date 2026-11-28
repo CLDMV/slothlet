@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/addapi/add-api-files.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/addapi/add-api-files.test.vitest.mjs
  *	@Date: 2026-02-13T16:27:51-08:00 (1771028871)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
+ *	@Last modified time: 2026-11-28T04:31:06-08:00 (1795869066)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -174,7 +174,11 @@ describe("File-based api.add() Functionality", () => {
 			const config = await slothlet({
 				base: TEST_DIRS.API_TEST,
 				mode: "eager",
-				collision: { api: "merge" }
+				api: {
+					collision: {
+						mode: { api: "merge" }
+					}
+				}
 			});
 
 			const mathPath = join(TEST_DIRS.API_TEST, "math/math.mjs");
@@ -192,7 +196,11 @@ describe("File-based api.add() Functionality", () => {
 			const config = await slothlet({
 				base: TEST_DIRS.API_TEST,
 				mode: "eager",
-				collision: { api: "replace" }
+				api: {
+					collision: {
+						mode: { api: "replace" }
+					}
+				}
 			});
 
 			const mathPath = join(TEST_DIRS.API_TEST, "math/math.mjs");

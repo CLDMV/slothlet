@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-caller-supplied-round5.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-caller-supplied-round5.test.vitest.mjs
  *	@Date: 2026-10-18T00:00:00-07:00 (1792306800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T09:04:32-07:00 (1793462672)
+ *	@Last modified time: 2026-11-28T04:32:22-08:00 (1795869142)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,12 +32,7 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 import { createHash } from "node:crypto";
 import { stripTypeScriptTypes } from "node:module";
-import {
-	installInstanceImportHooks,
-	recordedScriptCount,
-	recordedScriptHashes,
-	releaseInstanceScope
-} from "@cldmv/slothlet/helpers/instance-imports";
+import { installInstanceImportHooks, recordedScriptCount, recordedScriptHashes, releaseInstanceScope } from "#helpers/instance-imports";
 import { learnedScriptCount } from "#handlers/frame-placement";
 import { moduleMakerCount, resolveWrapper } from "#handlers/unified-wrapper";
 
@@ -63,7 +58,7 @@ const DENIED = "PERMISSION_DENIED";
  * How a module's code is refused while it is built as no module's: refused as unattributable, or — in the live
  * runtime, whose `self` names no instance outside a call — refused any context at all.
  */
-const BUILD_REFUSALS = new Set([DENIED, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
+const BUILD_REFUSALS = new Set([DENIED, "CONTEXT_NOT_ACTIVE_SELF"]);
 
 /**
  * Whether this engine gives a stack frame the hash of the script it runs in, which is what tells a file's own code
@@ -98,17 +93,17 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 	 * @param {object} [permissions] - Permissions to build with instead of the fixture's rules.
 	 * @returns {Promise<object>} The api.
 	 */
-	const build = async (permissions = { defaultPolicy: "deny", rules: RULES }) => {
+	const build = async (permissions = { policy: "deny", rules: RULES }) => {
 		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions });
 		await api.vault.secret.whoami();
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
-		await api.slothlet.api.add("outsider", path.join(DIR, "outsider"), { moduleID: "outsider-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
+		await api.slothlet.api.add("outsider", path.join(DIR, "outsider"), { id: "outsider-mod" });
 		return api;
 	};
 
 	/** Build with every call allowed, for the plain-JavaScript shape. */
-	const buildOpen = () => build({ defaultPolicy: "allow", rules: [] });
+	const buildOpen = () => build({ policy: "allow", rules: [] });
 
 	it("control: the callee's own call is its own", async () => {
 		await build();
@@ -191,12 +186,20 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 		});
 	});
 
-	describe("code the callee hands out runs as the callee, whoever runs it", () => {
-		it.each(["direct", "getterExport", "client", "object", "instanceMethod", "instanceGetter", "generator"])(
-			"%s: run by the supplier, as the callee's own call through self",
+	describe("code the callee hands out runs as the callee, under whoever runs it", () => {
+		// A call through `self` runs the callee's leaf, where the callee is the caller.
+		it.each(["direct", "getterExport"])("%s: run by the supplier, as the callee's own call through self", async (name) => {
+			await build();
+			expect(await api.supplier.probe.calleeMade(name)).toBe("s3cret");
+		});
+
+		// Code the callee returned, run by the supplier: the definer (the callee) may read the vault, the caller (the
+		// supplier) may not, and a `self` call needs both (#726).
+		it.each(["client", "object", "instanceMethod", "instanceGetter", "generator"])(
+			"%s: run by the supplier, which may not reach what the callee may",
 			async (name) => {
 				await build();
-				expect(await api.supplier.probe.calleeMade(name)).toBe("s3cret");
+				expect(await withSuppressedSlothletErrorOutput(async () => api.supplier.probe.calleeMade(name))).toBe(DENIED);
 			}
 		);
 
@@ -285,8 +288,8 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 	});
 
 	it("a module removed whole drops the record of what it made", async () => {
-		await build({ defaultPolicy: "allow", rules: [] });
-		const instance = resolveWrapper(api.callee).slothlet;
+		await build({ policy: "allow", rules: [] });
+		const instance = resolveWrapper(api.callee).____slothlet;
 		await api.supplier.bag.klass();
 		await api.callee.ops.makeClient();
 		const before = moduleMakerCount(instance);
@@ -335,7 +338,9 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 			const instance = await api.supplier.bag.shape("instance");
 			expect(instance instanceof C).toBe(true);
 			expect(instance.constructor).toBe(C);
-			expect(instance.m).toBe(made.m);
+			// Each instance has a stand-in of its own of each method, the same one every read (D1).
+			expect(instance.m).toBe(instance.m);
+			expect(instance.m).not.toBe(made.m);
 		});
 
 		it("a returned generator function and async function report their kind", async () => {
@@ -387,20 +392,36 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 
 	it("a source loaded again is recorded once", () => {
 		const load = loadHook();
-		const url = freshURL("again.cjs");
-		const next = () => ({ format: "commonjs", source: "module.exports = 1;\n" });
-		load(url, {}, next);
-		load(url, {}, next);
-		expect(recorded(url)).toEqual([sha256("module.exports = 1;\n")]);
+		const instanceID = `round5-again-${process.pid}-${counter}`;
+		const url = `${freshURL("again.mjs")}?slothlet_instance=${instanceID}&module=m`;
+		const next = () => ({ format: "module", source: "export const v = 1;\n" });
+		const first = load(url, {}, next);
+		const second = load(url, {}, next);
+		// The source is handed on sealed (#691), the same way each time it loads.
+		expect(second.source).toBe(first.source);
+		expect(first.source.startsWith("export const v = 1;\n")).toBe(true);
+		expect(recorded(url)).toEqual([sha256(first.source)]);
+		releaseInstanceScope(instanceID);
 	});
 
 	it("a file's sources are kept to a bounded number", () => {
 		const load = loadHook();
-		const url = freshURL("changing.cjs");
-		for (let index = 0; index < 40; index++) load(url, {}, () => ({ format: "commonjs", source: `module.exports = ${index};\n` }));
+		const instanceID = `round5-changing-${process.pid}-${counter}`;
+		const url = `${freshURL("changing.mjs")}?slothlet_instance=${instanceID}&module=m`;
+		let last;
+		for (let index = 0; index < 40; index++) last = load(url, {}, () => ({ format: "module", source: `export const v = ${index};\n` }));
 		expect(recorded(url).length).toBeGreaterThan(0);
 		expect(recorded(url).length).toBeLessThanOrEqual(16);
-		expect(recorded(url).at(-1)).toBe(sha256("module.exports = 39;\n"));
+		expect(recorded(url).at(-1)).toBe(sha256(last.source));
+		releaseInstanceScope(instanceID);
+	});
+
+	it("a CommonJS file loaded outside an instance's scope is not recorded, and is handed on as it is (#691)", () => {
+		const load = loadHook();
+		const url = freshURL("unscoped.cjs");
+		const result = load(url, {}, () => ({ format: "commonjs", source: "module.exports = 1;\n" }));
+		expect(result.source).toBe("module.exports = 1;\n");
+		expect(recorded(url)).toEqual([]);
 	});
 
 	it("an instance's sources are dropped when it shuts down", () => {
@@ -421,8 +442,9 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		const base = freshURL("reloaded.mjs");
 		const instanceID = `round5-reload-${process.pid}-${counter}`;
 		const before = recordedScriptCount();
+		let last;
 		for (let index = 0; index < 40; index++) {
-			load(`${base}?slothlet_instance=${instanceID}&module=m&_reload=${index}`, {}, () => ({
+			last = load(`${base}?slothlet_instance=${instanceID}&module=m&_reload=${index}`, {}, () => ({
 				format: "module",
 				source: `export const v = ${index};\n`
 			}));
@@ -430,7 +452,7 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		expect(recordedScriptCount()).toBe(before + 1);
 		const hashes = recorded(`${base}?slothlet_instance=${instanceID}&module=m&_reload=40`);
 		expect(hashes.length).toBe(16);
-		expect(hashes.at(-1)).toBe(sha256("export const v = 39;\n"));
+		expect(hashes.at(-1)).toBe(sha256(last.source));
 		releaseInstanceScope(instanceID);
 		expect(recordedScriptCount()).toBe(before);
 	});
@@ -439,9 +461,10 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		const load = loadHook();
 		const instanceID = `round5-kept-${process.pid}-${counter}`;
 		const url = `${freshURL("kept.mjs")}?slothlet_instance=${instanceID}&module=m`;
-		load(url, {}, () => ({ format: "module", source: "export const v = 1;\n" }));
+		const { source } = load(url, {}, () => ({ format: "module", source: "export const v = 1;\n" }));
 		const forged = sha256("forged");
-		const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImportState")];
+		const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImports")];
+		expect(state).toBeTypeOf("object");
 		const attempts = [
 			() => state.scriptHashes?.get?.(state.scriptKeyOf?.(url) ?? url)?.push?.(forged),
 			() => state.scriptHashes?.set?.(url, [forged]),
@@ -460,7 +483,7 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 				// A refusal is as good as nothing changed.
 			}
 		}
-		expect(recorded(url)).toEqual([sha256("export const v = 1;\n")]);
+		expect(recorded(url)).toEqual([sha256(source)]);
 		releaseInstanceScope(instanceID);
 		expect(recorded(url)).toEqual([]);
 	});
@@ -472,16 +495,15 @@ describe("Instance imports > CommonJS sources recorded as they load (#597)", () 
 		expect(recorded(url)).toEqual([]);
 	});
 
-	it.runIf(typeof stripTypeScriptTypes === "function")(
-		"a TypeScript CommonJS source is recorded as Node compiles it, its types stripped",
-		() => {
-			const load = loadHook();
-			const url = freshURL("typed.cts");
-			const source = "const answer: number = 3;\nmodule.exports = answer;\n";
-			load(url, {}, () => ({ format: "commonjs-typescript", source }));
-			expect(recorded(url)).toEqual([sha256(stripTypeScriptTypes(source))]);
-		}
-	);
+	it.runIf(typeof stripTypeScriptTypes === "function")("a TypeScript source is recorded as Node compiles it, its types stripped", () => {
+		const load = loadHook();
+		const instanceID = `round5-typed-${process.pid}-${counter}`;
+		const url = `${freshURL("typed.mts")}?slothlet_instance=${instanceID}&module=m`;
+		const source = "const answer: number = 3;\nexport default answer;\n";
+		const result = load(url, {}, () => ({ format: "module-typescript", source }));
+		expect(recorded(url)).toEqual([sha256(stripTypeScriptTypes(result.source))]);
+		releaseInstanceScope(instanceID);
+	});
 });
 
 describe("Frame placement > scripts learned from a shut-down instance are released (#597)", () => {
@@ -489,9 +511,9 @@ describe("Frame placement > scripts learned from a shut-down instance are releas
 		const [{ config }] = getMatrixConfigs();
 		/** One cycle: build, run a call that is checked for supplied code, shut down. */
 		const cycle = async () => {
-			const api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { defaultPolicy: "allow", rules: [] } });
-			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-			await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+			const api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { policy: "allow", rules: [] } });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+			await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
 			expect(await api.supplier.probe.throughCallee()).toBe("pong");
 			await api.shutdown();
 		};

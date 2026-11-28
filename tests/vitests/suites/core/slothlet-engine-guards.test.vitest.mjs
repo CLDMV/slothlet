@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/slothlet-engine-guards.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/slothlet-engine-guards.test.vitest.mjs
  *	@Date: 2026-03-02T15:20:00-08:00 (1772493600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-28T04:31:43-08:00 (1795869103)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,10 +22,10 @@
  *   line  138  – `_setupLifecycleSubscribers` returns early when handlers.lifecycle is null
  *   lines 347-348 – `setApiContextChecker` callback body: tryGetContext() + return value
  *                   (invoked when EventEmitter.on() is called within an async API context)
- *   line  497  – `reload()` throws INVALID_CONFIG_NOT_LOADED when config.dir is falsy
+ *   line  497  – `reload()` throws INSTANCE_NOT_LOADED when config.dir is falsy
  *   line  592  – `_clearModuleCaches()` deletes CJS entries from require.cache on reload
  *   line  608  – `injectRuntimeMetadataFunctions()` returns early when api has no metadata key
- *   line  677  – `getAPI()` throws INVALID_CONFIG_NOT_LOADED when isLoaded is false
+ *   line  677  – `getAPI()` throws INSTANCE_NOT_LOADED when isLoaded is false
  *   line  711  – `getOwnership()` returns null when no ownership handler is registered
  *
  * @module tests/vitests/suites/core/slothlet-engine-guards
@@ -71,7 +71,7 @@ async function makeApi(extra = {}) {
  * engine.isLoaded; // true
  */
 function getEngine(api) {
-	return resolveWrapper(api.math).slothlet;
+	return resolveWrapper(api.math).____slothlet;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,13 +161,13 @@ describe("slothlet setApiContextChecker callback (lines 347-348)", () => {
 // ---------------------------------------------------------------------------
 
 describe("slothlet.reload() — missing config.dir guard (line 497)", () => {
-	it("throws INVALID_CONFIG_NOT_LOADED when config has no dir", async () => {
-		// Arrange: wipe config.dir to simulate a never-configured instance
+	it("throws INSTANCE_NOT_LOADED when config has no dir", async () => {
+		// Arrange: a config with no `base` at all simulates a never-configured instance (a loaded one carries a path or null)
 		const savedConfig = engine.config;
-		engine.config = { base: null };
+		engine.config = {};
 
 		// Act + Assert
-		await expect(engine.reload()).rejects.toThrow(/INVALID_CONFIG_NOT_LOADED|not.*loaded/i);
+		await expect(engine.reload()).rejects.toThrow(/INSTANCE_NOT_LOADED|not.*loaded/i);
 
 		// Restore
 		engine.config = savedConfig;
@@ -198,7 +198,7 @@ describe("slothlet._clearModuleCaches — CJS require.cache cleanup (line 592)",
 				base: TEST_DIRS.API_TEST_CJS
 			});
 
-			const cjsEngine = resolveWrapper(cjsApi.math).slothlet;
+			const cjsEngine = resolveWrapper(cjsApi.math).____slothlet;
 
 			// Record cache size before reload
 			// createRequire gives access to require.cache in this ESM test environment
@@ -241,11 +241,11 @@ describe("slothlet.injectRuntimeMetadataFunctions — early return guard (line 6
 // ---------------------------------------------------------------------------
 
 describe("slothlet.getAPI() — not-loaded guard (line 677)", () => {
-	it("throws INVALID_CONFIG_NOT_LOADED when isLoaded is false", () => {
+	it("throws INSTANCE_NOT_LOADED when isLoaded is false", () => {
 		// Simulate an instance that was never loaded (or was fully shut down)
 		engine.isLoaded = false;
 
-		expect(() => engine.getAPI()).toThrow(/INVALID_CONFIG_NOT_LOADED|not.*loaded/i);
+		expect(() => engine.getAPI()).toThrow(/INSTANCE_NOT_LOADED|not.*loaded/i);
 
 		// Restore so afterEach shutdown works
 		engine.isLoaded = true;
@@ -301,11 +301,12 @@ describe("slothlet.getDiagnostics() — branch coverage (lines 721-728)", () => 
 	it("returns a diagnostics snapshot with all fields when everything is present", () => {
 		const result = engine.getDiagnostics();
 		expect(result).toBeDefined();
-		expect(result).toHaveProperty("instanceID");
-		expect(result).toHaveProperty("isLoaded");
-		expect(result).toHaveProperty("config");
-		expect(result).toHaveProperty("context");
-		expect(result).toHaveProperty("ownership");
+		expect(Object.keys(result).sort()).toEqual(["at", "config", "context", "instance", "loaded", "ownership", "runtime", "self"]);
+		expect(result.instance).toBe(engine.instanceID);
+		expect(result.loaded).toBe(true);
+		expect(Array.isArray(result.self)).toBe(true);
+		expect(typeof result.runtime.type).toBe("string");
+		expect(result.runtime.running).toBe(false);
 	});
 
 	it("returns null for context when contextManager is null (L726 || null branch)", () => {

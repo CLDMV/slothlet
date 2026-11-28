@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/diagnostics/diagnostics-extended.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/diagnostics/diagnostics-extended.test.vitest.mjs
  *	@Date: 2026-03-01T12:30:36-08:00 (1772397036)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-28T04:31:43-08:00 (1795869103)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,13 +29,13 @@
  *
  * - **Line 1061** (`diag.caches.get()`): calls `apiCacheManager.getCacheDiagnostics()`.
  *
- * - **Line 1072** (`diag.caches.getAllModuleIDs()`): calls `apiCacheManager.getAllModuleIDs()`.
+ * - **Line 1072** (`diag.caches.ids()`): calls `apiCacheManager.getAllModuleIDs()`.
  *
  * - **Line 1084** (`diag.caches.has(moduleID)`): calls `apiCacheManager.has(moduleID)`.
  *
  * - **Line 1119** (`diag.hook.enabled` getter): reads `hookManager.enabled`.
  *
- * - **Line 1149** (`diag.hook.compilePattern(pattern)`): calls
+ * - **Line 1149** (`diag.hook.compile(pattern)`): calls
  *   `hookManager.getCompilePatternForDiagnostics()(pattern)`.
  *
  * @module tests/vitests/suites/diagnostics/diagnostics-extended
@@ -130,31 +130,31 @@ describe("api.slothlet.diag.caches.get()", () => {
 		const result = api.slothlet.diag.caches.get();
 		expect(result).toBeDefined();
 		expect(typeof result).toBe("object");
-		// `getCacheDiagnostics()` returns { totalCaches, caches[] }
-		expect(typeof result.totalCaches).toBe("number");
+		// `getCacheDiagnostics()` returns { caches[] }
 		expect(Array.isArray(result.caches)).toBe(true);
+		expect("totalCaches" in result).toBe(false);
 	});
 
-	it("totalCaches is at least 1 after initial load", () => {
+	it("has at least 1 cache after initial load", () => {
 		const result = api.slothlet.diag.caches.get();
-		expect(result.totalCaches).toBeGreaterThanOrEqual(1);
+		expect(result.caches.length).toBeGreaterThanOrEqual(1);
 	});
 
-	it("caches array entries have moduleID and endpoint fields", () => {
+	it("caches array entries carry module, path, folder, mode, count and at", () => {
 		const result = api.slothlet.diag.caches.get();
-		if (result.caches.length > 0) {
-			const first = result.caches[0];
-			expect(first).toHaveProperty("moduleID");
-			expect(first).toHaveProperty("endpoint");
-		}
+		expect(result.caches.length).toBeGreaterThan(0);
+		const first = result.caches[0];
+		expect(Object.keys(first).sort()).toEqual(["at", "count", "folder", "mode", "module", "path"]);
+		expect(Array.isArray(first.path)).toBe(true);
+		expect(typeof first.at).toBe("number");
 	});
 });
 
-// ─── diag.caches.getAllModuleIDs() — line 1072 ───────────────────────────────
+// ─── diag.caches.ids() — line 1072 ───────────────────────────────
 
-describe("api.slothlet.diag.caches.getAllModuleIDs()", () => {
+describe("api.slothlet.diag.caches.ids()", () => {
 	it("returns array of moduleID strings (line 1072)", () => {
-		const ids = api.slothlet.diag.caches.getAllModuleIDs();
+		const ids = api.slothlet.diag.caches.ids();
 		expect(Array.isArray(ids)).toBe(true);
 		expect(ids.length).toBeGreaterThanOrEqual(1);
 		for (const id of ids) {
@@ -167,7 +167,7 @@ describe("api.slothlet.diag.caches.getAllModuleIDs()", () => {
 
 describe("api.slothlet.diag.caches.has()", () => {
 	it("returns true for a moduleID that exists in the cache (line 1084)", () => {
-		const [firstID] = api.slothlet.diag.caches.getAllModuleIDs();
+		const [firstID] = api.slothlet.diag.caches.ids();
 		expect(firstID).toBeDefined();
 		const result = api.slothlet.diag.caches.has(firstID);
 		expect(result).toBe(true);
@@ -179,7 +179,7 @@ describe("api.slothlet.diag.caches.has()", () => {
 	});
 });
 
-// ─── diag.hook.enabled + diag.hook.compilePattern — lines 1119, 1149 ─────────
+// ─── diag.hook.enabled + diag.hook.compile — lines 1119, 1149 ─────────
 
 describe("api.slothlet.diag.hook diagnostics", () => {
 	it("hook.enabled getter returns a boolean (line 1119)", () => {
@@ -193,58 +193,58 @@ describe("api.slothlet.diag.hook diagnostics", () => {
 		expect(api.slothlet.diag.hook.enabled).toBe(false);
 	});
 
-	it("hook.compilePattern compiles a glob and returns a function or regex (line 1149)", () => {
+	it("hook.compile compiles a glob and returns a function or regex (line 1149)", () => {
 		// `hookManager.getCompilePatternForDiagnostics()(pattern)`
-		const result = api.slothlet.diag.hook.compilePattern("math.*");
+		const result = api.slothlet.diag.hook.compile("math.*");
 		// Result is either a compiled function/RegExp — should be truthy
 		expect(result).toBeDefined();
 	});
 
-	it("hook.compilePattern('*') returns a truthy compiled pattern", () => {
-		const result = api.slothlet.diag.hook.compilePattern("*");
+	it("hook.compile('*') returns a truthy compiled pattern", () => {
+		const result = api.slothlet.diag.hook.compile("*");
 		expect(result).toBeDefined();
 	});
 
-	it("hook.compilePattern with a specific path pattern", () => {
-		const result = api.slothlet.diag.hook.compilePattern("math.add");
+	it("hook.compile with a specific path pattern", () => {
+		const result = api.slothlet.diag.hook.compile("math.add");
 		expect(result).toBeDefined();
 	});
 });
 
-// ─── diag.getAPI() — slothlet.mjs getAPI() lines 689, 699 ────────────────────
+// ─── diag.api() — slothlet.mjs getAPI() lines 689, 699 ────────────────────
 
-describe("api.slothlet.diag.getAPI()", () => {
+describe("api.slothlet.diag.api()", () => {
 	it("returns the bound API object (slothlet.mjs line 699)", () => {
 		// `getAPI()` → returns `this.boundApi`
-		const result = api.slothlet.diag.getAPI();
+		const result = api.slothlet.diag.api();
 		expect(result).toBeDefined();
 		// The returned API should have the slothlet namespace
 		expect(result.slothlet).toBeDefined();
 	});
 
 	it("returned API from getAPI() has .math namespace", () => {
-		const result = api.slothlet.diag.getAPI();
+		const result = api.slothlet.diag.api();
 		expect(result.math).toBeDefined();
 	});
 });
 
-// ─── diag.getOwnership() — slothlet.mjs getOwnership() lines 723-726 ─────────
+// ─── diag.owner.list() — slothlet.mjs getOwnership() lines 723-726 ─────────
 
-describe("api.slothlet.diag.getOwnership()", () => {
+describe("api.slothlet.diag.owner.list()", () => {
 	it("returns ownership diagnostics object when ownership is enabled (lines 723, 726)", () => {
 		// `getOwnership()` → `this.handlers.ownership.getDiagnostics()`
-		const result = api.slothlet.diag.getOwnership();
+		const result = api.slothlet.diag.owner.list();
 		expect(result).toBeDefined();
 	});
 
 	it("getOwnership() result has expected structure keys", () => {
-		const result = api.slothlet.diag.getOwnership();
+		const result = api.slothlet.diag.owner.list();
 		// Ownership diagnostics should be an object (non-null when ownership handler exists)
 		expect(typeof result).toBe("object");
 	});
 });
 
-describe("api.slothlet.diag.getOwnership() with ownership tracking", () => {
+describe("api.slothlet.diag.owner.list() with ownership tracking", () => {
 	it("returns object with modules/paths diagnostics (lines 723, 726)", async () => {
 		let ownerApi;
 		try {
@@ -256,7 +256,7 @@ describe("api.slothlet.diag.getOwnership() with ownership tracking", () => {
 
 			// With ownership handler always active, getOwnership() returns diagnostic object
 			// (the `!this.handlers.ownership` null-guard at line 723 is a defensive check)
-			const result = ownerApi.slothlet.diag.getOwnership();
+			const result = ownerApi.slothlet.diag.owner.list();
 			// Ownership is always initialized — should return diagnostics object
 			expect(result !== undefined).toBe(true);
 			if (result !== null) {

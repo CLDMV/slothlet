@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/unified-wrapper/unified-wrapper-waiting-proxy.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/unified-wrapper/unified-wrapper-waiting-proxy.test.vitest.mjs
  *	@Date: 2026-03-01T22:30:00-08:00 (1772433000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-28T04:33:15-08:00 (1795869195)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,7 @@
  *   1355       materialization check in then resolver
  *   1385       propChain walking loop
  *   1389-1390  isInternal + hasOwn check for chainProp
- *   1424       _materialize() trigger inside waiting proxy getTrap
+ *   1424       ___materialize() trigger inside waiting proxy getTrap
  *   1427-1449  util.inspect.custom handler in waiting proxy
  *   1451-1549  __type handler in waiting proxy (IN_FLIGHT and post-materialization paths)
  *   1469       __type post-mat: walk propChain (materialized=true)
@@ -51,7 +51,7 @@
  *   1695       non-inFlight → create another nested waiting proxy
  *   1700-1740  apply trap entry + materialization branches
  *   1712       DEBUG_MODE_WAITING_APPLY_ENTRY
- *   1716-1717  apply trap: not mat, not inFlight → await _materialize()
+ *   1716-1717  apply trap: not mat, not inFlight → await ___materialize()
  *   1732       apply trap: not mat, inFlight → await materializationPromise
  *   1756-1780  apply trap propChain walking loop
  *   1800-1828  apply trap currentWrapper.materialized check + waiting loop
@@ -121,7 +121,7 @@ describe("waiting proxy — creation (lines 1325-1340, 2366, 2386)", () => {
 	it("accessing a non-existent property on an unmaterialized lazy folder wrapper creates a waiting proxy", async () => {
 		// api.advanced is a FOLDER module — NOT pre-materialized at init (unlike root file modules).
 		// 'nonExistentProp' is not an own child of the advanced wrapper.
-		// The lazy getTrap: !materialized → _materialize(); inFlight=true; creates waiting proxy.
+		// The lazy getTrap: !materialized → ___materialize(); inFlight=true; creates waiting proxy.
 		// This covers: 2366 (debug log), 2386 (return ___createWaitingProxy([prop])), 1325-1339 (method entry).
 		const { api, teardown } = await makeLazy();
 		try {
@@ -169,7 +169,7 @@ describe("waiting proxy — then handler (lines 1348-1420)", () => {
 			await api.advanced.nonExistentProp;
 			// The advanced wrapper is now materialized
 			const advancedWrapper = api.advanced;
-			expect(advancedWrapper.__materialized).toBe(true);
+			expect(api.slothlet.node(advancedWrapper).materialized).toBe(true);
 		} finally {
 			await teardown();
 		}
@@ -195,11 +195,11 @@ describe("waiting proxy — then handler (lines 1348-1420)", () => {
 describe("waiting proxy — special property handlers (lines 1424-1565)", () => {
 	it("accessing __type on waiting proxy before materialization returns IN_FLIGHT symbol (lines 1451-1549)", async () => {
 		// The waiting proxy's __type handler: wrapper inFlight → return TYPE_STATES.IN_FLIGHT symbol.
-		// api.advanced.nonExistentProp triggers _materialize() synchronously (inFlight=true).
+		// api.advanced.nonExistentProp triggers ___materialize() synchronously (inFlight=true).
 		const { api, teardown } = await makeLazy();
 		try {
 			const waiting = api.advanced.nonExistentProp;
-			const t = waiting.__type;
+			const t = api.slothlet.node(waiting).type;
 			// Must be a Symbol (IN_FLIGHT state indicator)
 			expect(typeof t).toBe("symbol");
 			expect(t.toString()).toContain("inFlight");
@@ -216,8 +216,8 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		try {
 			const waiting = api.advanced.nonExistentProp; // capture waiting proxy before materialization
 			await waiting; // materializes advanced, keeping same proxy object
-			const t = waiting.__type; // same proxy, now post-materialization path (line 1469+)
-			expect(t).toBe("undefined");
+			// same proxy, now post-materialization: the chain reaches nothing, so there is no node to report
+			expect(api.slothlet.node(waiting)).toBeUndefined();
 		} finally {
 			await teardown();
 		}
@@ -228,7 +228,7 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		const { api, teardown } = await makeLazy();
 		try {
 			const waiting = api.advanced.nonExistentProp;
-			expect(waiting.__mode).toBe("lazy");
+			expect(api.slothlet.node(waiting).mode).toBe("lazy");
 		} finally {
 			await teardown();
 		}
@@ -239,7 +239,7 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		try {
 			const waiting = api.advanced.nonExistentProp;
 			// Before awaiting, advanced is not yet materialized
-			expect(waiting.__materialized).toBe(false);
+			expect(api.slothlet.node(waiting).materialized).toBe(false);
 		} finally {
 			await teardown();
 		}
@@ -247,11 +247,11 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 
 	it("accessing __inFlight on waiting proxy returns true while materializing", async () => {
 		// Line ~1422: if (prop === "__inFlight") return wrapper.____slothletInternal.state.inFlight;
-		// _materialize() sets inFlight=true synchronously (first line of the async IIFE body).
+		// ___materialize() sets inFlight=true synchronously (first line of the async IIFE body).
 		const { api, teardown } = await makeLazy();
 		try {
-			const waiting = api.advanced.nonExistentProp; // triggers _materialize() → inFlight=true
-			expect(waiting.__inFlight).toBe(true);
+			const waiting = api.advanced.nonExistentProp; // triggers ___materialize() → inFlight=true
+			expect(api.slothlet.node(waiting).loading).toBe(true);
 		} finally {
 			await teardown();
 		}
@@ -262,7 +262,7 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		const { api, teardown } = await makeLazy();
 		try {
 			const waiting = api.advanced.nonExistentProp;
-			const meta = waiting.__metadata;
+			const meta = api.slothlet.metadata.get(waiting);
 			expect(typeof meta).toBe("object");
 		} finally {
 			await teardown();
@@ -329,7 +329,7 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		const { api, teardown } = await makeLazy();
 		try {
 			const waiting = api.advanced.nonExistentProp;
-			expect(typeof waiting.__slothletPath).toBe("string");
+			expect(typeof api.slothlet.node(waiting).path.join(".")).toBe("string");
 		} finally {
 			await teardown();
 		}
@@ -343,7 +343,7 @@ describe("waiting proxy — util.inspect.custom handler (lines 1427-1449)", () =
 	it("util.inspect on a waiting proxy (in-flight) returns waitingTarget (line 1434-1435)", async () => {
 		// util.inspect triggers the Symbol(nodejs.util.inspect.custom) getter.
 		// The waiting proxy's handler: if inFlight → return waitingTarget (truthy result).
-		// inFlight=true here because _materialize() runs synchronously when the waiting proxy is created.
+		// inFlight=true here because ___materialize() runs synchronously when the waiting proxy is created.
 		const { api, teardown } = await makeLazy();
 		try {
 			const waiting = api.advanced.nonExistentProp; // inFlight=true (set synchronously)
@@ -355,7 +355,7 @@ describe("waiting proxy — util.inspect.custom handler (lines 1427-1449)", () =
 	});
 
 	it("util.inspect on a waiting proxy (unmaterialized, not in-flight) returns waitingTarget (line 1438-1439)", async () => {
-		// Line 1438 fires when !inFlight && !materialized. In practice, _materialize() sets inFlight=true
+		// Line 1438 fires when !inFlight && !materialized. In practice, ___materialize() sets inFlight=true
 		// synchronously (first line of async IIFE body), so line 1434 (inFlight path) normally fires first.
 		// Both lines produce the same result (return waitingTarget). This test covers the same code path
 		// via the inFlight branch to ensure util.inspect returns a string for any unmaterialized waiting proxy.
@@ -444,7 +444,7 @@ describe("waiting proxy — apply trap (lines 1700-1880)", () => {
 	});
 
 	it("calling waiting proxy after parent is already in-flight uses existing materializationPromise (lines 1732-1740)", async () => {
-		// First access triggers _materialize() (inFlight=true).
+		// First access triggers ___materialize() (inFlight=true).
 		// A second call to the waiting proxy finds inFlight=true → awaits materializationPromise.
 		const { api, teardown } = await makeLazy();
 		try {
@@ -509,7 +509,7 @@ describe("lazy getTrap — util.inspect.custom callback (lines 2133-2163)", () =
 		// After materialization, the custom inspect falls through to return wrapper.____slothletInternal.impl.
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.advanced.nest._materialize();
+			await api.advanced.nest.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const inspected = util.inspect(api.advanced.nest);
 			expect(typeof inspected).toBe("string");
@@ -523,7 +523,7 @@ describe("lazy getTrap — util.inspect.custom callback (lines 2133-2163)", () =
 // 8. lazy getTrap — symbol / bigint / undefined __type (lines 2106-2112)
 // ─────────────────────────────────────────────────────────────────────────────
 describe("lazy getTrap — symbol/bigint/undefined __type (lines 2106-2112)", () => {
-	it("__type for a Symbol impl returns 'symbol' (line 2106)", async () => {
+	it("node().type for a Symbol impl is 'data' (line 2106)", async () => {
 		// api_test_primitives needs symval.mjs that exports a Symbol.
 		// If that fixture doesn't exist, skip gracefully.
 		const { api, teardown } = await makeLazyPrimitives();
@@ -533,16 +533,16 @@ describe("lazy getTrap — symbol/bigint/undefined __type (lines 2106-2112)", ()
 				expect(true).toBe(true);
 				return;
 			}
-			await api.symval._materialize();
+			await api.symval.___materialize();
 			await new Promise((r) => setImmediate(r));
-			expect(api.symval.__type).toBe("symbol");
+			expect(api.slothlet.node(api.symval).type).toBe("data");
 		} finally {
 			await teardown();
 		}
 	});
 
 	it("__metadata returns an object from the wrapper's metadata handler (line 2119-2122)", async () => {
-		// Line 2133: if (wrapper.slothlet.handlers?.metadata) { return handler.getMetadata(wrapper); }
+		// Line 2133: if (api.slothlet.handlers?.metadata) { return handler.getMetadata(wrapper); }
 		// The built-in slothlet metadata handler is always present, so we verify it returns an object.
 		// Note: line 2122 (return {} fallback) requires NO metadata handler — slothlet always has one,
 		// so line 2122 is only reachable in an internal test context without a metadata handler.
@@ -552,9 +552,9 @@ describe("lazy getTrap — symbol/bigint/undefined __type (lines 2106-2112)", ()
 			silent: true
 		});
 		try {
-			await api.advanced._materialize();
+			await api.advanced.___materialize();
 			await new Promise((r) => setImmediate(r));
-			const meta = api.advanced.__metadata;
+			const meta = api.slothlet.metadata.get(api.advanced);
 			expect(typeof meta).toBe("object");
 			expect(meta).toBeDefined();
 		} finally {
@@ -572,7 +572,7 @@ describe("lazy getTrap — name property (line 2199)", () => {
 		// For a folder wrapper like api.advanced, accessing .name returns the apiPath last segment.
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.advanced._materialize();
+			await api.advanced.___materialize();
 			await new Promise((r) => setImmediate(r));
 			// For an object wrapper (folder), .name should be undefined or the api path segment
 			const n = api.advanced.name;

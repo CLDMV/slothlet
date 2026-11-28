@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-caller-supplied-code.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-caller-supplied-code.test.vitest.mjs
  *	@Date: 2026-10-16T19:30:00-07:00 (1792204200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T19:30:00-07:00 (1792204200)
+ *	@Last modified time: 2026-11-28T04:32:21-08:00 (1795869141)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,6 +41,8 @@ const BASE = TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE;
 
 /** Deny by default; the vault's secret is the callee's alone. */
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "callee.**", target: "vault.secret.secret", effect: "allow" },
 	{ caller: "**", target: "vault.secret.whoami", effect: "allow" },
 	{ caller: "supplier.**", target: "callee.**", effect: "allow" },
@@ -80,7 +82,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code (#597) > $
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 		return api;
 	};
 
@@ -149,7 +151,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code (#597) > a
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "supplier.**", target: "callee.**", effect: "allow" },
 					{ caller: "callee.**", target: "vault.secret.whoami", effect: "allow", requires: ["slow"] }

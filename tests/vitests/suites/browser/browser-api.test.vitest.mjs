@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/browser/browser-api.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/browser/browser-api.test.vitest.mjs
  *	@Date: 2026-05-28T00:00:00-07:00 (1779951600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-11-28T04:31:15-08:00 (1795869075)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,8 +36,8 @@
 
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
-import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
+import { generateManifest } from "#helpers/generate-manifest";
+import { createManifestResolver } from "#helpers/manifest-resolver";
 import { getBrowserMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE_DIR = TEST_DIRS.API_TEST_BROWSER;
@@ -70,7 +70,9 @@ function browserConfig(matrixConfig) {
 	return {
 		...matrixConfig,
 		base: FIXTURE_DIR,
-		manifest: BROWSER_MANIFEST
+		loader: {
+			files: BROWSER_MANIFEST
+		}
 	};
 }
 
@@ -132,9 +134,12 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > API tree > $name", ({ c
 		const calls = [];
 		api = await slothlet({
 			...browserConfig(config),
-			resolveModuleSpecifier: (entry) => {
-				calls.push({ ...entry });
-				return new URL(entry.path, `file://${FIXTURE_DIR}/`).href;
+			loader: {
+				...browserConfig(config).loader,
+				resolve: (entry) => {
+					calls.push({ ...entry });
+					return new URL(entry.path, `file://${FIXTURE_DIR}/`).href;
+				}
 			}
 		});
 
@@ -143,9 +148,9 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > API tree > $name", ({ c
 		for (const entry of calls) {
 			expect(typeof entry.path).toBe("string");
 			expect(typeof entry.name).toBe("string");
-			expect(typeof entry.fullName).toBe("string");
-			expect(entry.fullName).toMatch(/\.mjs$/);
-			expect(entry.name).toBe(entry.fullName.replace(/\.mjs$/, ""));
+			expect(typeof entry.full).toBe("string");
+			expect(entry.full).toMatch(/\.mjs$/);
+			expect(entry.name).toBe(entry.full.replace(/\.mjs$/, ""));
 		}
 	});
 
@@ -166,7 +171,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > API tree > $name", ({ c
 	it("createManifestResolver resolves paths to correct file URLs", () => {
 		const base = new URL(`file://${FIXTURE_DIR}/`);
 		const resolver = createManifestResolver(base);
-		const result = resolver({ path: "math.mjs", name: "math", fullName: "math.mjs" });
+		const result = resolver({ path: "math.mjs", name: "math", full: "math.mjs" });
 		expect(result).toMatch(/^file:\/\//);
 		expect(result).toMatch(/math\.mjs$/);
 	});

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/handlers/framework-internals.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/handlers/framework-internals.test.vitest.mjs
  *	@Date: 2026-08-17T12:00:00-07:00 (1786993200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-28T04:31:45-08:00 (1795869105)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@ import { markFrameworkInternal, isFrameworkInternal, isFrameworkMarkerKey } from
 
 describe("handlers > framework-internals brand (#283)", () => {
 	it("brands an object and reports it as framework-internal", () => {
-		const obj = { __isVersionDispatcher: true };
+		const obj = { ____isVersionDispatcher: true };
 		expect(markFrameworkInternal(obj)).toBe(obj); // returns the same reference for chaining
 		expect(isFrameworkInternal(obj)).toBe(true);
 	});
@@ -49,8 +49,8 @@ describe("handlers > framework-internals brand (#283)", () => {
 	});
 
 	it("recognizes exactly slothlet's reserved dispatcher marker keys via the immutable predicate", () => {
-		expect(isFrameworkMarkerKey("__isVersionDispatcher")).toBe(true);
-		expect(isFrameworkMarkerKey("__logicalPath")).toBe(true);
+		expect(isFrameworkMarkerKey("____isVersionDispatcher")).toBe(true);
+		expect(isFrameworkMarkerKey("____logicalPath")).toBe(true);
 		expect(isFrameworkMarkerKey("__metadata")).toBe(false);
 	});
 });

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-caller-supplied-round3.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-caller-supplied-round3.test.vitest.mjs
  *	@Date: 2026-10-17T00:00:00-07:00 (1792220400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-11-28T04:32:21-08:00 (1795869141)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,6 +36,8 @@ const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND3;
 
 /** Deny by default; the secret is the callee's alone. */
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "callee.**", target: "vault.secret.secret", effect: "allow" },
 	{ caller: "**", target: "vault.secret.whoami", effect: "allow" },
 	{ caller: "supplier.**", target: "callee.**", effect: "allow" },
@@ -76,10 +78,10 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, third rou
 		api = await slothlet({
 			...config,
 			base: path.join(DIR, "base"),
-			permissions: { defaultPolicy: "deny", rules: RULES }
+			permissions: { policy: "deny", rules: RULES }
 		});
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
 		// The vault is loaded up front, so code calling it synchronously gets its answer rather than a lazy load's promise.
 		await api.vault.secret.whoami();
 		return api;
@@ -89,15 +91,19 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, third rou
 		describe.each(["zz-not-real.mjs", "ops.mjs", "__lib/helper.cjs"])("%s", (file) => {
 			it.runIf(HAS_SCRIPT_HASH).each(KINDS)("%s: is not the callee's own code", async (kind) => {
 				await build();
-				expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.forgedInFolder(kind, file))).toEqual(DENIED);
+				// Under a real file of the callee's, the compile itself is refused, whatever the rules (D8 ruling).
+				expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.forgedInFolder(kind, file))).toEqual(
+					file === "zz-not-real.mjs" ? DENIED : { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" }
+				);
 			});
 
 			it.runIf(HAS_SCRIPT_HASH).each(KINDS)("%s: the vault sees the supplier", async (kind) => {
 				await build();
-				expect(await api.supplier.probe.forgedInFolder(kind, file, "whoami")).toEqual({
-					ok: true,
-					value: "supplier.probe.forgedInFolder"
-				});
+				expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.forgedInFolder(kind, file, "whoami"))).toEqual(
+					file === "zz-not-real.mjs"
+						? { ok: true, value: "supplier.probe.forgedInFolder" }
+						: { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" }
+				);
 			});
 		});
 
@@ -161,11 +167,11 @@ describe.each(getMatrixConfigs())(
 			api = null;
 		});
 
-		it.each(["scope", "event.on", "lockCaller", "lockCaller.caller", "metadata.caller"])(
+		it.each(["context.scope", "event.on", "pin", "pin.caller", "metadata.caller"])(
 			"%s: in, delete, freeze and reads after a freeze report as on the host's function",
 			async (name) => {
 				api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { mode: "disabled" } });
-				await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+				await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
 				const read = api.callee.shapes.of(name);
 				await api.shutdown();
 				api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { mode: "disabled" } });

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_permissions/callers/internal-proxy-helper.mjs
+ *	@Filename: api_tests/api_test_permissions/callers/internal-proxy-helper.mjs
  *	@Date: 2026-05-06T00:00:00-07:00 (1778050800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:50:55-07:00 (1792378255)
+ *	@Last modified time: 2026-11-28T04:29:08-08:00 (1795868948)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,20 +56,20 @@ export const readPermissionsSymbolProbeDescriptor = () => {
 };
 
 /**
- * Construct a warning object through a slothlet internal route.
+ * Call a slothlet namespace method with `new`.
  * Exercises internal route proxy `construct` trap.
  *
- * @returns {boolean} True when construction produced an object instance.
+ * @returns {boolean} True when construction returned what the method returns (`bind` hands back a function).
  * @example
- * const built = api.internalProxyHelper.constructWarningThroughDiag();
+ * const built = api.internalProxyHelper.constructThroughNamespace();
  */
-export const constructWarningThroughDiag = () => {
-	const warning = new self.slothlet.diag.SlothletWarning("WARNING_RESERVED_PROPERTY_CONFLICT");
-	return warning instanceof self.slothlet.diag.SlothletWarning;
+export const constructThroughNamespace = () => {
+	const bound = new self.slothlet.bind(() => "bound");
+	return typeof bound === "function" && bound() === "bound";
 };
 
 /**
- * Trigger INVALID_METADATA_KEY by passing an empty metadata key.
+ * Trigger METADATA_KEY_INVALID by passing an empty metadata key.
  * Exercises global metadata key validation.
  *
  * @returns {void}
@@ -77,7 +77,7 @@ export const constructWarningThroughDiag = () => {
  * api.internalProxyHelper.callSetGlobalWithEmptyKey();
  */
 export const callSetGlobalWithEmptyKey = () => {
-	self.slothlet.metadata.setGlobal("", "x");
+	self.slothlet.metadata.global("", "x");
 };
 
 /**
@@ -89,7 +89,7 @@ export const callSetGlobalWithEmptyKey = () => {
  * api.internalProxyHelper.callSetGlobalWithInvalidType();
  */
 export const callSetGlobalWithInvalidType = () => {
-	self.slothlet.metadata.setGlobal(7, "x");
+	self.slothlet.metadata.global(7, "x");
 };
 
 /**
@@ -224,4 +224,47 @@ export const mutatePermissionsSymbolKey = () => {
 			delete self.slothlet.permissions[probe];
 		})
 	};
+};
+
+/**
+ * Assign a string-keyed member on a namespace object the host handed in, rather than through `self`. The change then
+ * meets the internal route proxy's `set` trap with this module as the caller.
+ *
+ * @param {object} namespace - A namespace object held by the host (for example `api.slothlet.permissions`).
+ * @param {string} key - Member name to assign.
+ * @param {unknown} value - Value to assign.
+ * @returns {unknown} Value read back from the namespace.
+ * @example
+ * api.internalProxyHelper.writeOnHandedNamespace(api.slothlet.permissions, "rules", 1);
+ */
+export const writeOnHandedNamespace = (namespace, key, value) => {
+	namespace[key] = value;
+	return namespace[key];
+};
+
+/**
+ * Define a string-keyed member on a namespace object the host handed in. Meets the `defineProperty` trap.
+ *
+ * @param {object} namespace - A namespace object held by the host.
+ * @param {string} key - Member name to define.
+ * @param {unknown} value - Value of the new descriptor.
+ * @returns {boolean} Whether the definition succeeded.
+ * @example
+ * api.internalProxyHelper.defineOnHandedNamespace(api.slothlet.permissions, "rules", 2);
+ */
+export const defineOnHandedNamespace = (namespace, key, value) => {
+	return Reflect.defineProperty(namespace, key, { configurable: true, enumerable: true, writable: true, value });
+};
+
+/**
+ * Delete a string-keyed member from a namespace object the host handed in. Meets the `deleteProperty` trap.
+ *
+ * @param {object} namespace - A namespace object held by the host.
+ * @param {string} key - Member name to delete.
+ * @returns {boolean} Whether the deletion succeeded.
+ * @example
+ * api.internalProxyHelper.deleteOnHandedNamespace(api.slothlet.permissions, "rules");
+ */
+export const deleteOnHandedNamespace = (namespace, key) => {
+	return delete namespace[key];
 };

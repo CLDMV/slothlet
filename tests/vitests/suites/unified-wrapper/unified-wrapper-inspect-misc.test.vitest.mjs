@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/unified-wrapper/unified-wrapper-inspect-misc.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/unified-wrapper/unified-wrapper-inspect-misc.test.vitest.mjs
  *	@Date: 2026-03-02T00:00:00-08:00 (1772438400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-28T04:33:14-08:00 (1795869194)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  *  Line 85: getSafeFunctionName fallback — null apiPath on callable createProxy()
  *  Lines 310-316: prototype [util.inspect.custom] on raw UnifiedWrapper instances
  *  Lines 2133-2163: getTrap closure for util.inspect.custom on proxy objects
- *  Line 352: background materialization via tracking.materialization = true
+ *  Line 352: background materialization via loader.materialize = true
  *  Line 2122: __metadata fallback when handlers.metadata is null
  *  Line 1179: ___createChildWrapper returns undefined for undefined value
  *
@@ -75,20 +75,20 @@ async function makeLazy() {
 describe("getSafeFunctionName fallback (line 85) — callable createProxy with null apiPath", () => {
 	it("createProxy with null apiPath on callable wrapper uses fallback function name", async () => {
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const w = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: null,
 			initialImpl: () => "callable",
 			isCallable: true
 		});
-		const proxy = w.createProxy();
+		const proxy = w.___createProxy();
 		expect(typeof proxy).toBe("function");
 	});
 
 	it("createProxy with digit-leading apiPath prefixes safeName with underscore (line 85 TRUE arm)", async () => {
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		// apiPath "1test" produces baseName "1test", safeName "1test",
 		// which fails /^[A-Za-z_$]/ so the TRUE arm fires: safeName = "_1test"
 		const w = new UnifiedWrapper(sl, {
@@ -97,7 +97,7 @@ describe("getSafeFunctionName fallback (line 85) — callable createProxy with n
 			initialImpl: () => "callable",
 			isCallable: true
 		});
-		const proxy = w.createProxy();
+		const proxy = w.___createProxy();
 		// The proxy target function should be named _1test (getSafeFunctionName prefixed it)
 		// proxy.name returns the last path segment "1test" (proxy get trap), so check target name via createNamedProxyTarget result
 		expect(typeof proxy).toBe("function");
@@ -144,10 +144,10 @@ describe("prototype [util.inspect.custom] on raw wrapper (lines 310-316)", () =>
 describe("prototype [util.inspect.custom] unmaterialized lazy branch (line 352)", () => {
 	it("util.inspect on a freshly-created lazy wrapper returns the proxy before materialization (line 352)", async () => {
 		const eagerApi = await makeEager();
-		const sl = resolveWrapper(eagerApi.math).slothlet;
+		const sl = resolveWrapper(eagerApi.math).____slothlet;
 		// Create a lazy wrapper that has a proxy but is NOT yet materialized
 		const w = new UnifiedWrapper(sl, { mode: "lazy", apiPath: "test.inspect.lazy" });
-		const ____proxy = w.createProxy();
+		const ____proxy = w.___createProxy();
 		// Verify it is genuinely unmaterialized
 		expect(w.____slothletInternal.state.materialized).toBe(false);
 		expect(w.____slothletInternal.proxy).toBeTruthy();
@@ -161,12 +161,12 @@ describe("prototype [util.inspect.custom] unmaterialized lazy branch (line 352)"
 });
 
 // ---------------------------------------------------------------------------
-// TEST GROUP 4 — Line 352: background materialization via tracking.materialization: true
+// TEST GROUP 4 — Line 352: background materialization via loader.materialize: true
 // ---------------------------------------------------------------------------
 
-describe("background materialization via tracking.materialization (line 352)", () => {
-	it("lazy mode with tracking.materialization starts background materialization via setImmediate", async () => {
-		const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true, tracking: { materialization: true } });
+describe("background materialization via loader.materialize (line 352)", () => {
+	it("lazy mode with loader.materialize starts background materialization via setImmediate", async () => {
+		const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true, loader: { materialize: true } });
 		_api = api;
 		// Wrappers are created with mode=lazy and background materialization triggered.
 		// Wait multiple ticks to let setImmediate and async materialization complete.
@@ -187,11 +187,11 @@ describe("background materialization via tracking.materialization (line 352)", (
 describe("__metadata fallback when metadata handler is null (line 2122)", () => {
 	it("accessing __metadata on a proxy when handlers.metadata is null returns empty object", async () => {
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const originalMetadata = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
-			const meta = api.math.__metadata;
+			const meta = api.slothlet.metadata.get(api.math);
 			expect(meta).toEqual({});
 		} finally {
 			sl.handlers.metadata = originalMetadata;
@@ -206,7 +206,7 @@ describe("__metadata fallback when metadata handler is null (line 2122)", () => 
 describe("___createChildWrapper returns undefined for undefined value (line 1179)", () => {
 	it("___setImpl with an undefined-valued property hits return undefined in ___createChildWrapper", async () => {
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const w = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: "test.undefined.value",
@@ -252,14 +252,14 @@ describe("util.inspect via own-property closure on callable wrapper proxy", () =
 
 	it("util.inspect on a manually-created callable lazy wrapper returns string", async () => {
 		const eagerApi = await makeEager();
-		const sl = resolveWrapper(eagerApi.math).slothlet;
+		const sl = resolveWrapper(eagerApi.math).____slothlet;
 		const w = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: "test.callable.inspect",
 			initialImpl: () => "result",
 			isCallable: true
 		});
-		const proxy = w.createProxy();
+		const proxy = w.___createProxy();
 		const result = util.inspect(proxy);
 		expect(typeof result).toBe("string");
 	});

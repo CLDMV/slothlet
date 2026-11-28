@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-scheduler-attribution.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-scheduler-attribution.test.vitest.mjs
  *	@Date: 2026-07-30T12:00:00-07:00 (1785438000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
+ *	@Last modified time: 2026-11-28T04:32:40-08:00 (1795869160)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,7 +72,7 @@ describe.each(getMatrixConfigs())("Permissions > scheduler attribution > $name",
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -108,7 +108,7 @@ describe.each(getMatrixConfigs())("Permissions > scheduler attribution > $name",
 		const outcome = await armAndPoll(api.callers.dataReader.armTimerRead, api.callers.dataReader.readTimerOutcome);
 
 		expect(outcome).not.toBeNull();
-		// Denied by the rules is the correct outcome. RUNTIME_NO_ACTIVE_CONTEXT_SELF would mean the
+		// Denied by the rules is the correct outcome. CONTEXT_NOT_ACTIVE_SELF would mean the
 		// callback lost its identity entirely, which is the regression this guards.
 		expect(outcome.code).toMatch(/PERMISSION_DENIED/);
 	});
@@ -118,7 +118,7 @@ describe.each(getMatrixConfigs())("Permissions > scheduler attribution > $name",
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.dataReader.**", target: "db.secrets.**", effect: "allow" },
 					{ caller: "**", target: "callers.**", effect: "allow" }
@@ -174,7 +174,7 @@ describe("Permissions > scheduler attribution > mixed runtimes in one process", 
 			mode: "eager",
 			runtime,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});

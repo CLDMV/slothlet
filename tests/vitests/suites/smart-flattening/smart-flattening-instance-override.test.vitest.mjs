@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/smart-flattening/smart-flattening-instance-override.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/smart-flattening/smart-flattening-instance-override.test.vitest.mjs
  *	@Date: 2026-10-12T10:09:40-07:00 (1791824980)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T13:05:45-07:00 (1791835545)
+ *	@Last modified time: 2026-11-28T04:33:05-08:00 (1795869185)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -53,7 +53,7 @@ describe.each(getMatrixConfigs({}))("instance member override beside a sibling >
 		["replace", "named"],
 		["merge-replace", "named"]
 	])("under %s answers %s for the colliding member", async (mode, expected) => {
-		api = await slothlet({ ...config, base: BASE, silent: true, collision: { initial: mode, api: mode } });
+		api = await slothlet({ ...config, base: BASE, silent: true, api: { collision: { mode: { initial: mode, api: mode } } } });
 		await api.inst;
 		expect(api.inst.mode).toBe(expected);
 		expect(await api.inst.sib()).toBe("inst.sib");

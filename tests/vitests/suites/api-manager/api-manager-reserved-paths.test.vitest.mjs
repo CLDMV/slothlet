@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-reserved-paths.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-reserved-paths.test.vitest.mjs
  *	@Date: 2026-02-27T22:17:01-08:00 (1772259421)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-11-28T04:31:13-08:00 (1795869073)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  *
  * @description
  * Exercises:
- *   line 186 – INVALID_CONFIG_API_PATH_INVALID for reserved names: "slothlet", "shutdown", "destroy",
+ *   line 186 – API_PATH_INVALID for reserved names: "slothlet", "shutdown", "destroy",
  *              and composite paths whose first segment is "slothlet" (e.g. "slothlet.hook")
  *
  * @module tests/vitests/suites/api-manager/api-manager-reserved-paths
@@ -55,26 +55,26 @@ describe.each(CONFIGS)("normalizeApiPath reserved names — $name", ({ config })
 		}
 	});
 
-	it("throws INVALID_CONFIG_API_PATH_INVALID when apiPath top-level segment is 'slothlet'", async () => {
+	it("throws API_PATH_INVALID when apiPath top-level segment is 'slothlet'", async () => {
 		api = await makeApi(config);
-		await expect(api.slothlet.api.add("slothlet", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add("slothlet", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "API_PATH_INVALID" });
 	});
 
-	it("throws INVALID_CONFIG_API_PATH_INVALID when apiPath first segment is 'slothlet' (composite path)", async () => {
+	it("throws API_PATH_INVALID when apiPath first segment is 'slothlet' (composite path)", async () => {
 		api = await makeApi(config);
 		await expect(api.slothlet.api.add("slothlet.sub", TEST_DIRS.API_TEST)).rejects.toMatchObject({
-			code: "INVALID_CONFIG_API_PATH_INVALID"
+			code: "API_PATH_INVALID"
 		});
 	});
 
-	it("throws INVALID_CONFIG_API_PATH_INVALID when apiPath is 'shutdown'", async () => {
+	it("throws API_PATH_INVALID when apiPath is 'shutdown'", async () => {
 		api = await makeApi(config);
-		await expect(api.slothlet.api.add("shutdown", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add("shutdown", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "API_PATH_INVALID" });
 	});
 
-	it("throws INVALID_CONFIG_API_PATH_INVALID when apiPath is 'destroy'", async () => {
+	it("throws API_PATH_INVALID when apiPath is 'destroy'", async () => {
 		api = await makeApi(config);
-		await expect(api.slothlet.api.add("destroy", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add("destroy", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "API_PATH_INVALID" });
 	});
 
 	it("accepts a normal non-reserved apiPath without throwing", async () => {
@@ -82,9 +82,9 @@ describe.each(CONFIGS)("normalizeApiPath reserved names — $name", ({ config })
 		await expect(api.slothlet.api.add("plugins", TEST_DIRS.API_TEST)).resolves.toBeDefined();
 	});
 
-	it("throws INVALID_CONFIG_API_PATH_INVALID for paths with invalid characters (starts with dot)", async () => {
+	it("throws API_PATH_INVALID for paths with invalid characters (starts with dot)", async () => {
 		api = await makeApi(config);
-		await expect(api.slothlet.api.add(".hidden", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add(".hidden", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "API_PATH_INVALID" });
 	});
 
 	it("accepts empty string path as root-level add (normalizes to root)", async () => {
@@ -94,9 +94,9 @@ describe.each(CONFIGS)("normalizeApiPath reserved names — $name", ({ config })
 		await expect(api.slothlet.api.add("", TEST_DIRS.API_TEST)).resolves.toBeDefined();
 	});
 
-	it("throws INVALID_CONFIG_API_PATH_INVALID for paths with consecutive dots", async () => {
+	it("throws API_PATH_INVALID for paths with consecutive dots", async () => {
 		api = await makeApi(config);
-		await expect(api.slothlet.api.add("a..b", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		await expect(api.slothlet.api.add("a..b", TEST_DIRS.API_TEST)).rejects.toMatchObject({ code: "API_PATH_INVALID" });
 	});
 });
 
@@ -125,8 +125,8 @@ describe.each(CONFIGS)("normalizeApiPath prototype-pollution guard — $name", (
 
 	it.each(UNSAFE)("rejects a $label mount path and does not pollute Object.prototype", async ({ path, probe }) => {
 		api = await makeApi(config);
-		await expect(api.slothlet.api.add(path, () => "polluted", { moduleID: "proto-guard" })).rejects.toMatchObject({
-			code: "INVALID_CONFIG_API_PATH_INVALID"
+		await expect(api.slothlet.api.add(path, () => "polluted", { id: "proto-guard" })).rejects.toMatchObject({
+			code: "API_PATH_INVALID"
 		});
 		// The write must not have reached the prototype chain.
 		expect(Object.prototype[probe]).toBeUndefined();
@@ -138,7 +138,7 @@ describe.each(CONFIGS)("normalizeApiPath prototype-pollution guard — $name", (
 		// starts with "__" (the module-private convention) or contains a reserved word as a substring
 		// must still mount — the guard matches whole segments, not prefixes or substrings.
 		api = await makeApi(config);
-		await expect(api.slothlet.api.add("__config.value", () => 1, { moduleID: "safe-underscore" })).resolves.toBeDefined();
-		await expect(api.slothlet.api.add(["prototypeName", "leaf"], () => 2, { moduleID: "safe-substring" })).resolves.toBeDefined();
+		await expect(api.slothlet.api.add("__config.value", () => 1, { id: "safe-underscore" })).resolves.toBeDefined();
+		await expect(api.slothlet.api.add(["prototypeName", "leaf"], () => 2, { id: "safe-substring" })).resolves.toBeDefined();
 	});
 });

@@ -43,23 +43,23 @@ Hooks are configured when creating a slothlet instance:
 ```javascript
 // Enable hooks (simple boolean)
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	hook: true
 });
 
 // Enable with default pattern filter
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	hook: "database.*" // Only intercept database functions by default
 });
 
 // Full configuration object
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	hook: {
 		enabled: true,
 		pattern: "**",
-		suppressErrors: false
+		errors: false
 	}
 });
 ```
@@ -68,20 +68,20 @@ const api = await slothlet({
 
 - **`enabled`** (boolean): Enable or disable hook execution
 - **`pattern`** (string): Default pattern filter for which functions hooks apply to
-- **`suppressErrors`** (boolean): Control error throwing behavior
+- **`errors`** (`"suppress"` | `false`; `true` means `"suppress"`): Control error throwing behavior
   - `false` (default): Errors are sent to error hooks AND then re-thrown
   - `true`: Errors are sent to error hooks but NOT thrown (returns `undefined`)
 
 ### Error Suppression
 
-Error hooks **always receive errors** regardless of this setting. `suppressErrors` only controls whether the error is thrown after all error hooks have executed.
+Error hooks **always receive errors** regardless of this setting. `errors` only controls whether the error is thrown after all error hooks have executed.
 
-> Hooks (including error hooks) only execute when `hook.enabled: true`. If hooks are disabled entirely, errors throw normally with no hook execution.
+> Hooks (including error hooks) only execute when `hook.enabled: true`. If hooks are disabled entirely, errors throw normally with no hook execution. `api.slothlet.hook` is present on every instance, whether or not hooks start enabled: the `hook` option only sets the starting state, and `api.slothlet.hook.enable()` turns hooks on at runtime.
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
-	hook: { enabled: true, suppressErrors: true }
+	base: "./api",
+	hook: { enabled: true, errors: "suppress" }
 });
 
 api.slothlet.hook.on("**:error", ({ path, error }) => {
@@ -99,8 +99,8 @@ if (result === undefined) {
 
 1. Error occurs (in an around hook, before hook, the function, or an after hook)
 2. Error hooks execute with full source context
-3. If `suppressErrors: false` → error is re-thrown
-4. If `suppressErrors: true` → error is NOT thrown; function returns `undefined`
+3. If `errors: false` → error is re-thrown
+4. If `errors: "suppress"` → error is NOT thrown; function returns `undefined`
 
 The full pipeline, outermost first:
 
@@ -110,7 +110,7 @@ always / error observers
    └─ before hooks → function → after hooks
 ```
 
-The observers sit **outside** the around hooks, so they see exactly what the caller receives. On a path with `around` hooks, a failure inside the pipeline propagates through `next()` so an around hook can handle it: an error an around hook catches and swallows never reaches the error hooks, and one it rethrows (after a rollback, say) reaches them once, carrying the source of wherever it was first thrown. `suppressErrors` applies to what escapes the around chain. Error hooks and `always` hooks on such a path receive the arguments the caller passed, since that is the call they observe.
+The observers sit **outside** the around hooks, so they see exactly what the caller receives. On a path with `around` hooks, a failure inside the pipeline propagates through `next()` so an around hook can handle it: an error an around hook catches and swallows never reaches the error hooks, and one it rethrows (after a rollback, say) reaches them once, carrying the source of wherever it was first thrown. `errors` applies to what escapes the around chain. Error hooks and `always` hooks on such a path receive the arguments the caller passed, since that is the call they observe.
 
 ---
 
@@ -177,7 +177,7 @@ api.slothlet.hook.on(
 ```javascript
 import slothlet from "@cldmv/slothlet";
 
-const api = await slothlet({ dir: "./api", hook: true });
+const api = await slothlet({ base: "./api", hook: true });
 
 // Before hook: Modify arguments
 api.slothlet.hook.on(
@@ -202,8 +202,8 @@ api.slothlet.hook.on(
 // Always hook: Observe final result (read-only)
 api.slothlet.hook.on(
 	"**:always",
-	({ path, result, hasError, errors }) => {
-		if (hasError) {
+	({ path, result, errors }) => {
+		if (errors.length > 0) {
 			console.log(`${path} failed:`, errors);
 		} else {
 			console.log(`${path} succeeded:`, result);
@@ -260,12 +260,11 @@ api.slothlet.hook.on("math.*:after", ({ path, args, result, api, ctx }) => {
 ### Always hook context
 
 ```javascript
-api.slothlet.hook.on("**:always", ({ path, args, result, hasError, errors, api, ctx }) => {
+api.slothlet.hook.on("**:always", ({ path, args, result, errors, api, ctx }) => {
 	// path: string - API path
 	// args: Array - original arguments
-	// result: * - final result (undefined if hasError)
-	// hasError: boolean - whether an error occurred
-	// errors: Array<Error> - array of errors that occurred
+	// result: * - final result (undefined when the call failed)
+	// errors: Array<Error> - the errors that occurred (empty on success; the call failed when errors.length > 0)
 	// api, ctx - as above
 	// Return value is ignored
 });
@@ -279,7 +278,7 @@ api.slothlet.hook.on("math.*:around", ({ path, args, next, entry, caller, api, c
 	// args: Array - arguments as this around hook received them
 	// next: (args?: Array) => * - runs the rest of the pipeline; returns its result or throws its error
 	// entry: boolean - true when the call has no module caller (an outside call); false for a nested call
-	// caller: object|null - the calling module's metadata (the shape metadata.caller() returns), null when entry
+	// caller: object|null - the calling leaf: { path: string[], module, metadata (its user metadata), version: { tag, default, metadata } | null }; null when entry
 	// api, ctx - as above
 	return next(args);
 });
@@ -290,19 +289,18 @@ api.slothlet.hook.on("math.*:around", ({ path, args, next, entry, caller, api, c
 ### Error hook context
 
 ```javascript
-api.slothlet.hook.on("**:error", ({ path, args, error, errorType, source, timestamp, api, ctx }) => {
+api.slothlet.hook.on("**:error", ({ path, args, error, class: errorClass, origin, at, api, ctx }) => {
 	// path: string - API path
 	// args: Array - function arguments
 	// error: Error - the error object
-	// errorType: string - error constructor name
-	// timestamp: Date - when the error occurred
-	// source: object - error source details
-	//   source.type: "around" | "before" | "after" | "always" | "function"
-	//   source.subset: hook subset (if hook error)
-	//   source.hookId: hook ID (if hook error)
-	//   source.hookTag: hook tag/name (if hook error)
-	//   source.timestamp: epoch ms
-	//   source.stack: full stack trace
+	// class: string - the error's class name
+	// at: number - when the error hooks ran (the instance clock, epoch ms)
+	// origin: object - where the error came from
+	//   origin.type: "around" | "before" | "after" | "always" | "function"
+	//   origin.subset: hook subset (if hook error)
+	//   origin.hook: the failing hook's id (if hook error)
+	//   origin.at: when the error occurred (epoch ms)
+	//   origin.stack: full stack trace
 	// api, ctx - as above
 });
 ```
@@ -363,7 +361,7 @@ api.slothlet.hook.on("**:around", ({ path, args, next }) => {
 
 ## Pattern Matching
 
-The typePattern argument to `hook.on()` has the format `"pattern:type"` (path-first, type as trailing suffix). The old type-first form `"type:pattern"` (e.g. `"before:math.add"`) is deprecated — it still works but emits a deprecation warning and will be removed in v4.
+The typePattern argument to `hook.on()` has the format `"pattern:type"` (path-first, type as trailing suffix). A type-first string (e.g. `"before:math.add"`) names no hook type at its end and is refused with `HOOK_PATTERN_INVALID`.
 
 ```javascript
 // pattern = "math.add", type = "before"
@@ -381,14 +379,17 @@ api.slothlet.hook.on("database.*:error", handler);
 
 ### Supported Pattern Syntax
 
-| Syntax        | Description                                | Example            |
-| ------------- | ------------------------------------------ | ------------------ |
-| `exact.path`  | Exact match                                | `"math.add"`       |
-| `namespace.*` | All functions in namespace                 | `"math.*"`         |
-| `*.funcName`  | Function name in any namespace             | `"*.add"`          |
-| `**`          | All functions                              | `"**"`             |
-| `{a,b,c}`     | Brace expansion - matches "a", "b", or "c" | `"{math,utils}.*"` |
-| `!pattern`    | Negation - matches anything except pattern | `"!internal.*"`    |
+| Syntax         | Description                                | Example            |
+| -------------- | ------------------------------------------ | ------------------ |
+| `exact.path`   | Exact match                                | `"math.add"`       |
+| `namespace.*`  | All functions in namespace                 | `"math.*"`         |
+| `*.funcName`   | Function name in any namespace             | `"*.add"`          |
+| `**`           | All functions                              | `"**"`             |
+| `namespace.**` | The namespace itself and everything below  | `"db.**"`          |
+| `{a,b,c}`      | Brace expansion - matches "a", "b", or "c" | `"{math,utils}.*"` |
+| `!pattern`     | Negation - matches anything except pattern | `"!internal.*"`    |
+
+A `**` that is a whole segment matches any number of segments, none included, as in permission rules, routine names and `hidden` globs: `db.**` matches `db` itself (a callable folder's own function) as well as `db.query` and `db.pool.open`, `**.add` matches `add`, and `a.**.b` matches `a.b`. Several in a row say the same as one (`a.**.**` is `a.**`). A `*` is always exactly one segment.
 
 ### Pattern Examples
 
@@ -403,11 +404,13 @@ api.slothlet.hook.on("{math,database}.*:before", handler);
 api.slothlet.hook.on("*.{add,update,delete}:after", handler);
 ```
 
+A pattern that names `__proto__`, `constructor` or `prototype` as a segment (including inside braces, as in `{a,constructor}.x`) is refused with `API_PATH_INVALID`, wherever a pattern is taken: `hook.on()`, `remove`/`enable`/`disable`/`list` filters, `hook.pattern.enable()`/`disable()` and the configured `hook.pattern`. No api path can hold those segments, so the pattern could never match; other names such as `toString` and `valueOf` are ordinary api names and stay allowed.
+
 ### Diagnostic: Test a Pattern
 
 ```javascript
 // Compile a pattern to test it
-const matcher = api.slothlet.diag.hook.compilePattern("math.*");
+const matcher = api.slothlet.diag.hook.compile("math.*");
 console.log(matcher("math.add")); // true
 console.log(matcher("other.func")); // false
 ```
@@ -506,7 +509,9 @@ For around hooks, "runs first" means "outermost": the first around hook in this 
 
 ## Permissions and Pinning
 
-When a `permissions` block is configured, registering and firing a hook on a path is permission-gated: the rule target uses the same `pattern:type` suffix form (e.g. `"db.*:error"`, `"db.*:around"`), and `:hook` as the type matches any hook type on that path. An `around` hook is gated exactly like a `before` hook — it can rewrite the call and prevent it — so grant `:around` as deliberately. Module-registered hooks are force-pinned to their owner module by default — this prevents permission bypass through the bound `api`; opt out per-instance via `hook: { pin: false }` in the slothlet init config, or at runtime with `api.slothlet.hook.pin.disable()` (`.enable()` re-enables, `.enabled` reads the current state). A pinned `around` handler runs as its owner, but the rest of the pipeline its `next()` runs belongs to the intercepted call: the target still sees that call's own caller. Every handler is called as a plain function, with no `this`: it is never handed its own registration.
+When a `permissions` block is configured, registering and firing a hook on a path is permission-gated: the rule target uses the same `pattern:type` suffix form (e.g. `"db.*:error"`, `"db.*:around"`), and `:hook` as the type matches any hook type on that path. When several hook rules match, the most specific one decides: a specific type (`:before`) over `:hook`, then the pattern naming more literal segments (`db.write.**:before` over `db.**:before`), then the higher layer, then the last registered. Adding the rules in a different order never changes the outcome. An `around` hook is gated exactly like a `before` hook — it can rewrite the call and prevent it — so grant `:around` as deliberately. Module-registered hooks are force-pinned to their owner module by default — this prevents permission bypass through the bound `api`; opt out per-instance via `hook: { pin: false }` in the slothlet init config, or at runtime with `api.slothlet.hook.pin.disable()` (`.enable()` re-enables, `.enabled` reads the current state). A pinned `around` handler runs as its owner, but the rest of the pipeline its `next()` runs belongs to the intercepted call: the target still sees that call's own caller. Every handler is called as a plain function, with no `this`: it is never handed its own registration.
+
+A module may always hook a leaf in its own source file, as it may always call one ([self-call bypass](PERMISSIONS.md#self-call-bypass)). This holds for a hook registered on that exact path (`"db.write:before"`), at registration and every time it fires, and ahead of every rule, a hook rule that denies the path included. The file compared is the one slothlet recorded for the leaf currently at the path, so a leaf re-added there from another file no longer counts, and a path with no record (nothing loaded there yet) has no bypass. A pattern hook (`"db.*:before"`) takes no bypass: the rules decide every path it matches, the module's own file included. Registering a self-hook emits `permission:self-bypass` as a self-call does. The bypass never reaches the `slothlet.*` surface, and a [module-private](PERMISSIONS.md#module-private-exports) member is hooked this way only by the module that owns it. Code registered under another module's call keeps that call as its ceiling, and the ceiling is checked against the leaf as for a call: it takes the bypass only when the leaf is in its own file.
 
 A hook a module registered goes with the module: once the module is removed the hook no longer fires, with or without permissions, whoever is mounted at its old path or under its old moduleID since, and across a reload. Code the removed module kept cannot register a new one.
 
@@ -517,7 +522,7 @@ A hook a module registered goes with the module: once the module is removed the 
 Enable and disable hooks at runtime without unregistering them:
 
 ```javascript
-const api = await slothlet({ dir: "./api", hook: true });
+const api = await slothlet({ base: "./api", hook: true });
 
 // Disable all hooks
 api.slothlet.hook.disable();
@@ -541,17 +546,17 @@ api.slothlet.hook.disable({ id: "my-expensive-hook" });
 
 ```javascript
 // Only intercept database.* paths from now on — calls to other paths run no hooks.
-api.slothlet.hook.enablePattern("database.*");
+api.slothlet.hook.pattern.enable("database.*");
 
 // Widen the filter — both database.* and cache.* paths are now intercepted.
-api.slothlet.hook.enablePattern("cache.*");
+api.slothlet.hook.pattern.enable("cache.*");
 
 // Remove one pattern. When the last pattern is removed the filter deactivates,
 // so every path is intercepted again.
-api.slothlet.hook.disablePattern("database.*");
+api.slothlet.hook.pattern.disable("database.*");
 
 // Reset back to the pattern configured via hook.pattern (or fully unrestricted if that was "**").
-api.slothlet.hook.resetPatternFilter();
+api.slothlet.hook.pattern.reset();
 ```
 
 The catch-all pattern `"**"` matches every path, so a `hook.pattern` of `"**"` (the default) imposes no restriction.
@@ -614,14 +619,14 @@ The `error` hook type receives detailed context about any error in the execution
 ```javascript
 api.slothlet.hook.on(
 	"**:error",
-	({ path, error, source }) => {
+	({ path, error, origin }) => {
 		console.error(`Error in ${path}:`, error.message);
-		console.error(`Source type: ${source.type}`); // "around" | "before" | "function" | "after" | "always" | "unknown"
+		console.error(`Origin type: ${origin.type}`); // "around" | "before" | "function" | "after" | "always" | "unknown"
 
-		if (source.type === "function") {
+		if (origin.type === "function") {
 			console.error("Error in function body");
 		} else {
-			console.error(`Error in ${source.type} hook: ${source.hookTag}`);
+			console.error(`Error in ${origin.type} hook: ${origin.hook}`);
 		}
 	},
 	{ id: "error-monitor" }
@@ -630,7 +635,7 @@ api.slothlet.hook.on(
 
 **Important notes:**
 
-- Errors from `before` and `after` hooks are re-thrown after error hooks run (unless `suppressErrors: true`)
+- Errors from `before` and `after` hooks are re-thrown after error hooks run (unless `errors: "suppress"`)
 - On a path with `around` hooks, error hooks run only for the error that escapes the around chain — see [Error Flow](#error-flow)
 - Errors from `always` hooks are caught and passed to error hooks, but do NOT re-throw (never crash execution)
 - Error hooks do not receive errors thrown by other error hooks (no recursion)
@@ -639,9 +644,9 @@ api.slothlet.hook.on(
 
 ## Error Source Tracking
 
-### Source Types
+### Origin Types
 
-| `source.type` | Description                       |
+| `origin.type` | Description                       |
 | ------------- | --------------------------------- |
 | `"function"`  | Error in the target function body |
 | `"around"`    | Error thrown by an around hook    |
@@ -649,14 +654,13 @@ api.slothlet.hook.on(
 | `"after"`     | Error in an after hook            |
 | `"always"`    | Error in an always hook           |
 
-### Source Properties
+### Origin Properties
 
-- `source.type` - source type (see above)
-- `source.subset` - hook subset where error occurred (for hook errors)
-- `source.hookId` - ID of the hook that failed (for hook errors)
-- `source.hookTag` - name/tag of the hook that failed (for hook errors)
-- `source.timestamp` - epoch millisecond when error occurred
-- `source.stack` - full stack trace string
+- `origin.type` - origin type (see above)
+- `origin.subset` - hook subset where error occurred (for hook errors)
+- `origin.hook` - id of the hook that failed (for hook errors)
+- `origin.at` - epoch millisecond when error occurred
+- `origin.stack` - full stack trace string
 
 ### Comprehensive Error Monitoring Example
 
@@ -665,21 +669,20 @@ const errorStats = { function: 0, around: 0, before: 0, after: 0, always: 0, byH
 
 api.slothlet.hook.on(
 	"**:error",
-	({ path, error, source }) => {
-		errorStats[source.type] = (errorStats[source.type] || 0) + 1;
+	({ path, error, origin }) => {
+		errorStats[origin.type] = (errorStats[origin.type] || 0) + 1;
 
-		if (source.hookTag) {
-			errorStats.byHook[source.hookTag] = (errorStats.byHook[source.hookTag] || 0) + 1;
+		if (origin.hook) {
+			errorStats.byHook[origin.hook] = (errorStats.byHook[origin.hook] || 0) + 1;
 		}
 
 		sendToMonitoring({
-			timestamp: source.timestamp,
+			at: origin.at,
 			path,
-			errorType: source.type,
-			hookId: source.hookId,
-			hookTag: source.hookTag,
+			type: origin.type,
+			hook: origin.hook,
 			message: error.message,
-			stack: source.stack
+			stack: origin.stack
 		});
 	},
 	{ id: "error-analytics" }
@@ -690,20 +693,20 @@ api.slothlet.hook.on(
 
 ## Versioned Registration
 
-Calls route through the [`versionDispatcher`](VERSIONING.md#discriminator) seam; plain hook registration does not — a pattern written against the **logical** path (`"auth.login"`, the shape used for calls) matches nothing once the target mounts versioned, because hooks fire under the **physical** path (`"v1.auth.login"`). Registration can opt into the same seam:
+Calls route through the [`versioning.dispatcher`](VERSIONING.md#discriminator) seam; plain hook registration does not — a pattern written against the **logical** path (`"auth.login"`, the shape used for calls) matches nothing once the target mounts versioned, because hooks fire under the **physical** path (`"v1.auth.login"`). Registration can opt into the same seam:
 
 ```javascript
 // Resolve through the instance's configured dispatcher, exactly as a call would:
-api.slothlet.hook.on("auth.login:before", handler, { versioned: true });
+api.slothlet.hook.on("auth.login:before", handler, { versioning: { enabled: true } });
 
 // Or override per registration — and select SEVERAL versions at once:
 api.slothlet.hook.on("auth.login:before", handler, {
 	id: "audit-login",
-	versionDispatcher: (allVersions, caller) => Object.keys(allVersions) // every installed major
+	versioning: { dispatcher: (versions, caller) => Object.keys(versions) } // every installed major
 });
 ```
 
-The dispatcher receives the same `(allVersions, caller)` arguments call dispatch builds — `caller` describing the **registrant** — and may return a registered tag, an **array** of tags, or nothing to take the same default-version resolution a call falls back to. One registration is created per selected tag against the physical path (each passing the ordinary registration permission gate), and the returned id is the **group id**: a single `remove({ id })` unhooks every selected version. The binding survives `exportHooks()`/`importHooks()` reload replay.
+The dispatcher receives the same `(versions, caller)` arguments call dispatch builds — `caller` describing the **registrant** — and may return a registered tag, an **array** of tags, or nothing to take the same default-version resolution a call falls back to. One registration is created per selected tag against the physical path (each passing the ordinary registration permission gate), and the returned id is the **group id**: a single `remove({ id })` unhooks every selected version. The binding survives `exportHooks()`/`importHooks()` reload replay.
 
 Handlers learn which version fired them structurally — the hook context carries `version` (the tag) for version-dispatched registrations and `undefined` otherwise — so nothing needs to be parsed out of `path`:
 
@@ -713,7 +716,7 @@ api.slothlet.hook.on(
 	({ version, args }) => {
 		audit(`login attempt via ${version}`, args);
 	},
-	{ versioned: true }
+	{ versioning: { enabled: true } }
 );
 ```
 
@@ -791,7 +794,7 @@ Slothlet's hook system above governs slothlet's own `before`/`after`/`always`/`e
 
 ### Hooks auto-pin caller identity
 
-Slothlet's **own** hooks need no manual pinning. A hook handler fires during the API call it intercepts, which belongs to whichever caller triggered that call — not to the module that registered the hook. So by default `hook.on()` pins the **registering module's** caller identity onto the handler: its `self.*` calls and permission checks are attributed to the module that registered the hook, exactly as if the body had been wrapped in `lockCaller`.
+Slothlet's **own** hooks need no manual pinning. A hook handler fires during the API call it intercepts, which belongs to whichever caller triggered that call — not to the module that registered the hook. So by default `hook.on()` pins the **registering module's** caller identity onto the handler: its `self.*` calls and permission checks are attributed to the module that registered the hook, exactly as if the body had been wrapped in `pin`.
 
 ```javascript
 // Registered inside module B's init() — the handler runs as module B,
@@ -802,13 +805,13 @@ self.slothlet.hook.on("math.*:before", ({ args }) => {
 });
 ```
 
-Pass `{ lockCaller: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`. **Note:** while pin enforcement is on (the default), a `lockCaller: false` on a hook registered _from inside a module_ is ignored — it is forced back to pinned and a `HOOK_UNPINNED_IGNORED` warning fires; the opt-out takes effect only once pin enforcement is disabled via `hook: { pin: false }` at init or `api.slothlet.hook.pin.disable()`:
+Pass `{ pin: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`. **Note:** while pin enforcement is on (the default), a `pin: false` on a hook registered _from inside a module_ is ignored — it is forced back to pinned and a `WARNING_HOOK_UNPINNED_IGNORED` warning fires; the opt-out takes effect only once pin enforcement is disabled via `hook: { pin: false }` at init or `api.slothlet.hook.pin.disable()`:
 
 ```javascript
-self.slothlet.hook.on("math.*:before", logArgs, { lockCaller: false });
+self.slothlet.hook.on("math.*:before", logArgs, { pin: false });
 ```
 
-Auto-pinning applies only when the hook is registered from inside a module (there is a caller identity to capture) and the handler is not already `lockCaller`-wrapped. The remaining sections below cover the harder case slothlet **cannot** intercept: callbacks handed to a third-party framework.
+Auto-pinning applies only when the hook is registered from inside a module (there is a caller identity to capture) and the handler is not already `pin`-wrapped. The remaining sections below cover the harder case slothlet **cannot** intercept: callbacks handed to a third-party framework.
 
 ### Why array-stored callbacks lose caller identity
 
@@ -818,9 +821,9 @@ The failure mode: module B registers an `onRequest` hook. A later request restor
 
 This is not something slothlet can fix generically: `addHook` is a framework mechanism with no interception point. Instead, two opt-in utilities on `self.slothlet` let a module pin its identity onto a callback.
 
-### `self.slothlet.lockCaller(fn)` — pin caller identity, keep context live
+### `self.slothlet.pin(fn)` — pin caller identity, keep context live
 
-`lockCaller` captures the registering module's caller identity at call time and, on every invocation of the returned wrapper, overrides **only** the caller identity. The request-scoped context set later in the lifecycle stays live and visible; `self` stays the live proxy.
+`pin` captures the registering module's caller identity at call time and, on every invocation of the returned wrapper, overrides **only** the caller identity. The request-scoped context set later in the lifecycle stays live and visible; `self` stays the live proxy.
 
 ```javascript
 import { self } from "@cldmv/slothlet/runtime";
@@ -828,7 +831,7 @@ import { self } from "@cldmv/slothlet/runtime";
 // Inside module B's setup:
 server.addHook(
 	"onRequest",
-	self.slothlet.lockCaller(async (req, reply) => {
+	self.slothlet.pin(async (req, reply) => {
 		// Runs as module B regardless of which module's context is ambient.
 		const ctx = self.slothlet.context.get(); // permission rules keyed to B match
 		// ...
@@ -838,12 +841,12 @@ server.addHook(
 
 - The locked callback's caller identity is frozen, but the request context stays **live** — context set later in the request lifecycle is visible inside it.
 - `this` is forwarded, so framework-supplied `this` (the request/reply or the framework instance) is preserved.
-- Called with no active context (no module wrapper to capture), `lockCaller` is a no-op passthrough — it is meaningful only when called from inside a module.
-- **Runtime mode matters for async callbacks.** In **async** runtime mode the pinned identity propagates through `AsyncLocalStorage`, so `self.*` calls after an `await` still resolve to the registering module. In **live** runtime mode the pinned caller is held until the callback's promise settles, so `self.*` calls after an `await` resolve to the registering module as well. Live mode keeps no per-async-task context, though: while other module calls are suspended at the same time, the resumed callback is attributed from the call stack (see [PERMISSIONS.md → Overlapping calls](./PERMISSIONS.md#runtime-choice--the-permission-boundary)), which holds for cooperative code but is not an enforced guarantee. Use **async** runtime mode for `async` hooks (like the example above) whose locked identity is load-bearing past their first `await`. `bind` is **not** an escape hatch here — it has the same live-mode limitation (see below).
+- Called with no active context (no module wrapper to capture), `pin` is a no-op passthrough — it is meaningful only when called from inside a module.
+- **Runtime mode matters for async callbacks.** In **async** runtime mode the pinned identity propagates through `AsyncLocalStorage`, so `self.*` calls after an `await` still resolve to the registering module. In **live** runtime mode the pinned caller is held until the callback's promise settles, so `self.*` calls after an `await` resolve to the registering module as well. Live mode carries each `run()` / `scope()` flow across an `await` (in Node, through V8's promise hooks) but not which call picked up, though: while other module calls are suspended at the same time, the resumed callback is attributed from the call stack (see [PERMISSIONS.md → Overlapping calls](./PERMISSIONS.md#runtime-choice--the-permission-boundary)), which holds for cooperative code but is not an enforced guarantee. Use **async** runtime mode for `async` hooks (like the example above) whose locked identity is load-bearing past their first `await`. `bind` is **not** an escape hatch here — it has the same live-mode limitation (see below).
 
-### `self.slothlet.lockCaller.caller(fn)` — pin the leaf's caller
+### `self.slothlet.pin.caller(fn)` — pin the leaf's caller
 
-`lockCaller` pins the leaf that calls it. A service that accepts a callback on behalf of whoever called it — a scheduler's `every(interval, fn)`, a registry — can therefore only pin **itself**, and the callback runs as the service rather than the module that handed it over. `lockCaller.caller` pins the current leaf's **caller** instead: exactly the identity `self.slothlet.metadata.caller()` reports at that moment.
+`pin` pins the leaf that calls it. A service that accepts a callback on behalf of whoever called it — a scheduler's `every(interval, fn)`, a registry — can therefore only pin **itself**, and the callback runs as the service rather than the module that handed it over. `pin.caller` pins the current leaf's **caller** instead: exactly the identity `self.slothlet.metadata.caller()` reports at that moment.
 
 ```javascript
 // scheduler/service.mjs
@@ -851,7 +854,7 @@ import { self } from "@cldmv/slothlet/runtime";
 
 export function every(ms, job) {
 	// Runs each job as the module that called every(), not as the scheduler.
-	setInterval(self.slothlet.lockCaller.caller(job), ms);
+	setInterval(self.slothlet.pin.caller(job), ms);
 }
 ```
 
@@ -860,26 +863,26 @@ export function every(ms, job) {
 self.scheduler.service.every(60_000, () => self.reports.refresh());
 ```
 
-- **It is a privilege.** Acting as your caller is not something a module may do by default: `slothlet.lockCaller.caller` is its own api path, denied to every module by a built-in rule. The host grants it to the services that run callbacks on their callers' behalf — `{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }`. See [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). The check runs when the wrapper is created.
-- **No module caller → runs as the host.** When the leaf was itself called from outside any module (the host, a transport edge), the callback is pinned to "no module caller": it runs as the host, and `metadata.caller()` returns `null` inside it. This is a real pin, not a passthrough of `fn`, and it does not throw. Because a host-pinned callback carries the host's exemption from rules, grant `lockCaller.caller` only to modules trusted to act for any caller, the host included.
-- **A kept `lockCaller.caller` acts for the module that read it.** A module that keeps the function (`const pin = self.slothlet.lockCaller.caller`) and calls it later, outside any call — from a timer, or from host code it handed a closure to — has no caller at that point, but it is not the host either: the callback is pinned to that module. Calling it there is still checked against the grant for that module.
-- **Otherwise identical to `lockCaller`**: the identity is captured once, at call time, and cannot be changed afterwards; `this` and arguments are forwarded; errors thrown by `fn` propagate unchanged; the wrapper exposes `_slothletOriginal`; a callback held across `reload()` runs against the current instance.
+- **It is a privilege.** Acting as your caller is not something a module may do by default: `slothlet.pin.caller` is its own api path, denied to every module by a built-in rule. The host grants it to the services that run callbacks on their callers' behalf — `{ caller: "scheduler.**", target: "slothlet.pin.caller", effect: "allow" }`. See [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). The check runs when the wrapper is created.
+- **No module caller → runs as the host.** When the leaf was itself called from outside any module (the host, a transport edge), the callback is pinned to "no module caller": it runs as the host, and `metadata.caller()` returns `null` inside it. This is a real pin, not a passthrough of `fn`, and it does not throw. Because a host-pinned callback carries the host's exemption from rules, grant `pin.caller` only to modules trusted to act for any caller, the host included.
+- **A kept `pin.caller` acts for the module that read it.** A module that keeps the function (`const pin = self.slothlet.pin.caller`) and calls it later, outside any call — from a timer, or from host code it handed a closure to — has no caller at that point, but it is not the host either: the callback is pinned to that module. Calling it there is still checked against the grant for that module.
+- **Otherwise identical to `pin`**: the identity is captured once, at call time, and cannot be changed afterwards; `this` and arguments are forwarded; errors thrown by `fn` propagate unchanged; the wrapper exposes `____slothletOriginal`; a callback held across `reload()` runs against the current instance.
 - **Principals compose.** Calls made inside the callback are enforced for the pinned identity, so rules keyed to the caller — including [`requires` principals](PERMISSIONS.md#principals) — resolve exactly as they would for a direct call from that caller.
-- **Runtime mode** carries the same caveat as `lockCaller`: in **async** runtime mode the pinned identity propagates through `AsyncLocalStorage` across every `await`. In **live** runtime mode there is one identity slot per instance, so while an `async` callback is parked at an `await` alongside other suspended calls (for example the service that fired it and is awaiting it), its resumed calls are attributed from the call stack and can resolve to an awaiting module frame instead of the pin. That fails closed — never to the host — but it is not the pin; use async runtime mode for `async` callbacks that must keep the pinned caller past an `await`.
+- **Runtime mode** carries the same caveat as `pin`: in **async** runtime mode the pinned identity propagates through `AsyncLocalStorage` across every `await`. In **live** runtime mode the caller is not carried per call across an `await`, so while an `async` callback is parked at an `await` alongside other suspended calls (for example the service that fired it and is awaiting it), its resumed calls are attributed from the call stack and can resolve to an awaiting module frame instead of the pin. That fails closed — never to the host — but it is not the pin; use async runtime mode for `async` callbacks that must keep the pinned caller past an `await`.
 
 ### `self.slothlet.bind(fn)` — freeze the whole async context
 
-`bind` is a convenience re-export of Node's `AsyncResource.bind`. Unlike `lockCaller`, it freezes the **entire** async context captured at registration time — every `AsyncLocalStorage`, including slothlet's caller and request context:
+Unlike `pin`, `bind` freezes the **entire** context captured at registration time: slothlet's caller and request context, the running `run()` / `scope()` included. On the **async** runtime it is Node's `AsyncResource.bind`, so every `AsyncLocalStorage` is frozen with it. On the **live** runtime, which uses no `node:async_hooks`, the live context manager binds the flow and caller the callback was bound in, as it does for a function an `AsyncResource` runs; another library's `AsyncLocalStorage` is not part of what it binds there:
 
 ```javascript
 server.addHook("onRequest", self.slothlet.bind(handler));
 ```
 
-Reach for `lockCaller` when you want the caller pinned but request-scoped context live; reach for `bind` when you want the whole context snapshot frozen.
+Reach for `pin` when you want the caller pinned but request-scoped context live; reach for `bind` when you want the whole context snapshot frozen.
 
-Both utilities share the same live-mode limitation: `AsyncResource.bind` only meaningfully captures slothlet's caller/context in **async** runtime mode. In live mode the slothlet store is kept off the `AsyncLocalStorage`, so `bind` degrades to binding whatever other async context exists and does **not** preserve slothlet caller identity past an `await`. `bind` is therefore not a workaround for the live-mode `lockCaller` caveat above — if an `async` callback must keep slothlet identity across awaits, run the instance in **async** runtime mode.
+On the live runtime `bind` carries what the live runtime carries for any callback, with the same reach: the bound callback's synchronous code and what it schedules run in the bound flow and as the module that bound it, and the code after an `await` follows the rules in [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md#concurrent-run-and-scope-flows-in-the-live-runtime). It is not a workaround for the live-mode `pin` caveat above: if an `async` callback must keep slothlet identity across awaits while other calls are suspended, run the instance in **async** runtime mode.
 
-> `slothlet.lockCaller`, `slothlet.lockCaller.caller`, and `slothlet.bind` are permission-gated routes like every other `slothlet.*` member — see [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). `lockCaller.caller` is denied to modules by default.
+> `slothlet.pin`, `slothlet.pin.caller`, and `slothlet.bind` are permission-gated routes like every other `slothlet.*` member — see [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). `pin.caller` is denied to modules by default.
 
 ---
 
@@ -891,12 +894,15 @@ Register a hook.
 
 **Parameters:**
 
-- `typePattern` (string) - Combined pattern and type, format: `"pattern:type"` (e.g. `"math.*:before"`). The legacy type-first form `"type:pattern"` (e.g. `"before:math.*"`) is deprecated — it still works but emits a deprecation warning and will be removed in v4.
+- `typePattern` (string) - Combined pattern and type, format: `"pattern:type"` (e.g. `"math.*:before"`). A type-first string (e.g. `"before:math.*"`) is refused with `HOOK_PATTERN_INVALID`.
 - `handler` (Function) - Hook handler (sync or async — see [Sync and Async Function Behavior](#sync-and-async-function-behavior))
 - `options.id` (string, optional) - Unique identifier (auto-generated if omitted)
 - `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)
 - `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
-- `options.lockCaller` (boolean, optional) - Pin the registering module's caller identity onto the handler (default: `true`). See [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity).
+- `options.pattern` (string, optional) - Path pattern that overrides the one parsed from `typePattern`
+- `options.versioning.enabled` (boolean, optional) - Resolve the pattern, written against the logical path, through the instance's configured `versioning.dispatcher` (default: `false`). See [Versioned Registration](#versioned-registration).
+- `options.versioning.dispatcher` (Function, optional) - `(versions, caller) => tag | tag[] | null` for this registration only, overriding the instance's dispatcher. Implies versioned registration.
+- `options.pin` (boolean, optional) - Pin the registering module's caller identity onto the handler (default: `true`). See [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity).
 - `options.async` (boolean, optional) - Declare a handler asynchronous when the native async brand cannot show it (a plain function returning a Promise). Applies to `before`, `after` and `around` handlers.
 
 **Returns:** string - The hook ID
@@ -935,7 +941,7 @@ Disable hooks without unregistering them. Empty filter disables all.
 
 **Returns:** number - Count of hooks disabled
 
-### api.slothlet.hook.enablePattern(pattern)
+### api.slothlet.hook.pattern.enable(pattern)
 
 Restrict hook execution to an API path pattern at runtime (the global path filter). Distinct from `enable()`/`disable()`, which toggle individual registered hooks — this narrows which API paths the hook system applies to at all. Once any pattern is enabled the filter is active, and a hook fires only when the called path matches at least one enabled pattern.
 
@@ -945,13 +951,13 @@ Restrict hook execution to an API path pattern at runtime (the global path filte
 
 **Returns:** number - Count of patterns now in the active filter
 
-### api.slothlet.hook.disablePattern(pattern)
+### api.slothlet.hook.pattern.disable(pattern)
 
 Remove a path pattern from the runtime global path filter. When the last pattern is removed the filter deactivates and hooks apply to every path again.
 
 **Returns:** number - Count of patterns remaining in the filter
 
-### api.slothlet.hook.resetPatternFilter()
+### api.slothlet.hook.pattern.reset()
 
 Reset the runtime global path filter back to the configured `hook.pattern` default (fully unrestricted if that default was `"**"`).
 

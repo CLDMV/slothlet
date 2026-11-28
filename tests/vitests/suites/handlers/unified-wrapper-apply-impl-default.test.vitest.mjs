@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/handlers/unified-wrapper-apply-impl-default.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/handlers/unified-wrapper-apply-impl-default.test.vitest.mjs
  *	@Date: 2026-03-02T08:30:00-08:00 (1772469000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-28T04:31:46-08:00 (1795869106)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,19 +18,19 @@
  *
  * @description
  * The apply trap has three execution branches based on the underlying `impl` type. Each branch
- * forks again depending on whether `wrapper.slothlet.contextManager` is set. The no-contextManager
+ * forks again depending on whether `wrapper.____slothlet.contextManager` is set. The no-contextManager
  * paths (lines 2592, 2598, 2601) are never reached by normal tests because contextManager is always
  * present in a standard Slothlet instance.
  *
  * This file tests those branches by nulling contextManager on the real Slothlet instance (accessed via
  * resolveWrapper) and restoring it in finally blocks. Because `typeof proxy` always returns "function"
- * for callable proxies regardless of the underlying impl, use `wrapper.__type` to inspect the actual
+ * for callable proxies regardless of the underlying impl, use `api.slothlet.node(wrapper).type` to inspect the actual
  * impl type in assertions.
  *
  * Target lines:
  *   2592: `result = impl.apply(thisArg, args)` — impl is a function, no contextManager
  *   2598: `result = impl.default.apply(impl, args)` — impl is {default: fn}, no contextManager
- *   2601: throw INVALID_CONFIG_NOT_A_FUNCTION — impl is neither fn nor {default:fn}, no contextManager
+ *   2601: throw API_PATH_NOT_CALLABLE — impl is neither fn nor {default:fn}, no contextManager
  *
  * Lines covered via normal contextManager path (already passing):
  *   hasTrap ~2763: `prop in impl` fallback
@@ -63,11 +63,11 @@ describe("UnifiedWrapper > applyTrap > impl=fn, no contextManager (line 2592)", 
 	it("__type is 'function' confirming impl is a function (not just proxy target)", () => {
 		// Note: typeof api.math.add === "function" is due to the proxy target,
 		// not the impl. Use .__type to check the actual impl type.
-		expect(api.math.add.__type).toBe("function");
+		expect(api.slothlet.node(api.math.add).type).toBe("function");
 	});
 
 	it("calls impl.apply directly when contextManager is null", () => {
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const origCtx = sl.contextManager;
 		sl.contextManager = null;
 		try {
@@ -79,7 +79,7 @@ describe("UnifiedWrapper > applyTrap > impl=fn, no contextManager (line 2592)", 
 	});
 
 	it("passes args correctly when contextManager is null", () => {
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const origCtx = sl.contextManager;
 		sl.contextManager = null;
 		try {
@@ -91,7 +91,7 @@ describe("UnifiedWrapper > applyTrap > impl=fn, no contextManager (line 2592)", 
 	});
 
 	it("produces same result as normal contextManager path", () => {
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const normalResult = api.math.add(1, 2);
 
 		const origCtx = sl.contextManager;
@@ -132,7 +132,7 @@ describe("UnifiedWrapper > applyTrap > impl={default:fn}, no contextManager (lin
 		wrapper.____slothletInternal.impl = { default: (a, b) => a * b };
 		try {
 			// .__type reads the actual impl, not typeof proxy
-			expect(api.math.add.__type).toBe("function");
+			expect(api.slothlet.node(api.math.add).type).toBe("function");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}
@@ -140,7 +140,7 @@ describe("UnifiedWrapper > applyTrap > impl={default:fn}, no contextManager (lin
 
 	it("calls impl.default.apply when contextManager is null", () => {
 		const wrapper = resolveWrapper(api.math.add);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
 		const origCtx = sl.contextManager;
 
@@ -156,7 +156,7 @@ describe("UnifiedWrapper > applyTrap > impl={default:fn}, no contextManager (lin
 
 	it("impl.default receives correct arguments", () => {
 		const wrapper = resolveWrapper(api.math.add);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
 		const origCtx = sl.contextManager;
 
@@ -173,7 +173,7 @@ describe("UnifiedWrapper > applyTrap > impl={default:fn}, no contextManager (lin
 });
 
 // ─── line 2601: impl is invalid, no contextManager ──────────────────────────
-// Neither a function nor {default:fn} — throws INVALID_CONFIG_NOT_A_FUNCTION.
+// Neither a function nor {default:fn} — throws API_PATH_NOT_CALLABLE.
 
 describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 2601)", () => {
 	let api;
@@ -189,20 +189,21 @@ describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 260
 		}
 	});
 
-	it("__type returns 'object' when impl is a plain object with no default fn", () => {
+	it("node().type stays 'function' for a callable node whose impl is swapped for a plain object", () => {
 		const wrapper = resolveWrapper(api.math.add);
 		const origImpl = wrapper.____slothletInternal.impl;
 		wrapper.____slothletInternal.impl = { notAFunction: true };
 		try {
-			expect(api.math.add.__type).toBe("object");
+			// The node is still callable and holds no members of its own: a function (D-4).
+			expect(api.slothlet.node(api.math.add).type).toBe("function");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}
 	});
 
-	it("throws INVALID_CONFIG_NOT_A_FUNCTION when impl is a plain object and contextManager is null", () => {
+	it("throws API_PATH_NOT_CALLABLE when impl is a plain object and contextManager is null", () => {
 		const wrapper = resolveWrapper(api.math.add);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
 		const origCtx = sl.contextManager;
 
@@ -216,16 +217,16 @@ describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 260
 				err = e;
 			}
 			expect(err).toBeDefined();
-			expect(err.code).toBe("INVALID_CONFIG_NOT_A_FUNCTION");
+			expect(err.code).toBe("API_PATH_NOT_CALLABLE");
 		} finally {
 			sl.contextManager = origCtx;
 			wrapper.____slothletInternal.impl = origImpl;
 		}
 	});
 
-	it("throws INVALID_CONFIG_NOT_A_FUNCTION when impl is null and contextManager is null", () => {
+	it("throws API_PATH_NOT_CALLABLE when impl is null and contextManager is null", () => {
 		const wrapper = resolveWrapper(api.math.add);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
 		const origCtx = sl.contextManager;
 
@@ -239,7 +240,7 @@ describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 260
 				err = e;
 			}
 			expect(err).toBeDefined();
-			expect(err.code).toBe("INVALID_CONFIG_NOT_A_FUNCTION");
+			expect(err.code).toBe("API_PATH_NOT_CALLABLE");
 		} finally {
 			sl.contextManager = origCtx;
 			wrapper.____slothletInternal.impl = origImpl;
@@ -270,7 +271,7 @@ describe("UnifiedWrapper > applyTrap > permission runtimeContext fallback (line 
 
 	it("passes null runtimeContext to permissionManager when ctx.context is null", () => {
 		const fnWrapper = resolveWrapper(api.math.add);
-		const sl = fnWrapper.slothlet;
+		const sl = fnWrapper.____slothlet;
 		const originalPermissionManager = sl.handlers.permissionManager;
 		const originalTryGetContext = sl.contextManager.tryGetContext;
 
@@ -326,9 +327,9 @@ describe("UnifiedWrapper > hasTrap > prop in impl (line ~2763)", () => {
 		expect("add" in api.math).toBe(true);
 	});
 
-	it("'_materialize' in api.math returns true (special internal key)", async () => {
-		// hasTrap: prop === "_materialize" → return true immediately
-		expect("_materialize" in api.math).toBe(true);
+	it("'___materialize' in api.math returns true (special internal key)", async () => {
+		// hasTrap: prop === "___materialize" → return true immediately
+		expect("___materialize" in api.math).toBe(true);
 	});
 
 	it("'nonExistentProp' in api.math returns false", async () => {
@@ -430,7 +431,7 @@ describe("UnifiedWrapper > ownKeysTrap > impl keys (lines ~2858-2869)", () => {
 			mode: "lazy",
 			silent: true
 		});
-		// ownKeysTrap in lazy unmaterialized state triggers _materialize()
+		// ownKeysTrap in lazy unmaterialized state triggers ___materialize()
 		expect(() => {
 			const _ = Object.getOwnPropertyNames(lazyApi.math);
 		}).not.toThrow();
@@ -441,7 +442,7 @@ describe("UnifiedWrapper > ownKeysTrap > impl keys (lines ~2858-2869)", () => {
 // ─── hasTrap in lazy mode (lazy materialize trigger) ────────────────────────
 
 describe("UnifiedWrapper > hasTrap > lazy mode materialization trigger", () => {
-	it("'add' in api.math in lazy mode fires _materialize (lazy has trap path)", async () => {
+	it("'add' in api.math in lazy mode fires ___materialize (lazy has trap path)", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/typescript-cache-write-error.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/typescript-cache-write-error.test.vitest.mjs
  *	@Date: 2026-05-30T00:06:52-07:00 (1780124812)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:23-07:00 (1791090923)
+ *	@Last modified time: 2026-11-28T04:33:08-08:00 (1795869188)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 	};
 });
 
-const { writeTransformedToCache } = await import("@cldmv/slothlet/processors/typescript");
+const { writeTransformedToCache } = await import("#processors/typescript");
 
 describe("writeTransformedToCache — non-EEXIST cache-write error", () => {
 	const tempRoot = makeTestTmpDirSync("cachewrite");

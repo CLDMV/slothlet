@@ -1,11 +1,106 @@
 /**
+ * How many async hooks telling jobs apart slothlet has installed and not yet removed.
+ * @returns {number} The count.
+ * @internal
+ */
+export function jobHookCount(): number;
+/**
+ * Answer the install-time probe as a Node that runs every async hook for a promise's job does (`false`), so a promise's
+ * job of a flow is told by walking the stack, or go back to the probe's own answer (`null`). For the suite, which runs
+ * on a Node that leaves promises out. Only the slower of the two checks can be put in place: anything but `false`
+ * restores the probe's answer.
+ * @param {false|null} answer - The answer.
+ * @returns {void}
+ * @internal
+ */
+export function answerPromiseProbe(answer: false | null): void;
+/**
+ * What the install-time probe last found: whether the Node running leaves the second async hook out of a promise's job
+ * (`true`), runs it there (`false`), or null before any probe's job has run. For the suite, which checks the probe's own
+ * answer against the Node it runs on.
+ * @returns {boolean|null} The answer.
+ * @internal
+ */
+export function promiseProbeResult(): boolean | null;
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/**
  * AsyncLocalStorage-based context manager for async runtime
  * Uses ALS for full context isolation across async operations
  * @public
  */
 export class AsyncContextManager {
-    als: any;
+    store: SealedStorage | null;
+    dormant: DormantStore | null;
     instances: Map<any, any>;
+    /**
+     * The store the code running now acts in. Node's async context gives a flow's store to any code holding an async
+     * resource of that flow (an `AsyncResource`, a function `AsyncLocalStorage.snapshot()` or `bind()` made there, the
+     * context a timer keeps, copied onto a timer of its own), so a module could run its own code in another call's flow,
+     * or in a `run()` / `scope()` the host opened, and act there with that flow's context and identity. Code slothlet runs
+     * inside the store it entered, and anything that code calls, is the flow's. Elsewhere (code that picked up after an
+     * `await`, a timer, a resource's scope) the frames tell whose code it is (see `runningOutsideFlow` in
+     * `handlers/frame-placement`): a module's code that is not the flow's acts outside the flow, as the leaf it is,
+     * with the instance's own context (see {@link AsyncContextManager#outsideView}). The host's code is the flow's
+     * wherever it runs.
+     * @returns {object|undefined} The store.
+     * @internal
+     */
+    activeStore(): object | undefined;
+    /**
+     * Count an instance, installing the async hook that tells jobs apart for the first: a job (a promise's reaction, a
+     * timer, an immediate, a microtask, an `AsyncResource`'s scope) made by code that entered a flow by itself runs
+     * outside that flow, even when that code never touched slothlet there, and one the flow's own code made keeps the
+     * flow. A `run()` / `scope()` is isolated in every permission mode, so every instance counts. Outside every flow `init`
+     * returns at once, and `before` / `after` only keep the stack of running callbacks.
+     * @returns {void}
+     * @internal
+     */
+    holdJobHook(): void;
+    /**
+     * Uncount an instance, removing the async hook after the last.
+     * @returns {void}
+     * @internal
+     */
+    releaseJobHook(): void;
+    /**
+     * The store code that entered a flow by itself acts in: the instance's own, as the leaf the code is, with no call
+     * above it. Where no single leaf stands for the code, no one's: its accesses are refused.
+     * @param {object} store - The flow's store.
+     * @param {string} instanceID - The instance.
+     * @param {object|null} reader - The leaf.
+     * @returns {object|undefined} The stand-in; undefined when the instance has no store.
+     * @internal
+     */
+    outsideView(store: object, instanceID: string, reader: object | null): object | undefined;
+    /**
+     * The manager's `AsyncLocalStorage` (sealed, see {@link SealedStorage}): the store once it has been made, a stand-in before that which answers that no
+     * store is active and makes the store when one is run (see {@link AsyncContextManager#openStore}). Null in a browser.
+     * @type {SealedStorage|DormantStore|null}
+     * @public
+     */
+    public get als(): SealedStorage | DormantStore | null;
+    /**
+     * Make the manager's `AsyncLocalStorage`, once: called when an instance selects the async runtime, before any of its
+     * files load. The scripts of Node's own that run a store's callback are sampled first (see `sampleStoreScripts` in
+     * `handlers/frame-placement`), so they are known before slothlet's store runs anything.
+     * @returns {SealedStorage|null} The store; null in a browser.
+     * @internal
+     */
+    openStore(): SealedStorage | null;
+    /**
+     * Whether a flow a call starts carries that call however long it runs: an async function a module started and let
+     * go of runs in the store of the call that started it.
+     * @type {boolean}
+     * @internal
+     */
+    get carriesFlowCaller(): boolean;
     /**
      * Register the EventEmitter context checker
      * Must be called AFTER EventEmitter patching is enabled
@@ -16,10 +111,11 @@ export class AsyncContextManager {
      * Initialize context for a new instance
      * @param {string} instanceID - Unique instance identifier
      * @param {Object} config - Instance configuration
+     * @param {import("#helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
      * @returns {Object} Created context store
      * @public
      */
-    public initialize(instanceID: string, config?: Object): Object;
+    public initialize(instanceID: string, config?: Object, clock?: import("#helpers/clock").Clock): Object;
     /**
      * Run function with instance context active
      * @param {string} instanceID - Instance to run in context of
@@ -29,12 +125,12 @@ export class AsyncContextManager {
      * @param {Object} [currentWrapper] - Current wrapper being executed (for metadata.self())
      * @param {boolean} [rawErrors=false] - When `true`, let a non-SlothletError thrown by
      *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
-     *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
+     *   for framework callbacks (`pin`, pinned hooks) where the caller expects the
      *   original error type/code/status.
      * @param {boolean} [asHost=false] - When `true`, run `fn` with **no module caller**: both
      *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
      *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
-     *   `lockCaller.caller()` when the pinned caller is the host.
+     *   `pin.caller()` when the pinned caller is the host.
      * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
      *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
      * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
@@ -107,6 +203,42 @@ export class AsyncContextManager {
      * @internal
      */
     runUnattributed(instanceID: string, fn: () => any): any;
+    /**
+     * Run the load of a module file inside a store that names the file's module (#726), so what the file starts while
+     * it loads (a timer, a listener, an async resource, an `AsyncLocalStorage.snapshot()`) carries the module as its
+     * caller when it runs later, instead of running in no store, where it would count as the host's. The module's node
+     * does not exist while the file loads and can change with a reload, so the store's identity is read from the load
+     * whenever it is asked for. While there is none the store has no `self`, and its code is refused as code no one
+     * accounts for.
+     *
+     * @param {{instanceID: function(): (string|null), wrapper: function(): (object|null), record: function(): (object|null)}} loading - The load (see createModuleLoad).
+     * @param {function(): *} fn - What loads the file.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runModuleLoad(loading: {
+        instanceID: () => (string | null);
+        wrapper: () => (object | null);
+        record: () => (object | null);
+    }, fn: () => any): any;
+    /**
+     * Whether no flow of an instance is active: no store at all, or another instance's. Code running then was started
+     * by nothing slothlet entered, so only its frames can say whose it is.
+     * @param {string} instanceID - The instance.
+     * @returns {boolean} True when no store of the instance is active.
+     * @internal
+     */
+    isAmbient(instanceID: string): boolean;
+    /**
+     * The instance whose flow is running: the one the active store belongs to (a call, a hook, a `run()` or `scope()`
+     * callback, a file's load), or null when no store is active. Code of a file that carries no instance tag (a
+     * CommonJS file two instances load) is that instance's while its flow runs.
+     * @returns {string|null} The instance's id.
+     * @internal
+     * @example
+     * contextManager.runningInstanceID(); // "slothlet_abc" inside one of its calls, null in the host's own flow
+     */
+    runningInstanceID(): string | null;
     /**
      * Run `fn` outside every instance (#597): no store is active while it runs, nor in what it schedules, so code an
      * instance that has shut down made reaches no instance's api and no module's identity.
@@ -189,22 +321,149 @@ export class AsyncContextManager {
      */
     public runInSnapshotFlow(instanceID: string, captured: object, fn: Function): Promise<any>;
     /**
+     * Run `fn` synchronously inside a flow rebuilt from a {@link snapshotFlow} snapshot (#653), as
+     * {@link runInSnapshotFlow} does for a delivery that may be async: a change made through a lazy stand-in and
+     * replayed when its node loads runs in the context it was made in, and only for as long as `fn` runs.
+     *
+     * @param {string} instanceID - Instance to run against.
+     * @param {object} captured - Snapshot from {@link snapshotFlow}.
+     * @param {function(): *} fn - Synchronous function to run.
+     * @returns {*} What `fn` returned.
+     * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+     * @internal
+     */
+    runInSnapshotFlowSync(instanceID: string, captured: object, fn: () => any): any;
+    /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup
+     * @param {{keepFlows?: boolean}} [options] - `keepFlows`: the instance comes back on the flows it has (a restart),
+     *   so they stay its.
      * @public
      */
-    public cleanup(instanceID: string): void;
+    public cleanup(instanceID: string, { keepFlows }?: {
+        keepFlows?: boolean;
+    }): void;
     /**
-     * Get diagnostic information
-     * @returns {Object} Diagnostic data
+     * Diagnostics for one instance (#837): what this manager holds for that instance only, never the other instances
+     * the process-wide manager also serves.
+     * @param {string} instanceID - The instance.
+     * @returns {{ type: "async", running: boolean, at: number|null, context: object|null, self: string[], current: { context: object, nested: boolean }|null }}
+     *   The runtime word, whether code of the instance (a call, a `run()` / `scope()` callback, a load) is running now,
+     *   when its record was made, its context data, the top-level names its `self` shows, and the running flow's context
+     *   (and whether it is a nested run/scope).
      * @public
      */
-    public getDiagnostics(): Object;
+    public getInstanceDiagnostics(instanceID: string): {
+        type: "async";
+        running: boolean;
+        at: number | null;
+        context: object | null;
+        self: string[];
+        current: {
+            context: object;
+            nested: boolean;
+        } | null;
+    };
     #private;
 }
+export { guarded_asyncContextManager as asyncContextManager };
+/**
+ * Slothlet's `AsyncLocalStorage`, as {@link AsyncContextManager#als} hands it out: it takes and gives the stores
+ * themselves, and holds a token for each in Node's storage (see {@link sealStore}). The Node storage carries the methods
+ * taken as slothlet loaded as its own, so Node's code calling `this.getStore()` or `this.enterWith()` inside them runs
+ * those, never what a module put on the prototype since.
+ * @private
+ */
+declare class SealedStorage {
+    /**
+     * @returns {object|undefined} The active store.
+     */
+    getStore(): object | undefined;
+    /**
+     * @param {*} store - The store.
+     * @param {Function} fn - The callback.
+     * @param {...*} args - Its arguments.
+     * @returns {*} What it returned.
+     */
+    run(store: any, fn: Function, ...args: any[]): any;
+    /**
+     * The store the innermost `run()` running now entered, {@link NO_STORE} inside `exit()`, or undefined outside both.
+     * @returns {object|undefined} The store.
+     */
+    entered(): object | undefined;
+    /**
+     * @param {*} store - The store.
+     * @returns {void}
+     */
+    enterWith(store: any): void;
+    /**
+     * Enter a store for the rest of the code running now, as `enterWith()` does, and say how to take it back off the async
+     * resource it was put on. While `AsyncContextFrame` is off Node keeps the store on the resource running now, which can
+     * be one its owner runs again later (an `AsyncResource`, an interval's timer); with frames on, the scope Node opened
+     * for the code ends where the code does, and nothing is left to take back.
+     * @param {object} store - The store.
+     * @returns {?function(): void} Puts back what the resource held, unless something has entered another store on
+     *   it since; null when nothing has to.
+     */
+    enterAdopted(store: object): (() => void) | null;
+    /**
+     * @param {Function} fn - The callback.
+     * @param {...*} args - Its arguments.
+     * @returns {*} What it returned.
+     */
+    exit(fn: Function, ...args: any[]): any;
+    /**
+     * @returns {void}
+     */
+    disable(): void;
+    #private;
+}
+/**
+ * What {@link AsyncContextManager#als} answers before the manager has made its store: no store is active, a callback
+ * run outside every store runs as it is, and running a store (`run`, `enterWith`) makes the real one first. Reading the
+ * manager on the live runtime (the runtime dispatcher asks it whether a store is active) therefore makes no store: on
+ * a Node whose `AsyncContextFrame` is off one that has run switches async hooks on for the whole process.
+ * @private
+ */
+declare class DormantStore {
+    /**
+     * @param {AsyncContextManager} manager - The manager it stands in for.
+     */
+    constructor(manager: AsyncContextManager);
+    manager: AsyncContextManager;
+    /**
+     * @returns {undefined} No store is active before one has been made.
+     */
+    getStore(): undefined;
+    /**
+     * @param {*} store - The store.
+     * @param {Function} fn - The callback.
+     * @param {...*} args - Its arguments.
+     * @returns {*} What it returned.
+     */
+    run(store: any, fn: Function, ...args: any[]): any;
+    /**
+     * @param {*} store - The store.
+     * @returns {void}
+     */
+    enterWith(store: any): void;
+    /**
+     * @param {Function} fn - The callback.
+     * @param {...*} args - Its arguments.
+     * @returns {*} What it returned: no store is active, so it runs as it is.
+     */
+    exit(fn: Function, ...args: any[]): any;
+    /**
+     * Nothing to switch off before a store has been made.
+     * @returns {void}
+     */
+    disable(): void;
+}
+/** @type {typeof asyncContextManager} */
+declare const guarded_asyncContextManager: typeof asyncContextManager;
 /**
  * Singleton async context manager
  * @public
  */
-export const asyncContextManager: AsyncContextManager;
+declare const asyncContextManager: AsyncContextManager;
 //# sourceMappingURL=context-async.d.mts.map

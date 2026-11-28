@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_lock_caller_caller/client/app.mjs
+ *	@Filename: api_tests/api_test_lock_caller_caller/client/app.mjs
  *	@Date: 2026-09-28T00:00:00-07:00 (1790578800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:38-07:00 (1791090878)
+ *	@Last modified time: 2026-11-28T04:28:51-08:00 (1795868931)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -161,7 +161,7 @@ export function pinThroughScheduler() {
  * api.client.app.pinDirectly();
  */
 export function pinDirectly() {
-	return self.slothlet.lockCaller.caller(() => 0);
+	return self.slothlet.pin.caller(() => 0);
 }
 
 /**

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/slothlet-debug-paths.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/slothlet-debug-paths.test.vitest.mjs
  *	@Date: 2026-03-02T09:00:00-08:00 (1772470800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-28T04:31:42-08:00 (1795869102)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@
  *             `Object.assign(this.boundApi, this.reference)` - fires when `reference`
  *             config option is provided.
  *
- * - Line 677: `getAPI()` throws INVALID_CONFIG_NOT_LOADED when `!this.isLoaded`.
+ * - Line 677: `getAPI()` throws INSTANCE_NOT_LOADED when `!this.isLoaded`.
  *             Accessible via the internal slothlet instance diagnostics after shutdown.
  */
 
@@ -122,7 +122,7 @@ describe("slothlet > reload() preservedInstanceID cleanup path (lines 347-348)",
 			base: TEST_DIRS.API_TEST,
 			silent: true
 		});
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-1" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "extra-1" });
 		// Reload triggers preservedInstanceID logic
 		await api.slothlet.reload();
 		expect(api.math).toBeDefined();
@@ -181,7 +181,6 @@ describe("slothlet > getDiagnostics and getOwnership (lines ~711)", () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
-			ownership: false,
 			silent: true
 		});
 		expect(api).toBeDefined();

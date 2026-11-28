@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/lazy/lazy-set-during-materialize.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/lazy/lazy-set-during-materialize.test.vitest.mjs
  *	@Date: 2026-10-02T09:52:29-07:00 (1790959949)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:33-07:00 (1791091713)
+ *	@Last modified time: 2026-11-28T04:32:01-08:00 (1795869121)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,8 +51,8 @@ describe.each(getMatrixConfigs())("values set on a lazy namespace during its mat
 		["a namespace placed by a forceOverwrite add", true, "shadow-open"]
 	])("keeps a primitive, a plain object and a function set on %s while it materializes", async (_label, overwrite, lockResult) => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
-		if (overwrite) await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
+		if (overwrite) await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 		// Materialize the parent, so `vault` below is the namespace's own wrapper rather than a waiting proxy.
 		await api.launcher.session.store.create();
 

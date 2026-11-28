@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/setup/vitest-helper.mjs
+ *	@Filename: tests/vitests/setup/vitest-helper.mjs
  *	@Date: 2026-01-11T19:07:25-08:00 (1768187245)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:51:40-07:00 (1792378300)
+ *	@Last modified time: 2026-11-28T04:31:05-08:00 (1795869065)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
 
 import path from "path";
 import fs from "fs/promises";
-import { readdirSync } from "fs";
+import { readdirSync, statSync } from "fs";
 import { fileURLToPath } from "url";
 import { parse } from "jsonc-parser";
 
@@ -88,6 +88,7 @@ export const TEST_DIRS = {
 	API_TEST_VERSIONED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_versioned`),
 	API_TEST_PERMISSIONS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permissions`),
 	API_TEST_EXPORT_SHADOW: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_export_shadow`),
+	API_TEST_FUNCTION_MEMBERS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_function_members`),
 	API_TEST_PERMISSION_PRINCIPALS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_permission_principals`),
 	API_TEST_EVENTS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_events`),
 	API_TEST_CROSS_INSTANCE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_cross_instance`),
@@ -95,13 +96,17 @@ export const TEST_DIRS = {
 	API_TEST_LOCK_CALLER_CALLER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lock_caller_caller`),
 	API_TEST_CALLER_SUPPLIED_CODE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_code`),
 	API_TEST_CALLER_SUPPLIED_CEILING: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_ceiling`),
+	API_TEST_SYNC_LEAF_THENABLE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_sync_leaf_thenable`),
 	API_TEST_CALLER_SUPPLIED_FORGED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_forged`),
 	API_TEST_CALLER_SUPPLIED_ROUND2: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round2`),
 	API_TEST_CALLER_SUPPLIED_ROUND3: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round3`),
+	API_TEST_VM_RECOMPILED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_vm_recompiled`),
+	API_TEST_LEAF_FILE_IMPORT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_leaf_file_import`),
 	API_TEST_CALLER_SUPPLIED_ROUND4: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round4`),
 	API_TEST_CALLER_SUPPLIED_ROUND5: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round5`),
 	API_TEST_CALLER_SUPPLIED_ROUND7: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round7`),
 	API_TEST_CALLER_SUPPLIED_ROUND9: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_caller_supplied_round9`),
+	API_TEST_REQUIRE_ESM: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_require_esm`),
 	API_TEST_BROWSER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_browser`),
 	API_TEST_MULTI_ROOT_FN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_multi_root_fn`),
 	API_TEST_LIFECYCLE_HOOKS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks`),
@@ -109,6 +114,8 @@ export const TEST_DIRS = {
 	API_TEST_LIFECYCLE_HOOKS_WALK: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks_walk`),
 	// #518 — relative helper imports below a leaf are per instance (the api lives in `api/`, helpers in `lib/`).
 	API_TEST_HELPER_IMPORTS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_helper_imports/api`),
+	API_TEST_HELPER_IMPORTS_MOUNT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_helper_imports_mount/api`),
+	API_TEST_HELPER_IMPORTS_MIXED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_helper_imports_mixed`),
 	API_TEST_NESTED_ISOLATION: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_isolation/outer`),
 	API_TEST_ROUTINES: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines`),
 	API_TEST_ROUTINES_AUTH1: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_auth1`),
@@ -135,12 +142,33 @@ export const TEST_DIRS = {
 	API_TEST_ADD_ROOT_BASE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_base`),
 	API_TEST_ADD_ROOT_MULTI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_multi`),
 	// #625 — nested `self.X.Y = …` writes follow the same ownership rule as top-level ones.
-	API_TEST_NESTED_SELF_ASSIGN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_self_assign`),
+	API_TEST_NESTED_SELF_ASSIGN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_self_assign/api`),
 	// #625 — a module cannot change the framework namespace `self.slothlet`.
 	API_TEST_FRAMEWORK_NAMESPACE_GUARD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_framework_namespace_guard`),
 	// #625 — what a module reaches through another module's node, symbol keys, and `self` itself.
-	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`)
+	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`),
+	API_TEST_WRITE_NOT_EASIER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_write_not_easier`),
+	API_TEST_WRITE_CREATED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_write_created`),
+	// #653 — writes through a lazy node that has not loaded yet.
+	API_TEST_LAZY_UNLOADED_WRITE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lazy_unloaded_write`),
+	// A module file compiling code under its own name as vitest's module runner compiles it.
+	API_TEST_VITEST_RUNNER_COMPILE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_vitest_runner_compile`)
 };
+
+/**
+ * The api folder of a fixture, or of one of its parts. A fixture keeps its api tree in `api/` and its helpers and
+ * host-side files in `lib/` beside it; a fixture whose tests load several trees (a base and the folders they mount)
+ * has one fixture per tree, `<fixture>_<part>/api`.
+ * @param {string} fixture - The fixture folder (a `TEST_DIRS` entry).
+ * @param {string} [part] - The part, or none for the fixture's own tree.
+ * @returns {string} The api folder.
+ * @example
+ * apiPart(TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND7); // ".../api_test_caller_supplied_round7/api"
+ * apiPart(TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND7, "callee"); // ".../api_test_caller_supplied_round7_callee/api"
+ */
+export function apiPart(fixture, part) {
+	return path.join(part ? `${fixture}_${part}` : fixture, "api");
+}
 
 /**
  * Configuration space definition for automatic matrix generation
@@ -149,9 +177,7 @@ export const TEST_DIRS = {
 const CONFIG_SPACE = {
 	mode: ["eager", "lazy"],
 	runtime: ["async", "live"],
-	// allowApiOverwrite: [false, true],
-	// apiDepth: [1, 3, Infinity],
-	// allowMutation: [false, true],
+	// depth: [1, 3, Infinity],
 	// collision: [
 	// 	{ initial: "merge", api: "merge" },      // Default - allow all overwrites
 	// 	{ initial: "error", api: "error" }       // Strict - prevent overwrites
@@ -203,17 +229,17 @@ export async function materialize(api, path, ...args) {
 	// 	`[MATERIALIZE] path="${path}" typeof value="${typeof value}" value.name="${value?.name}" value.constructor.name="${value?.constructor?.name}"`
 	// );
 
-	// Trigger materialization if _materialize exists (for lazy mode)
-	if (typeof value?._materialize === "function") {
-		// console.log(`[MATERIALIZE] Calling value._materialize()`);
-		await value._materialize();
-		// console.log(`[MATERIALIZE] _materialize() completed`);
+	// Trigger materialization if ___materialize exists (for lazy mode)
+	if (typeof value?.___materialize === "function") {
+		// console.log(`[MATERIALIZE] Calling value.___materialize()`);
+		await value.___materialize();
+		// console.log(`[MATERIALIZE] ___materialize() completed`);
 	}
 
 	// Check actual type using __type property (for lazy mode compatibility)
 	// __type returns Symbol(inFlight) or Symbol(unmaterialized) for lazy wrappers,
 	// or the actual type string ("function", "object", etc.) after materialization
-	const typeInfo = value?.__type;
+	const typeInfo = api.slothlet.node(value)?.type;
 	// console.log(`[MATERIALIZE] typeof typeInfo="${typeof typeInfo}" typeInfo="${String(typeInfo)}" isSymbol=${typeof typeInfo === "symbol"}`);
 	const isFunction = typeInfo === "function" || (typeof typeInfo !== "symbol" && typeof value === "function");
 	// console.log(`[MATERIALIZE] isFunction=${isFunction} args.length=${args.length}`);
@@ -518,10 +544,8 @@ function generateTestMatrix(configSpace) {
 			config[key] = combination[i];
 		});
 
-		// Enable diagnostics for non-mutate configs to expose api.slothlet.api/reload/hooks for testing
-		// if (config.allowMutation === false) {
+		// Enable diagnostics to expose api.slothlet.api/reload/hooks for testing
 		config.diagnostics = true;
-		// }
 
 		// Generate descriptive name
 		const nameParts = [];
@@ -529,7 +553,7 @@ function generateTestMatrix(configSpace) {
 		if (config.runtime === "live") nameParts.push("LIVE");
 
 		// Add collision mode indicator (only if not default merge/merge)
-		if (config.collision && (config.collision.initial === "error" || config.collision.api === "error")) {
+		if (config.api?.collision?.mode && (config.api.collision.mode.initial === "error" || config.api.collision.mode.api === "error")) {
 			nameParts.push("STRICT");
 		}
 
@@ -606,7 +630,7 @@ export function getMatrixConfigs(requirements = {}) {
 				if (value.pattern !== undefined && configValue.pattern !== value.pattern) {
 					return false;
 				}
-				if (value.suppressErrors !== undefined && configValue.suppressErrors !== value.suppressErrors) {
+				if (value.errors !== undefined && configValue.errors !== value.errors) {
 					return false;
 				}
 			} else if (configValue !== value) {
@@ -698,7 +722,8 @@ export const RUNTIME_MATRIX = getMatrixConfigs({ runtime: "live" });
  */
 export const COMPLEX_MATRIX = TEST_MATRIX.filter(({ config }) => {
 	let featureCount = 0;
-	if (config.collision && (config.collision.initial === "error" || config.collision.api === "error")) featureCount++;
+	if (config.api?.collision?.mode && (config.api.collision.mode.initial === "error" || config.api.collision.mode.api === "error"))
+		featureCount++;
 	if (config.runtime === "live") featureCount++;
 	if (config.hooks === true) featureCount++;
 	return featureCount >= 2;
@@ -737,10 +762,26 @@ export function getAllApiTestFoldersSync() {
 			.filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
 			.map((entry) => path.join("smart_flatten", entry.name));
 
-		return [...topLevelFolders, ...smartFlattenFolders].sort();
+		return [...topLevelFolders, ...smartFlattenFolders].map((folder) => apiRootOf(apiTestsDir, folder)).sort();
 	} catch (error) {
 		console.error(`Error reading ${API_TEST_BASE} directories:`, error);
 		return [];
+	}
+}
+
+/**
+ * The api root of a fixture folder: its `api/` subfolder when it has one (the fixture keeps its helpers and host-side
+ * code in a sibling `lib/`, outside the api tree, as docs/MODULE-STRUCTURE.md lays a project out), else the folder.
+ * @param {string} apiTestsDir - The `api_tests` folder.
+ * @param {string} folder - The fixture folder, relative to `apiTestsDir`.
+ * @returns {string} The api root, relative to `apiTestsDir`.
+ */
+function apiRootOf(apiTestsDir, folder) {
+	const api = path.join(folder, "api");
+	try {
+		return statSync(path.join(apiTestsDir, api)).isDirectory() ? api : folder;
+	} catch {
+		return folder;
 	}
 }
 
@@ -765,7 +806,7 @@ export async function getAllApiTestFolders() {
 			.filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
 			.map((entry) => `smart_flatten/${entry.name}`);
 
-		return [...topLevelFolders, ...smartFlattenFolders].sort();
+		return [...topLevelFolders, ...smartFlattenFolders].map((folder) => apiRootOf(apiTestsDir, folder)).sort();
 	} catch (error) {
 		console.error(`Error reading ${API_TEST_BASE} directories:`, error);
 		return [];
@@ -812,13 +853,13 @@ const _manifestCache = new Map();
  * share a single `generateManifest` run.
  *
  * @param {string} dir - Absolute path to the API directory.
- * @returns {Promise<object>} Manifest structure compatible with slothlet's `manifest` config key.
+ * @returns {Promise<object>} Manifest structure compatible with slothlet's `loader.files` config key.
  */
 export function getManifest(dir) {
 	if (!_manifestCache.has(dir)) {
 		_manifestCache.set(
 			dir,
-			import("@cldmv/slothlet/helpers/generate-manifest").then(({ generateManifest }) => generateManifest(dir))
+			import("#helpers/generate-manifest").then(({ generateManifest }) => generateManifest(dir))
 		);
 	}
 	return _manifestCache.get(dir);
@@ -826,7 +867,7 @@ export function getManifest(dir) {
 
 /**
  * Merge a matrix config slice with browser-mode settings for the given directory.
- * Providing `manifest` automatically activates browser mode — no `platform: "browser"` needed.
+ * Providing `loader.files` automatically activates browser mode — no `loader.platform: "browser"` needed.
  * `base` is passed as a plain filesystem path; the default resolver converts it to `file://`.
  *
  * @param {object} matrixConfig - Config slice from getMatrixConfigs().
@@ -844,5 +885,5 @@ export function getManifest(dir) {
  * });
  */
 export function makeBrowserConfig(matrixConfig, dir, manifest) {
-	return { ...matrixConfig, base: dir, manifest };
+	return { ...matrixConfig, base: dir, loader: { files: manifest } };
 }

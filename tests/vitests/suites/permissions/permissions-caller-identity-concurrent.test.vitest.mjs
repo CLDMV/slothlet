@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-caller-identity-concurrent.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-caller-identity-concurrent.test.vitest.mjs
  *	@Date: 2026-07-29T12:00:00-07:00 (1785351600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:15-07:00 (1791090915)
+ *	@Last modified time: 2026-11-28T04:32:20-08:00 (1795869140)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,7 +55,7 @@ describe.each(getMatrixConfigs())("Permissions > Caller Identity Under Concurren
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.paymentsCaller.**", target: "db.write.**", effect: "allow" },
 					{ caller: "**", target: "callers.**", effect: "allow" }
@@ -100,7 +100,7 @@ describe.each(getMatrixConfigs())("Permissions > Caller Identity Under Concurren
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.untrustedCaller.gatedSibling", target: "db.write.**", effect: "allow" },
 					{ caller: "**", target: "callers.**", effect: "allow" }
@@ -130,7 +130,7 @@ describe.each(getMatrixConfigs())("Permissions > Caller Identity Under Concurren
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.paymentsCaller.**", target: "db.write.**", effect: "allow" },
 					{ caller: "**", target: "callers.**", effect: "allow" }

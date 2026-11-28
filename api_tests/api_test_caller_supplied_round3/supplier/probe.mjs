@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_caller_supplied_round3/supplier/probe.mjs
+ *	@Filename: api_tests/api_test_caller_supplied_round3/supplier/probe.mjs
  *	@Date: 2026-10-17T00:00:00-07:00 (1792220400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-11-28T04:27:40-08:00 (1795868860)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,8 +100,10 @@ function forge(kind, filename, target) {
  * await api.supplier.probe.forgedInFolder("compileFunction", "zz-not-real.mjs"); // { ok: false, code: "PERMISSION_DENIED" }
  */
 export async function forgedInFolder(kind, file, target = "secret") {
-	const closure = forge(kind, path.join(CALLEE_DIR, file), target);
-	return attempt(() => self.callee.ops.run(closure));
+	// Compiling under a real file of the callee's is refused itself where a capability check runs: that outcome is kept.
+	const forged = await attempt(() => forge(kind, path.join(CALLEE_DIR, file), target));
+	if (!forged.ok) return forged;
+	return attempt(() => self.callee.ops.run(forged.value));
 }
 
 /**

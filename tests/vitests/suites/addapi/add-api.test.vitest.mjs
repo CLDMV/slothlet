@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/addapi/add-api.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/addapi/add-api.test.vitest.mjs
  *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
+ *	@Last modified time: 2026-11-28T04:31:06-08:00 (1795869066)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -202,7 +202,7 @@ describe("api.slothlet.api.add Functionality", () => {
 		 */
 		it("should handle cross-module ownership based on config", async () => {
 			// Build addApi options based on config capabilities
-			const addApiOptions = { moduleID: "original-module" };
+			const addApiOptions = { id: "original-module" };
 			if (config.api?.mutations?.reload) {
 				// Can use moduleID tracking
 				await api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_MIXED, addApiOptions);
@@ -214,16 +214,14 @@ describe("api.slothlet.api.add Functionality", () => {
 				if (shouldBlock) {
 					// Rule 12 should block cross-module overwrite
 					await withSuppressedSlothletErrorOutput(async () => {
-						await expect(api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS, { moduleID: "hostile-module" })).rejects.toThrow(
-							"Rule 12"
-						);
+						await expect(api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS, { id: "hostile-module" })).rejects.toThrow("Rule 12");
 					});
 
 					// Original preserved
 					expect(Object.keys(api.funcTest)).toEqual(originalKeys);
 				} else {
 					// Should allow (either no ownership or allowAddApiOverwrite: true)
-					await expect(api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS, { moduleID: "new-owner-module" })).resolves.not.toThrow();
+					await expect(api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS, { id: "new-owner-module" })).resolves.not.toThrow();
 				}
 			} else {
 				// Without api.mutations.reload, no ownership tracking - just test basic api.slothlet.api.add

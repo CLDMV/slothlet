@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-framework-write-rules.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-framework-write-rules.test.vitest.mjs
  *	@Date: 2026-10-18T18:47:58-07:00 (1792374478)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:16:01-07:00 (1793056561)
+ *	@Last modified time: 2026-11-28T04:32:26-08:00 (1795869146)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,22 +16,27 @@
 /**
  * @fileoverview Who lifts the built-in write rules (#625).
  *
- * The built-in write rules (`slothlet.**:write`, `**.__metadata:write`, …) keep every module off the framework's
+ * The built-in write rules (`slothlet.**:write`, `**.____state:write`, …) keep every module off the framework's
  * namespace and the framework's own keys on api nodes while the permission system is on. They are defaults:
  * the host lifts one with a rule of its own, and so does a module's manifest — mounting it is the consumer's
- * choice. Module code may not lift one through `addRule` or the options of an `api.add` it makes, even the base
+ * choice. Module code may not lift one through `rules.add` or the options of an `api.add` it makes, even the base
  * module, which owns the rest of the tree, unless the host or its manifest let it manage rules beyond its subtree.
  * A lifted write still meets the ownership rule. With the system off no rule decides a write, a lift included: the
  * base module, which owns the whole tree, writes the namespace, a module owning none of it does not, and rule
  * registration keeps its limits.
  *
  * Fixture: `api_tests/api_test_self_write_reach` — `base/` (owns the whole tree), `victim/`, and the module
- * `modules/lifter`, whose manifest allows writes to `slothlet.**` and `**.__metadata`.
+ * `modules/lifter`, whose manifest allows writes to `slothlet.**` and `**.____state`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 
@@ -46,7 +51,7 @@ const CONFIGS = [
 const CALL_NAMESPACE = { caller: "**", target: "slothlet.**", effect: "allow" };
 const PERMISSIONS = [
 	{ label: "permissions with defaults", options: { permissions: {} } },
-	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: [CALL_NAMESPACE] } } }
+	{ label: "permissions defaultPolicy deny", options: { permissions: { policy: "deny", rules: [CALL_NAMESPACE] } } }
 ];
 
 describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $runtime", ({ mode, runtime }) => {
@@ -63,14 +68,14 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function load() {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+			await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
 			return api;
 		}
 
 		it("lets a module's manifest lift a built-in write rule", async () => {
 			await load();
-			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
+			await api.slothlet.api.modules.add("@local/lifter", { discover: { root: path.join(FIXTURE, "modules", "lifter") } });
 			expect(api.lifter.info.name()).toBe("lifter");
 			expect(await api.root.writeNamespace()).toBe("done");
 			expect(api.slothlet.lifted).toBe(1);
@@ -78,24 +83,24 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 
 		it("lets a manifest's lift grant the write to a module that owns none of the namespace", async () => {
 			await load();
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeNamespaceMember("lifted", 2))).toBe("PERMISSION_DENIED");
-			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
+			await api.slothlet.api.modules.add("@local/lifter", { discover: { root: path.join(FIXTURE, "modules", "lifter") } });
 			expect(await api.guest.x.writeNamespaceMember("lifted", 2)).toBe("done");
 			expect(api.slothlet.lifted).toBe(2);
 		});
 
-		it("refuses module code lifting a built-in write rule with addRule", async () => {
+		it("refuses module code lifting a built-in write rule with rules.add", async () => {
 			await load();
-			expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("PERMISSION_RULE_INVALID");
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");
 			expect(api.slothlet.lifted).toBeUndefined();
 		});
 
 		it("refuses module code lifting a built-in write rule through the options of an api.add", async () => {
 			await load();
-			expect(await withSuppressedSlothletErrorOutput(() => api.root.grantByAdd(path.join(FIXTURE, "victim")))).toBe(
-				"INVALID_PERMISSION_RULE"
+			expect(await withSuppressedSlothletErrorOutput(() => api.root.grantByAdd(apiPart(FIXTURE, "victim")))).toBe(
+				"PERMISSION_RULE_INVALID"
 			);
 			expect(api.granted).toBeUndefined();
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");
@@ -106,22 +111,22 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.addOtherRules())).toEqual({
 				deny: "done",
 				call: "done",
-				malformed: "INVALID_PERMISSION_RULE"
+				malformed: "PERMISSION_RULE_INVALID"
 			});
 		});
 
 		it("lets the host lift a built-in write rule with a rule of its own", async () => {
 			await load();
-			api.slothlet.permissions.addRule({ caller: "**", target: "slothlet.lifted:write", effect: "allow" });
+			api.slothlet.permissions.rules.add({ caller: "**", target: "slothlet.lifted:write", effect: "allow" });
 			expect(await api.root.writeNamespace()).toBe("done");
 			expect(api.slothlet.lifted).toBe(1);
 		});
 
 		it("lets a manifest's lift grant the write to a module that owns none of the namespace", async () => {
 			await load();
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeNamespaceMember("lifted", 2))).toBe("PERMISSION_DENIED");
-			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
+			await api.slothlet.api.modules.add("@local/lifter", { discover: { root: path.join(FIXTURE, "modules", "lifter") } });
 			expect(await api.guest.x.writeNamespaceMember("lifted", 2)).toBe("done");
 			expect(api.slothlet.lifted).toBe(2);
 		});
@@ -142,9 +147,9 @@ describe.each(CONFIGS)("the built-in write rules with the permission system off 
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+		await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}
 
@@ -165,10 +170,8 @@ describe.each(CONFIGS)("the built-in write rules with the permission system off 
 
 	it("keeps module code from adding a rule that lifts a built-in write rule", async () => {
 		await load();
-		expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("INVALID_PERMISSION_RULE");
-		expect(await withSuppressedSlothletErrorOutput(() => api.root.grantByAdd(path.join(FIXTURE, "victim")))).toBe(
-			"INVALID_PERMISSION_RULE"
-		);
+		expect(withSuppressedSlothletErrorOutputSync(() => api.root.grantByRule())).toBe("PERMISSION_RULE_INVALID");
+		expect(await withSuppressedSlothletErrorOutput(() => api.root.grantByAdd(apiPart(FIXTURE, "victim")))).toBe("PERMISSION_RULE_INVALID");
 		expect(api.granted).toBeUndefined();
 	});
 });
@@ -201,8 +204,8 @@ describe.each([
 	const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 	it("refuses a rule from code the live runtime cannot attribute to one call", async () => {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: {} });
-		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, permissions: {} });
+		await api.slothlet.api.add("twin", apiPart(FIXTURE, "twin"), { id: "twin" });
 		const [goGate, releaseGo] = gate();
 		const [peerGate, releasePeer] = gate();
 		// twin.go resumes in resume.mjs, which twin.peer imports too, while both are suspended.

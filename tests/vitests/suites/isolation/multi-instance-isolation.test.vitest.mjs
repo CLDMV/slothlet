@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/isolation/multi-instance-isolation.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/isolation/multi-instance-isolation.test.vitest.mjs
  *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-11-28T04:31:59-08:00 (1795869119)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,9 +58,9 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 		});
 		instances.push(api2);
 
-		expect(api1.slothlet.instanceID).toBeDefined();
-		expect(api2.slothlet.instanceID).toBeDefined();
-		expect(api1.slothlet.instanceID).not.toBe(api2.slothlet.instanceID);
+		expect(api1.slothlet.instance.id).toBeDefined();
+		expect(api2.slothlet.instance.id).toBeDefined();
+		expect(api1.slothlet.instance.id).not.toBe(api2.slothlet.instance.id);
 	});
 
 	it("should isolate instance context between multiple instances", async () => {
@@ -182,16 +182,14 @@ describe("Multi-Instance Mode Mixing", () => {
 		const eagerApi = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
-			runtime: "async",
-			hooks: false
+			runtime: "async"
 		});
 		instances.push(eagerApi);
 
 		const lazyApi = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
-			runtime: "async",
-			hooks: false
+			runtime: "async"
 		});
 		instances.push(lazyApi);
 
@@ -205,23 +203,21 @@ describe("Multi-Instance Mode Mixing", () => {
 		expect(lazyResult).toBe(1005);
 
 		// Verify they're different instances
-		expect(eagerApi.slothlet.instanceID).not.toBe(lazyApi.slothlet.instanceID);
+		expect(eagerApi.slothlet.instance.id).not.toBe(lazyApi.slothlet.instance.id);
 	});
 
 	it("should allow async and live runtime instances to coexist", async () => {
 		const asyncApi = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
-			runtime: "async",
-			hooks: false
+			runtime: "async"
 		});
 		instances.push(asyncApi);
 
 		const liveApi = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
-			runtime: "live",
-			hooks: false
+			runtime: "live"
 		});
 		instances.push(liveApi);
 
@@ -234,6 +230,6 @@ describe("Multi-Instance Mode Mixing", () => {
 		expect(liveResult).toBe(1005);
 
 		// Verify they're different instances
-		expect(asyncApi.slothlet.instanceID).not.toBe(liveApi.slothlet.instanceID);
+		expect(asyncApi.slothlet.instance.id).not.toBe(liveApi.slothlet.instance.id);
 	});
 });

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/ownership/ownership-force-overwrite.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/ownership/ownership-force-overwrite.test.vitest.mjs
  *	@Date: 2026-09-28T21:59:12-07:00 (1790657952)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:37-07:00 (1791091717)
+ *	@Last modified time: 2026-11-28T04:32:10-08:00 (1795869130)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,7 +54,7 @@ const SHADOW_SUBPATHS = ["store", "store.create", "store.destroy", "vault", "vau
  * @returns {object} The instance's OwnershipManager.
  */
 function ownershipOf(api) {
-	return resolveWrapper(api.core).slothlet.handlers.ownership;
+	return resolveWrapper(api.core).____slothlet.handlers.ownership;
 }
 
 /**
@@ -86,8 +86,8 @@ describe.each(getMatrixConfigs())("ownership after a forceOverwrite add (#524) >
 
 	it("records the overwriting module as current owner of every overwritten path of another added module", async () => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
-		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
+		await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 
 		expect(await callShadowLeaves(api.launcher.session)).toEqual(["shadow-create", "shadow-destroy", "shadow-open"]);
 
@@ -100,10 +100,10 @@ describe.each(getMatrixConfigs())("ownership after a forceOverwrite add (#524) >
 
 	it("records the overwriting module as current owner when the overwritten leaves were already called", async () => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
 		expect([await api.launcher.session.store.create(), await api.launcher.session.vault.lock.open()]).toEqual(["ext-create", "ext-open"]);
 
-		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 
 		expect(await callShadowLeaves(api.launcher.session)).toEqual(["shadow-create", "shadow-destroy", "shadow-open"]);
 
@@ -113,7 +113,7 @@ describe.each(getMatrixConfigs())("ownership after a forceOverwrite add (#524) >
 
 	it("records the overwriting module as current owner of an overwritten base-module path", async () => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("core", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("core", SHADOW, { id: "shadow", collision: { force: true } });
 
 		expect(await callShadowLeaves(api.core)).toEqual(["shadow-create", "shadow-destroy", "shadow-open"]);
 
@@ -123,8 +123,8 @@ describe.each(getMatrixConfigs())("ownership after a forceOverwrite add (#524) >
 
 	it("keeps the overwriting module as current owner across a full reload", async () => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
-		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
+		await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 		await api.slothlet.reload();
 
 		expect(await callShadowLeaves(api.launcher.session)).toEqual(["shadow-create", "shadow-destroy", "shadow-open"]);
@@ -145,10 +145,10 @@ describe.each(getMatrixConfigs().filter(({ name }) => name === "EAGER" || name =
 		});
 
 		it.each(["skip", "warn"])("a %s-rejected re-add keeps the placement the live content was added under", async (collisionMode) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, api: { mutations: { allowCollisionOverride: true } } });
-			await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
-			await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
-			await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", collisionMode });
+			api = await slothlet({ ...config, base: BASE, silent: true, api: { collision: { override: true } } });
+			await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
+			await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
+			await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { mode: collisionMode } });
 
 			const ownership = ownershipOf(api);
 			expect(ownership.getPlacementMode("shadow", "launcher.session.store.create")).toBe("replace");
@@ -157,9 +157,9 @@ describe.each(getMatrixConfigs().filter(({ name }) => name === "EAGER" || name =
 		});
 
 		it("a merge re-add of the same module at the same endpoint replaces the recorded placement", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, api: { mutations: { allowCollisionOverride: true } } });
-			await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
-			await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", collisionMode: "merge" });
+			api = await slothlet({ ...config, base: BASE, silent: true, api: { collision: { override: true } } });
+			await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
+			await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { mode: "merge" } });
 
 			expect(ownershipOf(api).getPlacementMode("shadow", "launcher.session.store")).toBeNull();
 		});

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/lazy/lazy-construct-before-load.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/lazy/lazy-construct-before-load.test.vitest.mjs
  *	@Date: 2026-11-01T09:38:12-08:00 (1793554692)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T10:57:17-08:00 (1793559437)
+ *	@Last modified time: 2026-11-28T04:31:59-08:00 (1795869119)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,7 +77,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("new before a lazy fo
 
 	it("refuses another new.target while a lazy node that is the class is loading", async () => {
 		api = await slothlet({ base: BASE, mode: "lazy", runtime, silent: true });
-		expect(api.widget.__materialized).toBe(false);
+		expect(api.slothlet.node(api.widget).materialized).toBe(false);
 		/** A constructor other than the node. */
 		function Other() {}
 		expect(() => Reflect.construct(api.widget, [5], Other)).toThrow(expect.objectContaining({ code: "LAZY_SUBCLASS_BEFORE_LOAD" }));

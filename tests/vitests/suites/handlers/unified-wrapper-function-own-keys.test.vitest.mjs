@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/handlers/unified-wrapper-function-own-keys.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/handlers/unified-wrapper-function-own-keys.test.vitest.mjs
  *	@Date: 2026-09-28T10:39:19-07:00 (1790617159)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:29-07:00 (1791091709)
+ *	@Last modified time: 2026-11-28T04:31:46-08:00 (1795869106)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,10 +17,10 @@
  * @fileoverview Regression: eager adoption turned a function leaf's NON-enumerable own properties into
  * enumerable api children. Adoption iterated `Reflect.ownKeys(impl)` and skipped only `length`, `name`
  * and `prototype`, so any other non-enumerable own property became a child endpoint that
- * `Object.keys()` reports. On Node 22 every sloppy-mode function (all CommonJS) carries own,
- * non-enumerable `arguments` and `caller` properties, so a `module.exports = function` leaf surfaced
- * `Object.keys(api.tools.count)` → `["arguments", "caller"]` in eager mode (Node 24+ no longer has
- * them, which hid it locally; typegen then emitted them as `unknown` members on CI's Node 22 job).
+ * `Object.keys()` reports. A sloppy-mode function (all CommonJS) can carry own, non-enumerable
+ * `arguments` and `caller` properties, so a `module.exports = function` leaf could surface
+ * `Object.keys(api.tools.count)` → `["arguments", "caller"]` in eager mode (typegen then emitted them as `unknown`
+ * members).
  *
  * The rule matches the get trap's (#304): only a function's own ENUMERABLE properties are children.
  *

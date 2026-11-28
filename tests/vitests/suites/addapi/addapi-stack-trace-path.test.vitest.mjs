@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/addapi/addapi-stack-trace-path.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/addapi/addapi-stack-trace-path.test.vitest.mjs
  *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:56-07:00 (1791090896)
+ *	@Last modified time: 2026-11-28T04:31:07-08:00 (1795869067)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,9 +55,9 @@ describe("Stack Trace Path Resolution", () => {
 
 		it("should resolve relative path from closure definition location, not execution location", async () => {
 			// Build api.slothlet.api.add options based on config capabilities
-			const addApiOptions = { moduleID: "testModule" };
+			const addApiOptions = { id: "testModule" };
 			if (config.api?.mutations?.reload) {
-				addApiOptions.forceOverwrite = true;
+				addApiOptions.collision = { force: true };
 			}
 
 			// Define closure HERE in this test file

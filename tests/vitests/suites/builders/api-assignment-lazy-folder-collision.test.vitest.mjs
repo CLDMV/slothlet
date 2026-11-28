@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/builders/api-assignment-lazy-folder-collision.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/builders/api-assignment-lazy-folder-collision.test.vitest.mjs
  *	@Date: 2026-03-02T00:00:00-08:00 (1772438400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-28T04:31:17-08:00 (1795869077)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@
  *
  * Lines covered:
  *   - 217-228  : existingIsLazyUnmaterialized=true → sets effectiveMode on existing
- *   - 229-248  : valueIsLazyUnmaterialized=true   → sets effectiveMode on value; calls _materialize for replace
+ *   - 229-248  : valueIsLazyUnmaterialized=true   → sets effectiveMode on value; calls ___materialize for replace
  *   - 318-348  : merge mode, !existingIsLazyUnmaterialized && valueIsLazyUnmaterialized
  *
  * @module tests/vitests/suites/builders/api-assignment-lazy-folder-collision
@@ -57,7 +57,7 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
  * @returns {object} The raw Slothlet instance.
  */
 function getSlothletInst(api, key) {
-	return resolveWrapper(api[key]).slothlet;
+	return resolveWrapper(api[key]).____slothlet;
 }
 
 /**
@@ -66,7 +66,7 @@ function getSlothletInst(api, key) {
  * @returns {object}
  */
 function makeConfig(mode = "merge") {
-	return { collision: { initial: mode } };
+	return { api: { collision: { mode: { initial: mode } } } };
 }
 
 /**
@@ -84,7 +84,7 @@ function makeLazyWrapper(slothletInst, apiPath) {
 			setImpl({ value: 99 });
 		}
 	});
-	return { wrapper, proxy: wrapper.createProxy() };
+	return { wrapper, proxy: wrapper.___createProxy() };
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ describe("api-assignment: both wrappers lazy+unmaterialized — collision lines 
 		});
 
 		expect(value.____slothletInternal.state.collisionMode).toBe("replace");
-		// Line 241: _materialize() called for replace mode
+		// Line 241: ___materialize() called for replace mode
 		expect(value.____slothletInternal.state.inFlight || value.____slothletInternal.state.materialized).toBe(true);
 	});
 
@@ -237,7 +237,7 @@ describe("api-assignment: existing eager, value lazy — merge branch (lines 318
 			apiPath: "folder.eager",
 			initialImpl: { exportedFn: () => 1 }
 		});
-		const existingProxy = existingEager.createProxy();
+		const existingProxy = existingEager.___createProxy();
 
 		// Value: lazy + unmaterialized (the folder arriving second)
 		const { wrapper: value, proxy: valueProxy } = makeLazyWrapper(sl, "folder.lazyNew");
@@ -246,7 +246,7 @@ describe("api-assignment: existing eager, value lazy — merge branch (lines 318
 
 		const targetApi = { myFolder: existingProxy };
 
-		// replace mode: lines 340-348 fire → _materialize() called on value
+		// replace mode: lines 340-348 fire → ___materialize() called on value
 		await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("replace"),
@@ -254,7 +254,7 @@ describe("api-assignment: existing eager, value lazy — merge branch (lines 318
 		});
 
 		expect(value.____slothletInternal.state.collisionMode).toBe("replace");
-		// _materialize() triggered (line 348 area)
+		// ___materialize() triggered (line 348 area)
 		expect(value.____slothletInternal.state.inFlight || value.____slothletInternal.state.materialized).toBe(true);
 	});
 
@@ -271,7 +271,7 @@ describe("api-assignment: existing eager, value lazy — merge branch (lines 318
 
 		const { wrapper: value, proxy: valueProxy } = makeLazyWrapper(sl, "folder.lazyNew2");
 
-		const targetApi = { myFolder: existingEager.createProxy() };
+		const targetApi = { myFolder: existingEager.___createProxy() };
 
 		// merge-replace: lines 318-334 — stores collisionMode on value lazy wrapper
 		await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
@@ -296,7 +296,7 @@ describe("api-assignment: existing eager, value lazy — merge branch (lines 318
 
 		const { wrapper: value, proxy: valueProxy } = makeLazyWrapper(sl, "folder.lazyNew3");
 
-		const targetApi = { myFolder: existingEager.createProxy() };
+		const targetApi = { myFolder: existingEager.___createProxy() };
 
 		// merge: lines 318-334 — collisionMode stays "merge" (same value but code runs)
 		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
@@ -336,7 +336,7 @@ describe("api-assignment: existing lazy, value eager — Case 1 merge (lines 318
 			apiPath: "folder.eagerVal",
 			initialImpl: { add: (a, b) => a + b }
 		});
-		const valueProxy = valueEager.createProxy();
+		const valueProxy = valueEager.___createProxy();
 
 		const targetApi = { myFolder: existingProxy };
 
@@ -368,7 +368,7 @@ describe("api-assignment: existing lazy, value eager — Case 1 merge (lines 318
 		const targetApi = { myFolder: existingProxy };
 
 		// merge-replace: also hits Case 1 when existing=lazy, value=eager
-		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueEager.createProxy(), {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueEager.___createProxy(), {
 			useCollisionDetection: true,
 			config: makeConfig("merge-replace"),
 			collisionContext: "initial"
@@ -396,7 +396,7 @@ describe("api-assignment: existing lazy, value eager — Case 1 merge (lines 318
 
 		const targetApi = { myFolder: existingProxy };
 
-		await assignment.assignToApiPath(targetApi, "myFolder", valueEager.createProxy(), {
+		await assignment.assignToApiPath(targetApi, "myFolder", valueEager.___createProxy(), {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
 			collisionContext: "initial"
@@ -436,7 +436,7 @@ describe("api-assignment: both materialized wrappers in merge mode — adoptImpl
 		// Manually mark as materialized with impl set, without adopting children
 		existingWrapper.____slothletInternal.state.materialized = true;
 		existingWrapper.____slothletInternal.impl = { existingKey: () => "existing" };
-		const existingProxy = existingWrapper.createProxy();
+		const existingProxy = existingWrapper.___createProxy();
 
 		// Value: lazy wrapper also forced-materialized
 		const valueWrapper = new UnifiedWrapper(sl, {
@@ -448,7 +448,7 @@ describe("api-assignment: both materialized wrappers in merge mode — adoptImpl
 		});
 		valueWrapper.____slothletInternal.state.materialized = true;
 		valueWrapper.____slothletInternal.impl = { valueKey: () => "value" };
-		const valueProxy = valueWrapper.createProxy();
+		const valueProxy = valueWrapper.___createProxy();
 
 		const targetApi = { myFolder: existingProxy };
 
@@ -489,7 +489,7 @@ describe("api-assignment: existing=wrapper, value=plain — merge branch (lines 
 			apiPath: "folder.existWrap",
 			initialImpl: { originalFn: () => "original" }
 		});
-		const existingProxy = existingWrapper.createProxy();
+		const existingProxy = existingWrapper.___createProxy();
 
 		// Value: plain object (NOT a wrapper proxy)
 		const plainValue = { newFn: () => "new" };
@@ -520,7 +520,7 @@ describe("api-assignment: existing=wrapper, value=plain — merge branch (lines 
 
 		const plainValue = { addedFn: () => "added" };
 
-		const targetApi = { myFolder: existingWrapper.createProxy() };
+		const targetApi = { myFolder: existingWrapper.___createProxy() };
 
 		const result = await assignment.assignToApiPath(targetApi, "myFolder", plainValue, {
 			useCollisionDetection: true,
@@ -565,7 +565,7 @@ describe("api-assignment: nested sub-wrapper recursive merge (lines 497-506)", (
 		const existingWrapper = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: "parent.exist",
-			initialImpl: { sharedKey: subWrapperA.createProxy() }
+			initialImpl: { sharedKey: subWrapperA.___createProxy() }
 		});
 		// Adopt children so existingWrapper.sharedKey = subWrapperA.proxy
 		existingWrapper.___adoptImplChildren();
@@ -573,18 +573,18 @@ describe("api-assignment: nested sub-wrapper recursive merge (lines 497-506)", (
 		const valueWrapper = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: "parent.value",
-			initialImpl: { sharedKey: subWrapperB.createProxy() }
+			initialImpl: { sharedKey: subWrapperB.___createProxy() }
 		});
 		// Adopt children so valueWrapper.sharedKey = subWrapperB.proxy (with fn2)
 		valueWrapper.___adoptImplChildren();
 
-		const targetApi = { myFolder: existingWrapper.createProxy() };
+		const targetApi = { myFolder: existingWrapper.___createProxy() };
 
 		// Both are eager+materialized wrappers, both have child "sharedKey" as a wrapper
 		// Neither Case 1 nor Case 2 fires (not lazy-unmaterialized)
 		// Child merge loop: key="sharedKey" is present in both, both values are wrapper proxies
 		// → lines 494-514 fire (recursive sub-wrapper merge)
-		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueWrapper.createProxy(), {
+		const result = await assignment.assignToApiPath(targetApi, "myFolder", valueWrapper.___createProxy(), {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
 			collisionContext: "initial"
@@ -602,7 +602,7 @@ describe("api-assignment: nested sub-wrapper recursive merge (lines 497-506)", (
 
 // ---------------------------------------------------------------------------
 // Group 7: Case 2 merge, value lazy with FAILING materializeFunc
-// → Line 416 (SlothletWarning in _materialize().catch())
+// → Line 416 (SlothletWarning in ___materialize().catch())
 // ---------------------------------------------------------------------------
 describe("api-assignment: failing materializeFunc warning in Case 2 merge (line 416)", () => {
 	let _api;
@@ -623,7 +623,7 @@ describe("api-assignment: failing materializeFunc warning in Case 2 merge (line 
 			apiPath: "folder.eagerFail",
 			initialImpl: { fn: () => "ok" }
 		});
-		const existingProxy = existingEager.createProxy();
+		const existingProxy = existingEager.___createProxy();
 
 		// Value: lazy wrapper with a materializeFunc that REJECTS
 		const failingWrapper = new UnifiedWrapper(sl, {
@@ -633,13 +633,13 @@ describe("api-assignment: failing materializeFunc warning in Case 2 merge (line 
 				throw new Error("intentional-test-materialize-failure");
 			}
 		});
-		const failingProxy = failingWrapper.createProxy();
+		const failingProxy = failingWrapper.___createProxy();
 
 		const targetApi = { myFolder: existingProxy };
 
 		// merge mode, existing=eager, value=lazy with failing materializeFunc
 		// Case 2: valueLazy && !existingLazy → else if (!isMergeReplace) block
-		// → _materialize().catch(err => new SlothletWarning(...)) fires → line 416
+		// → ___materialize().catch(err => new SlothletWarning(...)) fires → line 416
 		const result = await assignment.assignToApiPath(targetApi, "myFolder", failingProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
@@ -688,7 +688,7 @@ describe("api-assignment: lazy folder first, file second — getters through the
 				});
 			}
 		});
-		const folderProxy = folder.createProxy();
+		const folderProxy = folder.___createProxy();
 		const file = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: "gauge",
@@ -703,12 +703,12 @@ describe("api-assignment: lazy folder first, file second — getters through the
 			}
 		});
 		const targetApi = { gauge: folderProxy };
-		await sl.builders.apiAssignment.assignToApiPath(targetApi, "gauge", file.createProxy(), {
+		await sl.builders.apiAssignment.assignToApiPath(targetApi, "gauge", file.___createProxy(), {
 			useCollisionDetection: true,
 			config: makeConfig(mode),
 			collisionContext: "initial"
 		});
-		await targetApi.gauge._materialize();
+		await targetApi.gauge.___materialize();
 		return targetApi.gauge;
 	}
 

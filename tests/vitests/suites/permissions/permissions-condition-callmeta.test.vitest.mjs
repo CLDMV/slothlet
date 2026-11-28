@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-condition-callmeta.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-condition-callmeta.test.vitest.mjs
  *	@Date: 2026-09-25T00:00:00-07:00 (1790319600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-28T04:32:23-08:00 (1795869143)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,7 +52,7 @@ describe.each(getMatrixConfigs())("Permissions > Condition callMeta (#455) > $na
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -85,7 +85,7 @@ describe.each(getMatrixConfigs())("Permissions > Condition callMeta (#455) > $na
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -111,7 +111,7 @@ describe.each(getMatrixConfigs())("Permissions > Condition callMeta (#455) > $na
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -141,7 +141,7 @@ describe.each(getMatrixConfigs())("Permissions > Condition callMeta (#455) > $na
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -168,7 +168,7 @@ describe.each(getMatrixConfigs())("Permissions > Condition callMeta (#455) > $na
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -202,7 +202,7 @@ describe.each(getMatrixConfigs())("Permissions > Condition callMeta (#455) > $na
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.paymentsCaller.**", target: "db.write.**", effect: "allow", condition: predicate },
 					{ caller: "**", target: "callers.**", effect: "allow" }
@@ -231,7 +231,7 @@ describe.each(getMatrixConfigs())("Permissions > Condition callMeta (#455) > $na
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow", condition: (ctx) => ctx.tenant === "acme" }]
 			}
 		});

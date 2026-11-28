@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/handlers/unified-wrapper-debug.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/handlers/unified-wrapper-debug.test.vitest.mjs
  *	@Date: 2026-02-28T12:08:42-08:00 (1772309322)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-28T04:31:46-08:00 (1795869106)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,9 +25,9 @@
  *    directory includes a `config.mjs` file (API_TEST fixture).  The guard fires twice:
  *    once before `___adoptImplChildren()` and once after.
  *
- *  Lines 518-519 – `_applyNewImpl` sets filePath from impl.__filePath
+ *  Lines 518-519 – `_applyNewImpl` sets filePath from api.slothlet.node(impl).file
  *    Triggered during lazy materialization when the loaded module object carries a
- *    `__filePath` property (set by modes-processor) and the wrapper has no filePath yet.
+ *    `____filePath` property (set by modes-processor) and the wrapper has no filePath yet.
  *
  *  Line 543-544 – `___setImpl` debug guard for apiPath === "string"
  *    Triggered when `___setImpl` is called on the "string" wrapper (after a reload) with
@@ -225,7 +225,7 @@ describe("util.inspect on waiting proxy before materialization (lines 1426, 1436
 // ---------------------------------------------------------------------------
 // 5. lazy materialization debug paths for apiPath === "string"
 //    Lines 670, 683, 708, 718 in ___materialize
-//    Lines 518-519 in _applyNewImpl (filePath update from impl.__filePath)
+//    Lines 518-519 in _applyNewImpl (filePath update from api.slothlet.node(impl).file)
 // ---------------------------------------------------------------------------
 describe("lazy materialization debug paths for apiPath=string (lines 670, 683, 708, 718)", () => {
 	it("fires ___materialize debug guards when debug.wrapper=true and string wrapper materialises", async () => {
@@ -255,13 +255,13 @@ describe("lazy materialization debug paths for apiPath=string (lines 670, 683, 7
 		expect(result).toBe("[LOG] hello");
 	});
 
-	it("materialises string module without debug (lines 518-519 via _applyNewImpl __filePath)", async () => {
+	it("materialises string module without debug (lines 518-519 via _applyNewImpl ____filePath)", async () => {
 		const api = await make({
 			base: API_TEST_MODES_DEBUG,
 			mode: "lazy"
 		});
-		// During materialization, modes-processor sets __filePath on the impl.
-		// _applyNewImpl at line 517 checks `!filePath && impl.__filePath` and promotes it.
+		// During materialization, modes-processor sets ____filePath on the impl.
+		// _applyNewImpl at line 517 checks `!filePath && api.slothlet.node(impl).file` and promotes it.
 		// This covers lines 518-519.
 		const result = await api.string.trim("  hello  ");
 		expect(result).toBe("hello");

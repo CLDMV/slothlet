@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/isolation/nested-instance-boot.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/isolation/nested-instance-boot.test.vitest.mjs
  *	@Date: 2026-08-18T12:00:00-07:00 (1787079600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-11-28T04:31:59-08:00 (1795869119)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,7 +49,7 @@ describe.each(ALL_CONFIGS)("Nested instance boot inside a permissioned leaf > Co
 		const api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST_NESTED_ISOLATION,
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "root.**", effect: "allow" }] }
+			permissions: { policy: "deny", rules: [{ caller: "**", target: "root.**", effect: "allow" }] }
 		});
 		instances.push(api);
 
@@ -60,7 +60,7 @@ describe.each(ALL_CONFIGS)("Nested instance boot inside a permissioned leaf > Co
 		const api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST_NESTED_ISOLATION,
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "root.**", effect: "allow" }] }
+			permissions: { policy: "deny", rules: [{ caller: "**", target: "root.**", effect: "allow" }] }
 		});
 		instances.push(api);
 

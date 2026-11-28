@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-reference-identity.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-reference-identity.test.vitest.mjs
  *	@Date: 2026-01-27T22:45:42-08:00 (1769582742)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-28T04:31:11-08:00 (1795869071)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -80,7 +80,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves function references (eager) / breaks references (lazy) across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "test-module" });
 
 		if (config.mode === "lazy") {
 			// Pre-materialize so we can capture stable references
@@ -113,7 +113,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves nested references (eager) / breaks references (lazy) across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, { moduleID: "deep-module" });
+		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, { id: "deep-module" });
 
 		// In lazy mode, materialize before capturing references
 		if (config.mode === "lazy") {
@@ -146,7 +146,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves mixed export references (eager) / breaks references (lazy) across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, { moduleID: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, { id: "test-module" });
 
 		if (config.mode === "lazy") {
 			// Pre-materialize so we can capture stable references
@@ -176,7 +176,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves all reference types (eager) / breaks references (lazy) across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("comprehensive", TEST_DIRS.API_TEST, { moduleID: "comp-module" });
+		await api.slothlet.api.add("comprehensive", TEST_DIRS.API_TEST, { id: "comp-module" });
 
 		if (config.mode === "lazy") {
 			// Pre-materialize so we can capture stable references

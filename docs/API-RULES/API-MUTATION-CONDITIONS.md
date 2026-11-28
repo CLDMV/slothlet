@@ -23,7 +23,7 @@ Dynamic-mutation conditions — how the api tree is shaped by runtime `api.sloth
 const next = current[part];
 if (next === undefined) {
 	containerWrapper.___setImpl({}, moduleID);
-	current[part] = containerWrapper.createProxy();
+	current[part] = containerWrapper.___createProxy();
 }
 ```
 
@@ -42,7 +42,7 @@ if (next === undefined) {
 **Source(s)**: `src/lib/handlers/api-manager.mjs:431-441`
 
 **Trigger**: existing segment value is neither object nor function
-**Result**: `throw INVALID_CONFIG_API_PATH_INVALID` (reason `API_PATH_REASON_NOT_TRAVERSABLE`).
+**Result**: `throw API_PATH_INVALID` (reason `API_PATH_REASON_NOT_TRAVERSABLE`).
 
 ---
 
@@ -85,7 +85,7 @@ if (next === undefined) {
 **Source(s)**: `src/lib/handlers/api-manager.mjs:2200-2214` (#136)
 
 **Trigger**: `rootKeys.length === 0 && isSynthetic`
-**Result**: `WARN_SYNTHETIC_ROOT_EMPTY` emitted; the merge loop mounts nothing.
+**Result**: `WARNING_INLINE_ROOT_EMPTY` emitted; the merge loop mounts nothing.
 **Rule tie**: the mutation-layer companion to G06 (empty folder) and the empty-value leaf (placement) under Rule 3.
 
 ---

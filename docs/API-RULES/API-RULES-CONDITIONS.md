@@ -76,7 +76,7 @@ if (hasMultipleDefaults) {
 **Category**: Basic Flattening
 **Related Rule**: [Rule 5](../API-RULES.md#rule-5-multiple-module-default-export-handling)
 **Status**: ✅ Active
-**Bug Fix**: PR [#116](https://github.com/CLDMV/slothlet/pull/116) — corrected behavior enforced in v3.8+; opt-out via `suppressFixes: ["C03_116"]` (removed in v4)
+**Bug Fix**: PR [#116](https://github.com/CLDMV/slothlet/pull/116) — corrected behavior enforced since v3.8 and permanent in v4
 
 **Pattern**: In a multi-default context, if the current module does NOT have a default export, its named exports are hoisted ("flattened to root") directly into the parent folder namespace. The file's own intermediate namespace is dissolved — there is no `api.folder.filename` level. This is the complement of C02: default-exporting files are preserved as named namespaces, while named-only files are merged into the folder.
 
@@ -105,7 +105,7 @@ if (hasMultipleDefaults) {
 - `api.notifications.RETRY_LIMIT` — hoisted (C03, dissolved)
 - `api.notifications.helpers` — **does not exist**
 
-**Pre-Fix Behavior (before PR [#116](https://github.com/CLDMV/slothlet/pull/116))**: C03 fell through to standard namespace wrapping, so named-only files were NOT dissolved. `helpers.mjs` would have produced `api.notifications.helpers.formatPhone` and `api.notifications.helpers.RETRY_LIMIT` — the intermediate `helpers` namespace was retained. To temporarily restore this pre-fix behavior while migrating, use `suppressFixes: ["C03_116"]` (removed in v4).
+**Pre-Fix Behavior (before PR [#116](https://github.com/CLDMV/slothlet/pull/116))**: C03 fell through to standard namespace wrapping, so named-only files were NOT dissolved. `helpers.mjs` would have produced `api.notifications.helpers.formatPhone` and `api.notifications.helpers.RETRY_LIMIT` — the intermediate `helpers` namespace was retained.
 
 ---
 
@@ -178,7 +178,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 **Related Rule**: All rules (fallback)
 **Status**: ✅ Active
 
-**Pattern**: When no other condition matches, preserve the module under its own namespace key. This is the safe default.
+**Pattern**: When no other condition matches, preserve the module under its own namespace key. This is the safe default. In a folder it keeps every file of a multi-file folder at its own level, and a single file with no default-export function; a folder's only file whose default export is a function is the folder instead ([F05](API-FLATTENING.md#f05), composed in `processFiles()` of `src/lib/builders/modes-processor.mjs` as the folder's self-named file).
 
 **Function**: `getFlatteningDecision()`
 **Source**: `src/lib/processors/flatten.mjs` ~L174
@@ -397,25 +397,23 @@ if (fileBaseName === categoryName && moduleKeys.length > 0) {
 **Flattening Guide**: [F02: Function Folder Matching](API-FLATTENING.md#f02-function-folder-matching)
 **Status**: ✅ Active
 
-**Pattern**: When a folder contains exactly one file, that file has a generic name (e.g. `index`, `main`, `helpers`), and there is nested depth, flatten the module's exports to the parent level to avoid pointless nesting.
+**Pattern**: When a folder below the api root contains exactly one file, that file has a generic name (`singlefile`, `index`, `main`, `default`), and it has exactly one named export, that export is flattened to the parent level to avoid pointless nesting. A generic file with more than one export keeps its own level.
 
 **Function**: `buildCategoryDecisions()`
-**Source**: `src/lib/processors/flatten.mjs` ~L653-L661
+**Source**: `src/lib/processors/flatten.mjs` ~L695-L706
 
 **Condition Check**:
 
 ```javascript
-if (
-  moduleFiles.length === 1 &&
-  currentDepth > 0 &&
-  /* ... various generic-name checks ... */ &&
-  isGenericFilename
-) {
-  // flatten to parent
+if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Arrays.isArray(mod)) {
+	const isGenericFilename = ["singlefile", "index", "main", "default"].includes(moduleName.toLowerCase());
+	if (moduleKeys.length === 1 && isGenericFilename) {
+		// flatten to parent
+	}
 }
 ```
 
-**Triggers**: Single file in folder + nested context + filename is generic
+**Triggers**: Single file in folder + nested context + filename is generic + a single named export
 **Used By**: [API-RULES Rule 10](../API-RULES.md#rule-10-generic-filename-parent-level-promotion)
 
 ---
@@ -488,6 +486,7 @@ if (typeof mod === "function" && (!mod.name || mod.name === "default" || mod.__s
 ```
 
 **Triggers**: Module is an anonymous/unnamed function or explicit default + nested context
+**Note**: a named default function that is a folder's only file is promoted too, by [F05](API-FLATTENING.md#f05) (the file composes as the folder's self-named file), whatever its name.
 **Used By**: [API-RULES Rule 4](../API-RULES.md#rule-4-default-export-promotion)
 
 ---
@@ -523,7 +522,7 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 **Related Rule**: [Rule 4](../API-RULES.md#rule-4-default-export-promotion)
 **Status**: ✅ Active
 
-**Pattern**: A module that exports BOTH a default and named exports merges them onto one api value. The default is promoted to the slot; named exports attach as properties, resolved by the default's type: a **function** default consults the configured `collisionMode` for same-name conflicts; an **object** default is copied (a `Proxy` default gets a layer instead, so it is never written to) and resolves a named export that conflicts with one of its members by `collisionMode` too: `merge` / `skip` keep the default's member, `error` throws, `warn` / `replace` / `merge-replace` take the named export ([#421](https://github.com/CLDMV/slothlet/issues/421)). A member is an own property, enumerable or not, or one the default's class provides; members of `Object.prototype`, `Function.prototype` and `Array.prototype` are not conflicts. Every composition path applies this same rule; a **primitive** default is wrapped under a `default` key with named exports attached unconditionally.
+**Pattern**: A module that exports BOTH a default and named exports merges them onto one api value. The default is promoted to the slot; named exports attach as properties, resolved by the default's type: a **function** default consults the configured `collisionMode` for same-name conflicts; an **object** default is copied (a `Proxy` default gets a layer instead, so it is never written to) and resolves a named export that conflicts with one of its members by `collisionMode` too: `merge` / `skip` keep the default's member, `error` throws, `warn` / `replace` / `merge-replace` take the named export ([#421](https://github.com/CLDMV/slothlet/issues/421)). A member is an own property, enumerable or not, or one the default's class provides; members of `Object.prototype`, `Function.prototype` and `Array.prototype` are not conflicts, and neither are a function default's own `name`, `length` and `prototype` as the language gives them. A named export that is a different value from the default but shares the default function's name (`export { calc2 as calc }` beside `export default function calc`) is an ordinary member; one that is the default itself (`export { calc }`) adds nothing. Every composition path applies this same rule; a **primitive** default is wrapped under a `default` key with named exports attached unconditionally.
 
 **Function**: `processModuleForAPI()`
 **Source**: `src/lib/processors/flatten.mjs:304-365`
@@ -580,7 +579,7 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 **Source**: `src/lib/builders/modes-processor.mjs:761` ([#333](https://github.com/CLDMV/slothlet/issues/333))
 
 **Triggers**: category module content is callable AND `shouldWrap`
-**Result**: `api[categoryName] = wrapper.createProxy()` (callable leaf, not `{}`)
+**Result**: `api[categoryName] = wrapper.___createProxy()` (callable leaf, not `{}`)
 **Used By**: [API-RULES Rule 3](../API-RULES.md#rule-3-no-empty-leaves)
 
 ---
@@ -672,21 +671,22 @@ api.tool.side(); // "tool.side"
 **Flattening Guide**: [F08: AddApi Path Deduplication Flattening](API-FLATTENING.md#f08-addapi-path-deduplication-flattening)
 **Status**: ✅ Active (New in v3)
 
-**Pattern**: After `buildAPI` returns for an `api.slothlet.api.add()` call, if the result contains a key matching the last segment of the mount path, AND that key's value originated from a **direct subfolder** of the mounted directory (`isDirectChild` guard), hoist that key's exports one level up and remove the duplicate key.
+**Pattern**: After `buildAPI` returns for an `api.slothlet.api.add()` call, if the result contains a key matching the last segment of the mount path, AND that key's value comes from a **direct child** of the mounted directory (`isDirectChild` guard), hoist that key's exports one level up and remove the duplicate key.
 
 **Purpose**: Prevents double-nesting when a mounted folder contains a same-named subfolder. `api.slothlet.api.add("config", folder)` should produce `api.config.*`, not `api.config.config.*`.
 
 **Function**: `addApiComponent()`
 **Source**: `src/lib/handlers/api-manager.mjs` - immediately after single-file unwrap block
 
-**Guard - `isDirectChild`**:
+**Guard - `isDirectChild`**: the value is a file at the mounted directory's root (`config.mjs`), or a file directly inside its subfolder named like the mount (`config/config.mjs`). That subfolder is the one [C26](#c26-same-named-folder-deduplication) leaves standing: when `config/` holds nothing but `config/`, the inner folder is the direct child. A folder is never the hoisted value: the subfolder named like the mount is poured into the mount's level, and a folder of that name inside it is a nested namespace.
+
+The builder decides this as it places the entry (`hoistedOntoMount` in `modes-processor.mjs`) and records the mount path itself on the node; `addApiComponent` hoists the node that records it:
 
 ```javascript
-// Ensures the matching key came from mountDir/lastPart/, not a deeper nested folder
-const isDirectChild = dirname(filePath) === path.join(resolvedFolderPath, lastPart);
+const isDirectChild = resolveWrapper(newApi[lastPart])?.____slothletInternal?.apiPath === effectivePath;
 ```
 
-This guard prevents incorrect hoisting when a deeply nested folder happens to share the mount path's last segment name.
+So the path a node records is the path it is reached at after the hoist.
 
 **Condition Check**:
 
@@ -719,11 +719,54 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 
 **`isDirectChild` examples**:
 
-| Mount path   | Folder structure               | `isDirectChild` | Action      |
-| ------------ | ------------------------------ | --------------- | ----------- |
-| `"config"`   | `folder/config/config.mjs`     | `true`          | Hoist ✅    |
-| `"services"` | `folder/services/services.mjs` | `true`          | Hoist ✅    |
-| `"api"`      | `folder/api/nested/api.mjs`    | `false`         | No hoist ✅ |
+| Mount path   | Folder structure                                   | `isDirectChild`                   | Result                                           |
+| ------------ | -------------------------------------------------- | --------------------------------- | ------------------------------------------------ |
+| `"config"`   | `folder/config/config.mjs`                         | `true`                            | `api.config.*` ✅                                |
+| `"config"`   | `folder/config.mjs`                                | `true`                            | `api.config.*` ✅                                |
+| `"e"`        | `folder/e/e/e.mjs` (`e/` holds only `e/`)          | `true`                            | `api.e.*` ✅ (C26, then C25)                     |
+| `"services"` | `folder/services/{api.mjs, services/services.mjs}` | `false` for the inner `services/` | `api.services.api`, `api.services.services.*` ✅ |
+| `"c"`        | `folder/c/{z.mjs, c/x.mjs}`                        | `false` for the inner `c/`        | `api.c.z`, `api.c.c.x` ✅                        |
+| `"api"`      | `folder/api/nested/api.mjs`                        | `false` for `nested/api.mjs`      | `api.nested.api.*` ✅                            |
+
+---
+
+## C26: Same-Named Folder Deduplication
+
+**Category**: Flattening
+**Related Rule**: [Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication)
+**Flattening Guide**: [F09: Same-Named Folder Deduplication](API-FLATTENING.md#f09-same-named-folder-deduplication)
+**Status**: ✅ Active
+
+**Pattern**: Before a subdirectory's level is built, while it holds no files and exactly one subdirectory whose sanitized name equals its own, the inner directory is built in its place.
+
+**Purpose**: `e/e/x.mjs` is `api.e.x`, not `api.e.e.x`. The outer folder carries nothing of its own.
+
+**Function**: `#collapseSameNamedFolder()`
+**Source**: `src/lib/builders/modes-processor.mjs` - applied to each subdirectory of `processFiles()`, eager and lazy
+
+**Condition Check**:
+
+```javascript
+while (
+	dir.children.files.length === 0 &&
+	dir.children.directories.length === 1 &&
+	sanitize(dir.children.directories[0].name) === sanitize(dir.name)
+) {
+	dir = dir.children.directories[0];
+}
+```
+
+**Triggers**: no files + exactly one subdirectory + same sanitized name
+**Result**: One level. Every node under it records the collapsed path, which is the path it is reached at.
+**Used By**: [API-RULES Rule 22](../API-RULES.md#rule-22-same-named-folder-deduplication)
+
+| Folder structure             | Collapsed | Reached at                    |
+| ---------------------------- | --------- | ----------------------------- |
+| `e/e/x.mjs`                  | yes       | `api.e.x`                     |
+| `t/t/t/x.mjs`                | yes       | `api.t.x`                     |
+| `c/z.mjs` + `c/c/x.mjs`      | no        | `api.c.z`, `api.c.c.x`        |
+| `s/s.mjs` + `s/s/worker.mjs` | no        | Rule 1 (the file) and `s.s.*` |
+| `g/h/g/x.mjs`                | no        | `api.g.h.g.x`                 |
 
 ---
 
@@ -741,6 +784,7 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 - **Rule 10**: [C14](#c14-parent-level-flattening---generic-filenames)
 - **Rule 11**: [C24](#c24-addapi-special-file-detection)
 - **Rule 13**: [C25](#c25-addapi-path-deduplication)
+- **Rule 22**: [C26](#c26-same-named-folder-deduplication)
 
 ### By Flattening Pattern
 

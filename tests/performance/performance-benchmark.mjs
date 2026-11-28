@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/performance/performance-benchmark.mjs
+ *	@Filename: tests/performance/performance-benchmark.mjs
  *	@Date: 2026-01-10T17:42:21-08:00 (1768095741)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T09:24:36-08:00 (1793553876)
+ *	@Last modified time: 2026-11-28T04:30:54-08:00 (1795869054)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -233,7 +233,7 @@ async function main() {
 	const eagerStartupTimes = [];
 	for (let i = 0; i < START_UP_TEST_COUNT; i++) {
 		const { time } = await measureTime(async () => {
-			return await slothlet({ base: API_DIR, lazy: false, context: { instance: `eager-${++instanceCounter}` } });
+			return await slothlet({ base: API_DIR, mode: "eager", context: { instance: `eager-${++instanceCounter}` } });
 		});
 		eagerStartupTimes.push(time);
 	}
@@ -242,7 +242,7 @@ async function main() {
 	const lazyStartupTimes = [];
 	for (let i = 0; i < START_UP_TEST_COUNT; i++) {
 		const { time } = await measureTime(async () => {
-			return await slothlet({ base: API_DIR, lazy: true, context: { instance: `lazy-${++instanceCounter}` } });
+			return await slothlet({ base: API_DIR, mode: "lazy", context: { instance: `lazy-${++instanceCounter}` } });
 		});
 		lazyStartupTimes.push(time);
 	}
@@ -272,10 +272,10 @@ async function main() {
 	console.log("===========================================================");
 
 	// Create fresh eager API for baseline
-	const eagerApiForCalls = await slothlet({ base: API_DIR, lazy: false, context: { instance: `calls-eager-${++instanceCounter}` } });
+	const eagerApiForCalls = await slothlet({ base: API_DIR, mode: "eager", context: { instance: `calls-eager-${++instanceCounter}` } });
 
 	// Create fresh lazy API to ensure NO modules are materialized yet
-	const lazyApiForCalls = await slothlet({ base: API_DIR, lazy: true, context: { instance: `calls-lazy-${++instanceCounter}` } });
+	const lazyApiForCalls = await slothlet({ base: API_DIR, mode: "lazy", context: { instance: `calls-lazy-${++instanceCounter}` } });
 
 	// FIRST: Measure lazy first call (materialization)
 	console.log("Measuring lazy first call (materialization)...");
@@ -344,7 +344,7 @@ async function main() {
 	console.log("=================================================");
 
 	// Create fresh eager API for nested calls
-	const eagerApiForNested = await slothlet({ base: API_DIR, lazy: false, context: { instance: `nested-eager-${++instanceCounter}` } });
+	const eagerApiForNested = await slothlet({ base: API_DIR, mode: "eager", context: { instance: `nested-eager-${++instanceCounter}` } });
 
 	// Test nested module access
 	const eagerNested = await benchmarkFunction(async () => {
@@ -352,7 +352,7 @@ async function main() {
 	}, BENCHMARK_ITERATIONS_COMPLEX);
 
 	// Create completely fresh lazy API for nested test (no previous materializations)
-	const lazyApiForNested = await slothlet({ base: API_DIR, lazy: true, context: { instance: `nested-lazy-${++instanceCounter}` } });
+	const lazyApiForNested = await slothlet({ base: API_DIR, mode: "lazy", context: { instance: `nested-lazy-${++instanceCounter}` } });
 
 	const lazyNestedFirst = await measureTime(async () => {
 		return lazyApiForNested.nested.date.today(); // First access to nested.date module
@@ -398,11 +398,11 @@ async function main() {
 		console.log(`\n${test.name}:`);
 
 		// Create fresh eager API
-		const freshEagerApi = await slothlet({ base: API_DIR, lazy: false, context: { instance: test.eagerContext } });
+		const freshEagerApi = await slothlet({ base: API_DIR, mode: "eager", context: { instance: test.eagerContext } });
 		const eagerResult = await benchmarkFunction(() => test.call(freshEagerApi), BENCHMARK_ITERATIONS_MULTI);
 
 		// Create fresh lazy API (no modules materialized)
-		const freshLazyApi = await slothlet({ base: API_DIR, lazy: true, context: { instance: test.lazyContext } });
+		const freshLazyApi = await slothlet({ base: API_DIR, mode: "lazy", context: { instance: test.lazyContext } });
 
 		// First lazy call (should trigger materialization)
 		const lazyFirstResult = await measureTime(() => test.call(freshLazyApi));

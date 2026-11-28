@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/typescript-options-strict.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/typescript-options-strict.test.vitest.mjs
  *	@Date: 2026-09-28T00:00:00-07:00 (1790578800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:47-07:00 (1791091727)
+ *	@Last modified time: 2026-11-28T04:33:09-08:00 (1795869189)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,7 +15,7 @@
 
 /**
  * @fileoverview Strict mode honours `typescript.strict`, `typescript.module` and
- * `typescript.compilerOptions` (#499).
+ * `typescript.compiler` (#499).
  *
  * @description
  * Each option is driven through the real `slothlet({...})` config path and proven to reach the
@@ -23,9 +23,9 @@
  *
  * - `strict: false` — an implicit-`any` parameter (TS7006) is rejected by default and accepted
  *   once strict checking is turned off.
- * - `compilerOptions: { noUnusedLocals: true }` — an unused local (TS6133) passes by default and
+ * - `compiler: { noUnusedLocals: true }` — an unused local (TS6133) passes by default and
  *   is rejected once the flag is set.
- * - `module: "commonjs"` (and the tsconfig-style `compilerOptions: { module: "commonjs" }`) —
+ * - `module: "commonjs"` (and the tsconfig-style `compiler: { module: "commonjs" }`) —
  *   `import.meta` (TS1343) passes under the default ESNext module and is rejected under CommonJS.
  *
  * Every boot forks strict mode's type-generation pass, so the file runs solo
@@ -69,12 +69,12 @@ async function apiDir(name, leaf, source) {
  */
 async function boot(dir, options = {}) {
 	api = await slothlet({
-		dir,
+		base: dir,
 		mode: "eager",
 		silent: true,
 		typescript: {
 			mode: "strict",
-			types: { output: path.join(root, `${path.basename(dir)}-${Date.now()}.d.ts`), interfaceName: "OptionsAPI" },
+			types: { output: path.join(root, `${path.basename(dir)}-${Date.now()}.d.ts`), name: "OptionsAPI" },
 			...options
 		}
 	});
@@ -129,7 +129,7 @@ afterAll(async () => {
 
 describe("typescript.strict", () => {
 	it("rejects an implicit-any parameter by default", async () => {
-		await expectBootRejects(implicitAnyDir, {}, "TS_TYPE_CHECK_ERRORS", "implicitly has an 'any' type");
+		await expectBootRejects(implicitAnyDir, {}, "TYPESCRIPT_TYPE_CHECK_ERRORS", "implicitly has an 'any' type");
 	});
 
 	it("accepts an implicit-any parameter with strict: false", async () => {
@@ -138,27 +138,22 @@ describe("typescript.strict", () => {
 	});
 });
 
-describe("typescript.compilerOptions", () => {
+describe("typescript.compiler", () => {
 	it("accepts an unused local by default", async () => {
 		await boot(unusedLocalDir);
 		expect(await api.double(4)).toBe(8);
 	});
 
-	it("rejects an unused local with compilerOptions.noUnusedLocals", async () => {
-		await expectBootRejects(unusedLocalDir, { compilerOptions: { noUnusedLocals: true } }, "TS_TYPE_CHECK_ERRORS", "'unused' is declared");
+	it("rejects an unused local with compiler.noUnusedLocals", async () => {
+		await expectBootRejects(unusedLocalDir, { compiler: { noUnusedLocals: true } }, "TYPESCRIPT_TYPE_CHECK_ERRORS", "'unused' is declared");
 	});
 
-	it('applies tsconfig-style string values (compilerOptions.module: "commonjs" rejects import.meta)', async () => {
-		await expectBootRejects(importMetaDir, { compilerOptions: { module: "commonjs" } }, "TS_TYPE_CHECK_ERRORS", "import.meta");
+	it('applies tsconfig-style string values (compiler.module: "commonjs" rejects import.meta)', async () => {
+		await expectBootRejects(importMetaDir, { compiler: { module: "commonjs" } }, "TYPESCRIPT_TYPE_CHECK_ERRORS", "import.meta");
 	});
 
 	it("rejects an unknown compiler option with INVALID_CONFIG", async () => {
-		await expectBootRejects(
-			unusedLocalDir,
-			{ compilerOptions: { notARealCompilerOption: true } },
-			"INVALID_CONFIG",
-			"notARealCompilerOption"
-		);
+		await expectBootRejects(unusedLocalDir, { compiler: { notARealCompilerOption: true } }, "INVALID_CONFIG", "notARealCompilerOption");
 	});
 });
 
@@ -169,6 +164,6 @@ describe("typescript.module", () => {
 	});
 
 	it('rejects import.meta with module: "commonjs"', async () => {
-		await expectBootRejects(importMetaDir, { module: "commonjs" }, "TS_TYPE_CHECK_ERRORS", "import.meta");
+		await expectBootRejects(importMetaDir, { module: "commonjs" }, "TYPESCRIPT_TYPE_CHECK_ERRORS", "import.meta");
 	});
 });

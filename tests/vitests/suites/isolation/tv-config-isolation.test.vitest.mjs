@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/isolation/tv-config-isolation.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/isolation/tv-config-isolation.test.vitest.mjs
  *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-11-28T04:31:59-08:00 (1795869119)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,7 +54,7 @@ describe.each(getMatrixConfigs({}))("TV Config Isolation - $name", ({ config }) 
 		const ____instance2Info = await api2.config.getInstanceInfo();
 
 		// Instance IDs should be different (using slothlet instance IDs, not module instance IDs)
-		expect(api1.slothlet.instanceID).not.toBe(api2.slothlet.instanceID);
+		expect(api1.slothlet.instance.id).not.toBe(api2.slothlet.instance.id);
 
 		await api1.shutdown();
 		await api2.shutdown();

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_permissions/callers/check-call-caller.mjs
+ *	@Filename: api_tests/api_test_permissions/callers/check-call-caller.mjs
  *	@Date: 2026-09-28T12:00:00-07:00 (1790622000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:40-07:00 (1791090880)
+ *	@Last modified time: 2026-11-28T04:29:07-08:00 (1795868947)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,7 +16,7 @@
 import { self } from "@cldmv/slothlet/runtime";
 
 /**
- * Attempt the host-only `permissions.global.checkCall` from a MODULE context (#508), so a test can
+ * Attempt the host-only `permissions.global.check.call` from a MODULE context (#508), so a test can
  * assert a module caller is REFUSED rather than answered — and, when the host has granted it, that
  * the answer comes through. Returns the outcome instead of throwing.
  * @param {string} callerPath - Identity to ask about.
@@ -27,14 +27,14 @@ import { self } from "@cldmv/slothlet/runtime";
  */
 export async function attempt(callerPath, targetPath, args) {
 	try {
-		return { ok: true, allowed: await self.slothlet.permissions.global.checkCall(callerPath, targetPath, args) };
+		return { ok: true, allowed: await self.slothlet.permissions.global.check.call(callerPath, targetPath, args) };
 	} catch (error) {
 		return { ok: false, code: error.code || error.name };
 	}
 }
 
 /**
- * The gatable sibling, for contrast: `global.checkAccess` carries no built-in deny, so under an
+ * The gatable sibling, for contrast: `global.check.access` carries no built-in deny, so under an
  * allow default a module reaches it. Returns the outcome instead of throwing.
  * @param {string} callerPath - Identity to ask about.
  * @param {string} targetPath - Target api path.
@@ -43,7 +43,7 @@ export async function attempt(callerPath, targetPath, args) {
  */
 export async function attemptAccess(callerPath, targetPath) {
 	try {
-		return { ok: true, allowed: await self.slothlet.permissions.global.checkAccess(callerPath, targetPath) };
+		return { ok: true, allowed: await self.slothlet.permissions.global.check.access(callerPath, targetPath) };
 	} catch (error) {
 		return { ok: false, code: error.code || error.name };
 	}

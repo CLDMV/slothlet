@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/build/build-subpackages.mjs
+ *	@Filename: tools/build/build-subpackages.mjs
  *	@Date: 2026-06-08T23:00:20-07:00 (1780984820)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-28T04:33:18-08:00 (1795869198)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,8 +20,9 @@
  * @internal
  * @description
  * The main build emits `dist/` and `types/dist/`. This step slices that output into standalone
- * packages (`@cldmv/slothlet-i18n`, `@cldmv/slothlet-types`), each with a generated `package.json`
- * assembled from three layers:
+ * packages (`@cldmv/slothlet-i18n`, `@cldmv/slothlet-types`), and stages the code-carrying
+ * `@cldmv/slothlet-migrate` tool from its own source under `packaging/slothlet-migrate/`. Each gets a
+ * generated `package.json` assembled from three layers:
  *
  *   1. inherited — org / legal / marketing fields copied verbatim from the root package.json.
  *   2. authored  — description + keywords (and any explicit overrides) from packaging/<name>/package.json.
@@ -90,6 +91,30 @@ function copyIfExists(src, dst) {
 }
 
 /**
+ * Recursively copy a source tree (used for the code-carrying migrate package).
+ * @internal
+ */
+function copyTree(srcDir, dstDir) {
+	ensureDir(dstDir);
+	let files = 0;
+	let bytes = 0;
+	for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+		const src = path.join(srcDir, entry.name);
+		const dst = path.join(dstDir, entry.name);
+		if (entry.isDirectory()) {
+			const sub = copyTree(src, dst);
+			files += sub.files;
+			bytes += sub.bytes;
+			continue;
+		}
+		fs.copyFileSync(src, dst);
+		files++;
+		bytes += fs.statSync(dst).size;
+	}
+	return { files, bytes };
+}
+
+/**
  * Recursively copy a tsc declaration tree. Declaration maps only aid "go to definition" when the
  * original source ships too — it doesn't here — so unless INCLUDE_DECLARATION_MAPS is set, .d.mts.map
  * files are skipped and the now-dangling `sourceMappingURL` comment is stripped from each .d.mts.
@@ -143,24 +168,22 @@ function deriveName(coreName, folder) {
 }
 
 /**
- * Consumer-facing surface only (2026-09 scoping decision). Everything else this package exposes as
- * an `exports` subpath — `./modes/*`, `./builders/*`, `./processors/*`, `./handlers/*`/`./factories/*`
- * (via the internal `#imports` map), the rest of `./helpers/*`, `./i18n`, and the
- * mode-specific `./runtime/async` / `./runtime/live` — exists so this package's OWN source files can
- * reference each other cleanly; none of it was ever a supported external contract. Publishing full
- * types for it just invites consumers to depend on implementation details that can change at any
- * time. The four here are the real, documented consumer surface: the `slothlet()` factory itself
- * (`.` / `./slothlet`), the unified runtime context interface (not its mode-specific
- * implementations), the property-name sanitizer (carved out of the `./helpers/*` wildcard below —
- * every other helper stays internal), the thrown/emitted error classes, and the standalone
- * `slothlet typegen` generator (explicitly documented as CLI-and-programmatic, docs/TYPESCRIPT.md).
+ * Consumer-facing surface only (2026-09 scoping decision, v4 entry points). Slothlet's internals are
+ * package-private `imports` (`#builders/*`, `#handlers/*`, `#helpers/*`, …), and `./i18n` and the
+ * mode-specific `./runtime/async` / `./runtime/live` are not typed consumer contracts. Publishing full
+ * types for those just invites consumers to depend on implementation details that can change at any
+ * time. The ones here are the real, documented consumer surface (with the root `.`, the `slothlet()`
+ * factory): the unified runtime context interface (not its mode-specific implementations), the
+ * thrown/emitted error classes, the standalone `slothlet typegen` generator (explicitly documented as
+ * CLI-and-programmatic, docs/TYPESCRIPT.md), the vite/vitest plugin, the browser file-list helpers and
+ * the property-name sanitizer.
  * @internal
  */
-const CONSUMER_EXACT_EXPORTS = new Set(["./slothlet", "./runtime", "./errors", "./typegen"]);
+const CONSUMER_EXACT_EXPORTS = new Set(["./runtime", "./errors", "./typegen", "./vite", "./files", "./sanitize"]);
 
 /**
  * Build the standalone types package's export map from the core export map, restricted to
- * {@link CONSUMER_EXACT_EXPORTS} (plus the one carved-out `./helpers/sanitize` entry). Core's
+ * {@link CONSUMER_EXACT_EXPORTS}. Core's
  * `default` types condition now points at the shipped stubs, so the canonical declaration layout is
  * read from the `slothlet-dev` condition (./types/src/X) instead — the satellite carries a copy of
  * that same tree (./X). The root `.` maps to the generated aggregator (./index.d.mts). Anything not
@@ -185,17 +208,7 @@ export function computeTypesExports(coreExports) {
 		const dev = value["slothlet-dev"];
 		const devTypes = dev && typeof dev === "object" && typeof dev.types === "string" ? dev.types : null;
 		if (!devTypes || !devTypes.startsWith(srcPrefix)) continue; // skips any export whose dev types are not under ./types/src/
-		const rest = devTypes.slice(srcPrefix.length); // lib/helpers/*.d.mts | slothlet.d.mts
-		if (key === "./helpers/*") {
-			// Carve exactly the sanitize export out of the wildcard; the rest of ./helpers/* stays internal.
-			// Global regex, not a string literal — a plain `.replace("*", ...)` only ever replaces the
-			// first occurrence (CodeQL js/incomplete-sanitization); harmless for today's single-`*`
-			// wildcard shape, but the correct, robust form regardless.
-			const sanitizeRest = rest.replace(/\*/g, "sanitize"); // lib/helpers/sanitize.d.mts
-			if (!fs.existsSync(path.join(srcDir, sanitizeRest))) continue;
-			out["./helpers/sanitize"] = { types: "./" + sanitizeRest };
-			continue;
-		}
+		const rest = devTypes.slice(srcPrefix.length); // lib/runtime/runtime.d.mts | vite.d.mts
 		if (!CONSUMER_EXACT_EXPORTS.has(key)) continue;
 		const probe = rest.includes("*") ? path.posix.dirname(rest) : rest;
 		if (!fs.existsSync(path.join(srcDir, probe))) continue; // only what the satellite actually ships
@@ -206,8 +219,8 @@ export function computeTypesExports(coreExports) {
 
 /**
  * Build the standalone types package's `imports` map from the core `imports` map. Core keeps its
- * internal-only handlers/factories out of the public `exports` (they resolve via package `imports`
- * as `#handlers/*` / `#factories/*`). The carved declarations still reference those `#`-specifiers in
+ * internals out of the public `exports` (they resolve via package `imports` as `#builders/*`,
+ * `#handlers/*`, `#helpers/*`, `#slothlet`, …). The carved declarations still reference those `#`-specifiers in
  * type positions (e.g. `import("#factories/component-base")`), so the satellite must republish the
  * same subpath-imports — pointing at its own copied `.d.mts` mirror — or a consumer's type-checker
  * cannot resolve them. Types-only: a single `types` condition per key.
@@ -283,11 +296,45 @@ const RULES = {
 		}
 	},
 
+	"slothlet-migrate": {
+		// A standalone CLI with its own code (not carved from the core build): it does not import
+		// @cldmv/slothlet at all, so core declares no peer on it and it declares none on core.
+		corePeer: false,
+		stage(_core, { outDir }) {
+			const srcRoot = path.join(packagingDir, "slothlet-migrate");
+			let files = 0;
+			let bytes = 0;
+			for (const dir of ["bin", "src", "data"]) {
+				const from = path.join(srcRoot, dir);
+				if (!fs.existsSync(from)) continue;
+				const copied = copyTree(from, path.join(outDir, dir));
+				files += copied.files;
+				bytes += copied.bytes;
+			}
+			const bin = path.join(outDir, "bin", "slothlet-migrate.mjs");
+			if (fs.existsSync(bin)) fs.chmodSync(bin, 0o755);
+			return { files, bytes };
+		},
+		compute(core) {
+			// The rewrite engine parses with acorn; pin the range core's own build and tests use.
+			const acorn = core.devDependencies && core.devDependencies.acorn;
+			if (!acorn) throw new Error("core package.json has no acorn devDependency to take the migrate package's range from");
+			return {
+				exports: {
+					".": "./src/index.mjs",
+					"./package.json": "./package.json"
+				},
+				files: ["bin/", "src/", "data/", "README.md", "LICENSE"],
+				dependencies: { acorn }
+			};
+		}
+	},
+
 	"slothlet-types": {
 		stage(_core, { outDir }) {
 			// Carve from types/src, NOT types/dist: both trees mirror the identical file list and
 			// import specifiers (tsc compiles src/**/*.mjs and dist/**/*.mjs into the same output
-			// shape under types/), but build:minify strips ALL comments from dist/ before build:types
+			// shape under types/), but build:minify strips ALL comments from dist/ before types:build
 			// ever runs — so a types/dist declaration has none of the JSDoc-derived parameter/return
 			// types the source actually has, degrading almost every signature to `any` for real
 			// consumers of this package. types/src carries the real, JSDoc-rich declarations
@@ -296,7 +343,7 @@ const RULES = {
 			// delivered on that.
 			const srcDir = path.join(projectRoot, "types", "src");
 			if (!fs.existsSync(srcDir)) {
-				throw new Error(`missing ${rel(srcDir)} — run "npm run build:types" first`);
+				throw new Error(`missing ${rel(srcDir)} — run "npm run types:build" first`);
 			}
 			const copied = copyDeclarations(srcDir, outDir);
 			writeTypesRootIndex(outDir); // root aggregator so the package has a `.` entry
@@ -312,7 +359,7 @@ const RULES = {
 			const typesImports = computeTypesImports(core.imports);
 			return {
 				exports: computeTypesExports(core.exports),
-				// Republish core's `#handlers/*` / `#factories/*` subpath-imports so the carved
+				// Republish core's `#…` subpath-imports so the carved
 				// declarations' internal `import("#…")` type references resolve inside the satellite.
 				...(Object.keys(typesImports).length ? { imports: typesImports } : {}),
 				files,
@@ -415,7 +462,7 @@ function main() {
 		const staged = rule.stage(core, { outDir });
 		const computed = rule.compute(core);
 		const manifest = buildManifest(folder, core, authored, computed);
-		assertCorePeerRange(core, manifest.name); // lockstep guard — fails loudly on peer-range drift
+		if (rule.corePeer !== false) assertCorePeerRange(core, manifest.name); // lockstep guard — fails loudly on peer-range drift
 
 		writeJson(path.join(outDir, "package.json"), manifest);
 		copyIfExists(path.join(packagingDir, folder, "README.md"), path.join(outDir, "README.md"));

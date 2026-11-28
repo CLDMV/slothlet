@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/hooks/hooks-transparent-dispatch.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/hooks/hooks-transparent-dispatch.test.vitest.mjs
  *	@Date: 2026-08-04T12:00:00-07:00 (1785870000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:32-07:00 (1791091712)
+ *	@Last modified time: 2026-11-28T04:31:56-08:00 (1795869116)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -382,7 +382,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 	it("leaves the dispatch-strategy cache alone when remove() matches nothing", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await boot({ mode: "eager" });
-		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+		const hookManager = resolveWrapper(api.svc).____slothlet.handlers.hookManager;
 
 		api.slothlet.hook.on("svc.mulSync:after", async (c) => c.result, { id: "cached" });
 		const strategy = hookManager.getDispatchStrategy("svc.mulSync");
@@ -400,7 +400,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 	it("leaves the dispatch-strategy cache alone when a bulk enable/disable flips nothing", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await boot({ mode: "eager" });
-		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+		const hookManager = resolveWrapper(api.svc).____slothlet.handlers.hookManager;
 
 		api.slothlet.hook.on("svc.mulSync:after", async (c) => c.result, { id: "bulk-cached" });
 		api.slothlet.hook.disable({ pattern: "svc.mulSync" });
@@ -420,7 +420,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 	it("leaves the dispatch-strategy cache alone when a global-filter pattern toggle is a no-op", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await boot({ mode: "eager" });
-		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+		const hookManager = resolveWrapper(api.svc).____slothlet.handlers.hookManager;
 
 		api.slothlet.hook.on("svc.mulSync:after", async (c) => c.result, { id: "pattern-cached" });
 		hookManager.enablePattern("svc.**");
@@ -462,16 +462,20 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 					} catch (e) {
 						// Re-raise the marked ORIGINAL, not the context wrapper around it — that is what
 						// carries the processed marker across the boundary.
-						throw e.originalError ?? e;
+						throw e.cause ?? e;
 					}
 				}
 			}
 		});
 		api.slothlet.hook.on("relay.inner:after", async ({ result }) => result, { id: "r-inner" });
 		api.slothlet.hook.on("relay.outer:after", async ({ result }) => result, { id: "r-outer" });
-		api.slothlet.hook.on("relay.outer:always", ({ hasError, errors }) => observed.push({ hasError, message: errors[0]?.message }), {
-			id: "r-always"
-		});
+		api.slothlet.hook.on(
+			"relay.outer:always",
+			({ errors, hasError = errors.length > 0 }) => observed.push({ hasError, message: errors[0]?.message }),
+			{
+				id: "r-always"
+			}
+		);
 
 		await expect(async () => await api.relay.outer(api)).rejects.toThrow("relayed-boom");
 		// The marker suppresses a duplicate ERROR hook at the outer pipeline. `always` is a per-call
@@ -490,9 +494,13 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 			},
 			{ id: "a-refuse" }
 		);
-		api.slothlet.hook.on("svc.mulSync:always", ({ hasError, errors }) => observed.push({ hasError, message: errors[0]?.message }), {
-			id: "always-after-witness"
-		});
+		api.slothlet.hook.on(
+			"svc.mulSync:always",
+			({ errors, hasError = errors.length > 0 }) => observed.push({ hasError, message: errors[0]?.message }),
+			{
+				id: "always-after-witness"
+			}
+		);
 
 		await expect(async () => await api.svc.mulSync(1, 1)).rejects.toThrow("after-refused");
 		expect(observed, "the after-chain's failure reaches always, as it does on the sync path").toEqual([
@@ -510,9 +518,13 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 			},
 			{ id: "b-refuse" }
 		);
-		api.slothlet.hook.on("svc.mulSync:always", ({ hasError, errors }) => observed.push({ hasError, message: errors[0]?.message }), {
-			id: "always-witness"
-		});
+		api.slothlet.hook.on(
+			"svc.mulSync:always",
+			({ errors, hasError = errors.length > 0 }) => observed.push({ hasError, message: errors[0]?.message }),
+			{
+				id: "always-witness"
+			}
+		);
 
 		await expect(async () => await api.svc.mulSync(1, 1)).rejects.toThrow("gate-closed");
 		// The sync path guarantees this from its `finally`; whether a promotion happened is not the
@@ -521,7 +533,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 	});
 
 	it("resolves undefined under suppressErrors when an async handler throws", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, suppressErrors: true } });
+		api = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, errors: true } });
 		await api.slothlet.api.add("svc", TARGETS);
 		api.slothlet.hook.on(
 			"svc.mulSync:before",
@@ -568,7 +580,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 	});
 
 	it("suppresses a throwing async after handler and keeps the settled result", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, suppressErrors: true } });
+		api = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, errors: true } });
 		await api.slothlet.api.add("svc", TARGETS);
 		const seen = [];
 		api.slothlet.hook.on(
@@ -687,7 +699,7 @@ describe("Hooks > transparent dispatch impl shapes (#253)", () => {
 	it("promotes both callable shapes without a context manager", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		const wrapper = resolveWrapper(api.svc.mulSync);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
 		const origCtx = sl.contextManager;
 		api.slothlet.hook.on("svc.mulSync:after", async ({ result }) => result, { id: "noctx-async" });
@@ -704,7 +716,7 @@ describe("Hooks > transparent dispatch impl shapes (#253)", () => {
 		}
 	});
 
-	it("rejects INVALID_CONFIG_NOT_A_FUNCTION for a non-callable impl", async () => {
+	it("rejects API_PATH_NOT_CALLABLE for a non-callable impl", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		const wrapper = resolveWrapper(api.svc.mulSync);
 		const origImpl = wrapper.____slothletInternal.impl;
@@ -718,7 +730,7 @@ describe("Hooks > transparent dispatch impl shapes (#253)", () => {
 				err = e;
 			}
 			expect(err).toBeDefined();
-			expect(err.code).toBe("INVALID_CONFIG_NOT_A_FUNCTION");
+			expect(err.code).toBe("API_PATH_NOT_CALLABLE");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}
@@ -768,7 +780,7 @@ describe("Hooks > transparent dispatch impl shapes (#253)", () => {
 						// handed to error hooks. (The context boundary may hand back a wrapper around
 						// it — unwrap so the marker travels; the fallback keeps this correct once leaf
 						// throws propagate unwrapped.)
-						throw e.originalError ?? e;
+						throw e.cause ?? e;
 					}
 				}
 			}
@@ -784,7 +796,7 @@ describe("Hooks > transparent dispatch impl shapes (#253)", () => {
 	});
 
 	it("resolves undefined for a throwing target under suppressErrors", async () => {
-		const sup = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, suppressErrors: true } });
+		const sup = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, errors: true } });
 		try {
 			await sup.slothlet.api.add("boom", {
 				exports: {

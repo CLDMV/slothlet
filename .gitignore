@@ -69,6 +69,11 @@ jspm_packages/
 # so those fixture packages travel with the repo.
 !api_tests/**/node_modules/
 !api_tests/**/node_modules/**
+# The shared-helper fixture links its package in at run time, as a pnpm workspace does (#715).
+api_tests/api_test_shared_helper_import_split/node_modules/
+# Fixture module packages get slothlet linked into their node_modules at test setup, as an install would
+# (tests/vitests/setup/fixture-packages.mjs).
+api_tests/**/node_modules/@cldmv/slothlet
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/processors/flatten-branches.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/processors/flatten-branches.test.vitest.mjs
  *	@Date: 2026-02-26T19:02:54-08:00 (1772161374)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-28T04:32:48-08:00 (1795869168)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { Flatten } from "@cldmv/slothlet/processors/flatten";
+import { Flatten } from "#processors/flatten";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**
@@ -115,12 +115,11 @@ describe("Flatten.shouldAttachNamedExport — uncovered return false branches", 
 		).toBe(false);
 	});
 
-	it("returns false when key equals defaultFunc.name (line 538)", () => {
-		// When the key matches the wrapped default function's name, re-exporting it would
-		// create a duplicate and should be skipped.
-		// IMPORTANT: value must be a DIFFERENT reference from both defaultFunc and
-		// originalDefault so the early reference-equality check (line 534) does not fire
-		// first — only then does execution reach the name-equality guard at line 537-538.
+	it("attaches a named export called like the default function when it is a different value (#787), by defaultFunc.name", () => {
+		// A named export whose key is the default function's name is another value under that name
+		// (`export { calc2 as calc }` beside `export default function calc`): it is a member, not a duplicate.
+		// The value is a DIFFERENT reference from both defaultFunc and originalDefault, so the
+		// reference-equality check, which still skips the default exported again, does not fire.
 		const flatten = new Flatten(makeMock());
 
 		/** @returns {number} */
@@ -131,26 +130,24 @@ describe("Flatten.shouldAttachNamedExport — uncovered return false branches", 
 		const originalDefault = function originalFn() {};
 		const differentValue = 99; // not the same reference as computeSum or originalFn
 
-		// key "computeSum" === computeSum.name → line 538 fires.
-		expect(flatten.shouldAttachNamedExport("computeSum", differentValue, computeSum, originalDefault)).toBe(false);
+		// key "computeSum" === computeSum.name, and the value is not the default.
+		expect(flatten.shouldAttachNamedExport("computeSum", differentValue, computeSum, originalDefault)).toBe(true);
 	});
 
-	it("returns false when key equals originalDefault.name (line 541)", () => {
-		// When defaultFunc.name does NOT match key but originalDefault.name does,
-		// line 541's guard fires.
-		// IMPORTANT: value must differ from both, and key must differ from defaultFunc.name,
-		// so lines 534 and 538 are skipped before reaching line 540-541.
+	it("attaches a named export called like the default function when it is a different value (#787), by originalDefault.name", () => {
+		// The same when the key is the name of the original default rather than of its wrapper:
+		// the value differs from both, so it is a member under that name.
 		const flatten = new Flatten(makeMock());
 
 		function parseJSON() {
 			return {};
 		}
 
-		// defaultFunc has a different name so line 537-538 skips; originalDefault.name matches.
+		// defaultFunc has a different name; originalDefault.name matches the key.
 		const defaultWrapper = function wrappedFn() {};
 		const differentValue = "some-string"; // not the same reference as either function
 
-		expect(flatten.shouldAttachNamedExport("parseJSON", differentValue, defaultWrapper, parseJSON)).toBe(false);
+		expect(flatten.shouldAttachNamedExport("parseJSON", differentValue, defaultWrapper, parseJSON)).toBe(true);
 	});
 
 	it("returns true when key is a regular export with no name collision (line 543)", () => {

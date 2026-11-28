@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/runtime/self-assign-prototype-pollution.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/runtime/self-assign-prototype-pollution.test.vitest.mjs
  *	@Date: 2026-05-13T00:00:00-07:00 (1778655600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-28T04:33:00-08:00 (1795869180)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ describe("self.<reservedKey> = ... (prototype pollution guard)", () => {
 	it("rejects self.__proto__ = obj from external code (no currentWrapper)", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self.__proto__ = { hacked: true };
@@ -55,7 +55,7 @@ describe("self.<reservedKey> = ... (prototype pollution guard)", () => {
 	it("rejects self.constructor = obj", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self.constructor = { hacked: true };
@@ -67,7 +67,7 @@ describe("self.<reservedKey> = ... (prototype pollution guard)", () => {
 	it("rejects self.prototype = obj", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self.prototype = { hacked: true };
@@ -79,7 +79,7 @@ describe("self.<reservedKey> = ... (prototype pollution guard)", () => {
 	it("rejects bracket-form self['__proto__'] = obj (covers same trap path with computed key)", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self["__proto__"] = { hacked: true };
@@ -91,7 +91,7 @@ describe("self.<reservedKey> = ... (prototype pollution guard)", () => {
 	it("permits a sibling write so the segment loop's no-throw arm is exercised by the same fixture", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.bootstrapSibling = "ok";
 			expect(self.bootstrapSibling).toBe("ok");
 		});

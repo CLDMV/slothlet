@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/smart-flattening/smart-flattening-default-member-conflict.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/smart-flattening/smart-flattening-default-member-conflict.test.vitest.mjs
  *	@Date: 2026-10-09T00:00:00-07:00 (1791529200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T00:00:00-07:00 (1791529200)
+ *	@Last modified time: 2026-11-28T04:33:05-08:00 (1795869185)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -87,7 +87,7 @@ describe.each(getMatrixConfigs({}))("a named export winning over a read-only mem
 	});
 
 	it.each(["replace", "merge-replace", "warn"])("under %s, replaces the default's non-configurable read-only member", async (initial) => {
-		api = await slothlet({ ...config, base: BASE, collision: { initial } });
+		api = await slothlet({ ...config, base: BASE, api: { collision: { mode: { initial } } } });
 		for (const key of ["nonenum", "folder"]) {
 			expect(await api[key].secret()).toBe("named.secret");
 			expect(await api[key].visible()).toBe("default.visible");
@@ -100,7 +100,7 @@ describe.each(getMatrixConfigs({}))("a named export winning over a read-only mem
 		["merge-replace", "named"],
 		["warn", "named"]
 	])("under %s, the %s answers for an accessor member whose setter ignores writes", async (initial, winner) => {
-		api = await slothlet({ ...config, base: BASE, collision: { initial }, silent: true });
+		api = await slothlet({ ...config, base: BASE, api: { collision: { mode: { initial } } }, silent: true });
 		for (const key of ["accessor", "accfolder"]) {
 			expect(await api[key].mode).toBe(`${winner}.mode`);
 		}
@@ -123,7 +123,7 @@ describe.each(getMatrixConfigs({}))("an api-root function default's members vs i
 		["replace", "named"],
 		["merge-replace", "named"]
 	])("under %s, the %s member wins", async (initial, winner) => {
-		api = await slothlet({ ...config, base: ROOT_BASE, collision: { initial }, silent: true });
+		api = await slothlet({ ...config, base: ROOT_BASE, api: { collision: { mode: { initial } } }, silent: true });
 		expect(await api()).toBe("root");
 		expect(await api.tag()).toBe(`${winner}.tag`);
 		expect(await api.fixed()).toBe(`${winner}.fixed`);
@@ -131,7 +131,7 @@ describe.each(getMatrixConfigs({}))("an api-root function default's members vs i
 	});
 
 	it("under error, the conflict throws", async () => {
-		await expect(slothlet({ ...config, base: ROOT_BASE, collision: { initial: "error" } })).rejects.toThrow(
+		await expect(slothlet({ ...config, base: ROOT_BASE, api: { collision: { mode: { initial: "error" } } } })).rejects.toThrow(
 			/COLLISION_DEFAULT_EXPORT_ERROR/
 		);
 	});

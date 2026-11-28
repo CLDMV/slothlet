@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/slothlet.mjs
+ *	@Filename: src/slothlet.mjs
  *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T10:15:46-07:00 (1793466946)
+ *	@Last modified time: 2026-11-28T08:40:45-08:00 (1795884045)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -87,33 +87,329 @@
 // enters the static-import graph a browser must parse (#123). Only the Node
 // component-init path (_initializeComponents) touches fs/path/url; browser mode uses
 // _initializeComponentsBrowser.
-import { isNode, fs, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
-import { getContextManager } from "#factories/context";
-import { warnIfCoverageWithoutImporter } from "@cldmv/slothlet/processors/loader";
-import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
+import { isNode, fs, fsp, path, url, createRequire, AsyncLocalStorage } from "#helpers/platform";
+import { internals as contextInternals } from "#factories/context";
+import { warnIfCoverageWithoutImporter } from "#processors/loader";
+import { SlothletError, SlothletWarning } from "#errors";
+import { SlothletDebug } from "#helpers/debug";
+import {
+	afterCurrentWork,
+	countHeldCopy,
+	countReadThrough,
+	countRetiring,
+	CURRENT_COPY,
+	endRun,
+	FORK,
+	forgetFlowStores,
+	INHERIT_COPY,
+	INSTANCE_FIELD,
+	newRecord,
+	reparentFlowStores,
+	RUN_COPY,
+	RUN_DONE,
+	RUN_OPENED,
+	COPY_SOURCE_URL,
+	RUN_BUILD_SEAL,
+	RECORD_OPERATION,
+	SILENT_BUILD,
+	TREE_WRITE,
+	RUN_SELF,
+	untrackRunStores,
+	whenIdle,
+	WRITE_TARGET
+} from "#helpers/flow-stores";
+import { closeRunSnapshot, domainOf, runsOpen } from "#helpers/run-snapshot";
 import { registerInstance } from "#handlers/lifecycle-token";
-import { resolveWrapper, isCallableValue, releaseModuleMakers } from "#handlers/unified-wrapper";
-import { isFrameworkInternal } from "#handlers/framework-internals";
-import { TRUSTED_ROOT } from "#handlers/trusted-root";
-import { initI18n } from "@cldmv/slothlet/i18n";
+import { isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { internals as trustedRootInternals } from "#handlers/trusted-root";
+import { internals as translationsInternals } from "#i18n";
+import { internals as eventemitterContextInternals } from "#helpers/eventemitter-context";
+import { internals as schedulerContextInternals } from "#helpers/scheduler-context";
+import { internals as eventtargetContextInternals } from "#helpers/eventtarget-context";
+import { internals as eventtargetPropertyContextInternals } from "#helpers/eventtarget-property-context";
+import { internals as observerContextInternals } from "#helpers/observer-context";
+import { internals as promiseContextInternals } from "#helpers/promise-context";
+import { internals as cloneContextInternals } from "#helpers/clone-context";
+import { internals as asyncResourceContextInternals } from "#helpers/async-resource-context";
+import { internals as nodeCallbackContextInternals } from "#helpers/node-callback-context";
+import { internals as functionSourceContextInternals } from "#helpers/function-source-context";
+import { internals as capabilityContextInternals } from "#helpers/capability-context";
+import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "#helpers/defaults";
+import { dataMemberOf, isFrameworkReservedKey } from "#helpers/reserved-keys";
+import { isGuardedInternal, internals as instanceImportsInternals } from "#helpers/instance-imports";
+import { normalizePermissionsConfig, normalizeClockConfig } from "#helpers/config";
+import { assertConfigKeys, assertOptionKeys } from "#helpers/config-schema";
+import { DEFAULT_CLOCK } from "#helpers/clock";
+import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
-	enableEventEmitterPatching,
-	disableEventEmitterPatching,
-	cleanupEventEmitterResources,
-	setApiContextChecker
-} from "@cldmv/slothlet/helpers/eventemitter-context";
-import { enableSchedulerPatching, disableSchedulerPatching } from "@cldmv/slothlet/helpers/scheduler-context";
-import { enableEventTargetPatching, disableEventTargetPatching } from "@cldmv/slothlet/helpers/eventtarget-context";
-import {
-	enableEventTargetPropertyPatching,
-	disableEventTargetPropertyPatching
-} from "@cldmv/slothlet/helpers/eventtarget-property-context";
-import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
-import { enablePromisePatching, disablePromisePatching } from "@cldmv/slothlet/helpers/promise-context";
-import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
-import { dataMemberOf, isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
-import { releaseInstanceScope } from "@cldmv/slothlet/helpers/instance-imports";
-import { forgetInstanceScripts } from "#handlers/frame-placement";
+	ArrayMethods,
+	Arrays,
+	concatLists,
+	copyList,
+	filterList,
+	listPush,
+	listSplice,
+	Map,
+	mapEntries,
+	mapList,
+	MapMethods,
+	NativeProcess,
+	Objects,
+	Promise,
+	promiseAllSettled,
+	PromiseMethods,
+	Reflect,
+	Set,
+	setFrom,
+	settledWith,
+	SetMethods,
+	setToArray,
+	splitText,
+	StringMethods,
+	Symbol,
+	URLSearchParams,
+	URLSearchParamsMethods,
+	WeakMap,
+	WeakMapMethods
+} from "#helpers/intrinsics";
+import { segmentsOf } from "#helpers/segments";
+const { resolveWrapper, releaseModuleMakers, releaseStandInChanges, frameworkWrite, rootProxy, checkpointLoaded } =
+	unifiedWrapperInternals("slothlet");
+const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
+const trustedRootOwn = trustedRootInternals("slothlet");
+const { initI18n } = translationsInternals("slothlet");
+const { enableEventEmitterPatching, disableEventEmitterPatching, cleanupEventEmitterResources, setApiContextChecker } =
+	eventemitterContextInternals("slothlet");
+const { enableSchedulerPatching, disableSchedulerPatching } = schedulerContextInternals("slothlet");
+const { enableEventTargetPatching, disableEventTargetPatching } = eventtargetContextInternals("slothlet");
+const { enableEventTargetPropertyPatching, disableEventTargetPropertyPatching } = eventtargetPropertyContextInternals("slothlet");
+const { enableObserverPatching, disableObserverPatching } = observerContextInternals("slothlet");
+const { enablePromisePatching, disablePromisePatching } = promiseContextInternals("slothlet");
+const { enableClonePatching, disableClonePatching } = cloneContextInternals("slothlet");
+const { enableAsyncResourcePatching, disableAsyncResourcePatching } = asyncResourceContextInternals("slothlet");
+const { enableNodeCallbackPatching, disableNodeCallbackPatching, enableAsyncCallbackServing, disableAsyncCallbackServing } =
+	nodeCallbackContextInternals("slothlet");
+const { enableFunctionSourcePatching, disableFunctionSourcePatching } = functionSourceContextInternals("slothlet");
+const { registerCapabilityCheck, releaseCapabilityCheck, assertCapability } = capabilityContextInternals("slothlet");
+const { claimInstanceScope, setInstanceSelfKind, closeInstanceSelf } = instanceImportsInternals("slothlet");
+const { forgetInstanceScripts, recordInstanceOwner, runAsHostWork } = framePlacementInternals("slothlet");
+const { getContextManager } = contextInternals("slothlet");
+
+/**
+ * The TypeScript processor's internal bindings, taken once, the first time an instance's shutdown needs them (the
+ * processor is Node-only, so it is not imported where slothlet's own files load).
+ * @type {Promise<{releaseSecureFallbackRoot: function(): Promise<void>}>|null}
+ * @private
+ */
+let typescriptInternals = null;
+
+/**
+ * The mark of the build a reload, a restart or a run's copy is under way in (see {@link Slothlet#reload}): while a
+ * reload runs, the code of its build reads and writes the new copy's components, config and api tree, and every other
+ * caller reads the copy the instance has. Carried with the running code's flow (see {@link runMarked}).
+ * @type {symbol}
+ * @private
+ */
+const BUILD_MARK = Symbol("slothlet.buildMark");
+
+/**
+ * The mark of the instance ID a lazy node's load runs under when it was asked for by code in a run that keeps a copy a
+ * reload swapped out (see {@link Slothlet#loadAsCaller}): a load runs apart from the flow that asked for it, so the ID
+ * is carried to it here (see {@link runMarked}).
+ * @type {symbol}
+ * @private
+ */
+const LOAD_AS_MARK = Symbol("slothlet.loadAs");
+
+/**
+ * The async runtime's flows of {@link BUILD_MARK} and {@link LOAD_AS_MARK}: one AsyncLocalStorage each, made on its
+ * first use, so a process whose instances never reload makes none. The live runtime makes none at all: it carries the
+ * marks with its own flows (see {@link runMarked}).
+ * @type {Map<symbol, AsyncLocalStorage>}
+ * @private
+ */
+const markStorages = new Map();
+
+/**
+ * The live runtime's context manager when the instance runs on it: it carries a mark with the running code's flow, the
+ * way it carries a `run()`'s context and caller, so a mark reaches exactly as far as live context does (see
+ * docs/CONTEXT-PROPAGATION.md).
+ * @param {object} slothlet - The instance.
+ * @returns {object|null} The manager, or null on the async runtime.
+ * @private
+ */
+function liveMarks(slothlet) {
+	const manager = slothlet.contextManager;
+	return manager !== null && manager !== undefined && typeof manager.runMarked === "function" ? manager : null;
+}
+
+/**
+ * Run `fn` in a new flow that carries `value` as the instance's mark `key`: an AsyncLocalStorage flow on the async
+ * runtime, the live context manager's own on the live runtime.
+ * @param {object} slothlet - The instance.
+ * @param {symbol} key - {@link BUILD_MARK} or {@link LOAD_AS_MARK}.
+ * @param {*} value - The mark.
+ * @param {function(): *} fn - What runs in the flow.
+ * @returns {*} What `fn` returns.
+ * @private
+ */
+function runMarked(slothlet, key, value, fn) {
+	const live = liveMarks(slothlet);
+	if (live !== null) return live.runMarked(slothlet.instanceID, key, value, fn);
+	let storage = MapMethods.get(markStorages, key);
+	if (storage === undefined) {
+		storage = new AsyncLocalStorage();
+		MapMethods.set(markStorages, key, storage);
+	}
+	return storage.run(value, fn);
+}
+
+/**
+ * The instance's mark `key` the running code's flow carries (see {@link runMarked}).
+ * @param {object} slothlet - The instance.
+ * @param {symbol} key - {@link BUILD_MARK} or {@link LOAD_AS_MARK}.
+ * @returns {*} The mark, or undefined.
+ * @private
+ */
+function markOf(slothlet, key) {
+	const live = liveMarks(slothlet);
+	if (live !== null) return live.markOf(slothlet.instanceID, key);
+	return MapMethods.get(markStorages, key)?.getStore();
+}
+
+/**
+ * Whether the instance's runtime can carry marks with its flows: the live runtime always, the async runtime where the
+ * host has AsyncLocalStorage.
+ * @param {object} slothlet - The instance.
+ * @returns {boolean} True when it can.
+ * @private
+ */
+function carriesMarks(slothlet) {
+	return liveMarks(slothlet) !== null || AsyncLocalStorage !== null;
+}
+
+/**
+ * Run `fn` in a new flow carrying `mark` as the instance's build mark (see {@link BUILD_MARK}).
+ * @param {object} slothlet - The instance.
+ * @param {*} mark - The mark.
+ * @param {function(): *} fn - What runs in the flow.
+ * @returns {*} What `fn` returns.
+ * @private
+ */
+function runInReloadBuild(slothlet, mark, fn) {
+	return runMarked(slothlet, BUILD_MARK, mark, fn);
+}
+
+/**
+ * Run a build in a new flow carrying its mark (see {@link runInReloadBuild}), and close the mark once the build
+ * settles. Work module code begins while the build loads it (a timer, a server's callbacks) keeps the flow, and so the
+ * mark, for as long as it lives: once closed, the mark tells that work nothing (see {@link currentBuildMark}), so it
+ * runs as code outside the build does.
+ * @param {object} slothlet - The instance.
+ * @param {object} mark - The build's mark.
+ * @param {function(): Promise<*>} fn - The build.
+ * @returns {Promise<*>} What `fn` resolves to.
+ * @private
+ */
+async function runInClosingBuild(slothlet, mark, fn) {
+	try {
+		return await runInReloadBuild(slothlet, mark, fn);
+	} finally {
+		mark.closed = true;
+	}
+}
+
+/**
+ * The build mark the running code's flow carries, leaving out a mark whose build is over (see
+ * {@link runInClosingBuild}).
+ * @param {object} slothlet - The instance.
+ * @returns {*} The mark, or undefined.
+ * @private
+ */
+function currentBuildMark(slothlet) {
+	const mark = markOf(slothlet, BUILD_MARK);
+	return mark !== null && typeof mark === "object" && mark.closed === true ? undefined : mark;
+}
+
+/**
+ * Run a lazy node's load in a new flow carrying the instance ID it runs under (see {@link LOAD_AS_MARK}).
+ * @param {object} slothlet - The instance.
+ * @param {string} id - The instance ID the load runs under.
+ * @param {function(): *} fn - The load.
+ * @returns {*} What `fn` returns.
+ * @private
+ */
+function runLoadAs(slothlet, id, fn) {
+	return runMarked(slothlet, LOAD_AS_MARK, id, fn);
+}
+
+/**
+ * The instance's own fields, besides its component namespaces, that a full reload builds anew and swaps in at its end.
+ * @type {string[]}
+ * @private
+ */
+const RELOAD_COPY_FIELDS = [
+	"config",
+	"api",
+	"debugLogger",
+	"envTarget",
+	"reference",
+	"isLoaded",
+	// What goes with one api tree: its base module's ID, the user hooks and builtins its root holds, the incarnations of
+	// the modules mounted in it, its lazy-load counts, and the epoch its nodes carry (see unified-wrapper.mjs).
+	"baseModuleID",
+	"userHooks",
+	"_ownBuiltins",
+	"_moduleIncarnations",
+	"_retiredIncarnations",
+	"_lazyTally",
+	"_totalLazyCount",
+	"_unmaterializedLazyCount",
+	"_materializationComplete",
+	"_materializationWaiters",
+	"_materializationCompleteEmitted",
+	"_materializeCallbackCalled",
+	"_materializedPayload",
+	"_buildEpoch",
+	"_treeEpoch",
+	"_startTreeEpoch"
+];
+
+/**
+ * The handlers a `run()` / `scope()` keeps a copy of its own of once it writes them (see {@link FORK}): permission rules,
+ * event rules, mode, read gating, seal and principals; hooks; user and global metadata; event subscriptions; lifecycle
+ * subscriptions; which version is the default and each version's metadata. Each is a handler in the `handlers`
+ * namespace, by its property name there.
+ * @type {string[]}
+ * @private
+ */
+const FORKABLE_HANDLERS = ["permissionManager", "hookManager", "metadata", "eventManager", "lifecycle", "versionManager"];
+
+/**
+ * The forkable handlers a copy of a tree starts from as forks of the copied set's (see {@link Slothlet#buildCopyOnto}).
+ * The version manager is not among them: the copy registers its versions again as it replays the history, and then
+ * takes the copied set's versioning state.
+ * @type {string[]}
+ * @private
+ */
+const COPIED_HANDLERS = ["permissionManager", "hookManager", "metadata", "eventManager", "lifecycle"];
+
+/**
+ * The copy a run record reads through to once its copy is torn down: none, so what still runs in its store (code
+ * reached through the runtime `context` export) answers from the instance's own.
+ * @type {{values: null, users: number}}
+ * @private
+ */
+const TORN_DOWN = Objects.freeze({ __proto__: null, values: null, users: 0 });
+
+/**
+ * How many finished runs wait for an idle macrotask before the rest are drained on a microtask (see
+ * `Slothlet#drainRetiring`): code awaiting runs back to back never lets one pass.
+ * @type {number}
+ * @private
+ */
+const RETIRE_BATCH = 128;
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -140,6 +436,14 @@ const boundaryPatchHolders = new Set();
 const promisePatchHolders = new Set();
 
 /**
+ * Async-runtime instances holding the `crypto.randomInt` patch that hands each callback its value in the caller's async
+ * context (see `enableAsyncCallbackServing` in `helpers/node-callback-context`), removed once no async instance holds it.
+ * @type {Set<string>}
+ * @private
+ */
+const asyncCallbackHolders = new Set();
+
+/**
  * Top-level config keys retained by identity when the original config is snapshotted for
  * `restart()`: `reference` and `context` are user-owned live objects the instance exposes as-is, so
  * a restart hands the new instance the same objects the original `slothlet({...})` call received.
@@ -147,22 +451,38 @@ const promisePatchHolders = new Set();
  * @type {ReadonlySet<string>}
  * @private
  */
-const CONFIG_IDENTITY_KEYS = new Set(["reference", "context"]);
+const CONFIG_IDENTITY_KEYS = setFrom(["reference", "context"]);
+
+/**
+ * Resolved-config fields slothlet derives for itself, left out of `diag.inspect().config` (D-7): `dir` repeats `base`,
+ * and `envTarget` is what `env` resolved to.
+ * @type {Set<string>}
+ * @private
+ */
+const INTERNAL_CONFIG_KEYS = setFrom(["dir", "envTarget"]);
 
 /**
  * Copy a config value for the retained original-config snapshot (#504).
  *
  * @description
- * Plain objects and arrays are copied recursively so a later mutation of the caller's own options
- * object (or of anything config normalization touches) cannot change what `restart()` rebuilds from.
- * Everything else — functions, class instances, `Map`/`Set`, `Date`, `RegExp`, `URL` — is kept by
- * identity, as the original call passed it. With `freeze`, every copied container is frozen so the
- * retained snapshot itself is immutable; `restart()` takes an unfrozen copy of it for each rebuild,
- * because normalization receives a config it is free to read into new objects.
+ * Plain objects (`Object.prototype` or null prototype, the two shapes the config schema walks) and
+ * arrays are copied recursively so a later mutation of the caller's own options object (or of
+ * anything config normalization touches) cannot change what `restart()` rebuilds from. A plain
+ * object's copy carries its own enumerable string keys — the keys the schema and every option read —
+ * and keeps its prototype (`metadata` accepts null-prototype objects). Everything else — functions,
+ * class instances, `Map`/`Set`, `Date`, `RegExp`, `URL` — is kept by identity, as the original call
+ * passed it (`metadata` values may be any of these). With `freeze`, every copied container is frozen
+ * so the retained snapshot itself is immutable; `restart()` takes an unfrozen copy of it for each
+ * rebuild, because normalization receives a config it is free to read into new objects.
+ *
+ * `seen` maps each source container to its copy, so a container referenced twice is copied once and
+ * stays shared in the copy. It also ends cycles: the snapshot is taken before the config is
+ * validated, so a cyclic value that validation later refuses (`metadata` refuses a cycle through
+ * plain objects and arrays alike with `INVALID_ARGUMENT`) is copied without recursing forever.
  *
  * @param {unknown} value - Value to copy.
  * @param {boolean} freeze - Freeze each copied container.
- * @param {Map<object, object>} [seen=new Map()] - Cycle guard: source container → its copy.
+ * @param {Map<object, object>} [seen=new Map()] - Source container → its copy (shared references, cycles).
  * @returns {unknown} The copy (or the value itself for anything that is not a plain container).
  * @private
  *
@@ -171,23 +491,34 @@ const CONFIG_IDENTITY_KEYS = new Set(["reference", "context"]);
  */
 function copyConfigValue(value, freeze, seen = new Map()) {
 	if (!value || typeof value !== "object") return value;
-	if (seen.has(value)) return seen.get(value);
-	if (Array.isArray(value)) {
+	if (MapMethods.has(seen, value)) return MapMethods.get(seen, value);
+	if (Arrays.isArray(value)) {
 		const out = [];
-		seen.set(value, out);
-		for (const item of value) out.push(copyConfigValue(item, freeze, seen));
-		return freeze ? Object.freeze(out) : out;
+		MapMethods.set(seen, value, out);
+		for (let ofIndex = 0, ofList = value; ofIndex < ofList.length; ofIndex++) {
+			const item = ofList[ofIndex];
+			listPush(out, copyConfigValue(item, freeze, seen));
+		}
+		return freeze ? Objects.freeze(out) : out;
 	}
-	const proto = Object.getPrototypeOf(value);
-	if (proto !== Object.prototype && proto !== null) return value;
-	const out = proto === null ? Object.create(null) : {};
-	seen.set(value, out);
-	for (const key of Reflect.ownKeys(value)) {
-		const descriptor = Object.getOwnPropertyDescriptor(value, key);
-		if (!descriptor.enumerable) continue;
-		out[key] = copyConfigValue(value[key], freeze, seen);
+	const proto = Objects.getPrototypeOf(value);
+	if (proto !== Objects.prototype && proto !== null) return value;
+	const out = proto === null ? Objects.create(null) : {};
+	MapMethods.set(seen, value, out);
+	// Own enumerable keys, symbols included (user data in `metadata` may carry them). Each is defined, never assigned:
+	// an own "__proto__" key (JSON.parse makes one) stays a key instead of setting the copy's prototype.
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (!Objects.getOwnPropertyDescriptor(value, key).enumerable) continue;
+		Objects.defineProperty(out, key, {
+			__proto__: null,
+			value: copyConfigValue(value[key], freeze, seen),
+			writable: true,
+			enumerable: true,
+			configurable: true
+		});
 	}
-	return freeze ? Object.freeze(out) : out;
+	return freeze ? Objects.freeze(out) : out;
 }
 
 /**
@@ -204,10 +535,11 @@ function copyConfigValue(value, freeze, seen = new Map()) {
  */
 function copyTopLevelConfig(config, freeze) {
 	const out = {};
-	for (const key of Object.keys(config)) {
-		out[key] = CONFIG_IDENTITY_KEYS.has(key) ? config[key] : copyConfigValue(config[key], freeze);
+	for (let ofIndex = 0, ofList = Objects.keys(config); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		out[key] = SetMethods.has(CONFIG_IDENTITY_KEYS, key) ? config[key] : copyConfigValue(config[key], freeze);
 	}
-	return freeze ? Object.freeze(out) : out;
+	return freeze ? Objects.freeze(out) : out;
 }
 
 /**
@@ -220,12 +552,385 @@ class Slothlet {
 	static RESERVED_ROOT_KEYS = ["slothlet", "shutdown", "destroy"];
 
 	// Properties to skip during recursive operations (at any depth)
-	static SKIP_PROPS = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+	static SKIP_PROPS = ["___materialize", "____impl", "____slothletInternal"];
+
+	/**
+	 * The handle this instance claimed for its instance ID (see claimInstanceScope in helpers/instance-imports): how
+	 * its CommonJS files are loaded as its own, and how what slothlet keeps about its files is released. Held here
+	 * alone.
+	 * @type {{instanceID: string, require: function(string, object=): *, release: function(): void}|null}
+	 */
+	#importScope = null;
+
+	/**
+	 * The id this instance's capability check was registered under (see helpers/capability-context), or null.
+	 * @type {string|null}
+	 * @private
+	 */
+	#capabilityHolder = null;
+
+	/**
+	 * Whether a URL is one of this instance's own files: it carries this instance's tag, or that of the instance it was
+	 * reloaded from.
+	 * @param {string|null} url - An importer's URL.
+	 * @returns {boolean} True for this instance's file.
+	 * @private
+	 */
+	#importsAsOwnFile(url) {
+		if (typeof url !== "string") return false;
+		const tag = URLSearchParamsMethods.get(
+			new URLSearchParams(StringMethods.includes(url, "?") ? StringMethods.slice(url, StringMethods.indexOf(url, "?") + 1) : ""),
+			"slothlet_instance"
+		);
+		if (!tag) return false;
+		const own = `${this.instanceID ?? ""}`;
+		return (
+			tag === own || StringMethods.startsWith(own, `${tag}_reload_`) || StringMethods.startsWith(tag, `${splitText(own, "_reload_")[0]}`)
+		);
+	}
+
+	/**
+	 * The clock this instance reads the time and schedules its deferred work with (the `clock` option): held here alone,
+	 * never part of the config the instance hands out, so only the host that created the instance can supply it.
+	 * @type {import("#helpers/clock").Clock}
+	 */
+	#clock = DEFAULT_CLOCK;
+
+	/**
+	 * The fresh scope a normal reload has claimed and switches the instance to once the new ID's context is set up (see
+	 * {@link Slothlet#load}); null when no reload is under way. Until then the instance stays on its ID and context, so a
+	 * reload that fails before that context exists leaves it as it was.
+	 * @type {{instanceID: string, require: Function, release: Function}|null}
+	 * @private
+	 */
+	#pendingScope = null;
+
+	/**
+	 * The full reload under way, while it builds its new copy (see {@link Slothlet#openReloadWindow}); null otherwise.
+	 * @type {{mark: object, next: object, nextCopy: object|null, settled: Promise<void>, finish: Function, closed: boolean}|null}
+	 * @private
+	 */
+	#reloadWindow = null;
+
+	/**
+	 * The instance's own values of the copy fields (its component namespaces and {@link RELOAD_COPY_FIELDS}) while those
+	 * are accessors (see {@link Slothlet#installCopyFields}); null while they are plain fields.
+	 * @type {object|null}
+	 * @private
+	 */
+	#fields = null;
+
+	/**
+	 * The prototype each api the root reads holds on a record of its own (a function root's, see the root proxy).
+	 * @type {WeakMap<object, {given: boolean, prototype: (object|null)}>}
+	 */
+	#rootPrototypes = new WeakMap();
+
+	/**
+	 * Whether the instance has shut down and is not running again yet: set by `shutdown()` and cleared when it loads or
+	 * restarts. The wrapper reads it ({@link Slothlet#____ended}) to refuse module code's access through views it kept.
+	 * @type {boolean}
+	 */
+	#ended = false;
+
+	/**
+	 * The token of the copy the instance has, once a `run()` / `scope()` recorded it (see {@link CURRENT_COPY}); null
+	 * until one does.
+	 * @type {{values: object|null}|null}
+	 * @private
+	 */
+	#copy = null;
+
+	/**
+	 * How many copies are held apart from what the instance has: tokens that kept what the instance had (a reload
+	 * swapped another copy in, or the instance changed a forkable handler after runs recorded the token) while a run
+	 * still reads through one, and records of runs that hold a fork of their own. While any is, the copy fields answer
+	 * through {@link Slothlet#readField}. Each is let go when the last run reading it is torn down (see
+	 * {@link Slothlet#teardownRun}).
+	 * @type {number}
+	 * @private
+	 */
+	#heldCopies = 0;
+
+	/**
+	 * Set while {@link Slothlet#runRecord} tells which store is running.
+	 * @type {boolean}
+	 * @private
+	 */
+	#resolvingCopy = false;
+
+	/**
+	 * The epochs of the trees built for copies (see {@link Slothlet#buildCopy}): each one lower than the last, so no tree
+	 * a restart builds ever has one.
+	 * @type {number}
+	 * @private
+	 */
+	#copyEpochs = 0;
+
+	/**
+	 * The copy that owns each api tree built for one (see {@link Slothlet#ownTree}).
+	 * @type {WeakMap<object, object>}
+	 * @private
+	 */
+	#treeOwners = new WeakMap();
+
+	/**
+	 * The set each tree built for a copy belongs to, by the tree's epoch (see {@link Slothlet#buildCopy}): a lazy node of
+	 * that tree loads into it, whichever code asked for the load.
+	 * @type {Map<number, {values: object, bust: number|null}>}
+	 * @private
+	 */
+	#treeSets = new Map();
+
+	/**
+	 * Set by a restart whose runs keep trees loaded under the ID it leaves (see {@link Slothlet#keepScopeForCopies}):
+	 * the teardown leaves what slothlet keeps about that ID's files to the kept scope.
+	 * @type {boolean}
+	 * @private
+	 */
+	#scopeKeptForCopies = false;
+
+	/**
+	 * For each forkable handler (see {@link FORKABLE_HANDLERS}), the handlers namespaces of the copies that hold it
+	 * without owning it: kept tokens' and runs'. Before the handler's owner writes it, each of them gets a fork of its
+	 * own (see {@link Slothlet#keepSharers}). A copy torn down leaves every set it is in (see
+	 * {@link Slothlet#unshareHandlers}).
+	 * @type {WeakMap<object, Set<object>>}
+	 * @private
+	 */
+	#sharers = new WeakMap();
+
+	/**
+	 * The handlers namespace that owns each fork: the run's (or the kept token's) that the fork was made for. The
+	 * instance owns the handlers in its own namespace, which are not recorded here.
+	 * @type {WeakMap<object, object>}
+	 * @private
+	 */
+	#owners = new WeakMap();
+
+	/**
+	 * Every copy held apart from the instance's (see {@link Slothlet#holdCopy}), for a restart to update what goes with
+	 * the shared api tree in each (see {@link Slothlet#copiesFollowTree}). A copy leaves it when it is torn down.
+	 * @type {Set<object>}
+	 * @private
+	 */
+	#held = new Set();
+
+	/**
+	 * The records of the runs whose work is not done yet (see `holdRunWork` in `helpers/flow-stores`), for
+	 * `shutdown()` to tear down what they still hold.
+	 * @type {Set<object>}
+	 * @private
+	 */
+	#runs = new Set();
+
+	/**
+	 * Records of runs whose work is done, waiting for the instance to be idle to have their copies torn down (see
+	 * {@link Slothlet#teardownWhenIdle}).
+	 * @type {Array<object>}
+	 * @private
+	 */
+	#retiring = [];
+
+	/**
+	 * Records of runs whose work was done before the last batch drain (see {@link Slothlet#drainRetiring}): torn down
+	 * at the next one, or when the instance is idle, whichever comes first.
+	 * @type {Array<object>}
+	 * @private
+	 */
+	#settled = [];
+
+	/**
+	 * The batch drain {@link Slothlet#retiring} is in (see {@link Slothlet#drainRetiring}): stamped on each record as it
+	 * joins, so a drain tears down only records that joined before the previous one.
+	 * @type {number}
+	 * @private
+	 */
+	#retireBatch = 1;
+
+	/**
+	 * Whether a teardown of {@link Slothlet#retiring} is scheduled.
+	 * @type {boolean}
+	 * @private
+	 */
+	#teardownScheduled = false;
+
+	/**
+	 * Whether a batch drain (see {@link Slothlet#drainRetiring}) is queued.
+	 * @type {boolean}
+	 * @private
+	 */
+	#drainQueued = false;
+
+	/**
+	 * The import scopes of IDs a reload left that kept copies still load from, by ID (see
+	 * {@link Slothlet#keepReplacedScope}).
+	 * @type {Map<string, object>}
+	 * @private
+	 */
+	#keptScopes = new Map();
+
+	/**
+	 * The mark of the restart under way (see {@link Slothlet#_restart}), whose teardown and rebuild read and write the
+	 * instance's own fields; null while none is. It is closed when the restart ends (see {@link currentBuildMark}), so
+	 * work module code began while the restart loaded it is no longer taken for the restart's own.
+	 * @type {{closed: boolean}|null}
+	 * @private
+	 */
+	#instanceWork = null;
+
+	/**
+	 * Set by a reload with no window (see {@link Slothlet#carryIntoBuild}) for load() to call once the new copy's components
+	 * exist, before any of its modules load; null otherwise.
+	 * @type {Function|null}
+	 * @private
+	 */
+	#carryOnLoad = null;
+
+	/**
+	 * The metadata handler of the copy a full reload replaces, noting what calls write to it while the reload builds,
+	 * for the new copy to take at the swap (see {@link Slothlet#reloadOnto}); null otherwise.
+	 * @type {object|null}
+	 * @private
+	 */
+	#metadataTracked = null;
+
+	/**
+	 * The context a reload carries into the instance it rebuilds, so values `context.set()` made survive it.
+	 * @type {object|null}
+	 * @private
+	 */
+	#carriedContext = null;
+
+	/**
+	 * The instance's clock: the functions the host gave in the `clock` option, or the ones slothlet loaded with.
+	 * @returns {import("#helpers/clock").Clock} The frozen clock.
+	 * @internal
+	 * @example
+	 * slothlet.clock.now();
+	 */
+	get clock() {
+		return this.#clock;
+	}
+
+	/**
+	 * Whether the instance has shut down and is not running again yet. Answers false for any receiver that is not the
+	 * instance itself.
+	 * @returns {boolean} True once `shutdown()` has run, until the instance loads or restarts.
+	 * @internal
+	 */
+	get ____ended() {
+		return #ended in this && this.#ended;
+	}
+
+	/**
+	 * Claim the instance's ID for its files, before any of them load. An ID this instance already holds stays held;
+	 * one it held before is released.
+	 * @returns {void}
+	 * @throws {SlothletError} INSTANCE_ID_IN_USE when the ID is held by something else in the process.
+	 * @private
+	 */
+	#claimImportScope() {
+		if (this.#importScope?.instanceID === this.instanceID) return;
+		const scope = claimInstanceScope(this.instanceID);
+		if (!scope) throw new this.SlothletError("INSTANCE_ID_IN_USE", { instance: this.instanceID });
+		this.#adoptImportScope(scope);
+	}
+
+	/**
+	 * The most fresh IDs {@link Slothlet#claimFreshScope} tries before it gives up.
+	 * @type {number}
+	 * @private
+	 */
+	static #FRESH_ID_ATTEMPTS = 8;
+
+	/**
+	 * Claim a fresh instance ID for the instance's files, without taking it yet: the instance stays on the ID and scope
+	 * it holds until {@link Slothlet#adoptImportScope} switches. An ID something else already holds is passed over for
+	 * another fresh one, a bounded number of times.
+	 * @param {string} [prefix] - What the ID starts with (`<id>_reload` for a reload); `slothlet` when omitted.
+	 * @returns {{instanceID: string, require: Function, release: Function}} The claimed handle.
+	 * @throws {SlothletError} INSTANCE_ID_IN_USE when every ID tried is held; the instance is left as it was.
+	 * @private
+	 */
+	#claimFreshScope(prefix) {
+		let instanceID = null;
+		for (let attempt = 0; attempt < Slothlet.#FRESH_ID_ATTEMPTS; attempt++) {
+			instanceID = this.helpers.utilities.generateId(prefix);
+			const scope = claimInstanceScope(instanceID);
+			if (scope) return scope;
+		}
+		throw new this.SlothletError("INSTANCE_ID_IN_USE", { instance: instanceID });
+	}
+
+	/**
+	 * Switch the instance to a scope it has claimed: its ID becomes the scope's, and the scope it held before is released.
+	 * @param {{instanceID: string, require: Function, release: Function}} scope - The claimed handle.
+	 * @returns {void}
+	 * @private
+	 */
+	#adoptImportScope(scope) {
+		if (this.#importScope !== scope) this.#releaseImportScope();
+		this.instanceID = scope.instanceID;
+		this.#importScope = scope;
+		// A reload's files get the form of `self` the api took when it was first built, from their first import (#803).
+		if (this.boundApi) setInstanceSelfKind(this.instanceID, typeof this.boundApi === "function");
+	}
+
+	/**
+	 * Release what slothlet keeps about the files loaded under the instance ID this instance holds.
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseImportScope() {
+		if (this.#importScope) setInstanceSelfKind(this.#importScope.instanceID, null);
+		this.#importScope?.release();
+		this.#importScope = null;
+	}
+
+	/**
+	 * Run a CommonJS file of this instance through the instance's private CommonJS cache (see scopeRequire in
+	 * helpers/instance-imports).
+	 * @param {string} filePath - Absolute path of the CommonJS file.
+	 * @param {object} [options] - `fresh`, `importer` and `mount`, as scopeRequire takes them.
+	 * @param {string} [instanceID] - The ID to load under: the instance's own, or one a kept copy loads from.
+	 * @returns {*} The file's `module.exports`.
+	 * @package
+	 * @example
+	 * slothlet.requireInScope("/app/api/counter.cjs", { fresh: true });
+	 */
+	requireInScope(filePath, options, instanceID = this.instanceID) {
+		// A kept copy's lazy node loads through the scope of the ID it was loaded under (see Slothlet#loadID).
+		if (instanceID !== this.instanceID) {
+			const kept = MapMethods.get(this.#keptScopes, instanceID);
+			if (kept !== undefined) return kept.scope.require(filePath, options);
+		}
+		this.#claimImportScope();
+		return this.#importScope.require(filePath, options);
+	}
+
+	/**
+	 * Whether the instance holds the import scope of an ID: its own, or one a kept copy still loads from (see
+	 * {@link Slothlet#keepReplacedScope}).
+	 * @param {string} instanceID - The ID.
+	 * @returns {boolean} True when it does.
+	 * @package
+	 */
+	holdsScope(instanceID) {
+		return instanceID === this.instanceID || MapMethods.has(this.#keptScopes, instanceID);
+	}
 
 	constructor() {
 		// Expose error classes to components (no imports needed)
 		this.SlothletError = SlothletError;
-		this.SlothletWarning = SlothletWarning;
+		// The warnings raised through this instance, read by `api.slothlet.warnings.get()` (#819).
+		this.warnings = [];
+		// Per-instance subclass: every warning is recorded on this instance (#819), and printed unless the instance's
+		// `silent` option is on (#838).
+		this.SlothletWarning = SlothletWarning.forInstance(
+			() => this.config?.silent === true,
+			(warning) => listPush(this.warnings, warning)
+		);
 		// Debug logger will be initialized in load() with config
 		this.debugLogger = null;
 
@@ -253,6 +958,19 @@ class Slothlet {
 		// node at the same path in the live tree (see unified-wrapper.mjs).
 		this._buildEpoch = 0;
 		this._liveEpoch = 0;
+		// How many restarts a run() / scope() has made of its own copy: while none has, no run's code is checked against
+		// one (see Slothlet#_runRestart).
+		this._runRestarts = 0;
+		// The epoch of the tree this set answers from: the live one for the instance, a copy's own for a run's tree.
+		this._treeEpoch = 0;
+		// For a copy kept for runs when the instance changed the tree they started on, that tree's epoch: its nodes answer
+		// as themselves to those runs while they stand (see Slothlet#copyForSharers). Null for every other set.
+		this._startTreeEpoch = null;
+		// How many api trees copies hold apart from the instance's own (a run that changed its tree, a copy kept for runs
+		// across a change of the instance's tree): while any is, a node answers for the tree of the code reading it.
+		this._treeCopies = 0;
+		// The ID of the base module of the api tree, set by load().
+		this.baseModuleID = null;
 		// Module incarnations (#625): for each moduleID mounted with api.add, a token that stands for that mount for
 		// as long as the module is there. Every wrapper records its module's token at construction; code whose token
 		// is not the module's current one belongs to a removed module, and has no standing, even once another module
@@ -267,17 +985,24 @@ class Slothlet {
 		this._restarting = false;
 
 		// Lazy materialization tracking (for api.slothlet.materialize)
+		// The count a lazy wrapper joins: every wrapper records the one its tree's set has at construction, and moves only
+		// that count. A full reload, a restart and a run's copy of the tree start a new one, so a node of the tree they
+		// replaced (a reference held from before, or a run kept across the change) leaves the new tree's count alone.
+		this._lazyTally = {};
 		this._totalLazyCount = 0; // Total lazy wrappers created
 		this._unmaterializedLazyCount = 0; // Currently unmaterialized lazy wrappers
 		this._materializationComplete = false; // Set to true when all lazy wrappers materialized
 		this._materializationWaiters = []; // Promises waiting for full materialization
 		this._materializationCompleteEmitted = false; // Track if event was already emitted
+		this._materializeCallbackCalled = false; // The `loader.materialize` callback ran (once per instance)
+		this._materializedPayload = null; // What `materialized:complete` was announced with, handed to the callback too
 
 		// Component categories
 		this.componentCategories = ["helpers", "handlers", "builders", "processors", "modes"];
 
 		// Component namespaces (populated by _initializeComponents)
-		for (const category of this.componentCategories) {
+		for (let ofIndex = 0, ofList = this.componentCategories; ofIndex < ofList.length; ofIndex++) {
+			const category = ofList[ofIndex];
 			this[category] = {};
 		}
 	}
@@ -303,20 +1028,27 @@ class Slothlet {
 
 		const baseDir = path.join(path.dirname(url.fileURLToPath(import.meta.url)), "lib");
 
-		for (const category of this.componentCategories) {
+		for (let ofIndex = 0, ofList = this.componentCategories; ofIndex < ofList.length; ofIndex++) {
+			const category = ofList[ofIndex];
 			const categoryDir = path.join(baseDir, category);
-			const files = fs.readdirSync(categoryDir).filter((f) => f.endsWith(".mjs"));
+			const files = filterList(fs.readdirSync(categoryDir), (f) => StringMethods.endsWith(f, ".mjs"));
 
-			for (const file of files) {
+			for (let i = 0; i < files.length; i++) {
+				const file = files[i];
 				const filePath = path.join(categoryDir, file);
 
 				try {
 					const module = await import(url.pathToFileURL(filePath).href);
 
 					// Find ALL exported classes with slothletProperty (supports multiple per file)
-					const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
+					// A guarded internal export is no component, and is passed over without being used (it answers only the host).
+					const classExports = filterList(
+						Objects.values(module),
+						(exp) => typeof exp === "function" && !isGuardedInternal(exp) && exp.slothletProperty
+					);
 
-					for (const ClassExport of classExports) {
+					for (let ofIndex = 0, ofList = classExports; ofIndex < ofList.length; ofIndex++) {
+						const ClassExport = ofList[ofIndex];
 						const propName = ClassExport.slothletProperty;
 						// Organize into category namespace
 						this[category][propName] = new ClassExport(this);
@@ -331,6 +1063,9 @@ class Slothlet {
 						}
 					}
 				} catch (error) {
+					// A component that refuses the config it was built with (a permission rule naming nothing, for one)
+					// throws its own error, which is the one the host has to see.
+					if (error instanceof SlothletError) throw error;
 					// Component file failed to import - this is fatal
 					// unreachable via tests (2026-03-05): framework component files are always
 					// present in the installed package; this guard exists for corrupt installs.
@@ -338,9 +1073,9 @@ class Slothlet {
 					throw new this.SlothletError(
 						"MODULE_IMPORT_FAILED",
 						{
-							modulePath: filePath
+							file: filePath
 						},
-						error
+						{ cause: error }
 					);
 				}
 			}
@@ -364,10 +1099,10 @@ class Slothlet {
 		// skipped by the filter below, so extras in this list are harmless.
 		const BROWSER_COMPONENT_SPECIFIERS = [
 			// builders
-			"@cldmv/slothlet/builders/api-assignment",
-			"@cldmv/slothlet/builders/api_builder",
-			"@cldmv/slothlet/builders/builder",
-			"@cldmv/slothlet/builders/modes-processor",
+			"#builders/api-assignment",
+			"#builders/api_builder",
+			"#builders/builder",
+			"#builders/modes-processor",
 			// handlers
 			"#handlers/api-cache-manager",
 			"#handlers/api-manager",
@@ -382,30 +1117,36 @@ class Slothlet {
 			"#handlers/routine-manager",
 			"#handlers/version-manager",
 			// helpers
-			"@cldmv/slothlet/helpers/config",
-			"@cldmv/slothlet/helpers/hint-detector",
-			"@cldmv/slothlet/helpers/modes-utils",
-			"@cldmv/slothlet/helpers/resolve-from-caller",
-			"@cldmv/slothlet/helpers/sanitize",
-			"@cldmv/slothlet/helpers/utilities",
+			"#helpers/config",
+			"#helpers/hint-detector",
+			"#helpers/modes-utils",
+			"#helpers/resolve-from-caller",
+			"#helpers/sanitize",
+			"#helpers/utilities",
 			// modes
-			"@cldmv/slothlet/modes/eager",
-			"@cldmv/slothlet/modes/lazy",
+			"#modes/eager",
+			"#modes/lazy",
 			// processors
-			"@cldmv/slothlet/processors/flatten",
-			"@cldmv/slothlet/processors/loader"
+			"#processors/flatten",
+			"#processors/loader"
 		];
 
-		for (const specifier of BROWSER_COMPONENT_SPECIFIERS) {
+		for (let ofIndex = 0, ofList = BROWSER_COMPONENT_SPECIFIERS; ofIndex < ofList.length; ofIndex++) {
+			const specifier = ofList[ofIndex];
 			// Derive category from the specifier: public exports use "@cldmv/slothlet/<category>/...";
 			// internal-only handlers/factories use the package `imports` form "#<category>/...".
-			const parts = specifier.split("/");
-			const category = specifier.startsWith("#") ? parts[0].slice(1) : parts[2]; // e.g. "builders", "handlers", "helpers"
+			const parts = splitText(specifier, "/");
+			const category = StringMethods.startsWith(specifier, "#") ? StringMethods.slice(parts[0], 1) : parts[2]; // e.g. "builders", "handlers", "helpers"
 
 			const module = await import(specifier);
-			const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
+			// A guarded internal export is no component, and is passed over without being used (it answers only the host).
+			const classExports = filterList(
+				Objects.values(module),
+				(exp) => typeof exp === "function" && !isGuardedInternal(exp) && exp.slothletProperty
+			);
 
-			for (const ClassExport of classExports) {
+			for (let ofIndex = 0, ofList = classExports; ofIndex < ofList.length; ofIndex++) {
+				const ClassExport = ofList[ofIndex];
 				const propName = ClassExport.slothletProperty;
 				this[category][propName] = new ClassExport(this);
 			}
@@ -431,9 +1172,13 @@ class Slothlet {
 			return;
 		}
 		const lifecycle = this.handlers.lifecycle;
-		for (const [event, handler] of Object.entries(map)) {
-			const handlers = Array.isArray(handler) ? handler : [handler];
-			for (const fn of handlers) {
+		for (let ofIndex = 0, ofList = Objects.entries(map); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				event = ofEntry[0],
+				handler = ofEntry[1];
+			const handlers = Arrays.isArray(handler) ? handler : [handler];
+			for (let ofIndex = 0, ofList = handlers; ofIndex < ofList.length; ofIndex++) {
+				const fn = ofList[ofIndex];
 				lifecycle.subscribe(event, fn);
 			}
 		}
@@ -457,15 +1202,15 @@ class Slothlet {
 		if (this.handlers.metadata) {
 			// #398: the metadata system rides the INTERNAL contribution stream (pre-placement, every
 			// contribution). It tags the same target the pre-#398 `data.impl` field carried on this
-			// event: the real wrapper (`__wrapperRef`) — which under LAZY is present at construction even
-			// though `wrapper.__impl` is still null — falling back to the leaf impl when there is no
-			// wrapper (the lazy-materialization emit carries a raw function value, no `__wrapperRef`).
+			// event: the real wrapper (`____wrapperRef`) — which under LAZY is present at construction even
+			// though `wrapper.____impl` is still null — falling back to the leaf impl when there is no
+			// wrapper (the lazy-materialization emit carries a raw function value, no `____wrapperRef`).
 			// Tagging the wrapper here is load-bearing: adoption propagates a parent wrapper's baseModuleID
 			// to its children, so tagging null instead left lazily-materialized children with no moduleID.
 			// subscribeInternal, not subscribe, so this never fires from the public post-placement re-emit.
 			this.handlers.lifecycle.subscribeInternal("impl:created", (data, token) => {
 				this.handlers.metadata.tagSystemMetadata(
-					data.__wrapperRef ?? data.wrapper?.__impl,
+					data.____wrapperRef ?? data.wrapper?.____impl,
 					{
 						filePath: data.filePath,
 						apiPath: data.apiPath,
@@ -478,7 +1223,7 @@ class Slothlet {
 
 			this.handlers.lifecycle.subscribeInternal("impl:changed", (data, token) => {
 				this.handlers.metadata.tagSystemMetadata(
-					data.wrapper?.__impl,
+					data.wrapper?.____impl,
 					{
 						filePath: data.filePath,
 						apiPath: data.apiPath,
@@ -490,13 +1235,9 @@ class Slothlet {
 			});
 
 			this.handlers.lifecycle.subscribe("impl:removed", (data) => {
-				// Clean up user metadata for removed impl (use root segment only)
-				// impl:removed always provides data.apiPath; false arm is defensive dead code.
-				/* v8 ignore next */
-				if (data.apiPath) {
-					const rootSegment = data.apiPath.split(".")[0];
-					this.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
-				}
+				// Clean up user metadata for the removed impl, keyed by its root segment. The payload's `path` is the
+				// removed member's api path as segments.
+				this.handlers.metadata.removeUserMetadataByApiPath(data.path[0]);
 			});
 		}
 
@@ -518,7 +1259,12 @@ class Slothlet {
 				this.handlers.routineManager.onImplCreated(data);
 			});
 			this.handlers.lifecycle.subscribe("impl:removed", (data) => {
-				this.handlers.routineManager.onImplRemoved(data);
+				// The public payload names the removed member by `path` (segments) and `module`; the routine manager prunes by
+				// dotted api path and module ID.
+				this.handlers.routineManager.onImplRemoved({
+					apiPath: ArrayMethods.join(data.path, "."),
+					moduleID: data.module
+				});
 			});
 		}
 
@@ -528,7 +1274,17 @@ class Slothlet {
 		if (this.handlers.ownership) {
 			// The api node a public impl:created / impl:changed is about. A subscriber a module subscribed is
 			// handed its module's view of it instead of the implementation (#625).
-			const nodeOf = (data) => ({ impl: data.__wrapperRef?.____slothletInternal?.proxy ?? null });
+			const nodeOf = (data) => ({ impl: data.____wrapperRef?.____slothletInternal?.proxy ?? null });
+			// What ownership records for a contribution that is an object: the node itself, as the load's subtree
+			// confirmation records it in eager mode. The node adopts the object's members as its own, which leaves
+			// the object empty, so a record of the object would hold nothing to restore once another module's add
+			// over the path is removed (#815). A function or a primitive is recorded as itself, as before (a leaf's
+			// kind is read from it). The node's proxy is made after its construction event, so the wrapper stands
+			// in until then; ownership resolves either to the node.
+			const recordedValue = (data, implValue) =>
+				implValue !== null && typeof implValue === "object"
+					? (data.____wrapperRef?.____slothletInternal?.proxy ?? data.____wrapperRef ?? implValue)
+					: implValue;
 			// #398: rides the INTERNAL contribution stream (every contribution, pre-placement) so it can
 			// see and register merge-losers too, then decides placement and surfaces the PUBLIC event.
 			// Stays SYNCHRONOUS: ownership.register() below runs during the same synchronous emitInternal()
@@ -537,10 +1293,14 @@ class Slothlet {
 			// never rejects; emit() isolates its own handler errors), so it never makes this handler async
 			// and never defers the registration into a later microtask (which raced settle/leaves()).
 			this.handlers.lifecycle.subscribeInternal("impl:created", (data) => {
+				// Read at dispatch, not at subscription: the ownership handler can be gone by the time a leaf is built (an
+				// instance whose ownership tracking was taken away), and then there is nothing to register with.
+				const ownership = this.handlers.ownership;
+				if (!ownership) return;
 				// Get collision mode from config or use default
-				// config.collision.api is always set after normalization; "merge" fallback never reached.
+				// config.api.collision.mode.api is always set after normalization; "merge" fallback never reached.
 				/* v8 ignore next */
-				const configCollisionMode = this.config?.collision?.api || "merge";
+				const configCollisionMode = this.config?.api?.collision?.mode?.api || "merge";
 				// This subscriber fires synchronously during wrapper construction — BEFORE a caller's
 				// own per-call override (e.g. api.add()'s forceOverwrite → "replace") has a chance to
 				// reach this registration, since that override isn't threaded through UnifiedWrapper's
@@ -555,14 +1315,14 @@ class Slothlet {
 				// and without the real mode it was recorded as a merge loser wherever another module's
 				// function already sat — including a lazy leaf materializing after the add returned (#524).
 				const collisionMode =
-					this.handlers.ownership.getPlacementMode(data.moduleID, data.apiPath) ??
+					ownership.getPlacementMode(data.moduleID, data.apiPath) ??
 					(configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge");
-				// The leaf's impl. On a LAZY construction event `wrapper.__impl` is still null (the leaf
-				// hasn't materialized), so fall back to the real wrapper (`__wrapperRef`) exactly as the
+				// The leaf's impl. On a LAZY construction event `wrapper.____impl` is still null (the leaf
+				// hasn't materialized), so fall back to the real wrapper (`____wrapperRef`) exactly as the
 				// former `?? data.impl` did — `data.impl` used to be `this` on the construction emit, and
-				// `__wrapperRef` now carries that same reference (#398). Ownership's kind detection needs a
+				// `____wrapperRef` now carries that same reference (#398). Ownership's kind detection needs a
 				// non-null value here, or a lazy leaf registers with no recorded kind.
-				const implValue = data.wrapper?.__impl ?? data.__wrapperRef;
+				const implValue = data.wrapper?.____impl ?? data.____wrapperRef;
 				// RoutineManager#rebuildStacks() installs a stacked callable directly onto the live
 				// tree (`target[key] = ...`), guarding only ITS OWN raw capture via `recording = false`
 				// — this subscriber has no equivalent guard, so without this check the write is
@@ -570,13 +1330,13 @@ class Slothlet {
 				// the ownership stack with a phantom "the stacked callable is its own contribution"
 				// entry on every rebuild. Mirrors RoutineManager#onImplCreated's identical check
 				// (#372/#373 review, suppressed finding).
-				if (typeof implValue === "function" && implValue.__slothletRoutineStack === true) {
+				if (typeof implValue === "function" && implValue.____slothletRoutineStack === true) {
 					return;
 				}
-				this.handlers.ownership.register({
+				ownership.register({
 					moduleID: data.moduleID,
 					apiPath: data.apiPath,
-					value: implValue,
+					value: recordedValue(data, implValue),
 					source: data.source,
 					filePath: data.filePath,
 					// Where the value sits in its file's module namespace (#484), resolved by the wrapper.
@@ -589,26 +1349,26 @@ class Slothlet {
 				// A merge-loser or a skipped/"warn" registration never becomes the current owner, so it
 				// never fires publicly (fixing "impl:created announces a leaf that merge then discards").
 				// The public payload carries the wrapped callable + metadata, never the raw impl.
-				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
+				if (ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
 					// Fire-and-forget: keeps this handler synchronous (see the note above) — emit() isolates
 					// its own handler errors and never rejects, so no unhandled rejection can escape.
 					void this.handlers.lifecycle.emit(
 						"impl:created",
 						{
-							apiPath: data.apiPath,
+							path: segmentsOf(data.apiPath),
 							// #433: the public tier carries the WRAPPED callable on a stable `impl` field — never the
-							// raw impl (#398), and no longer the reserved internal `wrapper.__impl` handle, which is
+							// raw impl (#398), and no longer the reserved internal `wrapper.____impl` handle, which is
 							// dropped from the PUBLIC event entirely: it was redundant with `impl` and re-exposed an
 							// internal name (the very coupling #433 removes). `null` before a lazy wrapper materializes.
 							// The INTERNAL event still carries `wrapper` — ownership/metadata/routine subscribers read
-							// it via subscribeInternal — and `__wrapperRef` is never surfaced (it would leak the instance).
+							// it via subscribeInternal — and `____wrapperRef` is never surfaced (it would leak the instance).
 							// `impl` is the implementation the wrapper holds, handed to host subscribers only: a
 							// subscriber a module subscribed gets its module's view of the node (`nodeOf`) instead (#625).
-							impl: data.wrapper?.__impl ?? null,
+							impl: data.wrapper?.____impl ?? null,
 							source: data.source,
-							moduleID: data.moduleID,
-							filePath: data.filePath,
-							sourceFolder: data.sourceFolder
+							module: data.moduleID,
+							file: data.filePath,
+							folder: data.sourceFolder
 						},
 						nodeOf(data)
 					);
@@ -618,33 +1378,36 @@ class Slothlet {
 			// Also subscribe (INTERNAL) to impl:changed for replacements (when wrapper already exists but
 			// impl changes) — handles a module replacing another module's impl on reload/reassignment.
 			this.handlers.lifecycle.subscribeInternal("impl:changed", (data) => {
+				// Read at dispatch, as the impl:created subscriber above does.
+				const ownership = this.handlers.ownership;
+				if (!ownership) return;
 				// Get collision mode from config or use default
-				// config.collision.api is always set after normalization; "merge" fallback never reached.
+				// config.api.collision.mode.api is always set after normalization; "merge" fallback never reached.
 				/* v8 ignore next */
-				const configCollisionMode = this.config?.collision?.api || "merge";
+				const configCollisionMode = this.config?.api?.collision?.mode?.api || "merge";
 				// Same placement lookup and clamp as the impl:created subscriber above, and for the same
 				// reasons — see its comments.
 				const collisionMode =
-					this.handlers.ownership.getPlacementMode(data.moduleID, data.apiPath) ??
+					ownership.getPlacementMode(data.moduleID, data.apiPath) ??
 					(configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge");
-				// The leaf's impl. data.wrapper.__impl is normally set for impl:changed events; the
-				// `?? data.__wrapperRef` fallback mirrors the impl:created subscriber (see its note) — the
-				// former `?? data.impl` referenced the wrapper `this`, now carried on `__wrapperRef` (#398).
-				const implValue = data.wrapper?.__impl ?? data.__wrapperRef;
+				// The leaf's impl. data.wrapper.____impl is normally set for impl:changed events; the
+				// `?? data.____wrapperRef` fallback mirrors the impl:created subscriber (see its note) — the
+				// former `?? data.impl` referenced the wrapper `this`, now carried on `____wrapperRef` (#398).
+				const implValue = data.wrapper?.____impl ?? data.____wrapperRef;
 				// See the identical guard in the impl:created subscriber above — rebuildStacks()'s own
 				// property write reaches THIS subscriber too (#372/#373 review, suppressed finding).
-				if (typeof implValue === "function" && implValue.__slothletRoutineStack === true) {
+				if (typeof implValue === "function" && implValue.____slothletRoutineStack === true) {
 					return;
 				}
 
 				// Only register if this moduleID doesn't already own this path
 				// This prevents duplicate registrations from multiple impl:changed events
-				const currentOwner = this.handlers.ownership.getCurrentOwner(data.apiPath);
+				const currentOwner = ownership.getCurrentOwner(data.apiPath);
 				if (currentOwner?.moduleID !== data.moduleID) {
-					this.handlers.ownership.register({
+					ownership.register({
 						moduleID: data.moduleID,
 						apiPath: data.apiPath,
-						value: implValue,
+						value: recordedValue(data, implValue),
 						source: data.source,
 						filePath: data.filePath,
 						exportPath: data.exportPath ?? null,
@@ -654,7 +1417,7 @@ class Slothlet {
 				} else {
 					// Same owner, new impl (a lazy leaf materializing, a hot reload): the entry stays put, but
 					// its module origin follows the impl that actually arrived (#484).
-					this.handlers.ownership.refreshOrigin(data.moduleID, data.apiPath, {
+					ownership.refreshOrigin(data.moduleID, data.apiPath, {
 						filePath: data.filePath,
 						exportPath: data.exportPath ?? null,
 						memberExportPaths: data.memberExportPaths ?? null
@@ -663,19 +1426,19 @@ class Slothlet {
 				// #398: surface the PUBLIC, post-placement impl:changed — only when this contribution is
 				// the placed owner of the path (a change to a shadowed/merge-lost contribution is not a
 				// public change). Wrapped callable + metadata, never the raw impl.
-				if (this.handlers.ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
+				if (ownership.getCurrentOwner(data.apiPath)?.moduleID === data.moduleID) {
 					// Fire-and-forget — see the impl:created subscriber's note.
 					void this.handlers.lifecycle.emit(
 						"impl:changed",
 						{
-							apiPath: data.apiPath,
+							path: segmentsOf(data.apiPath),
 							// #433: stable public callable field, no public `wrapper` — see the impl:created re-emit above,
 							// also for what a subscriber a module subscribed gets instead (#625).
-							impl: data.wrapper?.__impl ?? null,
+							impl: data.wrapper?.____impl ?? null,
 							source: data.source,
-							moduleID: data.moduleID,
-							filePath: data.filePath,
-							sourceFolder: data.sourceFolder
+							module: data.moduleID,
+							file: data.filePath,
+							folder: data.sourceFolder
 						},
 						nodeOf(data)
 					);
@@ -726,7 +1489,7 @@ class Slothlet {
 
 	/**
 	 * Notify that a lazy wrapper has materialized
-	 * Called by UnifiedWrapper._materialize() after materialization completes
+	 * Called by UnifiedWrapper.___materialize() after materialization completes
 	 * @private
 	 */
 	_onWrapperMaterialized() {
@@ -784,23 +1547,48 @@ class Slothlet {
 			}
 
 			// Resolve all waiting promises
-			const waiters = this._materializationWaiters.splice(0);
-			for (const resolve of waiters) {
+			const waiters = listSplice(this._materializationWaiters, 0);
+			for (let ofIndex = 0, ofList = waiters; ofIndex < ofList.length; ofIndex++) {
+				const resolve = ofList[ofIndex];
 				resolve();
 			}
 
-			// Emit lifecycle event if tracking enabled and not already emitted
-			if (this.config?.tracking?.materialization && !this._materializationCompleteEmitted) {
+			// Emit the lifecycle event when loader.materialize is on (true or a callback), once per instance
+			if (this.config?.loader?.materialize && !this._materializationCompleteEmitted) {
 				this._materializationCompleteEmitted = true;
 				// lifecycle is always auto-registered via slothletProperty; false arm unreachable.
 				/* v8 ignore next */
 				if (this.handlers?.lifecycle) {
-					this.handlers.lifecycle.emit("materialized:complete", {
-						total: this._totalLazyCount,
-						timestamp: Date.now()
-					});
+					this._materializedPayload = { total: this._totalLazyCount, at: this.#clock.now() };
+					this.handlers.lifecycle.emit("materialized:complete", { ...this._materializedPayload });
 				}
 			}
+
+			// Before the instance has finished loading, load() calls it at its end instead.
+			if (this.isLoaded) this._callMaterializeCallback();
+		}
+	}
+
+	/**
+	 * Call the `loader.materialize` callback, when one was given, the first time everything is materialized and the
+	 * instance has loaded. It runs once per instance; what it throws or rejects with is reported as a
+	 * `WARNING_LIFECYCLE_HANDLER_ERROR` warning, like a `materialized:complete` handler that fails.
+	 * @returns {void}
+	 * @private
+	 */
+	_callMaterializeCallback() {
+		const callback = this.config?.loader?.materialize;
+		if (typeof callback !== "function" || this._materializeCallbackCalled || this._unmaterializedLazyCount !== 0) return;
+		this._materializeCallbackCalled = true;
+		const warn = (error) => {
+			new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "materialized:complete" }, { cause: error });
+		};
+		try {
+			// The `materialized:complete` event's payload, or one made now when no event was announced (eager mode).
+			const payload = this._materializedPayload ?? { total: this._totalLazyCount, at: this.#clock.now() };
+			PromiseMethods.then(settledWith(callback({ ...payload })), undefined, warn);
+		} catch (error) {
+			warn(error);
 		}
 	}
 
@@ -830,24 +1618,27 @@ class Slothlet {
 	 */
 	_captureEnvSnapshot(envConfig) {
 		const rawInclude = envConfig?.include;
-		const include = Array.isArray(rawInclude) ? rawInclude.filter((key) => typeof key === "string") : null;
+		const include = Arrays.isArray(rawInclude) ? filterList(rawInclude, (key) => typeof key === "string") : null;
 		const useAllowlist = include !== null && include.length > 0;
 		const raw = useAllowlist
-			? include.reduce((acc, key) => {
-					if (Object.prototype.hasOwnProperty.call(process.env, key)) {
-						acc[key] = process.env[key];
-					}
-					return acc;
-				}, Object.create(null))
-			: { ...process.env };
-		return Object.freeze(raw);
+			? ArrayMethods.reduce(
+					include,
+					(acc, key) => {
+						if (Objects.hasOwn(NativeProcess.env, key)) {
+							acc[key] = NativeProcess.env[key];
+						}
+						return acc;
+					},
+					Objects.create(null)
+				)
+			: { ...NativeProcess.env };
+		return Objects.freeze(raw);
 	}
 
 	/**
 	 * Load API from directory
 	 * @param {Object} config - Configuration options
 	 * @param {string} [config.base] - Directory (node mode) or base URL (browser mode) to load API modules from. Required in both modes.
-	 * @param {string} [config.dir] - Deprecated alias for `config.base`. Emits a `V3_CONFIG_DEPRECATED` warning unless `silent: true`.
 	 * @param {string} [config.mode="eager"] - Loading mode (eager or lazy)
 	 * @param {string} [config.runtime="async"] - Runtime type (async or live)
 	 * @param {string} [preservedInstanceID] - Optional instance ID to preserve (used by reload)
@@ -862,6 +1653,17 @@ class Slothlet {
 	 * });
 	 */
 	async load(config = {}, preservedInstanceID = null) {
+		// Every key must be one the v4 config has: a misspelled or renamed option would otherwise read as its default.
+		assertConfigKeys(config);
+
+		// The host's clock is read once and kept on the instance, never in the config the instance hands out. A reload
+		// passes the normalised config back in, which has none: the instance keeps the clock it has.
+		if (config.clock !== undefined) {
+			this.#clock = normalizeClockConfig(config.clock);
+			const { clock: _, ...rest } = config;
+			config = rest;
+		}
+
 		// Store raw config for components to access if needed
 		this.config = config;
 
@@ -869,8 +1671,9 @@ class Slothlet {
 		// the browser-mode component initialisation path can skip readdirSync.
 		// normalizeEnvTarget is not yet available (Config component not constructed), so we
 		// check the raw value directly. This stays in sync with Config.normalizeEnvTarget.
-		// manifest presence acts as a fallback browser-mode signal (mirrors normalizeEnvTarget).
-		this.envTarget = config.platform === "browser" || (config.platform !== "node" && config.manifest != null) ? "browser" : "node";
+		// A browser file list acts as a fallback browser-mode signal (mirrors normalizeEnvTarget).
+		const platform = config.loader?.platform;
+		this.envTarget = platform === "browser" || (platform !== "node" && config.loader?.files != null) ? "browser" : "node";
 
 		// Capture process.env snapshot before any module lifecycle runs.
 		// Uses raw config.env so the snapshot precedes config normalization and
@@ -881,13 +1684,26 @@ class Slothlet {
 		// browser, and even when running browser-mode tests under Node we must not
 		// leak Node env into the browser-mode api.slothlet.env surface.
 		if (!this.envSnapshot) {
-			this.envSnapshot = this.envTarget === "browser" ? Object.freeze(Object.create(null)) : this._captureEnvSnapshot(config.env);
+			this.envSnapshot = this.envTarget === "browser" ? Objects.freeze(Objects.create(null)) : this._captureEnvSnapshot(config.env);
 		}
 
 		// Early-init debug logger with raw config so that debug.initialization messages
 		// produced inside _initializeComponents() are visible even before transformConfig runs.
 		// Will be re-initialised below with the fully normalised config.
 		this.debugLogger = new SlothletDebug(config);
+
+		// Normalise `permissions` once, up front, so the PermissionManager built by _initializeComponents() reads the
+		// normalised section (#772) and transformConfig() below normalises that same snapshot, never a second read of the
+		// raw value. An invalid value is left raw here: transformConfig() reports it as INVALID_CONFIG.
+		let normalizedConfig = config;
+		if (config.permissions !== undefined) {
+			try {
+				normalizedConfig = { ...config, permissions: normalizePermissionsConfig(config.permissions) };
+			} catch {
+				normalizedConfig = config;
+			}
+		}
+		this.config = normalizedConfig;
 
 		// Initialize all components via auto-discovery BEFORE transforming config
 		// This allows config helpers to be component classes
@@ -908,24 +1724,33 @@ class Slothlet {
 		this._setupLifecycleSubscribers();
 
 		// Transform and validate config using component classes
-		this.config = this.helpers.config.transformConfig(config);
+		this.config = this.helpers.config.transformConfig(normalizedConfig);
 
 		// Default routines present in the normalized routines config make their root paths host-only
 		// (#529) — decided here, per load, once the effective list is known.
-		this.handlers.permissionManager?.applyDefaultRoutineRules(this.config.routines);
+		this.handlers.permissionManager?.applyDefaultRoutineRules(this.config.routines.entries);
+
+		// A reload with no window (a runtime that cannot carry marks): the new components take the instance's permission state, hooks and
+		// metadata now, as calls made while the reload runs reach them.
+		if (this.#carryOnLoad !== null) this.#carryOnLoad();
 
 		// Pin the original base as resolved against the creating call's caller, so restart() rebuilds
 		// from the same directory rather than re-resolving a relative base from its own call site (#504).
 		if (this._originalConfig && this._originalBase === undefined) {
-			this._originalBase = this.config.dir;
+			this._originalBase = this.config.base;
 		}
 
 		// One-shot DX hint (#235): under a vitest COVERAGE run with this slothlet copy externalized
 		// and no injectable importer configured, the consumer's leaf coverage will misattribute —
 		// say so at boot, pointing at the fix, instead of leaving a mysteriously low report.
 		if (this.envTarget === "node") {
-			warnIfCoverageWithoutImporter(this.config);
+			warnIfCoverageWithoutImporter(this.config, { Warning: this.SlothletWarning });
 		}
+
+		// The permission baseline (docs/PERMISSIONS.md): with permissions on, each check not met is a warning; under strict
+		// the instance does not start, before any module's code is loaded.
+		// The live runtime keeps nothing in an AsyncLocalStorage, so the async-context-frame check is the async runtime's alone.
+		await this.handlers.permissionManager?.checkBaseline(this.envTarget, this.config.runtime === "live" ? "live" : "async");
 
 		// Register construction-time lifecycle subscribers (config.lifecycle) on the freshly-built
 		// Lifecycle emitter BEFORE buildAPI runs, so events emitted during the cold-start build
@@ -935,23 +1760,38 @@ class Slothlet {
 
 		// Apply i18n configuration (dev-facing; process-global)
 		if (this.config?.i18n?.language) {
-			initI18n({ language: this.config.i18n.language });
+			initI18n({ language: this.config.i18n.language, SlothletWarning: this.SlothletWarning });
 		}
 
 		// Re-initialise debug logger with the fully normalised config (includes all flags).
 		// This replaces the early-init created above and ensures post-transform flags are active.
 		this.debugLogger = new SlothletDebug(this.config);
 
-		// Use preserved instance ID (from reload) or generate new one
-		this.instanceID = preservedInstanceID || this.helpers.utilities.generateId();
+		// Use preserved instance ID (from reload) or generate new one. The ID is claimed for this instance's files
+		// before any of them load.
+		// A normal reload's fresh ID is taken only once its context is set up, below.
+		const pendingScope = this.#pendingScope?.instanceID === preservedInstanceID ? this.#pendingScope : null;
+		if (pendingScope) {
+			// Taken below.
+		} else if (preservedInstanceID) {
+			this.instanceID = preservedInstanceID;
+			this.#claimImportScope();
+		} else {
+			this.#adoptImportScope(this.#claimFreshScope());
+		}
 
 		// Store reference and context from config
 		this.reference = this.config.reference;
-		this.context = this.config.context;
+		// The instance's own copy of the context passed in: `context.set()` changes it, the caller's object stays as it
+		// was. Top-level keys are copied; their values are the ones given. A reload keeps what `context.set()` made.
+		this.context = this.#carriedContext ?? { ...(this.config.context ?? {}) };
+		this.#carriedContext = null;
 
 		// Get appropriate context manager based on runtime
 		// Browser has no AsyncLocalStorage; force the live-binding context there.
 		this.contextManager = getContextManager(this.envTarget === "browser" ? "live" : this.config.runtime);
+		// The async runtime's store is made now, before any file of this instance loads; the live runtime has none.
+		if (typeof this.contextManager.openStore === "function") this.contextManager.openStore();
 
 		// Set up a generic fallback EventEmitter context checker. This callback body is
 		// dead code in practice: both AsyncContextManager and LiveContextManager define
@@ -969,13 +1809,26 @@ class Slothlet {
 
 		// Initialize context (or reuse existing if preservedInstanceID provided)
 		let store;
-		if (preservedInstanceID && this.contextManager.instances.has(preservedInstanceID)) {
-			// Reload: DONT reuse store, delete old and create fresh
-			this.contextManager.cleanup(preservedInstanceID);
-			store = this.contextManager.initialize(this.instanceID, this.config);
+		if (pendingScope) {
+			// A normal reload: the new ID's context first, then the switch to it, so a reload that cannot set the context up
+			// leaves the instance on the ID and context it has.
+			store = this.contextManager.initialize(pendingScope.instanceID, this.config, this.#clock);
+			await this.#switchToPendingScope(pendingScope);
+		} else if (preservedInstanceID && MapMethods.has(this.contextManager.instances, preservedInstanceID)) {
+			// Reload: DONT reuse store, delete old and create fresh. The instance keeps its ID, so its run() / scope()
+			// stores stay where they are.
+			this.contextManager.cleanup(preservedInstanceID, { keepFlows: true });
+			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
 		} else {
 			// Fresh load: initialize new store
-			store = this.contextManager.initialize(this.instanceID, this.config);
+			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
+		}
+		// A reload: until the new copy is built, the context answers calls with the api the instance has (the root proxy,
+		// which reads the tree in place), not an empty one.
+		if (this.boundApi) {
+			store.self = this.boundApi;
+			store.context = this.context || {};
+			store.slothlet = this;
 		}
 		// Mark this base store as the trusted root immediately, before any internal tree walk
 		// (ownership registration, materialization) reads through the permission read-gate. A
@@ -983,7 +1836,7 @@ class Slothlet {
 		// resolved context carries this marker — the basis for failing closed on absent caller.
 		// Non-enumerable so async execution-store shallow copies (`{ ...baseStore }`) do NOT inherit it:
 		// only the genuine base store and scope stores explicitly descended from it are trusted.
-		Object.defineProperty(store, TRUSTED_ROOT, { value: true, configurable: true });
+		Objects.defineProperty(store, trustedRootOwn.TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
 
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
@@ -1012,11 +1865,49 @@ class Slothlet {
 		// nothing for this patch, which runs on every `then` in the process (#601 review).
 		if (typeof this.contextManager.runRegisteredAsHost === "function") {
 			enablePromisePatching();
-			promisePatchHolders.add(this.instanceID);
+			// `AsyncLocalStorage.snapshot()` / `bind()` and `AsyncResource` restore Node's async context, which the live
+			// runtime's identity is not part of: what they run is pinned to the caller that made them. Live runtime
+			// only, as the promise patch is, and released with it.
+			enableAsyncResourcePatching();
+			// `fs.readFile(file, cb)`, `dns.lookup(host, cb)`, `crypto.randomBytes(n, cb)`: Node calls these callbacks from
+			// the event loop, past every boundary above, so each is pinned to the flow and caller that handed it in.
+			enableNodeCallbackPatching();
+			SetMethods.add(promisePatchHolders, this.instanceID);
+		} else {
+			// Node calls the callbacks of overlapping `crypto.randomInt(n, cb)` calls from the async context of the one that
+			// started its shared refill: each is handed its value through `process.nextTick()` in the caller's own.
+			enableAsyncCallbackServing();
+			SetMethods.add(asyncCallbackHolders, this.instanceID);
+		}
+
+		// The platform's cloning functions (`structuredClone`, `v8.serialize`, `postMessage`) refuse a Proxy, and what one
+		// module hands another is a view while the permission system is on: the patch lets them copy the data behind it.
+		enableClonePatching();
+
+		// `Function.prototype.toString.call(node)` answers native code for any Proxy, and an api node of a function is
+		// one: the patch answers the function's source, as `node.toString()` does (#750).
+		enableFunctionSourcePatching();
+
+		// Built-in capabilities (code from strings, `data:`/`blob:` imports, module hooks): refused to module code while
+		// the permission system is on, unless a rule opens one. The entry points are wrapped while any instance is up, in
+		// every permission mode, and unwrapped with the last: with the permission system off or disabled nothing is
+		// refused, but code a module compiles is still marked as the module's, so the leaf-file and internal-file import
+		// refusals, which hold in every mode, hold for it too, whoever calls it and whatever file name it is compiled under.
+		// A reload loads again under a new instanceID: the check held under the previous one goes once the new one is
+		// registered, so the instance is checked once per call and the entry points are not unwrapped in between.
+		const previousCapabilityHolder = this.#capabilityHolder;
+		this.#capabilityHolder = null;
+		const instanceID = this.instanceID;
+		registerCapabilityCheck(instanceID, (name, route, importer, filename, runnerCompile) =>
+			assertCapability(this, name, route, this.#importsAsOwnFile(importer) ? importer : null, filename, runnerCompile)
+		);
+		this.#capabilityHolder = instanceID;
+		if (previousCapabilityHolder !== null && previousCapabilityHolder !== this.#capabilityHolder) {
+			releaseCapabilityCheck(previousCapabilityHolder);
 		}
 
 		// Claim a share in the global patches, released on this instance's shutdown.
-		boundaryPatchHolders.add(this.instanceID);
+		SetMethods.add(boundaryPatchHolders, this.instanceID);
 
 		// Register context checker for EventEmitter tracking (must be after patching)
 		// registerEventEmitterContextChecker is always defined in both context managers.
@@ -1028,22 +1919,23 @@ class Slothlet {
 		// Note: ownership manager and hook manager already initialized via auto-discovery
 
 		// Generate base moduleID for ownership tracking
-		const baseModuleId = `base_${this.helpers.utilities.generateId().substring(0, 8)}`;
+		const baseModuleId = `base_${StringMethods.substring(this.helpers.utilities.generateId(), 0, 8)}`;
+		this.baseModuleID = baseModuleId;
+
+		// A reload: the copy the instance has keeps answering calls while the new one builds, and its code is the same base
+		// module's. The fresh ownership records the base module's mount now, so that code is not taken for a removed
+		// module's until the build records it again.
+		if (preservedInstanceID && this.boundApi) this.handlers.ownership?.setModuleEndpoint(baseModuleId, ".");
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
-		// Deprecated escape hatch: warn whenever scanHiddenFolders is supplied at all.
-		if (this.config.scanHiddenFolders !== undefined && !this.config.silent) {
-			new this.SlothletWarning("CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED", { option: "scanHiddenFolders" });
-		}
 		const baseApi = await this.builders.builder.buildAPI({
-			dir: this.config.dir,
+			dir: this.config.base,
 			// #471: a null dir means the instance has no base directory — an empty root.
-			noBase: this.config.dir === null,
+			noBase: this.config.base === null,
 			mode: this.config.mode,
 			moduleID: baseModuleId,
-			hidden: this.config.hidden ?? null,
-			scanHiddenFolders: this.config.scanHiddenFolders === true
+			hidden: this.config.hidden ?? null
 		});
 
 		// Temporarily assign baseApi to this.api for buildFinalAPI
@@ -1062,7 +1954,7 @@ class Slothlet {
 				endpoint: ".",
 				moduleID: baseModuleId,
 				api: this.api, // Store complete API with builtins
-				folderPath: this.config.dir,
+				folderPath: this.config.base,
 				mode: this.config.mode,
 				sanitizeOptions: this.config.sanitize || {},
 				// The base entry's own build context is "initial" (api-cache-manager.mjs's reload
@@ -1070,11 +1962,11 @@ class Slothlet {
 				// reflect collision.initial, not collision.api — the two can differ, and using the
 				// wrong one made a base-API reload apply API-level collision semantics to the
 				// original initial-load file/folder and export conflicts (PR #366 review).
-				// config.collision.initial is always set after config normalization; "merge" fallback never reached.
+				// config.api.collision.mode.initial is always set after config normalization; "merge" fallback never reached.
 				/* v8 ignore next */
-				collisionMode: this.config.collision?.initial || "merge",
+				collisionMode: this.config.api.collision.mode.initial || "merge",
 				config: { ...this.config },
-				timestamp: Date.now()
+				timestamp: this.#clock.now()
 			});
 		}
 
@@ -1084,7 +1976,10 @@ class Slothlet {
 		// Apply init metadata if provided in config
 		if (this.config.metadata && typeof this.config.metadata === "object") {
 			// Set as global metadata so it's inherited by all future api.add() calls
-			for (const [key, value] of Object.entries(this.config.metadata)) {
+			for (let ofIndex = 0, ofList = Objects.entries(this.config.metadata); ofIndex < ofList.length; ofIndex++) {
+				const ofEntry = ofList[ofIndex],
+					key = ofEntry[0],
+					value = ofEntry[1];
 				this.handlers.metadata.setGlobalMetadata(key, value);
 			}
 
@@ -1107,41 +2002,18 @@ class Slothlet {
 
 		// Create boundApi proxy if first load (preserves reference across reloads)
 		if (!this.boundApi) {
-			// V8 fork-pool coverage gaps with isCallable cond-expr; proxy trap null guards are defensive dead code.
-			/* v8 ignore start */
-			// Determine proxy target type based on this.api (like UnifiedWrapper does)
-			const isCallable = typeof this.api === "function" || (this.api && typeof this.api.default === "function");
-			const proxyTarget = isCallable ? function () {} : {};
-
-			this.boundApi = new Proxy(proxyTarget, {
-				get: (target, prop) => (this.api ? this.api[prop] : undefined),
-				set: (target, prop, value) => {
-					if (this.api) {
-						this.api[prop] = value;
-					}
-					return true;
-				},
-				has: (target, prop) => (this.api ? prop in this.api : false),
-				ownKeys: (____target) => (this.api ? Reflect.ownKeys(this.api) : []),
-				deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
-				apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
-				construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
-				getOwnPropertyDescriptor: (target, prop) => {
-					// Return actual descriptor for 'prototype' on function targets to satisfy proxy invariants
-					if (isCallable && prop === "prototype") {
-						return Object.getOwnPropertyDescriptor(target, prop);
-					}
-					if (this.api && prop in this.api) {
-						const desc = Object.getOwnPropertyDescriptor(this.api, prop);
-						if (desc) {
-							return { ...desc, configurable: true };
-						}
-					}
-					return undefined;
-				}
-			});
-			/* v8 ignore stop */
+			this.boundApi = markSlothletProxy(
+				rootProxy(
+					this,
+					this.#rootPrototypes,
+					() => this[INSTANCE_FIELD]("api"),
+					(target) => closeInstanceSelf(this.instanceID, target)
+				)
+			);
 		}
+
+		// The instance's files get the form of `self` its api takes: a function for a function root (#803).
+		setInstanceSelfKind(this.instanceID, typeof this.boundApi === "function");
 
 		// Set self and context in store
 		store.self = this.boundApi;
@@ -1153,7 +2025,7 @@ class Slothlet {
 		// TODO: Merge reference object using add API system for ownership tracking
 		// For now, directly assign to boundApi (will be replaced with proper add API)
 		if (this.reference && typeof this.reference === "object") {
-			Object.assign(this.boundApi, this.reference);
+			frameworkWrite(this.boundApi, () => Objects.assign(this.boundApi, this.reference));
 		}
 
 		// Stackable lifecycle routines (#341): fold every mounted module's contribution to a
@@ -1168,12 +2040,17 @@ class Slothlet {
 		}
 
 		this.isLoaded = true;
+		this.#ended = false;
+
+		// `loader.materialize` given a function: call it now when everything is already materialized (eager mode, or a lazy
+		// tree that finished during load); otherwise _checkMaterializationComplete() calls it when the last wrapper loads.
+		this._callMaterializeCallback();
 
 		// `init` (#504): a new instance finished building — the cold start, and the rebuild inside
 		// restart(). A reload (which always passes an instance ID to preserve or rotate) is the same
 		// instance re-reading its modules, not a new one, so it does not emit this.
 		if (!preservedInstanceID) {
-			await this.handlers.lifecycle.emit("init", { instanceID: this.instanceID, restart: this._restarting });
+			await this.handlers.lifecycle.emit("init", { instance: this.instanceID, restart: this._restarting });
 		}
 
 		return this.boundApi;
@@ -1189,8 +2066,8 @@ class Slothlet {
 	 * Replays all add/remove operations in chronological order.
 	 *
 	 * @param {Object} [options={}] - Reload options.
-	 * @param {boolean} [options.keepInstanceID=false] - When true the existing instanceID is
-	 *   reused instead of generating a new `_reload_` ID. This causes
+	 * @param {"keep"|"new"} [options.instance="new"] - `"keep"` reuses the existing instanceID
+	 *   instead of generating a new `_reload_` ID. This causes
 	 *   `contextManager.instances.has(preservedInstanceID)` to be TRUE inside `load()`,
 	 *   triggering the cleanup-then-reinitialise branch. Useful for testing and for callers
 	 *   that need the context store reset in place rather than migrated to a new ID.
@@ -1201,201 +2078,1925 @@ class Slothlet {
 	 *
 	 * @example
 	 * // Reload while resetting the context store in place (same instanceID)
-	 * await api.slothlet.reload({ keepInstanceID: true });
+	 * await api.slothlet.reload({ instance: "keep" });
 	 */
 	async reload(options = {}) {
-		const { keepInstanceID = false } = options;
+		const given = options == null ? {} : options;
+		assertOptionKeys(given, "slothlet.reload");
+		const { instance = "new" } = given;
+		if (instance !== "keep" && instance !== "new") {
+			throw new SlothletError("INVALID_ARGUMENT", {
+				argument: "options.instance",
+				expected: '"keep" | "new"',
+				received: typeof instance === "string" ? instance : typeof instance
+			});
+		}
+		const keepInstanceID = instance === "keep";
+
+		// A reload asked for in a run() / scope() rebuilds the run's own tree, and leaves the instance as it is.
+		const runWriter = this.#treeWriter();
+		if (runWriter !== null && runWriter !== undefined) return this.#reloadRun(runWriter);
+
+		// One full reload at a time: a reload asked for while another builds starts once that one has finished. One asked
+		// for by the build itself (a startup routine's) could never start, so it is refused.
+		while (this.#reloadWindow !== null) {
+			if (markOf(this, BUILD_MARK) === this.#reloadWindow.mark) {
+				throw new SlothletError("RELOAD_IN_PROGRESS", { operation: ["slothlet", "reload"] });
+			}
+			await this.#reloadWindow.settled;
+		}
 
 		// Allow reload from shutdown state as long as config was previously loaded.
 		// Reject only if the instance was never loaded at all. A loaded config always carries `dir` —
 		// a path, or null for an instance with no base directory (#471) — so `undefined` means "never
 		// loaded".
-		if (this.config?.dir === undefined) {
-			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "reload",
-				validationError: true
-			});
+		if (this.config?.base === undefined) {
+			throw new SlothletError("INSTANCE_NOT_LOADED", { operation: ["slothlet", "reload"] });
 		}
 
-		// 1. Save operation history from api-manager for replay
-		// apiManager.state.operationHistory is always a defined array; [] fallback is dead code.
+		// A closed api root keeps the members it holds, as a closed object does, so it cannot take the ones a rebuild makes.
+		this._assertRootOpen(["slothlet", "reload"]);
+
+		// A normal reload rotates to a fresh random ID, claimed before anything else changes: when no ID can be claimed,
+		// the reload fails with the instance still on the ID and scope it holds, and still working.
+		const oldInstanceID = this.instanceID;
+		// Every reload's ID is the first ID plus one fresh `_reload_<time>_<random>` part, never the previous ID plus
+		// another: an ID that grew on each reload would soon be too long for the folders named after it.
+		const nextScope = keepInstanceID ? null : this.#claimFreshScope(`${splitText(`${oldInstanceID}`, "_reload_")[0]}_reload`);
+		// Until the new copy is built and swapped in, every call is answered by the copy the instance has, with its
+		// components (permission rules and mode, hooks, metadata, ownership), config and api tree: the build works on a
+		// set of its own (see openReloadWindow). The build is told apart by the mark its flow carries: the live runtime
+		// carries it with its own flows, so it needs no AsyncLocalStorage for it (a browser). Only a runtime that cannot
+		// carry the mark keeps nothing apart: there the build replaces the instance's own, and what it had is kept to put
+		// back if the reload fails.
+		const window = carriesMarks(this) ? this.#openReloadWindow() : null;
+		const kept = window === null ? this.#keepForFailedReload() : null;
+		// A reload of an instance that has shut down loads a new copy before it knows whether the rest of the rebuild works;
+		// one that fails leaves the instance shut down, and what its modules kept refuses them again.
+		const endedBefore = this.#ended;
+		this.#pendingScope = nextScope;
+		try {
+			// The build is framework work, run as the host even when a module's call asked for the reload (as restart()'s is,
+			// #903): the module's call belongs to the copy being replaced.
+			if (window === null) {
+				// The build writes the instance's own handlers as it goes: the token runs recorded is set aside first, so
+				// those writes keep nothing half built for them, and takes the set from before the build once it is done.
+				const token = this.#copy;
+				this.#copy = null;
+				let built;
+				try {
+					built = await this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, null));
+				} catch (error) {
+					this.#copy ??= token;
+					throw error;
+				}
+				this.#keepCopyForRuns(kept, token);
+				return built;
+			}
+			return await runInReloadBuild(this, window.mark, () => this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, window)));
+		} catch (error) {
+			this.#pendingScope = null;
+			if (window !== null) this.#closeReloadWindow(window, false);
+			this.#restoreFailedReload(kept);
+			this.#ended = endedBefore;
+			// The fresh scope was claimed but never taken: let the ID go again.
+			if (nextScope !== null && this.#importScope !== nextScope) nextScope.release();
+			if (nextScope !== null) this.#settleFailedReload(oldInstanceID);
+			if (window !== null) await this.#retireReplacedScope(window);
+			throw error;
+		} finally {
+			this.#pendingScope = null;
+			// A reload that failed leaves the instance's metadata handler as it was, with nothing noted.
+			this.#metadataTracked?.endUserChanges();
+			this.#metadataTracked = null;
+			if (window !== null) {
+				// A reload that ended any other way (it cannot, but nothing is left half-split) answers from the copy it had.
+				this.#closeReloadWindow(window, false);
+				this.#reloadWindow = null;
+				window.finish();
+			}
+		}
+	}
+
+	/**
+	 * After a reload with no window (a runtime that cannot carry marks, where the build replaced the instance's own set),
+	 * the runs that recorded the instance's copy token keep the set the instance had before the reload: the token takes
+	 * it, and the fields answer through {@link Slothlet#readField} until no such token is left.
+	 * @param {object} kept - What {@link Slothlet#keepForFailedReload} took before the build.
+	 * @param {object|null} old - The token runs recorded before the build, if any.
+	 * @returns {void}
+	 * @private
+	 */
+	#keepCopyForRuns(kept, old) {
+		if (old === null) return;
+		// No run reads through the token any more: there is nothing to keep it for.
+		if (!old.users) return;
+		const values = { __proto__: null, ...kept.components };
+		for (let ofIndex = 0; ofIndex < RELOAD_COPY_FIELDS.length; ofIndex++)
+			values[RELOAD_COPY_FIELDS[ofIndex]] = kept[RELOAD_COPY_FIELDS[ofIndex]];
+		old.values = values;
+		this.#copy = null;
+		this.#shareHandlers(values.handlers);
+		this.#ownReplacedHandlers(values.handlers);
+		this.#holdCopy(old);
+	}
+
+	/**
+	 * Wait for a full reload under way to settle, unless the reload's own build is the caller.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #reloadSettled() {
+		while (this.#reloadWindow !== null && markOf(this, BUILD_MARK) !== this.#reloadWindow.mark) {
+			await this.#reloadWindow.settled;
+		}
+	}
+
+	/**
+	 * Start a full reload's window: from now until {@link Slothlet#closeReloadWindow}, the instance's component namespaces
+	 * and {@link RELOAD_COPY_FIELDS} answer the reload's build (code whose flow carries its {@link BUILD_MARK}) from
+	 * a set of its own, and everyone else as {@link Slothlet#readField} says. The build's set starts as a copy of the
+	 * current one (each namespace a shallow copy), which load() then replaces piece by piece, as it replaced the
+	 * instance's own before.
+	 * @returns {object} The window.
+	 * @private
+	 */
+	#openReloadWindow() {
+		let finish;
+		const settled = new Promise((resolve) => {
+			finish = resolve;
+		});
+		this.#installCopyFields();
+		const window = { mark: {}, next: this.#copyOfFields(this.#fields), nextCopy: null, settled, finish, closed: false };
+		this.#reloadWindow = window;
+		return window;
+	}
+
+	/**
+	 * End a full reload's window. On a swap (`swap`, the reload succeeded) the instance's set becomes the build's, all at
+	 * once: the component namespace objects stay the instance's own and take the build's components. A run opened before
+	 * the swap keeps the copy it started with: when one may still hold the instance's copy token, the token takes the set
+	 * the instance had, and the fields keep answering through {@link Slothlet#readField} until no such token is left.
+	 * Otherwise the fields become plain fields again.
+	 * @param {object} window - The window {@link Slothlet#openReloadWindow} opened.
+	 * @param {boolean} swap - Whether the new copy takes over.
+	 * @returns {void}
+	 * @private
+	 */
+	#closeReloadWindow(window, swap) {
+		if (window.closed) return;
+		window.closed = true;
+		if (swap) {
+			this.#swapCopy(window.next, window.nextCopy);
+			this.#keepReplacedScope(window);
+		}
+		this.#settleCopyFields();
+	}
+
+	/**
+	 * At a reload's swap: every copy kept for runs that was loaded under the ID the reload left keeps that ID's import
+	 * scope, so a lazy node of it that loads later loads as that copy (see {@link Slothlet#loadID}). The scope is
+	 * retired when the last of those copies is torn down (see {@link Slothlet#releaseCopy}), instead of at the swap.
+	 * @param {object} window - The reload's window.
+	 * @returns {void}
+	 * @private
+	 */
+	#keepReplacedScope(window) {
+		const replaced = window.replaced;
+		if (!replaced) return;
+		let users = 0;
+		for (let heldIndex = 0, held = setToArray(this.#held); heldIndex < held.length; heldIndex++) {
+			const holder = held[heldIndex];
+			if (holder.values === null || holder.values === undefined || holder.loadID !== undefined) continue;
+			// A run reads through its token unless it has a tree of its own.
+			if (holder.ns !== undefined && holder.ownsTree !== true) continue;
+			holder.loadID = replaced.instanceID;
+			holder.replaced = replaced;
+			users++;
+		}
+		if (users === 0) return;
+		replaced.users = users;
+		window.replaced = null;
+		if (replaced.scope) MapMethods.set(this.#keptScopes, replaced.scope.instanceID, replaced);
+	}
+
+	/**
+	 * Run a lazy node's load (which runs apart from the flow that asked for it) under the ID the asking code's copy loads
+	 * under (see {@link Slothlet#loadID}). A node of a tree a copy owns (see {@link Slothlet#ownTree}) loads into that
+	 * tree's set, whichever code asked for it.
+	 * @param {Function} load - The load.
+	 * @param {object} [wrapper] - The node's wrapper.
+	 * @returns {*} What it returns.
+	 * @package
+	 */
+	loadAsCaller(load, wrapper) {
+		// A node of a tree a copy owns loads into that tree's set: its new nodes, ownership and metadata are the copy's.
+		const entry =
+			wrapper !== undefined && this._treeCopies !== 0 ? MapMethods.get(this.#treeSets, wrapper.____slothletInternal?.epoch) : undefined;
+		if (entry !== undefined) {
+			const mark = { copyOf: this, next: entry.values, kind: "materialize", bust: entry.bust, silent: this[SILENT_BUILD]() };
+			const owner = WeakMapMethods.get(this.#treeOwners, entry.values.api);
+			const id = this.#loadIDOf(owner);
+			const inSet = () => runInClosingBuild(this, mark, load);
+			if (id === undefined || id === this.instanceID) return inSet();
+			return runLoadAs(this, id, inSet);
+		}
+		if (this.#heldCopies === 0) return load();
+		const id = this.loadID;
+		if (!carriesMarks(this)) return load();
+		// A node of the copy a run reads through its token (a copy a reload swapped out, with no tree of its own) loads
+		// into that copy's set: run apart from the run's flow, the load would otherwise read the instance's new set, and
+		// make the node's children with the new metadata, which knows nothing of the copy's nodes and so of their module.
+		const values = this.#keptValuesOf(this.#runRecord());
+		const inSet =
+			values === null
+				? load
+				: () =>
+						runInClosingBuild(this, { copyOf: this, next: values, kind: "materialize", bust: null, silent: this[SILENT_BUILD]() }, load);
+		if (id === this.instanceID) return inSet();
+		return runLoadAs(this, id, inSet);
+	}
+
+	/**
+	 * The set a run reads through the token it recorded, once the instance no longer has that copy (see
+	 * {@link Slothlet#readField}): null for no run, a run with a tree of its own, or a run whose copy is still the
+	 * instance's.
+	 * @param {object|null} record - The run's copy record.
+	 * @returns {object|null} The set.
+	 * @private
+	 */
+	#keptValuesOf(record) {
+		if (record === null || record.values !== null) return null;
+		const values = record.from?.values;
+		return values === null || values === undefined ? null : values;
+	}
+
+	/**
+	 * Retire the import scope a kept copy held, once the last such copy is torn down (see
+	 * {@link Slothlet#keepReplacedScope}).
+	 * @param {object} replaced - What the reload left (see {@link Slothlet#switchToPendingScope}).
+	 * @returns {void}
+	 * @private
+	 */
+	#retireKeptScope(replaced) {
+		if (replaced.scope && MapMethods.get(this.#keptScopes, replaced.scope.instanceID) !== replaced) return;
+		if (replaced.scope) MapMethods.delete(this.#keptScopes, replaced.scope.instanceID);
+		// Nothing awaits it: what it removes from disk is stale either way, and a failure there is not the caller's.
+		PromiseMethods.catch(this.#retireScope(replaced), () => {});
+	}
+
+	/**
+	 * The instance ID a lazy node that loads now loads under: the ID a kept copy was loaded under, for code running in a
+	 * run that keeps a copy a reload swapped out (see {@link Slothlet#keepReplacedScope}); the instance's own otherwise.
+	 * @type {string}
+	 * @package
+	 */
+	get loadID() {
+		if (this.#heldCopies !== 0) {
+			const carried = markOf(this, LOAD_AS_MARK);
+			if (carried !== undefined && MapMethods.has(this.#keptScopes, carried)) return carried;
+			const mark = markOf(this, BUILD_MARK);
+			if (mark === undefined || mark !== this.#reloadWindow?.mark) {
+				const id = this.#loadIDOf(this.#runRecord());
+				if (id !== undefined && MapMethods.has(this.#keptScopes, id)) return id;
+			}
+		}
+		return this.instanceID;
+	}
+
+	/**
+	 * Swap a new set in for the one the instance has (see {@link Slothlet#closeReloadWindow}). The instance's copy token,
+	 * when it handed one out, keeps the set the instance had, for the runs that recorded it.
+	 * @param {object} next - The new set, one value per field.
+	 * @param {object|null} nextCopy - The token the build handed out for the new set, if any.
+	 * @returns {void}
+	 * @private
+	 */
+	#swapCopy(next, nextCopy) {
+		const fields = this.#fields;
+		// A token no run reads through any more keeps nothing.
+		const old = this.#copy !== null && this.#copy.users ? this.#copy : null;
+		if (old !== null) {
+			old.values = this.#copyOfFields(fields);
+			// A handler the new copy carries over unchanged is still the instance's: the kept copy holds it as a sharer.
+			this.#shareHandlers(old.values.handlers);
+			this.#holdCopy(old);
+		}
+		this.#copy = nextCopy;
+		const swappedOut = old?.values?.handlers;
+		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
+			const field = ofList[ofIndex];
+			if (ArrayMethods.includes(this.componentCategories, field)) {
+				const value = fields[field];
+				const taken = next[field];
+				for (let keyIndex = 0, keys = Objects.keys(value); keyIndex < keys.length; keyIndex++) {
+					if (!Objects.hasOwn(taken, keys[keyIndex])) delete value[keys[keyIndex]];
+				}
+				Objects.assign(value, taken);
+			} else {
+				fields[field] = next[field];
+			}
+		}
+		if (swappedOut !== undefined) this.#ownReplacedHandlers(swappedOut);
+	}
+
+	/**
+	 * The fields a copy of the instance is made of: its component namespaces and {@link RELOAD_COPY_FIELDS}.
+	 * @returns {string[]} The field names.
+	 * @private
+	 */
+	#copyFieldNames() {
+		return concatLists(this.componentCategories, RELOAD_COPY_FIELDS);
+	}
+
+	/**
+	 * A copy of a set of fields, each component namespace a shallow copy of its own, so later changes to the namespace
+	 * objects leave it as it is.
+	 * @param {object} fields - The set, one value per field.
+	 * @returns {object} The copy.
+	 * @private
+	 */
+	#copyOfFields(fields) {
+		const copy = { __proto__: null };
+		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
+			const field = ofList[ofIndex];
+			copy[field] = ArrayMethods.includes(this.componentCategories, field) ? { ...fields[field] } : fields[field];
+		}
+		return copy;
+	}
+
+	/**
+	 * Make the copy fields accessors that read through {@link Slothlet#readField}, holding the instance's own values in
+	 * {@link Slothlet#fields}. Done only while a reload builds or a run keeps a copy the instance no longer has; otherwise
+	 * they are plain fields, read at no extra cost.
+	 * @returns {void}
+	 * @private
+	 */
+	#installCopyFields() {
+		if (this.#fields !== null) return;
+		const fields = { __proto__: null };
+		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
+			const field = ofList[ofIndex];
+			fields[field] = this[field];
+			Objects.defineProperty(this, field, {
+				__proto__: null,
+				configurable: true,
+				enumerable: true,
+				get: () => this.#readField(field),
+				set: (value) => {
+					this.#writeField(field, value);
+				}
+			});
+		}
+		this.#fields = fields;
+		countReadThrough(1);
+	}
+
+	/**
+	 * Make the copy fields plain fields again once nothing needs them read through {@link Slothlet#readField}: no reload
+	 * window open and no run keeping a copy the instance no longer has.
+	 * @returns {void}
+	 * @private
+	 */
+	#settleCopyFields() {
+		const fields = this.#fields;
+		if (fields === null || this.#heldCopies !== 0) return;
+		if (this.#reloadWindow !== null && !this.#reloadWindow.closed) return;
+		this.#fields = null;
+		countReadThrough(-1);
+		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
+			const field = ofList[ofIndex];
+			Objects.defineProperty(this, field, { __proto__: null, configurable: true, enumerable: true, writable: true, value: fields[field] });
+		}
+	}
+
+	/**
+	 * Read one of the copy fields while they are accessors. The value comes from, in order:
+	 * 1. the reload's build set, when the reading code runs in the build of a reload under way; the instance's own set,
+	 *    when it runs in instance work (a restart's teardown and rebuild);
+	 * 2. for the reading code's `run()` / `scope()` (its calls, and work it left behind, which holds its store): the
+	 *    run's own handlers namespace once it holds a fork (for `handlers`), else the copy the run recorded when it
+	 *    started, once the instance no longer has that copy;
+	 * 3. the instance's own set.
+	 * @param {string} field - The field.
+	 * @returns {*} The value.
+	 * @private
+	 */
+	#readField(field) {
+		const mark = currentBuildMark(this);
+		if (mark !== undefined) {
+			if (this.#inInstanceWork(mark)) return this.#fields[field];
+			const next = this.#buildNext(mark);
+			if (next !== null) return next[field];
+		}
+		if (this.#heldCopies !== 0) {
+			const record = this.#runRecord();
+			if (record !== null) {
+				// A run with a tree of its own answers from its own set.
+				if (record.values !== null) return record.values[field];
+				if (record.ns !== null && field === "handlers") return record.ns;
+				const values = record.from.values;
+				if (values !== null) return values[field];
+			}
+		}
+		return this.#fields[field];
+	}
+
+	/**
+	 * Write one of the copy fields while they are accessors: into the reload's build set from its build, else into the
+	 * instance's own set.
+	 * @param {string} field - The field.
+	 * @param {*} value - The value.
+	 * @returns {void}
+	 * @private
+	 */
+	#writeField(field, value) {
+		const mark = currentBuildMark(this);
+		const instance = mark !== undefined && this.#inInstanceWork(mark);
+		const next = mark === undefined || instance ? null : this.#buildNext(mark);
+		if (next !== null) next[field] = value;
+		else if (!instance && this.#heldCopies !== 0) {
+			// A run with a tree of its own writes its own set (a lazy node's count as it loads).
+			const record = this.#runRecord();
+			if (record !== null && record.values !== null) record.values[field] = value;
+			else this.#fields[field] = value;
+		} else this.#fields[field] = value;
+	}
+
+	/**
+	 * The set a build writes and reads: the reload's under way, or a run's copy (see {@link Slothlet#buildCopy}), when
+	 * `mark` is that build's; null otherwise.
+	 * @param {*} mark - The build mark the running code's flow carries (see {@link currentBuildMark}).
+	 * @returns {object|null} The build's set.
+	 * @private
+	 */
+	#buildNext(mark) {
+		const window = this.#reloadWindow;
+		if (window !== null && !window.closed && mark === window.mark) return window.next;
+		if (mark !== null && typeof mark === "object" && mark.copyOf === this) return mark.next;
+		return null;
+	}
+
+	/**
+	 * Whether the code running with `mark` is the restart's own work (see {@link Slothlet#_restart}), which reads and
+	 * writes the instance's own set: code of the restart's flow, not in a `run()` / `scope()` opened in it. A run opened
+	 * in that flow (by work a module began while the restart loaded it) is an ordinary run with a copy of its own.
+	 * @param {*} mark - What {@link currentBuildMark} gives for the running code.
+	 * @returns {boolean} True for the restart's own work.
+	 * @private
+	 */
+	#inInstanceWork(mark) {
+		const work = this.#instanceWork;
+		if (work === null || mark !== work) return false;
+		return this.#runRecord() === null;
+	}
+
+	/**
+	 * The copy record of the running code's `run()` / `scope()`, if it runs in one.
+	 * @returns {object|null} The record, or null when the code runs in no run.
+	 * @private
+	 */
+	#runRecord() {
+		// Telling the running store apart can read the instance's fields itself: those reads answer from its own set.
+		if (this.#resolvingCopy) return null;
+		this.#resolvingCopy = true;
+		try {
+			const contextManager = this.contextManager;
+			let record = contextManager?.tryGetContext?.(this.instanceID)?.[RUN_COPY];
+			if (record === undefined || record === null) {
+				// A run opened under an ID the instance has since left (a restart starts a new one) still runs this
+				// instance's code: its store, when active, is found by the instance object it records.
+				const active = contextManager?.tryGetContext?.();
+				record = active?.slothlet === this ? (active[RUN_COPY] ?? null) : null;
+			}
+			// A run whose copy is torn down keeps none: what still runs in its store (code reached through the runtime
+			// `context` export) answers as the instance.
+			return record === null || record.torn ? null : record;
+		} finally {
+			this.#resolvingCopy = false;
+		}
+	}
+
+	/**
+	 * Count a copy held apart from what the instance has (a kept token, or a run's record holding a fork) until it is
+	 * collected, and make the copy fields read through {@link Slothlet#readField} meanwhile.
+	 * @param {object} holder - The token or record.
+	 * @returns {void}
+	 * @private
+	 */
+	#holdCopy(holder) {
+		this.#installCopyFields();
+		if (SetMethods.has(this.#held, holder)) return;
+		SetMethods.add(this.#held, holder);
+		this.#heldCopies++;
+		countHeldCopy(1);
+	}
+
+	/**
+	 * Let go of a copy {@link Slothlet#holdCopy} held, once no run reads it any more: it leaves the sets of the handlers
+	 * it shared, a kept token lets go of the import scope of the ID it was loaded under when it is the last to use it,
+	 * and the copy fields become plain fields again once nothing else is held.
+	 * @param {object} holder - The token or record.
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseCopy(holder) {
+		if (!SetMethods.delete(this.#held, holder)) return;
+		this.#heldCopies--;
+		countHeldCopy(-1);
+		const ns = holder.ns !== undefined ? holder.ns : holder.values?.handlers;
+		if (ns !== null && ns !== undefined) this.#unshareHandlers(ns);
+		if (holder.ownsTree === true) {
+			holder.ownsTree = false;
+			this._treeCopies--;
+			this.#retireTree(holder.values);
+		}
+		const replaced = holder.replaced;
+		if (replaced !== undefined && replaced !== null) {
+			holder.replaced = null;
+			if (--replaced.users === 0) this.#retireKeptScope(replaced);
+		}
+		this.#settleCopyFields();
+	}
+
+	/**
+	 * [RUN_OPENED] - Note a new run record, so `shutdown()` can tear down what it holds (see `copyForRun` in
+	 * `helpers/flow-stores`).
+	 * @param {object} record - The record.
+	 * @returns {void}
+	 * @internal
+	 */
+	[RUN_OPENED](record) {
+		SetMethods.add(this.#runs, record);
+	}
+
+	/**
+	 * [RUN_DONE] - A run's work is done (see `releaseRunWork` in `helpers/flow-stores`): its copy is torn down once the
+	 * instance is idle, or at the second batch drain after it (see {@link Slothlet#drainRetiring}), whichever comes
+	 * first; never in the middle of the work that finished it.
+	 * @param {object} record - The record.
+	 * @returns {void}
+	 * @internal
+	 */
+	[RUN_DONE](record) {
+		SetMethods.delete(this.#runs, record);
+		record.retired = this.#retireBatch;
+		listPush(this.#retiring, record);
+		countRetiring(1);
+		this.#teardownWhenIdle();
+		// Code that awaits runs one after another without ever letting a macrotask pass would keep every finished copy
+		// until it does: past a batch, drain on a microtask too.
+		if (this.#retiring.length >= RETIRE_BATCH && !this.#drainQueued) {
+			this.#drainQueued = true;
+			afterCurrentWork(() => this.#drainRetiring());
+		}
+	}
+
+	/**
+	 * Tear down the copies of the runs that were already done at the previous batch drain, and keep the ones done since
+	 * for the next: a record is torn down only after the code that finished it has returned and a whole batch of runs
+	 * has been made since, the same as an idle macrotask would find.
+	 * @returns {void}
+	 * @private
+	 */
+	#drainRetiring() {
+		this.#drainQueued = false;
+		const settled = this.#settled;
+		const batch = this.#retireBatch++;
+		this.#settled = this.#retiring;
+		this.#retiring = [];
+		countRetiring(-settled.length);
+		for (let index = 0; index < settled.length; index++) {
+			const record = settled[index];
+			// A record that took on new work and finished it again since joined a later batch, which tears it down.
+			if (record.done && record.retired < batch) this.#teardownRun(record);
+		}
+	}
+
+	/**
+	 * Tear down the copies of the runs whose work is done (see {@link Slothlet#retiring}) on a later macrotask, in one
+	 * batch: after the work that finished them, and every microtask it queued, has run.
+	 * @returns {void}
+	 * @private
+	 */
+	#teardownWhenIdle() {
+		if (this.#teardownScheduled) return;
+		this.#teardownScheduled = true;
+		whenIdle(() => {
+			this.#teardownScheduled = false;
+			this.#teardownRetiring();
+		});
+	}
+
+	/**
+	 * Tear down the copies of every run waiting in {@link Slothlet#settled} and {@link Slothlet#retiring}.
+	 * @returns {void}
+	 * @private
+	 */
+	#teardownRetiring() {
+		const settled = this.#settled;
+		const retiring = this.#retiring;
+		this.#settled = [];
+		this.#retiring = [];
+		countRetiring(-(settled.length + retiring.length));
+		// A run that took on new work since (its last piece of work began more) is live again, and stays.
+		for (let index = 0; index < settled.length; index++) if (settled[index].done) this.#teardownRun(settled[index]);
+		for (let index = 0; index < retiring.length; index++) if (retiring[index].done) this.#teardownRun(retiring[index]);
+	}
+
+	/**
+	 * Tear down a done run's copy: its forked handlers go, and the copy it read through to is let go when it was the last
+	 * run to read it. The record then reads through to nothing, so code still running in its store (reached through the
+	 * runtime `context` export) answers from the instance.
+	 * @param {object} record - The record.
+	 * @returns {void}
+	 * @private
+	 */
+	#teardownRun(record) {
+		if (record.torn) return;
+		record.torn = true;
+		untrackRunStores(record);
+		// The run's snapshot goes with its copy: its own copies, and the versions the instance kept only for it.
+		closeRunSnapshot(record.snap);
+		record.snap = null;
+		this.#releaseCopy(record);
+		record.ns = null;
+		record.values = null;
+		record.history = null;
+		record.parent = null;
+		const token = record.from;
+		record.from = TORN_DOWN;
+		if (--token.users === 0 && SetMethods.has(this.#held, token)) {
+			this.#releaseCopy(token);
+			token.values = null;
+		}
+	}
+
+	/**
+	 * At `shutdown()`: end every run still holding work and tear down every copy at once (the stop gap for work that
+	 * never finishes, such as a listener left on an emitter), then let go of the import scopes kept copies held.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #teardownAllRuns() {
+		for (let index = 0, runs = setToArray(this.#runs); index < runs.length; index++) endRun(runs[index]);
+		this.#teardownRetiring();
+		for (let index = 0, held = setToArray(this.#held); index < held.length; index++) this.#releaseCopy(held[index]);
+		if (this.#copy !== null) this.#copy = null;
+		const kept = [];
+		for (const entry of mapEntries(this.#keptScopes)) listPush(kept, entry[1]);
+		MapMethods.clear(this.#keptScopes);
+		for (let index = 0; index < kept.length; index++) await this.#retireScope(kept[index]);
+	}
+
+	/**
+	 * Remove a copy's handlers namespace from the sharer sets of the forkable handlers in it (see
+	 * {@link Slothlet#shareHandlers}).
+	 * @param {object} ns - The namespace.
+	 * @returns {void}
+	 * @private
+	 */
+	#unshareHandlers(ns) {
+		for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
+			const handler = ns[FORKABLE_HANDLERS[ofIndex]];
+			if (handler === null || typeof handler !== "object") continue;
+			const sharers = WeakMapMethods.get(this.#sharers, handler);
+			if (sharers === undefined) continue;
+			SetMethods.delete(sharers, ns);
+			if (SetMethods.size(sharers) === 0) WeakMapMethods.delete(this.#sharers, handler);
+		}
+	}
+
+	/**
+	 * Point a copy's handlers namespace at the instance's handlers, except the forkable ones the copy keeps.
+	 * @param {object} ns - The copy's handlers namespace.
+	 * @param {object} handlers - The instance's.
+	 * @returns {void}
+	 * @private
+	 */
+	#followTree(ns, handlers) {
+		for (let ofIndex = 0, keys = Objects.keys(ns); ofIndex < keys.length; ofIndex++) {
+			if (!ArrayMethods.includes(FORKABLE_HANDLERS, keys[ofIndex]) && !Objects.hasOwn(handlers, keys[ofIndex])) delete ns[keys[ofIndex]];
+		}
+		for (let ofIndex = 0, keys = Objects.keys(handlers); ofIndex < keys.length; ofIndex++) {
+			const key = keys[ofIndex];
+			if (!ArrayMethods.includes(FORKABLE_HANDLERS, key) || ns[key] === undefined) ns[key] = handlers[key];
+		}
+		const metadata = ns.metadata;
+		if (metadata !== handlers.metadata && typeof metadata?.readThrough === "function") metadata.readThrough(handlers.metadata);
+	}
+
+	/**
+	 * Before the instance first changes after runs recorded its copy token, make the token keep what the instance has
+	 * now: those runs started on it, and the change must not reach them.
+	 * @returns {void}
+	 * @private
+	 */
+	#keepCurrentCopy() {
+		const token = this.#copy;
+		if (token === null) return;
+		// No run reads through the token any more: there is nothing to keep it for.
+		if (!token.users) {
+			this.#copy = null;
+			return;
+		}
+		this.#installCopyFields();
+		token.values = this.#copyOfFields(this.#fields);
+		// The history the runs on it replay, as it is now: what the instance records from here on is not theirs.
 		/* v8 ignore next */
-		const operationHistory = this.handlers.apiManager?.state?.operationHistory ? [...this.handlers.apiManager.state.operationHistory] : [];
-		// The mounts that history describes, as the api manager tracks them (moduleID lookups, restore).
+		token.history = copyList(token.values.handlers.apiManager?.state?.operationHistory ?? []);
+		this.#shareHandlers(token.values.handlers);
+		this.#copy = null;
+		this.#holdCopy(token);
+	}
+
+	/**
+	 * Record a handlers namespace as holding each forkable handler in it, so the handler's owner forks it for the
+	 * namespace before writing (see {@link Slothlet#keepSharers}).
+	 * @param {object} ns - The namespace (a kept token's or a run's).
+	 * @returns {void}
+	 * @private
+	 */
+	#shareHandlers(ns) {
+		for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
+			const handler = ns[FORKABLE_HANDLERS[ofIndex]];
+			if (handler === null || typeof handler !== "object") continue;
+			let sharers = WeakMapMethods.get(this.#sharers, handler);
+			if (sharers === undefined) {
+				sharers = new Set();
+				WeakMapMethods.set(this.#sharers, handler, sharers);
+			}
+			SetMethods.add(sharers, ns);
+		}
+	}
+
+	/**
+	 * Give every copy that holds a forkable handler without owning it a fork of its own, before the handler is written.
+	 * Each fork is a copy of the handler as it is now, which is what each of those copies started with.
+	 * @param {object} handler - The handler about to be written.
+	 * @param {string} slot - Its property name in the handlers namespace.
+	 * @returns {void}
+	 * @private
+	 */
+	#keepSharers(handler, slot) {
+		const sharers = WeakMapMethods.get(this.#sharers, handler);
+		if (sharers === undefined) return;
+		WeakMapMethods.delete(this.#sharers, handler);
+		for (let sharerIndex = 0, list = setToArray(sharers); sharerIndex < list.length; sharerIndex++) {
+			const ns = list[sharerIndex];
+			if (ns[slot] !== handler) continue;
+			const fork = handler[FORK]();
+			ns[slot] = fork;
+			WeakMapMethods.set(this.#owners, fork, ns);
+		}
+	}
+
+	/**
+	 * Which object a write to a forkable handler goes to (see `writeTarget` in `helpers/flow-stores`).
+	 *
+	 * - Code in a `run()` / `scope()` writes the run's own fork. The run's first write to the handler makes the fork, a
+	 *   copy of the handler as the run sees it (its parent's, or the copy it started on); its handlers namespace becomes
+	 *   one of its own then. Nested runs that hold the run's fork get forks of their own before it changes.
+	 * - Code outside any run writes the instance's own handler: first, the token runs recorded keeps what the instance
+	 *   has (see {@link Slothlet#keepCurrentCopy}), and every copy that holds the handler gets a fork of its own.
+	 *
+	 * A write reaching another copy of the same handler (an unsubscribe function handed out by the instance's handler,
+	 * called in a run; one a run handed out, called outside it) goes where a write from that code goes. A handler that
+	 * is no copy's (a reload's build, one being constructed) is written as it is.
+	 *
+	 * A run() costs nothing here until something writes; a fork costs a copy of the one handler written.
+	 * @param {object} handler - The handler about to be written.
+	 * @param {boolean} instanceOnly - True for the instance's teardown of its own handler, which never forks for a run.
+	 * @returns {object} The handler to write.
+	 * @internal
+	 */
+	[WRITE_TARGET](handler, instanceOnly) {
+		if (this.#copy === null && this.#fields === null) return handler;
+		const slot = handler.constructor.slothletProperty;
+		const mark = currentBuildMark(this);
+		const instance = mark !== undefined && this.#inInstanceWork(mark);
+		if (mark !== undefined && !instance && this.#buildNext(mark) !== null) return handler;
+		const own = (this.#fields ?? this).handlers;
+		const known = own?.[slot] === handler || WeakMapMethods.has(this.#owners, handler);
+		if (!known) return handler;
+		const record = instanceOnly || instance ? null : this.#runRecord();
+		if (record === null) {
+			if (instanceOnly && own[slot] !== handler) return handler;
+			const target = own[slot];
+			this.#keepCurrentCopy();
+			this.#keepSharers(target, slot);
+			return target;
+		}
+		const view = record.ns ?? record.from.values?.handlers ?? own;
+		const current = view[slot];
+		if (record.ns !== null && WeakMapMethods.get(this.#owners, current) === record.ns) {
+			this.#keepSharers(current, slot);
+			return current;
+		}
+		const fork = current[FORK]();
+		if (record.ns === null) {
+			record.ns = { ...view };
+			this.#shareHandlers(record.ns);
+			this.#holdCopy(record);
+		}
+		record.ns[slot] = fork;
+		WeakMapMethods.set(this.#owners, fork, record.ns);
+		return fork;
+	}
+
+	/**
+	 * Mark the forkable handlers a kept copy holds that the instance no longer has as that copy's: a write reaching one
+	 * of them (through something it handed out) goes where the writing code's writes go (see
+	 * {@link Slothlet#[WRITE_TARGET]}).
+	 * @param {object} ns - The kept copy's handlers namespace.
+	 * @returns {void}
+	 * @private
+	 */
+	#ownReplacedHandlers(ns) {
+		const own = (this.#fields ?? this).handlers;
+		for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
+			const handler = ns[FORKABLE_HANDLERS[ofIndex]];
+			if (handler !== null && typeof handler === "object" && own?.[FORKABLE_HANDLERS[ofIndex]] !== handler) {
+				if (!WeakMapMethods.has(this.#owners, handler)) WeakMapMethods.set(this.#owners, handler, ns);
+			}
+		}
+	}
+
+	/**
+	 * One of the copy fields as the instance has it, whichever copy the calling code answers from.
+	 * @param {string} field - The field.
+	 * @returns {*} The value.
+	 * @internal
+	 */
+	[INSTANCE_FIELD](field) {
+		return (this.#fields ?? this)[field];
+	}
+
+	/**
+	 * The copy record of a run opened in a run that holds a fork (see `copyForRun` in `helpers/flow-stores`): it starts
+	 * with a copy of the parent's handlers namespace, so neither run's later writes reach the other.
+	 * @param {object} parent - The parent run's record.
+	 * @returns {object} The new run's record.
+	 * @internal
+	 */
+	[INHERIT_COPY](parent) {
+		const record = newRecord(parent.from, parent, { ...parent.ns }, this);
+		// A parent with a tree of its own: the nested run reads that tree until either one changes it (see
+		// Slothlet#copyForSharers), with its own handlers namespace.
+		if (parent.values !== null) record.values = { ...parent.values, handlers: record.ns };
+		this.#shareHandlers(record.ns);
+		this.#holdCopy(record);
+		return record;
+	}
+
+	/**
+	 * Which copy a change to the api tree made now is made in: null for the instance's own (code outside any run, and
+	 * the instance's own work), the run's record for code in a `run()` / `scope()`, and `undefined` for a build, which
+	 * changes the set it builds, or a runtime that cannot carry marks, which cannot tell runs apart from the instance.
+	 * @returns {object|null|undefined} The writer.
+	 * @private
+	 */
+	#treeWriter() {
+		const mark = currentBuildMark(this);
+		if (mark !== undefined) {
+			if (this.#inInstanceWork(mark)) return null;
+			if (this.#buildNext(mark) !== null) return undefined;
+		}
+		return this.#runRecord();
+	}
+
+	/**
+	 * [TREE_WRITE] - Ready the api tree for a change the calling code is about to make (see `treeWrite` in
+	 * `helpers/flow-stores`).
+	 *
+	 * - Code in a `run()` / `scope()` changes a tree of its own: on the run's first change, the run gets a copy of the
+	 *   tree it reads (see {@link Slothlet#ownTree}), and the change is made there. A nested run still reading the
+	 *   run's tree gets a copy of its own first.
+	 * - Code outside any run changes the instance's tree: every copy still reading it (the runs that started on it)
+	 *   gets a copy of its own first.
+	 *
+	 * A run that changes nothing pays nothing here; an instance with no run open checks two fields.
+	 * @returns {Promise<void>|undefined} Settles once the tree may be changed.
+	 * @internal
+	 */
+	[TREE_WRITE]() {
+		if (this.#copy === null && this.#fields === null) return undefined;
+		const writer = this.#treeWriter();
+		if (writer === undefined) return undefined;
+		return writer === null ? this.#instanceTreeWrite() : this.#runTreeWrite(writer);
+	}
+
+	/**
+	 * Ready a run's tree for a change it makes (see {@link Slothlet#[TREE_WRITE]}).
+	 * @param {object} record - The run's record.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #runTreeWrite(record) {
+		while (record.treeBusy) await record.treeBusy;
+		if (record.torn) return;
+		if (record.values === null || WeakMapMethods.get(this.#treeOwners, record.values.api) !== record) await this.#ownTree(record, "copy");
+		await this.#copyForSharers(record.values.api, record);
+	}
+
+	/**
+	 * Ready the instance's tree for a change made outside any run: the runs that started on it keep the tree as it is.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #instanceTreeWrite() {
+		this.#keepCurrentCopy();
+		this.#checkpointTree();
+		await this.#copyForSharers((this.#fields ?? this).api, null, true);
+	}
+
+	/**
+	 * Before the instance changes its tree in place (`add()`, `remove()`, a `reload(path)`) or tears it down for a
+	 * `restart()`, save the root and every loaded node as they are for the runs open (see `helpers/run-snapshot`): the change is made as a build, which saves
+	 * nothing as it goes, and a run reads those nodes as of its start, also after a later change the instance makes to
+	 * one of them saves it again. Once per window, as every save is.
+	 * @returns {void}
+	 * @private
+	 */
+	#checkpointTree() {
+		if (!runsOpen(domainOf(this))) return;
+		const api = (this.#fields ?? this).api;
+		if (api === null || api === undefined || (typeof api !== "object" && typeof api !== "function")) return;
+		this.____rootBarrier?.();
+		for (let index = 0, keys = Reflect.ownKeys(api); index < keys.length; index++) {
+			const described = Reflect.getOwnPropertyDescriptor(api, keys[index]);
+			const value = described !== undefined && "value" in described ? described.value : undefined;
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
+			const wrapper = resolveWrapper(value);
+			if (wrapper !== null) checkpointLoaded(wrapper);
+		}
+	}
+
+	/**
+	 * Give every copy that reads a tree without owning it a copy of its own, before the tree's owner changes it.
+	 * @param {object} tree - The api tree about to change.
+	 * @param {object|null} writer - Its owner (null for the instance), which gets none.
+	 * @param {boolean} [keepStart=false] - True when the instance changes the tree in place (`add()`, `remove()`, a
+	 *   `reload(path)`) or replaces it (`restart()`): the runs reading a kept copy started on that tree, whose nodes they read as of their start, and
+	 *   each copy built here answers them with those nodes while they stand (see {@link Slothlet#ownTree}).
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #copyForSharers(tree, writer, keepStart = false) {
+		for (let index = 0, held = setToArray(this.#held); index < held.length; index++) {
+			const holder = held[index];
+			if (holder === writer || holder.torn === true) continue;
+			while (holder.treeBusy) await holder.treeBusy;
+			const values = holder.values;
+			if (values === null || values === undefined || values.api !== tree) continue;
+			if (WeakMapMethods.get(this.#treeOwners, tree) === holder) continue;
+			await this.#ownTree(holder, "copy", keepStart && holder.ns === undefined);
+		}
+	}
+
+	/**
+	 * The set a copy answers from now: a run's own set, or the copy its record reads through to (the token's kept set or
+	 * the instance's own) with the run's handlers namespace; a kept token's set. Each component namespace is a shallow
+	 * copy, so building on it leaves the copy as it is.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @returns {object} The set.
+	 * @private
+	 */
+	#viewOf(holder) {
+		if (holder.values !== null && holder.values !== undefined) return holder.values;
+		const base = holder.from?.values ?? this.#copyOfFields(this.#fields ?? this);
+		return { ...base, handlers: holder.ns ?? base.handlers };
+	}
+
+	/**
+	 * The operation history a copy replays (its `add()` / `remove()` mounts and rule changes): its own, once it recorded
+	 * one, else the history of the copy it reads.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {object} view - Its set (see {@link Slothlet#viewOf}).
+	 * @returns {Array<object>} The history.
+	 * @private
+	 */
+	#historyOf(holder, view) {
 		/* v8 ignore next */
-		const addHistory = this.handlers.apiManager?.state?.addHistory ? [...this.handlers.apiManager.state.addHistory] : [];
+		return holder.history ?? holder.from?.history ?? view.handlers?.apiManager?.state?.operationHistory ?? [];
+	}
+
+	/**
+	 * Give a copy a tree of its own (see {@link Slothlet#buildCopy}), one build at a time per copy.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {"copy"|"reload"|"restart"} kind - What the build is.
+	 * @param {boolean} [keepStart=false] - For a kept token's copy of a tree the instance changes in place: the nodes of
+	 *   that tree answer the token's runs as themselves while they stand, so a node a run reads as of its start (one the
+	 *   instance replaced since) is not answered by the copy's node at its path. A node the instance removed answers from
+	 *   the copy's.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #ownTree(holder, kind, keepStart = false) {
+		let release;
+		holder.treeBusy = new Promise((resolve) => {
+			release = resolve;
+		});
+		try {
+			// Held first, so the copy fields read through and the build reads and writes its own set.
+			this.#holdCopy(holder);
+			const view = this.#viewOf(holder);
+			const history = this.#historyOf(holder, view);
+			// A copy of a tree loaded under an ID the instance has left loads under that ID too (see Slothlet#loadID).
+			const kept = kind === "copy" ? this.#keptScopeOf(holder) : null;
+			// A reload after a restart of the run seals its CommonJS leaves as that restart did (see `RUN_BUILD_SEAL`).
+			const seal = kind === "reload" ? (holder.restart?.seal ?? null) : null;
+			const next = await this.#buildCopy(view, history, kind, kept?.instanceID, seal, this.#startOf(holder, view, kind));
+			if (holder.torn === true) {
+				this.#retireTree(next);
+				return;
+			}
+			if (kind === "copy") this.#carryRootPrototype(view.api, next.api);
+			if (keepStart) next._startTreeEpoch = view._treeEpoch;
+			this.#adoptTree(holder, next);
+			this.#noteRunRestart(holder, kind, next);
+			// A full-isolation run's `self` writes what it kept so far into the run's new tree, as that tree's build, and
+			// from now on reads and writes that tree (see `makeRunSelf` in handlers/unified-wrapper/run).
+			const runSelf = holder[RUN_SELF];
+			if (runSelf !== undefined && runSelf !== null)
+				runSelf.adopted(kind, (write) => runInReloadBuild(this, { copyOf: this, next }, write));
+			if (kept !== null && holder.replaced !== kept) {
+				if (holder.replaced) {
+					const left = holder.replaced;
+					if (--left.users === 0) this.#retireKeptScope(left);
+				}
+				holder.loadID = kept.instanceID;
+				holder.replaced = kept;
+				kept.users++;
+			}
+		} finally {
+			holder.treeBusy = null;
+			release();
+		}
+	}
+
+	/**
+	 * The snapshot a run's first copy of its tree is built as of (see {@link Slothlet#buildCopy}): a run that changes
+	 * the tree it started on (the instance's, or a copy kept for it when the instance changed that tree) gets the tree
+	 * as it read it, as of its start, not as the instance holds it now. Null for a kept token, a rebuild, a run that
+	 * owns a tree already, and a run reading another run's tree.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {object} view - The set copied (see {@link Slothlet#viewOf}).
+	 * @param {"copy"|"reload"|"restart"} kind - What the build is.
+	 * @returns {object|null} The run's snapshot.
+	 * @private
+	 */
+	#startOf(holder, view, kind) {
+		if (kind !== "copy" || holder.ns === undefined || holder.ownsTree === true) return null;
+		const snap = holder.snap ?? null;
+		if (snap === null || snap.closed || snap.root === null || snap.root === undefined) return null;
+		const owner = WeakMapMethods.get(this.#treeOwners, view.api);
+		return owner === undefined || owner.ns === undefined ? snap : null;
+	}
+
+	/**
+	 * Keep what tells a run's code apart from the code of the trees it read before its last `restart()` (see
+	 * {@link Slothlet#_runRestart}): a restart starts that record over, and a reload after it adds the stamp it imported
+	 * its files under. A copy imports from the URLs of the tree it copies, so it adds none.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {"copy"|"reload"|"restart"} kind - What the build was.
+	 * @param {object} next - The built set.
+	 * @returns {void}
+	 * @private
+	 */
+	#noteRunRestart(holder, kind, next) {
+		if (kind === "copy" || (kind === "reload" && !holder.restart)) return;
+		const bust = MapMethods.get(this.#treeSets, next._treeEpoch)?.bust ?? null;
+		if (kind === "restart") {
+			// The modules of the trees the run read until now are gone with them: their code has no standing in the run (see
+			// ApiManager#isRestartReplaced). Copies take ever lower epochs, so every node of those trees carries a higher one.
+			// The seal its CommonJS leaves were sealed for is held here, and its scripts are recognised while it is. The seals
+			// of the run's earlier restarts stay held with it, so the code of those copies is still recognised, and refused.
+			const seal = MapMethods.get(this.#treeSets, next._treeEpoch)?.seal ?? null;
+			const seals = holder.restart ? copyList(holder.restart.seals) : [];
+			if (seal !== null) listPush(seals, seal);
+			holder.restart = { epoch: next._treeEpoch, stamps: new Set(), seal, seals };
+			this._runRestarts++;
+		}
+		if (bust !== null) SetMethods.add(holder.restart.stamps, `${bust}`);
+	}
+
+	/**
+	 * Give the root of a copy's new tree the prototype the root of the tree it copies has: one it was given is the copy's
+	 * too.
+	 * @param {object|Function} from - The api copied.
+	 * @param {object|Function} to - The new api.
+	 * @returns {void}
+	 * @private
+	 */
+	#carryRootPrototype(from, to) {
+		if (from === null || from === undefined || to === null || to === undefined || from === to) return;
+		const record = WeakMapMethods.get(this.#rootPrototypes, from);
+		if (record !== undefined) {
+			if (record.given) WeakMapMethods.set(this.#rootPrototypes, to, { given: true, prototype: record.prototype });
+			return;
+		}
+		if (typeof from !== "object" || typeof to !== "object") return;
+		const prototype = Reflect.getPrototypeOf(from);
+		if (prototype !== Reflect.getPrototypeOf(to) && Reflect.isExtensible(to)) Reflect.setPrototypeOf(to, prototype);
+	}
+
+	/**
+	 * Make a built set a copy's own: its handlers namespace owns its forks, the copy's earlier namespace stops sharing
+	 * the handlers it held, and the runs reading through a kept token that took a tree read their non-forkable handlers
+	 * from it.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {object} next - The built set.
+	 * @returns {void}
+	 * @private
+	 */
+	#adoptTree(holder, next) {
+		const ns = next.handlers;
+		for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
+			const handler = ns[FORKABLE_HANDLERS[ofIndex]];
+			if (handler !== null && typeof handler === "object") WeakMapMethods.set(this.#owners, handler, ns);
+		}
+		const previous = holder.ns !== undefined ? holder.ns : holder.values?.handlers;
+		if (previous !== null && previous !== undefined) this.#unshareHandlers(previous);
+		const replacedTree = holder.ownsTree === true ? holder.values : null;
+		holder.values = next;
+		if (holder.ns !== undefined) holder.ns = ns;
+		holder.history = null;
+		WeakMapMethods.set(this.#treeOwners, next.api, holder);
+		if (replacedTree !== null) this.#retireTree(replacedTree);
+		else {
+			holder.ownsTree = true;
+			this._treeCopies++;
+		}
+		if (holder.ns === undefined) {
+			// A kept token: the runs reading through it with handlers of their own take its other handlers.
+			for (let index = 0, held = setToArray(this.#held); index < held.length; index++) {
+				const record = held[index];
+				if (record.from === holder && record.ns !== null && record.ns !== undefined && record.values === null)
+					this.#followTree(record.ns, ns);
+			}
+		}
+	}
+
+	/**
+	 * Let go of a tree a copy owned: what its own handlers hold (ownership, versions, event subscriptions) is cleared, as
+	 * a shutdown clears the instance's. The clearing is the copy's own, never the instance's, whoever's code triggered it.
+	 * @param {object|null} values - The set.
+	 * @returns {void}
+	 * @private
+	 */
+	#retireTree(values) {
+		if (values === null || values === undefined) return;
+		WeakMapMethods.delete(this.#treeOwners, values.api);
+		MapMethods.delete(this.#treeSets, values._treeEpoch);
+		const handlers = values.handlers;
+		/* v8 ignore next */
+		if (!carriesMarks(this) || !handlers) return;
+		runInReloadBuild(this, { copyOf: this, next: values }, () => {
+			handlers.ownership?.clear?.();
+			handlers.versionManager?.shutdown?.();
+			handlers.eventManager?.shutdown?.();
+		});
+	}
+
+	/**
+	 * Build a set of the instance's fields to the side for a copy (see {@link Slothlet#ownTree}): a new api tree and
+	 * the handlers that go with it, made as load() makes the instance's, while the code that runs as the build reads and
+	 * writes only the new set (see {@link Slothlet#buildNext}).
+	 *
+	 * - `"copy"`: the tree as the copy has it, from the very modules it uses (each file from the URL the copied tree
+	 *   imported it from, so no module runs again): the base, then the `add()` / `remove()` history replayed, then what
+	 *   was written into the tree at runtime. The copy's permission rules, hooks, metadata, event and lifecycle
+	 *   subscriptions are forks of its own, and the build announces nothing to lifecycle subscribers.
+	 * - `"reload"`: as a reload rebuilds the instance, for the copy alone: every file read again from disk, the history
+	 *   replayed, and the rules, hooks, metadata and event strategy carried over; runtime writes are not.
+	 * - `"restart"`: as a restart rebuilds the instance, for the copy alone: from the original config, nothing carried.
+	 * @param {object} view - The set copied.
+	 * @param {Array<object>} history - Its operation history.
+	 * @param {"copy"|"reload"|"restart"} kind - What the build is.
+	 * @param {string} [loadID] - The ID the copied tree's files were loaded under, when the instance has left it.
+	 * @param {{stamp: string}|null} [seal=null] - For a reload, the seal of the run's last restart (see
+	 *   `RUN_BUILD_SEAL`); a restart draws its own.
+	 * @param {object|null} [asOf=null] - For a run's copy, the run's snapshot: what was written into the tree is carried
+	 *   as the run read it, as of its start (see {@link Slothlet#startOf}).
+	 * @returns {Promise<object>} The new set.
+	 * @private
+	 */
+	async #buildCopy(view, history, kind, loadID, seal = null, asOf = null) {
+		const next = this.#copyOfFields(view);
+		const epoch = --this.#copyEpochs;
+		next._buildEpoch = epoch;
+		next._treeEpoch = epoch;
+		next._startTreeEpoch = null;
+		next._lazyTally = {};
+		next._totalLazyCount = 0;
+		next._unmaterializedLazyCount = 0;
+		next._materializationComplete = false;
+		next._materializationWaiters = [];
+		// The copy is no new instance: what announces a loaded instance (`materialized:complete`, the `loader.materialize`
+		// callback) is not announced again for it.
+		next._materializationCompleteEmitted = kind === "copy";
+		next._materializeCallbackCalled = true;
+		next._moduleIncarnations = kind === "restart" ? new Map() : this.#copyMap(view._moduleIncarnations);
+		next._retiredIncarnations = kind === "restart" ? new Map() : this.#copyMap(view._retiredIncarnations);
+		const mark = { copyOf: this, next, view, kind, silent: kind === "copy", bust: kind === "copy" ? null : this.#clock.now(), asOf };
+		mark.seal = kind === "restart" ? Objects.freeze({ stamp: `${mark.bust}` }) : kind === "reload" ? seal : null;
+		MapMethods.set(this.#treeSets, epoch, { values: next, bust: mark.bust, seal: mark.seal });
+		const build = () => this._runAsHost(() => this.#buildCopyOnto(mark, history));
+		// The tree being built is one apart from the instance's from its first node on.
+		this._treeCopies++;
+		try {
+			await runInClosingBuild(this, mark, loadID === undefined ? build : () => runLoadAs(this, loadID, build));
+		} catch (error) {
+			this.#retireTree(next);
+			throw error;
+		} finally {
+			this._treeCopies--;
+		}
+		return next;
+	}
+
+	/**
+	 * The kept import scope of the ID the tree a copy reads was loaded under, when the instance has left that ID (see
+	 * {@link Slothlet#keepReplacedScope}); null when it loads under the instance's own.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @returns {object|null} The kept scope's entry.
+	 * @private
+	 */
+	#keptScopeOf(holder) {
+		const id = this.#loadIDOf(holder);
+		if (id === undefined) return null;
+		return MapMethods.get(this.#keptScopes, id) ?? null;
+	}
+
+	/**
+	 * The ID a copy's lazy nodes load under, when it is not the instance's own: the one recorded on the copy that owns
+	 * the tree it reads, or on the token it reads through.
+	 * @param {object|null} holder - A run's record or a kept token.
+	 * @returns {string|undefined} The ID.
+	 * @private
+	 */
+	#loadIDOf(holder) {
+		if (holder === null || holder === undefined) return undefined;
+		if (holder.loadID !== undefined) return holder.loadID;
+		const values = holder.values;
+		if (values !== null && values !== undefined) {
+			const owner = WeakMapMethods.get(this.#treeOwners, values.api);
+			if (owner !== undefined && owner !== holder && owner.loadID !== undefined) return owner.loadID;
+		}
+		return holder.from?.loadID;
+	}
+
+	/**
+	 * At a restart with runs open: the trees built for them keep loading under the ID the instance leaves (their lazy
+	 * nodes load the files as their other files were loaded), so its import scope is kept until the last of them is torn
+	 * down, instead of being released by the teardown.
+	 * @returns {void}
+	 * @private
+	 */
+	#keepScopeForCopies() {
+		const replaced = { instanceID: this.instanceID, scope: null, typescriptCacheDirs: [], users: 0 };
+		for (let index = 0, held = setToArray(this.#held); index < held.length; index++) {
+			const holder = held[index];
+			if (holder.ownsTree !== true || this.#loadIDOf(holder) !== undefined) continue;
+			holder.loadID = replaced.instanceID;
+			holder.replaced = replaced;
+			replaced.users++;
+		}
+		if (replaced.users === 0) return;
+		replaced.scope = this.#importScope;
+		this.#importScope = null;
+		this.#scopeKeptForCopies = true;
+		MapMethods.set(this.#keptScopes, replaced.instanceID, replaced);
+	}
+
+	/**
+	 * A shallow copy of a Map, or a new empty one.
+	 * @param {Map|null|undefined} map - The map.
+	 * @returns {Map} The copy.
+	 * @private
+	 */
+	#copyMap(map) {
+		const copy = new Map();
+		if (map) for (const entry of mapEntries(map)) MapMethods.set(copy, entry[0], entry[1]);
+		return copy;
+	}
+
+	/**
+	 * The body of {@link Slothlet#buildCopy}, run as the build: `this` reads and writes the new set.
+	 * @param {object} mark - The build's mark.
+	 * @param {Array<object>} history - The operation history the copied set has.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #buildCopyOnto(mark, history) {
+		const { view, kind } = mark;
+		let restartConfig = null;
+		if (kind === "restart") {
+			const { clock: _, ...config } = copyTopLevelConfig(this._originalConfig, false);
+			if (this._originalBase !== undefined) config.base = this._originalBase;
+			restartConfig = config;
+			if (config.permissions !== undefined) {
+				try {
+					restartConfig = { ...config, permissions: normalizePermissionsConfig(config.permissions) };
+				} catch {
+					restartConfig = config;
+				}
+			}
+			this.config = restartConfig;
+		}
+		await this._initializeComponents();
+		if (restartConfig !== null) this.config = this.helpers.config.transformConfig(restartConfig);
+		const handlers = this.handlers;
+		const oldHandlers = view.handlers;
+		if (kind === "copy") {
+			// The copy's rules, hooks, metadata and subscriptions are what the copied set has, in forks of its own. The
+			// lifecycle fork carries the framework's own subscribers too.
+			for (let ofIndex = 0; ofIndex < COPIED_HANDLERS.length; ofIndex++) {
+				const slot = COPIED_HANDLERS[ofIndex];
+				const from = oldHandlers[slot];
+				if (from !== null && typeof from === "object" && typeof from[FORK] === "function") handlers[slot] = from[FORK]();
+			}
+		} else {
+			this._setupLifecycleSubscribers();
+			handlers.permissionManager?.applyDefaultRoutineRules(this.config.routines.entries);
+			this._setupConfigLifecycleSubscribers();
+		}
+		const baseModuleId =
+			kind === "copy" && view.baseModuleID
+				? view.baseModuleID
+				: `base_${StringMethods.substring(this.helpers.utilities.generateId(), 0, 8)}`;
+		this.baseModuleID = baseModuleId;
+		const baseApi = await this.builders.builder.buildAPI({
+			dir: this.config.base,
+			noBase: this.config.base === null,
+			mode: this.config.mode,
+			moduleID: baseModuleId,
+			hidden: this.config.hidden ?? null,
+			cacheBust: mark.bust
+		});
+		this.api = baseApi;
+		const apiWithBuiltins = await this.buildFinalAPI(this.api);
+		/* v8 ignore next */
+		if (handlers.apiCacheManager) {
+			handlers.apiCacheManager.set(baseModuleId, {
+				endpoint: ".",
+				moduleID: baseModuleId,
+				api: this.api,
+				folderPath: this.config.base,
+				mode: this.config.mode,
+				sanitizeOptions: this.config.sanitize || {},
+				/* v8 ignore next */
+				collisionMode: this.config.api.collision.mode.initial || "merge",
+				config: { ...this.config },
+				timestamp: this.#clock.now()
+			});
+		}
+		this.injectRuntimeMetadataFunctions(apiWithBuiltins);
+		if (kind !== "copy" && this.config.metadata && typeof this.config.metadata === "object") {
+			for (let ofIndex = 0, ofList = Objects.entries(this.config.metadata); ofIndex < ofList.length; ofIndex++) {
+				handlers.metadata.setGlobalMetadata(ofList[ofIndex][0], ofList[ofIndex][1]);
+			}
+			handlers.metadata.registerUserMetadata(baseModuleId, this.config.metadata);
+		}
+		/* v8 ignore next */
+		if (handlers.ownership) {
+			handlers.ownership.registerSubtree(apiWithBuiltins, baseModuleId, "");
+			handlers.ownership.setModuleEndpoint(baseModuleId, ".");
+		}
+		this.reference = kind === "restart" ? this.config.reference : view.reference;
+		if (this.reference && typeof this.reference === "object") {
+			frameworkWrite(this.boundApi, () => Objects.assign(this.boundApi, this.reference));
+		}
+		if (kind === "reload") {
+			const savedMetadataState = oldHandlers.metadata?.exportUserState?.();
+			if (savedMetadataState && handlers.metadata) handlers.metadata.importUserState(savedMetadataState);
+			const savedEventStrategy = oldHandlers.eventManager?.exportStrategy?.() ?? null;
+			if (savedEventStrategy) handlers.eventManager.strategy(savedEventStrategy);
+		}
+		if (kind !== "restart") {
+			for (let ofIndex = 0; ofIndex < history.length; ofIndex++) {
+				const operation = history[ofIndex];
+				// A copy's rules are in its permission manager's fork already; a reload registers them again.
+				if (kind === "reload" || operation.type === "add" || operation.type === "remove") await this.#replayOperation(operation);
+			}
+			/* v8 ignore else */
+			if (handlers.apiManager?.state) {
+				handlers.apiManager.state.operationHistory = copyList(history);
+				/* v8 ignore next */
+				const addHistory = oldHandlers.apiManager?.state?.addHistory;
+				handlers.apiManager.state.addHistory = addHistory ? copyList(addHistory) : [];
+			}
+		}
+		if (kind === "reload") {
+			const savedHooks = oldHandlers.hookManager?.exportHooks?.();
+			if (savedHooks?.length && handlers.hookManager) handlers.hookManager.importHooks(savedHooks);
+			const wasSealed = oldHandlers.permissionManager?.isSealed?.() === true;
+			const savedMode = oldHandlers.permissionManager?.mode?.() ?? null;
+			const permissionManager = handlers.permissionManager;
+			if (savedMode === "on" && permissionManager?.mode?.() !== "on") permissionManager.enable();
+			else if (savedMode === "off" && permissionManager?.mode?.() !== "off") permissionManager.disable();
+			if (wasSealed) permissionManager?.seal?.();
+		}
+		if (kind === "copy") {
+			// What code wrote into the copied tree at runtime (`self.x = …`, a member the host set) is in the copy too.
+			// A run's first copy carries it as the run read it, as of its start (see Slothlet#startOf).
+			const asOf = mark.asOf ?? null;
+			await handlers.apiManager?.carryRuntimeMembers?.(asOf?.root ?? view.api, apiWithBuiltins, oldHandlers.ownership, asOf);
+			// Which version is the default and each version's metadata are the copied set's too.
+			handlers.versionManager?.carryState?.(oldHandlers.versionManager);
+		}
+		/* v8 ignore next */
+		if (handlers.routineManager) {
+			await handlers.routineManager.rebuildStacks(this.boundApi);
+			// Fresh modules start as they do in a load; a copy's modules are the ones already started.
+			if (kind !== "copy") await handlers.routineManager.runStartupModeRoutines();
+		}
+		this.isLoaded = kind === "copy" ? view.isLoaded : true;
+		if (this.isLoaded) this.#ended = false;
+		if (kind === "restart") await handlers.lifecycle.emit("init", { instance: this.instanceID, restart: true });
+	}
+
+	/**
+	 * `reload()` in a `run()` / `scope()`: the run's tree is rebuilt as a reload rebuilds the instance's (every file read
+	 * again, the `add()` / `remove()` history replayed, rules, hooks, metadata and the event strategy carried), for the
+	 * run alone. The instance, sibling runs and a nested run still reading the run's tree keep what they have.
+	 * @param {object} record - The run's record.
+	 * @returns {Promise<object>} The api.
+	 * @private
+	 */
+	async #reloadRun(record) {
+		while (record.treeBusy) await record.treeBusy;
+		if (record.ownsTree === true) await this.#copyForSharers(record.values.api, record);
+		await this.#ownTree(record, "reload");
+		return this.boundApi;
+	}
+
+	/**
+	 * `restart()` in a `run()` / `scope()`: the run's copy starts over from the original config, as a restart starts the
+	 * instance over, for the run alone. `restart` and `shutdown` are announced to the run's lifecycle subscribers, and
+	 * `init` and `restarted` to those of its new copy. The instance and the other runs keep what they have.
+	 * @param {object} record - The run's record.
+	 * @returns {Promise<object>} The api.
+	 * @private
+	 */
+	async #restartRun(record) {
+		while (record.treeBusy) await record.treeBusy;
+		const lifecycle = this.handlers.lifecycle;
+		await lifecycle.emit("restart", { instance: this.instanceID });
+		await lifecycle.emit("shutdown", { instance: this.instanceID, restart: true });
+		if (record.ownsTree === true) await this.#copyForSharers(record.values.api, record);
+		await this.#ownTree(record, "restart");
+		await this.handlers.lifecycle.emit("restarted", { instance: this.instanceID, previous: this.instanceID });
+		return this.boundApi;
+	}
+
+	/**
+	 * The loader of the set a node's tree belongs to: a tree built for a run (see {@link Slothlet#buildCopy}) has a loader
+	 * of its own, which imported its files under the run's own queries, and the instance's tree has the instance's. Read
+	 * through the instance's fields, a node of the instance's tree would be answered with the loader of the run the
+	 * reading code runs in. Any other node (a tree a restart replaced, a copy kept across a reload) gets the loader the
+	 * running code reads.
+	 * @param {object|null|undefined} wrapper - A node's wrapper.
+	 * @returns {object|null} The loader, or null.
+	 * @internal
+	 *
+	 * @example
+	 * slothlet._nodeLoader(wrapper)?.importedUnderQuery(filePath, query);
+	 */
+	_nodeLoader(wrapper) {
+		const epoch = wrapper?.____slothletInternal?.epoch;
+		const entry = typeof epoch === "number" ? MapMethods.get(this.#treeSets, epoch) : undefined;
+		if (entry !== undefined) return entry.values.processors?.loader ?? null;
+		const own = this.#fields ?? this;
+		if (epoch === own._treeEpoch) return own.processors?.loader ?? null;
+		return this.processors?.loader ?? null;
+	}
+
+	/**
+	 * The last `restart()` the running code's `run()` / `scope()` made of its copy (see {@link Slothlet#restartRun}):
+	 * `epoch`, the epoch of the tree it built, which the nodes of the trees the run read before it are above, and
+	 * `stamps`, the reload stamps the files of the trees built for the run since were imported under; `seal`, the seal its
+	 * CommonJS leaves were sealed for (see `RUN_BUILD_SEAL`), and `seals`, those of every restart of the run, held so the
+	 * scripts sealed for them stay recognised. Null when the code runs in no run, or in one that restarted nothing.
+	 * @returns {{epoch: number, stamps: Set<string>, seal: object|null, seals: Array<object>}|null} The restart.
+	 * @internal
+	 *
+	 * @example
+	 * const floor = slothlet._runRestart()?.epoch;
+	 */
+	_runRestart() {
+		if (this._runRestarts === 0) return null;
+		return this.#runRecord()?.restart ?? null;
+	}
+
+	/**
+	 * The snapshot of the run that owns a tree a copy built for it (see {@link Slothlet#ownTree}), by the tree's epoch:
+	 * the runs opened in that run read the tree as of their start on it, so the run saves the tree's nodes and root
+	 * before it changes them while one is open (see `helpers/run-snapshot`). Null for a tree no run owns (the
+	 * instance's, a copy kept for runs) and once the run has let it go.
+	 * @param {number} epoch - The tree's epoch.
+	 * @returns {object|null} The run's snapshot.
+	 * @internal
+	 *
+	 * @example
+	 * const snap = slothlet._runTreeSnapshot(wrapper.____slothletInternal.epoch);
+	 */
+	_runTreeSnapshot(epoch) {
+		if (this._treeCopies === 0 || typeof epoch !== "number" || epoch >= 0) return null;
+		const api = MapMethods.get(this.#treeSets, epoch)?.values?.api;
+		const owner = api === null || api === undefined ? undefined : WeakMapMethods.get(this.#treeOwners, api);
+		if (owner === undefined || owner.ns === undefined || owner.torn === true) return null;
+		const snap = owner.snap ?? null;
+		return snap === null || snap.closed ? null : snap;
+	}
+
+	/**
+	 * `shutdown()` in a `run()` / `scope()`: the run's copy is shut down (announced to its lifecycle subscribers; its
+	 * ownership, versions, permission rules and event subscriptions cleared; it stops being loaded), for the run alone.
+	 * The instance and the other runs keep what they have.
+	 * @param {object} record - The run's record.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #shutdownRun(record) {
+		if (!this.isLoaded) return;
+		await this.handlers.lifecycle.emit("shutdown", { instance: this.instanceID, restart: false });
+		while (record.treeBusy) await record.treeBusy;
+		if (record.ownsTree === true) await this.#copyForSharers(record.values.api, record);
+		else await this.#ownTree(record, "copy");
+		const values = record.values;
+		values.isLoaded = false;
+		const handlers = values.handlers;
+		await runInReloadBuild(this, { copyOf: this, next: values }, async () => {
+			handlers.ownership?.clear?.();
+			handlers.versionManager?.shutdown?.();
+			await handlers.permissionManager?.shutdown?.();
+			handlers.eventManager?.shutdown?.();
+		});
+	}
+
+	/**
+	 * [SILENT_BUILD] - Whether the calling code builds a copy of a tree for a run (see {@link Slothlet#buildCopy}),
+	 * which announces nothing to lifecycle subscribers: nothing is loaded that was not loaded before.
+	 * @returns {boolean} True in such a build.
+	 * @internal
+	 */
+	[SILENT_BUILD]() {
+		const mark = currentBuildMark(this);
+		return mark !== undefined && mark !== null && typeof mark === "object" && mark.copyOf === this && mark.silent === true;
+	}
+
+	/**
+	 * [COPY_SOURCE_URL] - What a build for a run tells the loader (see {@link Slothlet#buildCopy}): for a copy, the
+	 * loader of the copied tree, whose URLs and CommonJS namespaces the copy takes so it uses the very modules the copied
+	 * tree uses; for a run's own reload or restart, the stamp that has every file read again; null otherwise.
+	 * @returns {object|number|null} The loader, the stamp, or null.
+	 * @internal
+	 */
+	[COPY_SOURCE_URL]() {
+		const mark = currentBuildMark(this);
+		if (mark === undefined || mark === null || typeof mark !== "object" || mark.copyOf !== this) return null;
+		if (mark.kind !== "copy") return mark.bust ?? null;
+		return mark.view.processors?.loader ?? null;
+	}
+
+	/**
+	 * [RUN_BUILD_SEAL] - The seal a build for a run seals its CommonJS leaves' scripts for (see `SEALED_BUILDS` in
+	 * helpers/instance-imports): drawn by a `restart()` of the run, and taken by the reloads in the run after it, so the
+	 * code of every copy the run built since its last restart runs in one script per file, told apart from the code of
+	 * the copies it read before. Null for any other build (a copy, a reload in a run that restarted nothing): their
+	 * leaves are sealed as the instance's own loads are.
+	 * @returns {{stamp: string}|null} The seal, or null.
+	 * @internal
+	 */
+	[RUN_BUILD_SEAL]() {
+		const mark = currentBuildMark(this);
+		if (mark === undefined || mark === null || typeof mark !== "object" || mark.copyOf !== this) return null;
+		return mark.seal ?? null;
+	}
+
+	/**
+	 * [RECORD_OPERATION] - Record an operation in the history of the copy the calling code changes (see
+	 * `recordOperation` in `helpers/flow-stores`): a run with no tree of its own keeps a history of its own, starting from
+	 * the one it reads, so what it changes is not replayed into the instance on a reload.
+	 * @param {object} operation - The operation.
+	 * @returns {void}
+	 * @internal
+	 */
+	[RECORD_OPERATION](operation) {
+		const writer = this.#copy === null && this.#fields === null ? null : this.#treeWriter();
+		if (writer !== null && writer !== undefined && writer.values === null) {
+			writer.history ??= copyList(this.#historyOf(writer, this.#viewOf(writer)));
+			listPush(writer.history, operation);
+			return;
+		}
+		const history = this.handlers?.apiManager?.state?.operationHistory;
+		if (history) listPush(history, operation);
+	}
+
+	/**
+	 * The token of the copy the instance has now, which the copy record each `run()` / `scope()` gets when it starts
+	 * reads through to (see `RUN_COPY` and `copyForRun` in `helpers/flow-stores`). Made the first time a run asks for it after a swap, so a reload with no run open swaps
+	 * nothing out for runs to keep. A run opened by the build of a reload under way records the build's copy.
+	 * @returns {{values: object|null}} The token.
+	 * @internal
+	 */
+	[CURRENT_COPY]() {
+		const window = this.#reloadWindow;
+		if (window !== null && !window.closed && markOf(this, BUILD_MARK) === window.mark) {
+			window.nextCopy ??= { values: null };
+			return window.nextCopy;
+		}
+		this.#copy ??= { values: null };
+		return this.#copy;
+	}
+
+	/**
+	 * Switch the instance to the fresh scope a normal reload claimed, once the new ID's context is set up: the instance's
+	 * code runs there from now on, and what was kept under the ID it leaves goes.
+	 * @param {{instanceID: string, require: Function, release: Function}} scope - The claimed scope.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #switchToPendingScope(scope) {
+		const oldInstanceID = this.instanceID;
+		const oldScope = this.#importScope;
+		this.#pendingScope = null;
+		const window = this.#reloadWindow;
+		if (window !== null) {
+			// The copy the instance has keeps answering calls until the swap: what slothlet keeps about its files (its
+			// import graph, its CommonJS copies, its share of the global patches, its TS transform cache) stays until then.
+			window.replaced = {
+				instanceID: oldInstanceID,
+				scope: oldScope,
+				typescriptCacheDirs: this._typescriptCacheDirs?.size ? setToArray(this._typescriptCacheDirs) : []
+			};
+			if (this._typescriptCacheDirs?.size) SetMethods.clear(this._typescriptCacheDirs);
+			this.#importScope = null;
+			this.#adoptImportScope(scope);
+			return;
+		}
+		// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
+		forgetInstanceScripts(oldInstanceID);
+		this.#adoptImportScope(scope);
+		// The global patches are held under the new ID once load() goes on; the old ID's share goes now, or the patches
+		// could never be released. Nothing is unpatched here: the new ID takes the share straight back.
+		SetMethods.delete(boundaryPatchHolders, oldInstanceID);
+		SetMethods.delete(promisePatchHolders, oldInstanceID);
+		SetMethods.delete(asyncCallbackHolders, oldInstanceID);
+
+		// The TS transform cache dirs from the previous instanceID are stale: the startup sweep only removes dirs whose
+		// owning PID is dead (same-PID dirs from prior rotations are kept), so without this they'd accumulate one dir per
+		// reload until shutdown — an unbounded leak in long-lived dev processes that reload frequently.
+		if (isNode && this._typescriptCacheDirs?.size) {
+			await promiseAllSettled(mapList(setToArray(this._typescriptCacheDirs), (dir) => fsp.rm(dir, { recursive: true, force: true })));
+			SetMethods.clear(this._typescriptCacheDirs);
+		}
+	}
+
+	/**
+	 * Let go of what slothlet kept about the files of the ID a reload switched the instance away from (see
+	 * {@link Slothlet#switchToPendingScope}), once that copy no longer answers calls: when the reload has swapped its new
+	 * copy in, or has failed after switching (the instance stays on the new ID, answering from the copy it had).
+	 * @param {object} window - The reload's window.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #retireReplacedScope(window) {
+		const replaced = window.replaced;
+		if (!replaced) return;
+		window.replaced = null;
+		await this.#retireScope(replaced);
+	}
+
+	/**
+	 * Let go of what slothlet kept about the files of an ID the instance left (see {@link Slothlet#retireReplacedScope}).
+	 * @param {{instanceID: string, scope: object|null, typescriptCacheDirs: string[]}} replaced - What was left.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #retireScope(replaced) {
+		const { instanceID } = replaced;
+		// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
+		forgetInstanceScripts(instanceID);
+		if (replaced.scope) {
+			setInstanceSelfKind(replaced.scope.instanceID, null);
+			replaced.scope.release();
+		}
+		// The global patches are held under the new ID; the old ID's share goes, or the patches could never be released.
+		// Nothing is unpatched here: the new ID holds its share.
+		SetMethods.delete(boundaryPatchHolders, instanceID);
+		SetMethods.delete(promisePatchHolders, instanceID);
+		SetMethods.delete(asyncCallbackHolders, instanceID);
+		// The TS transform cache dirs of the previous instanceID are stale (see switchToPendingScope).
+		if (isNode && replaced.typescriptCacheDirs.length) {
+			await promiseAllSettled(mapList(replaced.typescriptCacheDirs, (dir) => fsp.rm(dir, { recursive: true, force: true })));
+		}
+	}
+
+	/**
+	 * What the instance answers calls with, taken before a reload: load() replaces the components, the config and the
+	 * api tree before it knows whether the new copy loads.
+	 * @returns {object} The kept state, for {@link Slothlet#restoreFailedReload}.
+	 * @private
+	 */
+	#keepForFailedReload() {
+		const components = {};
+		for (let ofIndex = 0, ofList = this.componentCategories; ofIndex < ofList.length; ofIndex++) {
+			const category = ofList[ofIndex];
+			components[category] = { ...this[category] };
+		}
+		return {
+			components,
+			config: this.config,
+			api: this.api,
+			debugLogger: this.debugLogger,
+			envTarget: this.envTarget,
+			reference: this.reference,
+			context: this.context,
+			isLoaded: this.isLoaded,
+			_lazyTally: this._lazyTally,
+			_totalLazyCount: this._totalLazyCount,
+			_unmaterializedLazyCount: this._unmaterializedLazyCount,
+			_materializationComplete: this._materializationComplete
+		};
+	}
+
+	/**
+	 * Put back what the instance answered calls with before a reload that failed: a failed reload leaves the instance as it
+	 * was, answering from the copy it had (docs/RELOAD.md), on whichever ID it is on now.
+	 * @param {object} kept - What {@link Slothlet#keepForFailedReload} took.
+	 * @returns {void}
+	 * @private
+	 */
+	#restoreFailedReload(kept) {
+		if (kept !== null) {
+			for (let ofIndex = 0, ofList = this.componentCategories; ofIndex < ofList.length; ofIndex++) {
+				const category = ofList[ofIndex];
+				const now = this[category];
+				for (let keyIndex = 0, keys = Objects.keys(now); keyIndex < keys.length; keyIndex++) {
+					if (!Objects.hasOwn(kept.components[category], keys[keyIndex])) delete now[keys[keyIndex]];
+				}
+				Objects.assign(now, kept.components[category]);
+			}
+			this.config = kept.config;
+			this.api = kept.api;
+			this.debugLogger = kept.debugLogger;
+			this.envTarget = kept.envTarget;
+			this.reference = kept.reference;
+			this.context = kept.context;
+			this.isLoaded = kept.isLoaded;
+			this._lazyTally = kept._lazyTally;
+			this._totalLazyCount = kept._totalLazyCount;
+			this._unmaterializedLazyCount = kept._unmaterializedLazyCount;
+			this._materializationComplete = kept._materializationComplete;
+		}
+		this.#carriedContext = null;
+		// The context the instance's code runs in now answers with that copy: a reload that switched IDs set the new ID's
+		// context up for the copy it did not finish. A reload that keeps the ID (`instance: "keep"`) drops the ID's context
+		// before setting it up again: when that failed, it is set up once more here, as the trusted root load() makes.
+		let store = MapMethods.get(this.contextManager.instances, this.instanceID);
+		if (store === undefined) {
+			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
+			Objects.defineProperty(store, trustedRootOwn.TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
+		}
+		store.self = this.boundApi;
+		store.context = this.context || {};
+		store.slothlet = this;
+	}
+
+	/**
+	 * After a normal reload failed: a reload that switched to its new ID (load() switches once that ID's context is set up,
+	 * before any module loads) leaves the instance's code running there, so the context it ran in before goes and the
+	 * `run()` / `scope()` stores made in it follow it. A reload that failed before the switch left the instance on its ID
+	 * and context, and there is nothing to do.
+	 * @param {string} oldInstanceID - The instance's ID when the reload started.
+	 * @returns {void}
+	 * @private
+	 */
+	#settleFailedReload(oldInstanceID) {
+		const current = this.instanceID;
+		if (current === oldInstanceID) return;
+		const instances = this.contextManager.instances;
+		for (const ofEntry of mapEntries(instances)) {
+			const store = ofEntry[1];
+			if (store.parentInstanceID === oldInstanceID) store.parentInstanceID = current;
+		}
+		reparentFlowStores(this, [oldInstanceID], current);
+		if (MapMethods.has(instances, oldInstanceID)) this.contextManager.cleanup(oldInstanceID);
+	}
+
+	/**
+	 * The body of {@link Slothlet#reload}, run once the reload's fresh scope (if any) is claimed: in the reload's build
+	 * flow when the instance has a window open (see {@link Slothlet#openReloadWindow}), where `this` answers with the new
+	 * copy's set while every other caller is answered by the set the instance has.
+	 * @param {{instanceID: string, require: Function, release: Function}|null} nextScope - The claimed scope a normal
+	 *   reload switches to, or null for `instance: "keep"`.
+	 * @param {string} oldInstanceID - The instance's ID when the reload started.
+	 * @param {object|null} window - The reload's window, or null where the runtime cannot carry marks.
+	 * @returns {Promise<Object>} The bound API.
+	 * @private
+	 */
+	async #reloadOnto(nextScope, oldInstanceID, window) {
+		const keepInstanceID = nextScope === null;
+
+		// Changes queued through lazy stand-ins, and refusals of those made, belong to the nodes this reload replaces;
+		// eager mode's changes go with those nodes too (#653).
+		releaseStandInChanges(this);
+
+		// 1. The components the instance has. With a window open they keep answering every call until the swap, so what
+		//    the new copy takes from them (history, hooks, metadata, the permission state) is read as late as it can be,
+		//    and takes in changes calls made while the reload ran. Without one, load() replaces them on the instance.
+		const oldHandlers = { ...this.handlers };
+		/* v8 ignore next */
+		const oldApiState = oldHandlers.apiManager?.state ?? null;
 
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
 
-		// 3. Determine the instanceID to pass to load().
-		//    Normal reload: create a fresh ID (busts internal caches; old ID cleaned up below).
-		//    keepInstanceID: reuse the current ID so instances.has() is TRUE inside load(),
+		// 3. The instanceID load() runs under.
+		//    Normal reload: the fresh ID claimed in reload() (busts internal caches; old ID cleaned up below). load() sets
+		//    its context up and only then switches the instance to it (#pendingScope).
+		//    instance "keep": reuse the current ID so instances.has() is TRUE inside load(),
 		//    which triggers the cleanup-then-reinitialise branch of the context store.
-		const oldInstanceID = this.instanceID;
-		if (!keepInstanceID) {
-			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
-			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
-			forgetInstanceScripts(oldInstanceID);
-			releaseInstanceScope(oldInstanceID);
-			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
-			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
-			boundaryPatchHolders.delete(oldInstanceID);
-			promisePatchHolders.delete(oldInstanceID);
+		const loadInstanceID = keepInstanceID ? this.instanceID : nextScope.instanceID;
 
-			// The TS transform cache dirs from the previous instanceID are stale: the
-			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs
-			// from prior rotations are kept), so without this they'd accumulate one
-			// dir per reload until shutdown — an unbounded leak in long-lived dev
-			// processes that reload frequently.
-			if (isNode && this._typescriptCacheDirs?.size) {
-				await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
-				this._typescriptCacheDirs.clear();
-			}
+		// Without a window, calls made while the new copy builds reach its components: they take the permission state,
+		// hooks, metadata and event-delivery strategy the instance has before any module of the new copy loads (see
+		// Slothlet#carryIntoBuild), never a fresh set.
+		const carried = window === null ? { history: null } : null;
+		if (carried !== null) this.#carryOnLoad = () => this.#carryIntoBuild(oldHandlers, oldApiState, carried);
+
+		// 4. Do a FRESH load() with the new permanent instanceID. The new tree's lazy nodes are counted from zero, as a
+		//    fresh instance's are, in a count of their own: the replaced tree's nodes keep moving the count they joined.
+		//    wait() callers queued before the reload stay queued, and settle once the new tree has loaded.
+		this._lazyTally = {};
+		this._totalLazyCount = 0;
+		this._unmaterializedLazyCount = 0;
+		this._materializationComplete = false;
+		this.#carriedContext = this.context;
+		try {
+			await this.load(this.config, loadInstanceID);
+		} finally {
+			this.#carryOnLoad = null;
 		}
 
-		// 3b. Save user-managed metadata state before load() destroys the current
-		//     Metadata instance. This preserves setGlobal() and set() values across reload.
-		const savedMetadataState = this.handlers.metadata?.exportUserState?.();
-
-		// 3c. Save hook registrations before load() destroys the current HookManager.
-		//     This preserves hook.on() registrations across full reload.
-		const savedHooks = this.handlers.hookManager?.exportHooks?.();
-
-		// 3c'. Save the host's event-delivery strategy (#497) — host configuration, like hooks — before
-		//      load() replaces the EventManager. Subscriptions themselves are not carried: modules
-		//      re-register theirs, and listener ids are stable across that re-registration.
-		const savedEventStrategy = this.handlers.eventManager?.exportStrategy?.() ?? null;
-
-		// 3d. Save the permission-control seal state before load() constructs a fresh
-		//     PermissionManager (whose #sealed resets to false). seal() is a one-way lock,
-		//     so a reload must not silently unseal it; it is re-applied after rule replay below.
-		const wasSealed = this.handlers.permissionManager?.isSealed?.() === true;
-		// The mode the host moved the system to (`control.enable()` / `disable()`) holds across the reload too, so a
-		// system the host turned on from "disabled" does not fall back to it (#625).
-		const savedMode = this.handlers.permissionManager?.mode?.() ?? null;
-
-		// 4. Do a FRESH load() with the new permanent instanceID
-		await this.load(this.config, this.instanceID);
-
-		// 4b. Restore saved metadata state into the new Metadata instance, BEFORE
-		//     replay so that registerUserMetadata() from replay merges over it correctly.
+		// 4b. Restore the user-managed metadata (metadata.global() and metadata.set() values) into the new Metadata
+		//     instance, BEFORE replay so that registerUserMetadata() from replay merges over it correctly.
 		// savedMetadataState is always truthy (metadata always exports state); metadata handler always present.
+		//     From here the old handler notes what calls write to it until the swap, which hands that over too (step 10).
+		const savedMetadataState = oldHandlers.metadata?.exportUserState?.();
 		/* v8 ignore next */
 		if (savedMetadataState && this.handlers.metadata) {
 			this.handlers.metadata.importUserState(savedMetadataState);
+			oldHandlers.metadata.trackUserChanges();
+			this.#metadataTracked = oldHandlers.metadata;
 		}
 
-		// 4c. Restore hook registrations into the new HookManager instance.
-		// savedHooks always has entries when exported after hooks are registered; hookManager always present.
-		/* v8 ignore next */
-		if (savedHooks?.length && this.handlers.hookManager) {
-			this.handlers.hookManager.importHooks(savedHooks);
-		}
-
-		// 4d. Restore the event-delivery strategy into the new EventManager.
-		if (savedEventStrategy) {
-			this.handlers.eventManager.strategy(savedEventStrategy);
+		// 4c. The host's event-delivery strategy (#497) — host configuration, like hooks. Subscriptions themselves are not
+		//     carried: modules re-register theirs, and listener ids are stable across that re-registration.
+		if (carried === null) {
+			const savedEventStrategy = oldHandlers.eventManager?.exportStrategy?.() ?? null;
+			if (savedEventStrategy) this.handlers.eventManager.strategy(savedEventStrategy);
 		}
 
 		// 5. Reparent any child __run_ context stores that were created before reload.
 		//    Their parentInstanceID points to the old base instanceID; updating it lets
 		//    context.get() still find them for callers that call reload() inside a .run() scope.
-		for (const [, store] of this.contextManager.instances) {
+		for (const ofEntry of mapEntries(this.contextManager.instances)) {
+			const store = ofEntry[1];
 			if (store.parentInstanceID === oldInstanceID) {
 				store.parentInstanceID = this.instanceID;
 			}
 		}
+		// The stores of runs that have returned are no longer among the instances, but work they left behind (a timer, a
+		// listener, a promise chain) still holds them and runs in them: they move to the new ID too.
+		reparentFlowStores(this, [oldInstanceID], this.instanceID);
 
-		// 6. Clean up the old base context store now that the new one is active.
-		//    Guard with .has() because shutdown() may have already removed the store.
-		if (oldInstanceID && oldInstanceID !== this.instanceID && this.contextManager.instances?.has(oldInstanceID)) {
-			this.contextManager.cleanup(oldInstanceID);
-		}
+		// 6. The old base context store stays until the swap (step 10): code of the copy being replaced still runs in it
+		//    while the new copy builds (a call made before the reload, a timer or listener it set), and is answered there as
+		//    the module it is (see the live context manager's tryGetContext).
 
-		// 6. Replay operation history in chronological order
-		for (const operation of operationHistory) {
-			if (operation.type === "add") {
-				await this.handlers.apiManager.addApiComponent({
-					apiPath: operation.apiPath,
-					folderPath: operation.folderPath,
-					// operation.options carries the ORIGINAL moduleID recorded at add time; addApiComponent
-					// reuses it (there is no top-level moduleID param), so a module keeps the same id across a
-					// reload — for user-supplied ids and auto-generated `<path>_<hash>` ids alike. That stable
-					// id is what lets a scoped remove op below resolve on replay.
-					// operation.options is always provided during api.add() replay; {} fallback is dead code.
-					/* v8 ignore next */
-					options: { ...(operation.options || {}), recordHistory: false },
-					versionConfig: operation.versionConfig || null
-				});
-			} else if (operation.type === "remove") {
-				// Route the replayed remove through the full removeApiComponent path so
-				// it performs the SAME cleanup a live remove does — api + boundApi tree,
-				// apiCacheManager entry, ownership records, metadata, version registration.
-				// A bare deletePath would prune only `this.api` and leave boundApi / cache /
-				// ownership remnants, so the rebuilt tree would not match a clean
-				// build-up-to-this-point. recordHistory:false avoids re-appending the op.
-				if (operation.scopedModuleID) {
-					// Scoped removal (remove(moduleID, apiPath)): replay the two-argument form so only this
-					// module's nodes go. The module's id survives the add replay above, so it resolves; a
-					// plain apiPath removal here would over-delete other modules sharing the path.
-					await this.handlers.apiManager.removeApiComponent(operation.scopedModuleID, {
-						scopedApiPath: operation.apiPath,
-						recordHistory: false
-					});
-				} else {
-					await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
-				}
-			} else if (operation.type === "addPermissionRule") {
-				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
-				/* v8 ignore else */
-				if (this.handlers.permissionManager) {
-					// A module's write rule keeps the module layer it was added at (#625).
-					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer);
-				}
-			} else if (operation.type === "removePermissionRule") {
-				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
-				/* v8 ignore else */
-				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
-				}
-			} else if (operation.type === "addEventRule") {
-				// Event rules (#407) replay through the same permissionManager; absent-manager arm unreachable.
-				/* v8 ignore else */
-				if (this.handlers.permissionManager) {
-					// An event rule keeps the layer it was added at (#625).
-					this.handlers.permissionManager.addEventRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer ?? null);
-				}
-			} else if (operation.type === "registerPrincipal") {
-				// Principals (#459). A host registration replays as-is — host code is not reloaded. A module's
-				// recorded resolver is a closure over the module as it was BEFORE the reload, so replaying it
-				// would answer from stale module state; the name is reserved for its owner instead (dormant,
-				// fail-closed) until the reloaded module registers again.
-				/* v8 ignore else */
-				if (this.handlers.permissionManager) {
-					if (operation.ownerModuleID === null) {
-						this.handlers.permissionManager.registerPrincipal(operation.name, operation.definition, null, null);
-					} else {
-						this.handlers.permissionManager.reservePrincipal(operation.name, operation.ownerModuleID);
-					}
-				}
-			} else if (operation.type === "unregisterPrincipal") {
-				/* v8 ignore else */
-				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.unregisterPrincipal(operation.name, operation.callerModuleID);
-				}
-			} else {
-				// The op type is necessarily removeEventRule here — the replay records only
-				// add/remove/add|removePermissionRule/add|removeEventRule/register|unregisterPrincipal —
-				// so this final else is that.
-				/* v8 ignore else */
-				if (operation.type === "removeEventRule") {
-					// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
-					/* v8 ignore else */
-					if (this.handlers.permissionManager) {
-						this.handlers.permissionManager.removeEventRule(operation.ruleId, operation.callerModuleID);
-					}
-				}
+		// 7. Replay operation history in chronological order. With a window, that is everything the instance's api manager
+		//    recorded, read until nothing new is left, so an add(), remove() or rule change a call made while this reload
+		//    ran (which reached that api manager) comes along. Without one, the build carried the history's permission
+		//    operations already, and its add() / remove() operations replay here.
+		let operationHistory;
+		if (carried === null) {
+			operationHistory = [];
+			/* v8 ignore next */
+			const recorded = () => oldApiState?.operationHistory ?? [];
+			while (operationHistory.length < recorded().length) {
+				const operation = recorded()[operationHistory.length];
+				listPush(operationHistory, operation);
+				await this.#replayOperation(operation);
+			}
+		} else {
+			operationHistory = carried.history;
+			for (let ofIndex = 0, ofList = operationHistory; ofIndex < ofList.length; ofIndex++) {
+				const operation = ofList[ofIndex];
+				if (operation.type === "add" || operation.type === "remove") await this.#replayOperation(operation);
 			}
 		}
 
@@ -1405,7 +4006,8 @@ class Slothlet {
 		/* v8 ignore else */
 		if (this.handlers.apiManager?.state) {
 			this.handlers.apiManager.state.operationHistory = operationHistory;
-			this.handlers.apiManager.state.addHistory = addHistory;
+			/* v8 ignore next */
+			this.handlers.apiManager.state.addHistory = oldApiState?.addHistory ? copyList(oldApiState.addHistory) : [];
 		}
 
 		// Runtime `self.X = …` writes are intentionally NOT replayed: a reload
@@ -1413,16 +4015,193 @@ class Slothlet {
 		// of that history. Module-init writes reappear naturally because the
 		// module body re-executes during the rebuild.
 
-		// Re-apply the permission-control seal AFTER rule replay (replay re-adds rules via
-		// addRule, which a sealed manager would reject). This preserves seal()'s documented
-		// one-way lock across a reload — the fresh PermissionManager starts unsealed, so
-		// without this a reload would silently unseal the control surface.
+		// 8. Hook registrations (hook.on()) carry into the new HookManager, read last so hooks registered while the
+		//    reload ran come along.
+		if (carried === null) {
+			const savedHooks = oldHandlers.hookManager?.exportHooks?.();
+			// savedHooks always has entries when exported after hooks are registered; hookManager always present.
+			/* v8 ignore next */
+			if (savedHooks?.length && this.handlers.hookManager) {
+				this.handlers.hookManager.importHooks(savedHooks);
+			}
+		}
+
+		// 9. The mode the host moved the system to (`control.mode(value)`) holds across the reload, so a system the host
+		//    turned on from "disabled" does not fall back to it (#625). The seal goes back on AFTER rule replay (replay
+		//    re-adds rules via addRule, which a sealed manager would reject): seal() is a one-way lock, and the fresh
+		//    PermissionManager starts unsealed, so without this a reload would silently unseal the control surface.
+		const wasSealed = oldHandlers.permissionManager?.isSealed?.() === true;
+		const savedMode = oldHandlers.permissionManager?.mode?.() ?? null;
 		const permissionManager = this.handlers.permissionManager;
 		if (savedMode === "on" && permissionManager?.mode?.() !== "on") permissionManager.enable();
 		else if (savedMode === "off" && permissionManager?.mode?.() !== "off") permissionManager.disable();
 		if (wasSealed) this.handlers.permissionManager?.seal?.();
 
+		// 10. The swap: from here every call, whoever makes it, is answered by the new copy. The old base context store goes
+		//     last, once the files of the copy it served are retired. Guard with .has() because shutdown() may have already
+		//     removed the store. The metadata calls wrote to the instance while the reload built goes into the new copy
+		//     first: nothing awaits between that and the swap, so no write falls between the two.
+		// Defensive: step 4b always sets the tracked handler, and the metadata handler is always present.
+		/* v8 ignore next */
+		if (this.#metadataTracked !== null && this.handlers.metadata) this.handlers.metadata.takeUserChanges(this.#metadataTracked);
+		this.#metadataTracked = null;
+		if (window !== null) {
+			this.#closeReloadWindow(window, true);
+			await this.#retireReplacedScope(window);
+		} else {
+			this.handlers.metadata?.readThrough?.(null);
+		}
+		if (
+			oldInstanceID &&
+			oldInstanceID !== this.instanceID &&
+			(this.contextManager.instances == null ? undefined : MapMethods.has(this.contextManager.instances, oldInstanceID))
+		) {
+			// The live runtime keeps it while a call made before the swap still waits in it (a module awaiting this reload),
+			// so that call goes on as its module with `self` the instance's api, as an async-runtime flow keeps its store.
+			if (typeof this.contextManager.retire === "function") this.contextManager.retire(oldInstanceID);
+			else this.contextManager.cleanup(oldInstanceID);
+		}
+
 		return this.boundApi;
+	}
+
+	/**
+	 * Replay one recorded operation onto the new copy's components (see {@link Slothlet#reloadOnto}).
+	 * @param {object} operation - The recorded operation.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #replayOperation(operation) {
+		if (operation.type === "add") {
+			await this.handlers.apiManager.addApiComponent({
+				apiPath: operation.apiPath,
+				folderPath: operation.folderPath,
+				// operation.options carries the ORIGINAL moduleID recorded at add time; addApiComponent
+				// reuses it (there is no top-level moduleID param), so a module keeps the same id across a
+				// reload — for user-supplied ids and auto-generated `<path>_<hash>` ids alike. That stable
+				// id is what lets a scoped remove op below resolve on replay.
+				// operation.options is always provided during api.add() replay; {} fallback is dead code.
+				/* v8 ignore next */
+				options: { ...(operation.options || {}), recordHistory: false },
+				versionConfig: operation.versionConfig || null
+			});
+		} else if (operation.type === "remove") {
+			// Route the replayed remove through the full removeApiComponent path so
+			// it performs the SAME cleanup a live remove does — api + boundApi tree,
+			// apiCacheManager entry, ownership records, metadata, version registration.
+			// A bare deletePath would prune only `this.api` and leave boundApi / cache /
+			// ownership remnants, so the rebuilt tree would not match a clean
+			// build-up-to-this-point. recordHistory:false avoids re-appending the op.
+			if (operation.scopedModuleID) {
+				// Scoped removal (remove(moduleID, apiPath)): replay the two-argument form so only this
+				// module's nodes go. The module's id survives the add replay above, so it resolves; a
+				// plain apiPath removal here would over-delete other modules sharing the path.
+				await this.handlers.apiManager.removeApiComponent(operation.scopedModuleID, {
+					scopedApiPath: operation.apiPath,
+					recordHistory: false
+				});
+			} else {
+				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
+			}
+		} else {
+			this.#replayPermissionOperation(operation);
+		}
+	}
+
+	/**
+	 * Replay one recorded permission operation (a rule, an event rule or a principal) onto the new copy's permission
+	 * manager (see {@link Slothlet#reloadOnto}).
+	 * @param {object} operation - The recorded operation, anything but an `add` / `remove`.
+	 * @returns {void}
+	 * @private
+	 */
+	#replayPermissionOperation(operation) {
+		if (operation.type === "addPermissionRule") {
+			// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+			/* v8 ignore else */
+			if (this.handlers.permissionManager) {
+				// A module's write rule keeps the module layer it was added at (#625).
+				this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer);
+			}
+		} else if (operation.type === "removePermissionRule") {
+			// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+			/* v8 ignore else */
+			if (this.handlers.permissionManager) {
+				this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+			}
+		} else if (operation.type === "addEventRule") {
+			// Event rules (#407) replay through the same permissionManager; absent-manager arm unreachable.
+			/* v8 ignore else */
+			if (this.handlers.permissionManager) {
+				// An event rule keeps the layer it was added at (#625).
+				this.handlers.permissionManager.addEventRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer ?? null);
+			}
+		} else if (operation.type === "registerPrincipal") {
+			// Principals (#459). A host registration replays as-is — host code is not reloaded. A module's
+			// recorded resolver is a closure over the module as it was BEFORE the reload, so replaying it
+			// would answer from stale module state; the name is reserved for its owner instead (dormant,
+			// fail-closed) until the reloaded module registers again.
+			/* v8 ignore else */
+			if (this.handlers.permissionManager) {
+				if (operation.ownerModuleID === null) {
+					this.handlers.permissionManager.registerPrincipal(operation.name, operation.definition, null, null);
+				} else {
+					this.handlers.permissionManager.reservePrincipal(operation.name, operation.ownerModuleID);
+				}
+			}
+		} else if (operation.type === "unregisterPrincipal") {
+			/* v8 ignore else */
+			if (this.handlers.permissionManager) {
+				this.handlers.permissionManager.unregisterPrincipal(operation.name, operation.callerModuleID);
+			}
+		} else {
+			// The op type is necessarily removeEventRule here — the replay records only
+			// add/remove/add|removePermissionRule/add|removeEventRule/register|unregisterPrincipal —
+			// so this final else is that.
+			/* v8 ignore else */
+			if (operation.type === "removeEventRule") {
+				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+				/* v8 ignore else */
+				if (this.handlers.permissionManager) {
+					this.handlers.permissionManager.removeEventRule(operation.ruleId, operation.callerModuleID);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Without a window (a runtime that cannot carry marks), the new copy's freshly made components take, before any of its
+	 * modules load, the permission state (rules, event rules, principals, mode), hooks, metadata and event-delivery
+	 * strategy the instance has, so a call made while the reload runs, which reaches them, is held to the same rules and
+	 * hooks as before it. Called from load() once the components exist. The seal goes on at the end of the reload, as the
+	 * replayed `add()` history registers rules of its own.
+	 * @param {object} oldHandlers - The handlers the instance had.
+	 * @param {object|null} oldApiState - Their api manager's state.
+	 * @param {{history: Array<object>|null}} carried - Receives the operations carried.
+	 * @returns {void}
+	 * @private
+	 */
+	#carryIntoBuild(oldHandlers, oldApiState, carried) {
+		/* v8 ignore next */
+		carried.history = oldApiState?.operationHistory ? copyList(oldApiState.operationHistory) : [];
+		const savedMetadataState = oldHandlers.metadata?.exportUserState?.();
+		/* v8 ignore next */
+		if (savedMetadataState && this.handlers.metadata) this.handlers.metadata.importUserState(savedMetadataState);
+		// The nodes calls run until the reload ends are the copy the instance has, tagged in its handler.
+		this.handlers.metadata?.readThrough?.(oldHandlers.metadata ?? null);
+		const savedHooks = oldHandlers.hookManager?.exportHooks?.();
+		/* v8 ignore next */
+		if (savedHooks?.length && this.handlers.hookManager) this.handlers.hookManager.importHooks(savedHooks);
+		const savedEventStrategy = oldHandlers.eventManager?.exportStrategy?.() ?? null;
+		if (savedEventStrategy) this.handlers.eventManager.strategy(savedEventStrategy);
+		for (let ofIndex = 0, ofList = carried.history; ofIndex < ofList.length; ofIndex++) {
+			const operation = ofList[ofIndex];
+			if (operation.type !== "add" && operation.type !== "remove") this.#replayPermissionOperation(operation);
+		}
+		const savedMode = oldHandlers.permissionManager?.mode?.() ?? null;
+		const permissionManager = this.handlers.permissionManager;
+		if (savedMode === "on" && permissionManager?.mode?.() !== "on") permissionManager.enable();
+		else if (savedMode === "off" && permissionManager?.mode?.() !== "off") permissionManager.disable();
 	}
 
 	/**
@@ -1470,17 +4249,37 @@ class Slothlet {
 	 * does not stop the rebuild; its error is re-thrown once the new instance is in place.
 	 *
 	 * @returns {Promise<Object>} The same bound API reference.
-	 * @throws {SlothletError} INVALID_CONFIG_NOT_LOADED when the instance was never created via `slothlet()`.
+	 * @throws {SlothletError} INSTANCE_NOT_LOADED when the instance was never created via `slothlet()`.
 	 *
 	 * @example
 	 * await api.slothlet.restart();
 	 */
 	restart() {
+		// A restart asked for in a run() / scope() starts the run's own copy over, and leaves the instance as it is.
+		const runWriter = this.#treeWriter();
+		if (runWriter !== null && runWriter !== undefined) return this.#restartRun(runWriter);
 		if (this._restartPromise) return this._restartPromise;
-		this._restartPromise = this._restart().finally(() => {
+		this._restartPromise = PromiseMethods.finally(this._restart(), () => {
 			this._restartPromise = null;
 		});
 		return this._restartPromise;
+	}
+
+	/**
+	 * Refuse an operation that rebuilds the api root while the root is closed (`Object.preventExtensions`, `seal` or
+	 * `freeze` on the api): a closed root keeps the members it holds, so it cannot take the ones a rebuild makes.
+	 * @param {string[]} operation - The method refused, as path segments.
+	 * @returns {void}
+	 * @throws {SlothletError} API_ROOT_CLOSED when the root is closed.
+	 * @private
+	 *
+	 * @example
+	 * this._assertRootOpen(["slothlet", "reload"]);
+	 */
+	_assertRootOpen(operation) {
+		if (this.boundApi && !Reflect.isExtensible(this.boundApi)) {
+			throw new SlothletError("API_ROOT_CLOSED", { operation });
+		}
 	}
 
 	/**
@@ -1492,19 +4291,52 @@ class Slothlet {
 	 * await this._restart();
 	 */
 	async _restart() {
+		if (this.#reloadWindow !== null) await this.#reloadSettled();
 		if (!this._originalConfig) {
-			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "restart",
-				validationError: true
-			});
+			throw new SlothletError("INSTANCE_NOT_LOADED", { operation: ["slothlet", "restart"] });
 		}
 
+		this._assertRootOpen(["slothlet", "restart"]);
+
+		// A run() / scope() open now keeps the copy it started with: the restart replaces the instance's, not the runs'.
+		// The teardown and rebuild below are the instance's own work, also when a run's code asked for them: they read
+		// and write the instance's own set, never the calling run's copy.
+		this.#keepCurrentCopy();
+		if (!carriesMarks(this)) return this.#restartOnto();
+		// The async runtime counts the work of runs open now while any of its instances lives: the teardown below leaves
+		// it with none until the rebuild starts the new one, so it is held across, or the work those runs finish after the
+		// restart would never be counted done and their copies never torn down.
+		const contextManager = this.contextManager;
+		const holdsJobHook = typeof contextManager.holdJobHook === "function";
+		if (holdsJobHook) contextManager.holdJobHook();
+		const work = { closed: false };
+		this.#instanceWork = work;
+		try {
+			// Each run open now keeps a tree of its own, built before the teardown below: it keeps the api tree, the
+			// handlers and the modules it started with, and nothing of the rebuilt instance reaches it.
+			this.#checkpointTree();
+			await runInReloadBuild(this, work, () => this.#copyForSharers((this.#fields ?? this).api, null, true));
+			this.#keepScopeForCopies();
+			return await runInReloadBuild(this, work, () => this.#restartOnto());
+		} finally {
+			work.closed = true;
+			this.#instanceWork = null;
+			if (holdsJobHook) contextManager.releaseJobHook();
+		}
+	}
+
+	/**
+	 * restart()'s teardown and rebuild (see {@link Slothlet#_restart}).
+	 * @returns {Promise<Object>} The same bound API reference.
+	 * @private
+	 */
+	async #restartOnto() {
 		const previousInstanceID = this.instanceID;
 		let teardownError = null;
 		this._restarting = true;
 		try {
 			// 1. `restart` — before anything is torn down.
-			await this.handlers.lifecycle.emit("restart", { instanceID: previousInstanceID });
+			await this.handlers.lifecycle.emit("restart", { instance: previousInstanceID });
 
 			// 2. Normal teardown of the old instance — the same steps as the root `api.shutdown()` dispose
 			//    path: `mode: "shutdown"` routines, the root shutdown hook (whatever the user's routines
@@ -1542,10 +4374,12 @@ class Slothlet {
 			await this._clearModuleCaches();
 			this.envSnapshot = null;
 			this._typesGenerated = false;
+			this._lazyTally = {};
 			this._totalLazyCount = 0;
 			this._unmaterializedLazyCount = 0;
 			this._materializationComplete = false;
 			this._materializationCompleteEmitted = false;
+			this._materializeCallbackCalled = false;
 
 			// 4. Build the new instance from the original config. New wrappers carry the next epoch;
 			//    the old tree's wrappers keep answering as themselves until the swap below.
@@ -1557,17 +4391,33 @@ class Slothlet {
 			// A restart mounts none of the modules added before it: a module added later under one of their ids is new.
 			this._moduleIncarnations = new Map();
 			this._retiredIncarnations = new Map();
-			await this.load(config);
+			// As the host too: the rebuild is framework work. A module's call that triggered the restart belongs to the
+			// instance it was made in, which is still this one, so without this the new copy would be built as that module
+			// — removed by the teardown above, and refused every read of the framework's own surface.
+			await this._runAsHost(() => this.load(config));
 
 			// 5. Swap complete: every wrapper from an earlier epoch now forwards to the node at its path
 			//    in the new tree (or throws RESTART_REFERENCE_UNRESOLVED if the path is gone).
 			this._liveEpoch = this._buildEpoch;
+			this._treeEpoch = this._liveEpoch;
 		} finally {
 			this._restarting = false;
+			// The runs open across the restart, kept by the teardown, run on under the instance's ID now. A rebuild that
+			// failed has moved the instance to its new ID too (load() claims it before any module loads): without the move,
+			// those runs would name an ID with no store, and be read as no flow of the instance.
+			if (typeof this.instanceID === "string" && this.instanceID !== previousInstanceID) {
+				const flows = this.contextManager?.instances;
+				if (flows) {
+					for (const ofEntry of mapEntries(flows)) {
+						if (ofEntry[1].parentInstanceID === previousInstanceID) ofEntry[1].parentInstanceID = this.instanceID;
+					}
+				}
+				reparentFlowStores(this, [previousInstanceID], this.instanceID);
+			}
 		}
 
 		// 6. `restarted` — on the new instance.
-		await this.handlers.lifecycle.emit("restarted", { instanceID: this.instanceID, previousInstanceID });
+		await this.handlers.lifecycle.emit("restarted", { instance: this.instanceID, previous: previousInstanceID });
 
 		if (teardownError) throw teardownError;
 		return this.boundApi;
@@ -1587,7 +4437,18 @@ class Slothlet {
 	async _runAsHost(fn) {
 		const identity = this.contextManager?.getCallerIdentity?.(this.instanceID);
 		if (!identity?.currentWrapper && !identity?.unresolved) return fn();
-		return this.contextManager.runInContext(this.instanceID, fn, null, [], null, true, true);
+		// The module's call that asked for the work stays on the stack below it (a function awaiting its own
+		// `self.slothlet.reload()`): the work is marked as the host's, so the code that asked is not read as making it.
+		const contextManager = this.contextManager;
+		return contextManager.runInContext(
+			this.instanceID,
+			() => runAsHostWork(this, contextManager.als?.getStore?.(), fn),
+			null,
+			[],
+			null,
+			true,
+			true
+		);
 	}
 
 	/**
@@ -1598,15 +4459,16 @@ class Slothlet {
 		if (!isNode) return;
 		// Clear CommonJS require cache
 		// Only clear modules from the configured dir to avoid breaking dependencies
-		const targetDir = this.config.dir;
+		const targetDir = this.config.base;
 		// No base directory (#471): nothing was loaded from one, so there is nothing to clear here.
 		if (targetDir === null) return;
 		const require = createRequire(import.meta.url);
 		const absoluteTargetDir = path.resolve(targetDir);
 
 		// Clear require.cache for CJS modules
-		for (const key of Object.keys(require.cache)) {
-			if (key.startsWith(absoluteTargetDir)) {
+		for (let ofIndex = 0, ofList = Objects.keys(require.cache); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (StringMethods.startsWith(key, absoluteTargetDir)) {
 				delete require.cache[key];
 			}
 		}
@@ -1629,10 +4491,6 @@ class Slothlet {
 		const metadataHandler = this.handlers.metadata;
 
 		// Delegate to Metadata class methods — all logic lives in metadata.mjs
-		api.slothlet.metadata.get = async function slothlet_metadata_get_runtime(path) {
-			return metadataHandler.get(path);
-		};
-
 		api.slothlet.metadata.self = function slothlet_metadata_self_runtime() {
 			return metadataHandler.self();
 		};
@@ -1676,12 +4534,12 @@ class Slothlet {
 			// excluding functions would silently skip ALL lazy wrappers and their pending
 			// materializationPromises, making this drain a no-op in exactly the mode it exists for.
 			const objType = typeof obj;
-			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || seen.has(obj)) return;
-			seen.add(obj);
+			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || SetMethods.has(seen, obj)) return;
+			SetMethods.add(seen, obj);
 
 			try {
 				// Skip version dispatcher proxies — they have no materialization promises. Detect by the
-				// module-private brand, never by reading `.__isVersionDispatcher`: that `__`-private read
+				// module-private brand, never by reading `.____isVersionDispatcher`: that `__`-private read
 				// is denied by the permission gate on any gated data node under `private.host: deny` (#287).
 				if (isFrameworkInternal(obj)) return;
 
@@ -1692,22 +4550,24 @@ class Slothlet {
 				const wrapper = resolveWrapper(obj);
 				if (wrapper) {
 					const mat = wrapper.____slothletInternal.materializationPromise;
-					if (mat) pending.push(mat);
+					if (mat) listPush(pending, mat);
 
 					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering
-					// ownKeysTrap, which calls _materialize() on lazy+unmaterialized wrappers
+					// ownKeysTrap, which calls ___materialize() on lazy+unmaterialized wrappers
 					// during shutdown. Children are stored as own enumerable properties on the
 					// raw wrapper; accessing wrapper[key] returns the child proxy, which collect
 					// then resolves via resolveWrapper() on the next recursion.
 					// A getter holds no load in flight: it is read by descriptor, so draining never runs a module's
 					// getter (#597).
-					for (const key of Object.keys(wrapper)) {
+					for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
 						if (!isFrameworkReservedKey(key)) collect(dataMemberOf(wrapper, key), depth + 1);
 					}
 					return;
 				}
 
-				for (const key of Object.keys(obj)) {
+				for (let ofIndex = 0, ofList = Objects.keys(obj); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					collect(dataMemberOf(obj, key), depth + 1);
 				}
 			} catch {
@@ -1716,12 +4576,13 @@ class Slothlet {
 			}
 		};
 
-		for (const key of Object.keys(this.api)) {
+		for (let ofIndex = 0, ofList = Objects.keys(this.api); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			collect(dataMemberOf(this.api, key));
 		}
 
 		if (pending.length > 0) {
-			await Promise.allSettled(pending);
+			await promiseAllSettled(pending);
 		}
 	}
 
@@ -1730,6 +4591,12 @@ class Slothlet {
 	 * @public
 	 */
 	async shutdown() {
+		// A shutdown asked for in a run() / scope() shuts down the run's own copy, and leaves the instance as it is.
+		const runWriter = this.#treeWriter();
+		if (runWriter !== null && runWriter !== undefined) return this.#shutdownRun(runWriter);
+		// A full reload under way finishes first: its new copy is swapped in, or it fails and the instance keeps its copy,
+		// and then what the instance has is shut down.
+		if (this.#reloadWindow !== null) await this.#reloadSettled();
 		if (!this.isLoaded) {
 			return;
 		}
@@ -1737,24 +4604,41 @@ class Slothlet {
 		// `shutdown` (#504): teardown is starting — emitted on the instance's own emitter while every
 		// system is still up, so its subscribers (config-declared and runtime alike) can still reach the
 		// api. `restart` is true when the teardown is the first half of a restart().
-		await this.handlers.lifecycle.emit("shutdown", { instanceID: this.instanceID, restart: this._restarting });
+		await this.handlers.lifecycle.emit("shutdown", { instance: this.instanceID, restart: this._restarting });
 
 		// Drain any in-flight lazy-mode module loads before tearing down, so that
 		// background import() calls can complete and won't cause "Closing rpc while
 		// fetch was pending" errors in Vitest workers.
 		await this._drainInFlightLoads();
 
+		// The stop gap: what runs still hold (work that never finishes, such as a listener left on an emitter) is torn
+		// down now, and the scopes of IDs kept copies loaded from are retired. A restart keeps open runs' copies.
+		if (!this._restarting) await this.#teardownAllRuns();
+
 		// Release this instance's share of the global boundary patches, and unpatch only once nothing holds
 		// them. Unpatching while another instance is live would leave its deferred work unattributed —
 		// which fails closed rather than leaking, but still refuses reads that should have succeeded.
-		boundaryPatchHolders.delete(this.instanceID);
-		if (promisePatchHolders.delete(this.instanceID) && promisePatchHolders.size === 0) disablePromisePatching();
-		if (boundaryPatchHolders.size === 0) {
+		SetMethods.delete(boundaryPatchHolders, this.instanceID);
+		if (this.#capabilityHolder !== null) {
+			releaseCapabilityCheck(this.#capabilityHolder);
+			this.#capabilityHolder = null;
+		}
+		if (SetMethods.delete(promisePatchHolders, this.instanceID) && SetMethods.size(promisePatchHolders) === 0) {
+			disablePromisePatching();
+			disableAsyncResourcePatching();
+			disableNodeCallbackPatching();
+		}
+		if (SetMethods.delete(asyncCallbackHolders, this.instanceID) && SetMethods.size(asyncCallbackHolders) === 0) {
+			disableAsyncCallbackServing();
+		}
+		if (SetMethods.size(boundaryPatchHolders) === 0) {
 			disableEventEmitterPatching();
 			disableSchedulerPatching();
 			disableEventTargetPatching();
 			disableEventTargetPropertyPatching();
 			disableObserverPatching();
+			disableClonePatching();
+			disableFunctionSourcePatching();
 
 			// Emitter cleanup is held to the same refcount: the tracking structures span every instance in
 			// the process, so running this on each shutdown would rip a still-live sibling's listeners off
@@ -1764,9 +4648,17 @@ class Slothlet {
 			cleanupEventEmitterResources();
 		}
 
+		// From here on, an api node a module was handed reads nothing for it (see refuseEndedAccess): the context
+		// and the permission rules its accesses were decided against go now. A restart brings the instance back.
+		this.#ended = true;
+
 		// Cleanup context
 		if (this.instanceID && this.contextManager) {
-			this.contextManager.cleanup(this.instanceID);
+			// A restart keeps the run() / scope() stores open across it: they keep their copies, and move to the new ID once
+			// the rebuild has one (see Slothlet#restartOnto).
+			if (MapMethods.has(this.contextManager.instances, this.instanceID))
+				this.contextManager.cleanup(this.instanceID, this._restarting ? { keepFlows: true } : undefined);
+			if (!this._restarting) forgetFlowStores(this);
 		}
 
 		// Clear ownership
@@ -1776,32 +4668,37 @@ class Slothlet {
 			this.handlers.ownership.clear();
 		}
 
+		// The instance's own handlers, also when the shutdown was asked for from a run(): a run's forks are the run's.
+		const ownHandlers = (this.#fields ?? this).handlers;
+
 		// Shutdown versioning manager — clears all dispatcher/registry/metadata state.
-		this.handlers.versionManager?.shutdown();
+		ownHandlers.versionManager?.shutdown();
 
 		// Shutdown permission manager — clears rules, cache, and resets enabled state.
-		await this.handlers.permissionManager?.shutdown();
+		await ownHandlers.permissionManager?.shutdown();
 
 		// Shutdown event manager (#407) — clears all subscriptions.
-		this.handlers.eventManager?.shutdown();
+		ownHandlers.eventManager?.shutdown();
 
 		// Drop this instance's private CommonJS helper copies (#518, #534), the scripts recorded and learned for its
 		// files, and the records of what its modules made (#597).
-		forgetInstanceScripts(this.instanceID);
-		releaseInstanceScope(this.instanceID);
+		// Runs that kept trees loaded under this ID across a restart keep its files' records until the last is torn down.
+		if (this.#scopeKeptForCopies) this.#scopeKeptForCopies = false;
+		else forgetInstanceScripts(this.instanceID);
+		this.#releaseImportScope();
 		releaseModuleMakers(this);
 
-		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
+		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<hash of instanceID>/).
 		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
 		// across process runs. Node-only: `fsp` is null in a browser (helpers/platform), so guard
 		// the same way as the reload-time cleanup (a browser never writes a TS cache anyway).
 		if (isNode && this._typescriptCacheDirs?.size) {
-			await Promise.allSettled([...this._typescriptCacheDirs].map((dir) => fsp.rm(dir, { recursive: true, force: true })));
-			this._typescriptCacheDirs.clear();
+			await promiseAllSettled(mapList(setToArray(this._typescriptCacheDirs), (dir) => fsp.rm(dir, { recursive: true, force: true })));
+			SetMethods.clear(this._typescriptCacheDirs);
 			// With its own cache gone, release the process's secure temp-dir fallback root if no other
 			// instance still uses it (#465); the TypeScript processor is already loaded at this point.
-			const { releaseSecureFallbackRoot } = await import("@cldmv/slothlet/processors/typescript");
-			await releaseSecureFallbackRoot();
+			typescriptInternals ??= PromiseMethods.then(import("#processors/typescript"), (typescript) => typescript.internals("slothlet"));
+			await (await typescriptInternals).releaseSecureFallbackRoot();
 		}
 
 		// Mark as not loaded. Keep this.api intact so the boundApi proxy remains
@@ -1831,31 +4728,56 @@ class Slothlet {
 	 */
 	getAPI() {
 		if (!this.isLoaded) {
-			throw new SlothletError(
-				"INVALID_CONFIG_NOT_LOADED",
-				{
-					operation: "getAPI"
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("INSTANCE_NOT_LOADED", {
+				operation: ["slothlet", "diag", "api"]
+			});
 		}
 		return this.boundApi;
 	}
 
 	/**
-	 * Get diagnostic information
-	 * @returns {Object} Diagnostic data
+	 * A diagnostic snapshot of this instance (`api.slothlet.diag.inspect()`): this instance only, never the others the
+	 * process-wide context manager also serves (#837).
+	 * @returns {{ instance: string, loaded: boolean, at: number|null, config: object, runtime: { type: string, running: boolean }, context: object|null, self: string[], ownership: object|null }}
+	 *   Its id, whether it is loaded, when its context record was made, its resolved config, the runtime it runs on
+	 *   and whether a call of it is running now, its context data, the top-level names its `self` shows, and its
+	 *   ownership summary (the `diag.owner` list shape).
 	 * @public
 	 */
 	getDiagnostics() {
+		const runtime = this.contextManager?.getInstanceDiagnostics?.(this.instanceID) ?? null;
 		return {
-			instanceID: this.instanceID,
-			isLoaded: this.isLoaded,
-			config: this.config,
-			context: this.contextManager?.getDiagnostics() || null,
+			instance: this.instanceID,
+			loaded: this.isLoaded,
+			at: runtime?.at ?? null,
+			config: this.#publicConfig(),
+			runtime: { type: runtime?.type ?? this.config?.runtime ?? null, running: runtime?.running ?? false },
+			context: runtime?.context ?? null,
+			self: runtime?.self ?? [],
 			ownership: this.handlers.ownership?.getDiagnostics() || null
 		};
+	}
+
+	/**
+	 * The resolved config as `diag.inspect()` reports it (D-7): the options as written in `slothlet({...})`, with
+	 * their defaults filled in and the fields slothlet derives for itself left out. A copy: changing it never changes
+	 * the instance.
+	 * @returns {object} The config.
+	 * @private
+	 */
+	#publicConfig() {
+		const out = {};
+		for (let ofIndex = 0, ofList = Objects.keys(this.config ?? {}); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (SetMethods.has(INTERNAL_CONFIG_KEYS, key)) continue;
+			const value = this.config[key];
+			// The values handed in by identity (reference, context) are reported as passed, as diag.reference and diag.context are.
+			out[key] =
+				value !== null && typeof value === "object" && !SetMethods.has(CONFIG_IDENTITY_KEYS, key)
+					? this.helpers.utilities.deepClone(value)
+					: value;
+		}
+		return out;
 	}
 
 	/**
@@ -1904,7 +4826,7 @@ class Slothlet {
  * const api = await slothlet({
  *   base: "./api",
  *   mode: "lazy",
- *   backgroundMaterialize: true
+ *   loader.materialize: true
  * });
  *
  * @example
@@ -1925,6 +4847,8 @@ class Slothlet {
  */
 export async function slothlet(config) {
 	const instance = new Slothlet();
+	// The package whose code is creating the instance is the host's own (#714).
+	recordInstanceOwner(instance);
 	// Retain the config as passed, before anything reads it, so restart() can rebuild from it (#504).
 	instance._retainOriginalConfig(config);
 	const api = await instance.load(config);
@@ -1940,7 +4864,7 @@ export async function slothlet(config) {
  * level: a consumer spreading `slothlet.defaults.routines` gets an independent array, but the
  * exported originals can never be mutated out from under other consumers or slothlet itself.
  *
- * @type {Readonly<{routines: ReadonlyArray<{name: string, mode: string}>, reservedExports: ReadonlySet<string>}>}
+ * @type {Readonly<{routines: ReadonlyArray<{name: string, mode: string}>, reserved: ReadonlySet<string>}>}
  * @public
  *
  * @example
@@ -1954,9 +4878,9 @@ export async function slothlet(config) {
  *   routines: slothlet.defaults.routines.filter((r) => r.name !== "shutdown")
  * });
  */
-slothlet.defaults = Object.freeze({
+slothlet.defaults = Objects.freeze({
 	routines: DEFAULT_ROUTINES,
-	reservedExports: RESERVED_EXPORTS
+	reserved: RESERVED_EXPORTS
 });
 
 export default slothlet;
@@ -1970,7 +4894,6 @@ export default slothlet;
  * @typedef {object} SlothletOptions
  * @property {string} [base] - Directory (node mode) or file:// URL / base URL (browser mode) to load API modules from.
  *   Required in both modes. Plain filesystem paths are automatically converted to `file://` URLs by the default browser-mode resolver.
- * @property {string} [dir] - Deprecated alias for `base`. Still accepted; emits a `V3_CONFIG_DEPRECATED` warning unless `silent: true`. Will be removed in v4.
  * @property {"eager"|"lazy"} [mode="eager"] - Loading strategy.
  *   - `"eager"` — all modules are loaded immediately at startup (default).
  *   - `"lazy"` — modules are loaded on first access via a Proxy.
@@ -1978,94 +4901,127 @@ export default slothlet;
  * @property {"async"|"live"} [runtime="async"] - Context propagation runtime.
  *   - `"async"` — AsyncLocalStorage (Node.js built-in, recommended for production).
  *   - `"live"` — Experimental live bindings.
- *   Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.
- * @property {number} [apiDepth=Infinity] - Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root.
+ *   Also accepted (case-insensitive): `"asynclocal"` / `"asynclocalstorage"` as aliases for `"async"`; `"livebindings"` / `"experimental"` as aliases for `"live"`.
+ *   Any other value silently falls back to `"async"`.
+ * @property {"instance"|"module"} [helpers="instance"] - How often a helper file (a file an api file imports that is no api file itself) is loaded.
+ *   - `"instance"` — once per instance: every api file importing the helper shares one copy, and so its module state.
+ *   - `"module"` — once per importing api file: each api file gets its own copy of every helper it imports, so helper state is not shared between api files, and the permission system can tell which api file a helper's code runs for. Node and the vite plugin only; a browser build keeps one copy.
+ * @property {number} [depth=Infinity] - Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root.
  * @property {string|string[]} [hidden] - Glob or array of globs hiding files and folders from the API, matched against each entry's
  *   path relative to `base` (folder-style `a/b` or dotted `a.b`; `*` one segment, `**` any depth, `?` one char, `{a,b}` alternation,
- *   `!` negation). Files match on their extension-stripped path. Applies on top of the built-in rule that `.`/`__`-prefixed names are
- *   hidden by default (`.`/`__`-prefixed folders can be restored via the deprecated `scanHiddenFolders`; files stay hidden). Also accepted per-call by `api.slothlet.api.add(path, dir, { hidden })`, where globs are relative to the added folder.
- * @property {boolean} [scanHiddenFolders=false] - Deprecated escape hatch: restore the pre-v3.11 behavior of scanning `.`/`__`-prefixed
- *   folders. Emits a `CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED` warning when supplied (unless `silent: true`). Will be removed in v4.
+ *   `!` re-includes, a trailing `/` names folders only, a name's leading `.` is part of the name). Files match on their
+ *   extension-stripped path. The globs sit over the built-in rule that hides `.`/`__`-prefixed names: they apply in order, the
+ *   last one that matches an entry decides, and an entry no glob matches falls to the built-in rule, so `"!**\/__*"` brings back
+ *   `__`-prefixed files and folders and `["!**\/.*\/", "!**\/__*\/"]` the folders only. Framework-reserved names are still refused.
+ *   Also accepted per-call by `api.slothlet.api.add(path, dir, { hidden })`, where globs are relative to the added folder.
  * @property {object|null} [context=null] - Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`.
- * @property {object|null} [reference=null] - Object whose properties are merged directly onto the root API and also available as `api.slothlet.reference`.
- * @property {{merge: "shallow"|"deep"}} [scope] - Controls how per-request scope data is merged. `"shallow"` merges top-level keys; `"deep"` recurses into nested objects.
+ * @property {object|null} [reference=null] - Object whose properties are merged directly onto the root API and, with `diagnostics: true`, readable as `api.slothlet.diag.reference`.
+ * @property {{merge?: "shallow"|"deep", isolation?: "partial"|"full"}} [scope] - Defaults for `api.slothlet.context.scope()` runs.
+ *   `merge`: `"shallow"` merges top-level keys; `"deep"` recurses into nested objects (any other value throws `INVALID_CONFIG`).
+ *   `isolation`: `"full"` (default) gives the scope a `self` of its own, so its `self` writes, checked as any write is, stay in the scope; `"partial"` lets a scope's `self` writes reach the shared api. A per-call `isolation` option overrides it; any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
+ * @property {object|null} [metadata] - Init metadata. Each key is set as global metadata (inherited by every later `api.slothlet.api.add()`) and registered as user metadata for the base module. See [METADATA.md](docs/METADATA.md#init-metadata).
+ * @property {object} [sanitize] - Options for turning file and folder names into api property names, the same options `sanitizePropertyName()` takes:
+ *   `first` (default `true`), `preserve` (`{ upper?, lower? }`, each default `false`) and `rules` (`{ leave?, nocase?, upper?, lower? }`, each a `string[]` of exact names, globs or `**boundary**` patterns).
+ *   Applies to every file and folder name the loader derives and to `api.slothlet.sanitize()`. See [SANITIZATION.md](docs/SANITIZATION.md).
  * @property {object} [api] - API build and mutation settings.
- * @property {string|{initial: string, api: string}} [api.collision="merge"] - Collision strategy when two modules export the same path.
+ * @property {string|{mode?: (string|{initial: string, api: string}), override?: boolean}} [api.collision] - Collision handling. A bare
+ *   string is the shorthand for `{ mode }`.
+ * @property {string|{initial: string, api: string}} [api.collision.mode="merge"] - Collision strategy when two modules export the same path.
  *   Modes: `"merge"` (default), `"merge-replace"`, `"replace"`, `"skip"`, `"warn"`, `"error"`.
  *   Pass an object to use different strategies for the initial build vs. runtime `api.slothlet.api.add()` calls.
- * @property {object} [api.mutations={add:true,remove:true,reload:true}] - Enable or disable runtime mutation methods on `api.slothlet.api`.
- *   Object with boolean keys `add`, `remove`, `reload` (all default `true`).
+ * @property {boolean} [api.collision.override=false] - Must be `true` before `api.slothlet.api.add()` honors a per-call `collisionMode` / `mutateExisting` / `recordHistory`.
+ * @property {object} [api.mutations={add:true,remove:true,reload:true,permissions:true,events:true}] - Enable or disable runtime mutation surfaces.
+ *   Object with boolean keys: `add`, `remove`, `reload` (`api.slothlet.api.*`), `permissions` (`api.slothlet.permissions.*` rule changes) and `events` (`api.slothlet.event.rules.*`), all default `true`.
  * @property {boolean|string|object} [hook=false] - Hook system configuration.
  *   - `false` — disabled (default).
  *   - `true` — enabled, all endpoints.
  *   - `string` — enabled with a default glob pattern.
- *   - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.
- * @property {object} [permissions] - Permission system configuration. Omit it and the system is off entirely. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
- * @property {"allow"|"deny"} [permissions.defaultPolicy="allow"] - Fallback when no rule matches.
- * @property {boolean} [permissions.enabled=true] - Global enforcement toggle.
+ *   - `object` — full control: `{ enabled: boolean, pattern?: string, errors?: "suppress"|false, pin?: boolean }` (`pin` defaults to `true`; `errors: true` means `"suppress"`).
+ * @property {object|"on"|"off"|"disabled"|boolean} [permissions] - Permission system configuration. Omit it and the system is off entirely. A bare `"on"`, `"off"` or `"disabled"` means `{ mode }`, `true` and `false` mean `"on"` and `"off"`; any other string or non-object value throws `INVALID_CONFIG`. See [PERMISSIONS.md](docs/PERMISSIONS.md#configuration).
+ * @property {"allow"|"deny"} [permissions.policy="allow"] - Fallback when no rule matches.
+ * @property {"on"|"strict"|"off"|"disabled"|boolean} [permissions.mode="on"] - Whether the rules apply; `true`/`false` mean `"on"`/`"off"`.
  * @property {"default"|"verbose"|boolean} [permissions.audit="default"] - Audit level; `true`/`false` normalize to `"default"`.
- * @property {boolean} [permissions.readGating=true] - Gate terminal data-value reads the same way calls are gated.
- * @property {boolean} [permissions.failOpenOnAbsentCaller=false] - Restore the legacy fail-open treatment of calls with no resolvable caller.
  * @property {boolean} [permissions.owner=false] - Owner grant (#509): a caller leaf may access any target leaf currently owned
  *   by the same module (the initial load's base module, or an `api.add()`'s `moduleID`) — across that module's own directories —
- *   wherever `defaultPolicy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace
+ *   wherever `policy` would otherwise deny. Matched by owner, not path, so another module mounted into the same namespace
  *   gets nothing; an explicit deny rule still wins. See [PERMISSIONS.md](docs/PERMISSIONS.md#owner-grant).
- * @property {"leaf"|"chain"} [permissions.ceiling="leaf"] - Code a caller hands to a leaf runs as that caller, under the
+ * @property {object} [permissions.caller] - How the caller of a call or read is identified.
+ * @property {boolean} [permissions.caller.anonymous=false] - Let a call or read with no resolvable caller through instead of denying it.
+ * @property {"precise"|"fast"} [permissions.caller.attribution="precise"] - How the definer of code a module hands out is known
+ *   (#726): `"precise"` wraps a returned value that is itself code to record its definer, where the stack cannot tell it;
+ *   `"fast"` wraps nothing, keeping `===` for returned functions, and tells every definer from the stack, refusing where
+ *   it cannot. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer).
+ * @property {boolean} [permissions.caller.capture=true] - A function read out of the api keeps its reader's identity.
+ * @property {"leaf"|"chain"} [permissions.caller.ceiling="leaf"] - Code a caller hands to a leaf runs as that caller, under the
  *   leaf it is running inside as its ceiling (#597); `"chain"` keeps every leaf the code was handed through as its ceiling
  *   instead. See [PERMISSIONS.md](docs/PERMISSIONS.md#code-a-caller-hands-to-a-leaf-runs-as-the-caller).
- * @property {boolean} [permissions.provenance=true] - A module's function reached by a route slothlet does not see — a
+ * @property {boolean} [permissions.caller.provenance=true] - A module's function reached by a route slothlet does not see — a
  *   callback, a shared object, a global, a replaced built-in — runs as that module inside another module's call, with
  *   the call as its ceiling (#597). `false` turns this off: such a function then runs with the permissions of whichever
- *   call runs it.
- * @property {object} [permissions.references] - Options for api functions held as references (`{ capture?: boolean }`).
- * @property {object} [permissions.private] - Module-privacy host policy (`{ host?: "deny"|"allow" }`).
+ *   call runs it, and what a module returns is searched for code when it is handed out instead, so code nested in
+ *   returned data keeps its definer.
+ * @property {object} [permissions.gating] - What is gated besides calls.
+ * @property {boolean|number} [permissions.gating.buffers=false] - Whether a typed array or `Buffer` one module hands
+ *   another is checked for members of its own under string keys (`bytes.item = …`), which means listing its keys:
+ *   `false` never lists, `true` always does, a whole number lists arrays of up to that many kilobytes. One found holding
+ *   a member is handed over as a view.
+ * @property {boolean} [permissions.gating.read=true] - Gate terminal data-value reads the same way calls are gated.
+ * @property {object} [permissions.private] - Module privacy (`{ host?: "deny"|"allow", scope?: "module"|"folder" }`): whether the host reads `_`/`__` members, and whether a member is private to its owning module ID (default) or to the folder that exports it.
  * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.
- * @property {object} [permissions.events] - Event-rule section (`{ default?: "deny"|"notify"|"allow", rules?: Array<object> }`).
+ * @property {object} [permissions.search] - How far a value handed into a call or returned out of one is searched for
+ *   code: a leaf's function nested in an argument, or code nested in returned data. Host config only. See
+ *   [PERMISSIONS.md](docs/PERMISSIONS.md#how-far-values-are-searched).
+ * @property {number} [permissions.search.depth=4] - Levels of objects searched, the outermost counted (1 to 64).
+ * @property {number} [permissions.search.properties=512] - Own properties read, all values of one search counted
+ *   together (1 to 65536).
+ * @property {object} [permissions.events] - Event-rule section (`{ policy?: "deny"|"notify"|"allow", rules?: Array<object> }`).
  * @property {boolean|object} [debug=false] - Enable verbose internal logging. `true` enables all categories.
- *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
+ *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context`, `initialization`, `materialize`, `versioning`, `permissions` to target specific subsystems.
  * @property {boolean} [silent=false] - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
  * @property {boolean} [diagnostics=false] - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
  * @property {Object.<string, (Function|Function[])>} [lifecycle] - Construction-time lifecycle subscribers, registered on the lifecycle emitter BEFORE the api builds so events emitted during cold-start `buildAPI` (init-time `impl:warning` / `impl:created` / …) are observable. Maps an event name to a handler `function(data, token)` or an array of them; any event name is accepted. Because they are ordinary subscribers, they also receive runtime events afterward — equivalent to calling `api.slothlet.lifecycle.on(event, fn)` for each, but early enough to catch initialization diagnostics. Because they come from the config, `api.slothlet.restart()` subscribes them again on the new instance, so they also receive the new instance's `init` and `restarted` events (runtime `lifecycle.on` subscribers are dropped with the old instance). Example: `{ "impl:warning": (d) => log(d), "impl:error": [onError, audit] }`.
- * @property {boolean} [collectLifecycleHooks=false] - DEPRECATED — will be removed in v4. Expands into two implicit `routines` entries (`{name: "^**.shutdown", mode: "shutdown", order: "depth"}` and the `destroy` equivalent) reproducing this option's original whole-tree, cross-mount, deepest-first scope for literally-named `shutdown`/`destroy` leaves, dropping any existing `shutdown`/`destroy`-mode routine (including the built-in `shutdown` default) in favor of these — and sets the effective `autoRoutines` to `true` unless `autoRoutines` is given explicitly. Nested hooks remain directly callable regardless. Emits a `V3_CONFIG_DEPRECATED` warning unless `silent: true`.
- * @property {Array<string|{name: string, mode?: ("manual"|"startup"|"shutdown"|"destroy"), recursive?: boolean, order?: ("mount"|"depth"), cascade?: boolean}>} [routines] - Stackable lifecycle routines (#341). Every mounted module exporting a function matching a configured routine name is composed into one callable at its exact composed api path, plus a root cascade (`self.<name>()`, i.e. `api.<name>()`) that runs every matching contribution anywhere. Entries: `"name"` (mode `"manual"`), `"name:mode"`, or `{ name, mode?, recursive?, order?, cascade? }` (`recursive`/`order`/`cascade` only settable via the object form). `name` is mount-relative by default (a bare name matches only a mount's own top level; a dotted name matches a fixed relative sub-path, or with `recursive: true` any depth within the mount); a `^`-prefixed name is root-anchored, matched via glob (`*`, `**`, `{}`, `!`) against the full api path, crossing mount boundaries. `order` (`"mount"` | `"depth"`, mode-defaulted) controls the root cascade's grouping order. `cascade` (default `true`) controls whether the root `api.<name>()` run-all cascade is created at all — set `cascade: false` (#400) for a per-entity lifecycle routine, where the host must invoke exactly one co-owner by key via `api.<path>.<name>.for(moduleID)(...)` rather than a run-all; every stacked path also exposes `api.<path>.<name>.contributors` (the moduleIDs present there). `.for(key)` runs that one contributor in its own extent/identity with the args passed straight through, and bypasses the `stackRoutines` owner-filter so a specific co-owner runs even if it lost the shared-path collision. Providing `routines` at all REPLACES the built-in defaults (`slothlet.defaults.routines`: `initialize` → `startup`, `shutdown` → `shutdown`) — spread `slothlet.defaults.routines` to extend them instead, or pass `[]` to disable every routine. Every configured routine is always wrapped and directly callable regardless of `autoRoutines`. Whether two or more contributors colliding at the identical api path all run is governed by `stackRoutines` (#365), independent of `collisionMode` — by default only the single contribution that actually owns that path runs, matching ordinary collision behavior. A throwing contributor doesn't stop the chain — every contributor runs (best-effort), and one aggregate `ROUTINE_FAILED` error is thrown afterward if any failed. See [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
- * @property {boolean} [autoRoutines=false] - The non-deprecated replacement for `collectLifecycleHooks`. TEMPORARY v3-compat default (#341): `false` for now, so a project upgrading sees no behavior change from a pre-existing nested leaf that happens to share a routine's name (e.g. `shutdown`) — it stays stacked and directly callable, but does not start auto-firing. When `true`, every `mode: "startup"` routine's cascade runs at the end of compose, and every `mode: "shutdown"`/`"destroy"` routine's cascade runs on the corresponding dispose call. Planned to default to `true` in v4 (`collectLifecycleHooks` removed at the same time) — see [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
- * @property {boolean} [stackRoutines=false] - Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per `collisionMode`) runs (#365). `false` by default, matching ordinary (non-routine) collision behavior everywhere else in the framework. Deliberately independent of `collisionMode` — a module that loses a collision, under any mode, does not run via the routine system unless this is explicitly `true`. The root cascade runs every matching contribution across distinct api paths regardless of this flag; where two or more contributions land on the identical api path, the cascade applies the same filtering a direct call at that path would. See [LIFECYCLE.md](docs/LIFECYCLE.md#stackroutines).
- * @property {boolean|object} [tracking=false] - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
- * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
+ * @property {object} [routines] - Stackable lifecycle routines (#341).
+ * @property {Array<string|{name: string, mode?: ("manual"|"startup"|"shutdown"|"destroy"), recursive?: boolean, order?: ("mount"|"depth"), cascade?: boolean}>} [routines.entries] - Stackable lifecycle routines (#341). Every mounted module exporting a function matching a configured routine name is composed into one callable at its exact composed api path, plus a root cascade (`self.<name>()`, i.e. `api.<name>()`) that runs every matching contribution anywhere. Entries: `"name"` (mode `"manual"`), `"name:mode"`, or `{ name, mode?, recursive?, order?, cascade? }` (`recursive`/`order`/`cascade` only settable via the object form). `name` is mount-relative by default (a bare name matches only a mount's own top level; a dotted name matches a fixed relative sub-path, or with `recursive: true` any depth within the mount); a `^`-prefixed name is root-anchored, matched via glob (`*`, `**`, `{}`, `!`) against the full api path, crossing mount boundaries. `order` (`"mount"` | `"depth"`, mode-defaulted) controls the root cascade's grouping order. `cascade` (default `true`) controls whether the root `api.<name>()` run-all cascade is created at all — set `cascade: false` (#400) for a per-entity lifecycle routine, where the host must invoke exactly one co-owner by key via `api.<path>.<name>.for(moduleID)(...)` rather than a run-all; every stacked path also exposes `api.<path>.<name>.contributors` (the moduleIDs present there). `.for(key)` runs that one contributor in its own extent/identity with the args passed straight through, and bypasses the `routines.stack` owner-filter so a specific co-owner runs even if it lost the shared-path collision. Providing `routines.entries` REPLACES the built-in defaults (`slothlet.defaults.routines`: `initialize` → `startup`, `shutdown` → `shutdown`) — spread `slothlet.defaults.routines` to extend them instead, or pass `[]` to disable every routine. Every configured routine is always wrapped and directly callable regardless of `routines.auto`. Whether two or more contributors colliding at the identical api path all run is governed by `routines.stack` (#365), independent of the collision mode — by default every contributor at that path runs, in mount order; `routines.stack: false` runs only the single contribution that actually owns that path, matching ordinary collision behavior. A throwing contributor doesn't stop the chain — every contributor runs (best-effort), and one aggregate `ROUTINE_FAILED` error is thrown afterward if any failed. See [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
+ * @property {boolean} [routines.auto=true] - When `true` (the default), every `mode: "startup"` routine's cascade runs at the end of compose, and every `mode: "shutdown"`/`"destroy"` routine's cascade runs on the corresponding dispose call. `false` leaves every routine to explicit calls. See [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
+ * @property {boolean} [routines.stack=true] - Whether two or more modules' contributions colliding at the exact same composed api path all run (the default), or only the single contribution that actually owns that path (per the collision mode) runs (#365). Deliberately independent of the collision mode — with `false`, a module that loses a collision, under any mode, does not run via the routine system. The root cascade runs every matching contribution across distinct api paths regardless of this flag; where two or more contributions land on the identical api path, the cascade applies the same filtering a direct call at that path would. See [LIFECYCLE.md](docs/LIFECYCLE.md#routines).
+ * @property {object} [clock] - Host only: the functions the instance reads the time and starts its deferred work with, instead of the ones slothlet loaded with. Read once when the instance is created and never part of the config the instance reports. See [CONFIGURATION.md](docs/CONFIGURATION.md#clock).
+ * @property {function(): number} [clock.now] - The time in milliseconds: `ttl` of principals, reload and run IDs, and every recorded timestamp.
+ * @property {Function} [clock.set] - Schedules the instance's deferred work as `setTimeout` does (called with a delay of `0`); a host that fakes timers moves it with its own clock.
+ * @property {Function} [clock.clear] - Cancels a timer `clock.set` made, as `clearTimeout` does.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).
  *   `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`).
- * @property {"browser"|"node"} [platform] - Execution-environment target. Controls whether filesystem-dependent code paths run. Independent of `env` (the `process.env` snapshot).
- *   - `"browser"` — browser/worker/Electron-renderer mode. Skips filesystem operations and the `process.env` snapshot. Requires `manifest`.
- *   - `"node"` — explicit Node.js mode.
- *   - Omitted — auto-detected: `"browser"` when a `manifest` is provided (or no Node `process` is present), `"node"` otherwise.
  * @property {object|null} [env] - `process.env` snapshot configuration (Node mode). Independent of `platform`.
  *   - `{ include: ["KEY"] }` — allowlist; only the listed keys are captured in `api.slothlet.env`. Non-string entries are silently ignored; an all-non-string array falls back to the full snapshot.
  *   - Omitted / `null` — the full `process.env` snapshot is captured.
  * @property {string[]} [env.include] - Allowlist of environment variable names to capture. Only string entries are used.
- * @property {{files: Array<{path:string,name:string,fullName:string}>, directories: Array}} [manifest] - Pre-generated directory structure for browser mode.
- *   Produced at build time by `generateManifest()` from `@cldmv/slothlet/helpers/generate-manifest`. Required when `platform: "browser"`.
- *   Presence of `manifest` auto-triggers browser mode without needing an explicit `platform: "browser"`.
- * @property {Function} [resolveModuleSpecifier] - Browser-mode module resolver: `(fileEntry: {path, name, fullName}) => string | URL`.
- *   Maps a manifest file entry to an importable URL or bare specifier. Defaults to resolving against `base` as a `file://` URL.
- *   Override to point at a CDN, bundler virtual module, or other browser-friendly source.
- * @property {Function} [import] - Injectable leaf importer: `(specifier: string) => Promise<object>`.
+ * @property {object} [loader] - How leaf files are found and loaded.
+ * @property {Function} [loader.import] - Injectable leaf importer: `(specifier: string) => Promise<object>`.
  *   Every leaf module load is routed through it instead of slothlet's own dynamic `import()`, so the
  *   modules land in the caller's module graph rather than slothlet's. Pass `(s) => import(s)` written
  *   inside the consumer's own (transformed) code to make a coverage run attribute leaf execution
- *   correctly; unset, slothlet imports natively exactly as before. See [`docs/TESTING.md`](../docs/TESTING.md).
- * @property {string[]} [suppressFixes] - Opt out of specific bug-fix behaviors that landed in v3 and become permanent in v4.
- *   Each entry uses the `<rule>_<PR>` form (e.g. `"C03_116"`). Each listed rule emits a `WARN_SUPPRESS_FIX_ACTIVE` deprecation warning unless `silent: true`.
- *   Temporary escape hatch — will be removed in v4 when the corrected behaviors become permanent.
+ *   correctly; unset, slothlet imports natively. See [`docs/TESTING.md`](../docs/TESTING.md).
+ * @property {{files: Array<{path:string,name:string,full:string}>, directories: Array}} [loader.files] - Pre-generated directory structure for browser mode.
+ *   Produced at build time by `files.generate()` from `@cldmv/slothlet/files`. Required when `loader.platform` is `"browser"`.
+ *   Giving it selects browser mode without an explicit `loader.platform`.
+ * @property {boolean|Function} [loader.materialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init and emits `materialized:complete` once everything has loaded (the v3 `tracking: { materialization: true }` option is folded into it). A function turns it on and is called once with `{ total, at }` (the `materialized:complete` event's payload) when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning.
+ * @property {"browser"|"node"} [loader.platform] - Execution-environment target. Controls whether filesystem-dependent code paths run. Independent of `env` (the `process.env` snapshot).
+ *   - `"browser"` — browser/worker/Electron-renderer mode. Skips filesystem operations and the `process.env` snapshot. Requires `loader.files`.
+ *   - `"node"` — explicit Node.js mode.
+ *   - Omitted — auto-detected: `"browser"` when `loader.files` is given (or no Node `process` is present), `"node"` otherwise.
+ * @property {Function} [loader.resolve] - Browser-mode module resolver: `(fileEntry: {path, name, full}) => string | URL`.
+ *   Maps a file list entry to an importable URL or bare specifier. Defaults to resolving against `base` as a `file://` URL.
+ *   Override to point at a CDN, bundler virtual module, or other browser-friendly source.
  * @property {boolean|"fast"|"strict"|object} [typescript=false] - TypeScript support.
  *   - `false` — disabled (default).
  *   - `true` or `"fast"` — esbuild transpilation, no type checking.
  *   - `"strict"` — tsc compilation with type checking and `.d.ts` generation.
  *   See [TYPESCRIPT.md](docs/TYPESCRIPT.md) for the full configuration reference.
- * @property {string|Function|null} [versionDispatcher] - Version routing discriminator for versioned API paths.
+ * @property {object} [versioning] - Versioned api paths.
+ * @property {string|Function|null} [versioning.dispatcher] - Version routing discriminator for versioned API paths.
  *   - **string** (e.g. `"version"`) — at dispatch time, reads that key from the calling module's version metadata to select a version tag.
  *   - **function** — called as `(allVersions, caller) => versionTag | null`; return a registered version tag to force routing, or `null`/`undefined` to fall through to the automatic default.
  *   - **omitted / `undefined`** — behaves identically to `"version"`.
- *   Only relevant when modules are registered via `api.slothlet.api.add()` with a `versionConfig` argument.
+ *   Only relevant when modules are registered via `api.slothlet.api.add()` with a `version` option.
  */
 
 /**
@@ -2079,60 +5035,58 @@ export default slothlet;
  * @property {object} slothlet.api - Runtime API mutation methods — availability controlled by `api.mutations` config option.
  * @property {Function} slothlet.api.add - Mount a new API module at runtime. %%sig: (apiPath: string, folderPath: string, [options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.add('utils.math', './api/utils/math');%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.add('utils.math', './api/utils/math');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.add('utils.math', './api/utils/math');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.api.add('utils.math', './api/utils/math');%%
  * @property {Function} slothlet.api.reload - Hot-reload a specific module or directory path. %%sig: ([pathOrModuleId]: string|null, [options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|// Reload a specific module|await api.slothlet.api.reload('utils.math');|// Reload everything|await api.slothlet.api.reload();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  // Reload a specific module|  await api.slothlet.api.reload('utils.math');|  // Reload everything|  await api.slothlet.api.reload();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  // Reload a specific module|  await api.slothlet.api.reload('utils.math');|  // Reload everything|  await api.slothlet.api.reload();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|// Reload a specific module|await api.slothlet.api.reload('utils.math');|// Reload everything|await api.slothlet.api.reload();%%
- * @property {Function} slothlet.api.remove - Unmount an API module at runtime. `remove(id)` removes every path the module owns; `remove(apiPath)` removes that path's whole subtree; the two-argument `remove(moduleID, apiPath)` removes only that module's single node at the path, leaving sibling modules sharing the mount and the module's other mounts intact. Resolves to whether anything was removed. %%sig: (pathOrModuleId: string, apiPath?: string): Promise.<boolean>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.remove('utils.math');%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.remove('utils.math');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.remove('utils.math');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.api.remove('utils.math');%%
- * @property {Function} slothlet.api.leaves - Enumerate the api paths a module owns, read from the loader's ownership records. Pass a moduleID, a mount endpoint, any owned path, or `"."` for the base load; `{ details: true }` returns every owned path tagged with its kind instead of the callable paths alone. The answer is scoped to the caller — module-private members the caller could not read are omitted; `{ includePrivate: true }` (host-only) returns the unredacted list, and a module caller passing it is refused with PERMISSION_DENIED. %%sig: (key: string, [options]: Object): Promise.&lt;string[]|Array.&lt;{path: string, kind: &quot;function&quot;|&quot;namespace&quot;|&quot;data&quot;}&gt;&gt;%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const moduleID = await api.slothlet.api.add('shop', './ext/shop/api');|await api.slothlet.api.leaves(moduleID);%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.leaves('shop', { details: true });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.leaves('shop');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.api.leaves('shop');%%
+ * @property {Function} slothlet.api.remove - Unmount an API module at runtime. `remove(id)` removes every path the module owns; `remove(apiPath)` removes that path's whole subtree; the two-argument `remove(apiPath, id)` removes only module `id`'s single node at the path, leaving sibling modules sharing the mount and the module's other mounts intact. Resolves to whether anything was removed. %%sig: (target: string, id?: string): Promise.<boolean>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.remove('utils.math');%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.remove('utils.math');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.remove('utils.math');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.api.remove('utils.math');%%
+ * @property {Function} slothlet.api.leaves - Enumerate the api paths a module owns, read from the loader's ownership records. Pass a moduleID, a mount endpoint, any owned path, or `"."` for the base load; `{ details: true }` returns every owned path tagged with its kind instead of the callable paths alone. The answer is scoped to the caller — module-private members the caller could not read are omitted; `{ private: true }` (host-only) returns the unredacted list, and a module caller passing it is refused with PERMISSION_DENIED. %%sig: (key: string, [options]: Object): Promise.&lt;string[]|Array.&lt;{path: string, kind: &quot;function&quot;|&quot;namespace&quot;|&quot;data&quot;}&gt;&gt;%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const moduleID = await api.slothlet.api.add('shop', './ext/shop/api');|await api.slothlet.api.leaves(moduleID);%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.leaves('shop', { details: true });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.leaves('shop');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.api.leaves('shop');%%
  * @property {object} slothlet.api.modules - Module discovery + mount sub-namespace. Composes subsystems shipped as separate npm packages (each with a `slothlet.module.json` manifest) into this api tree at runtime. Each method is typed as `Function` here; the detailed parameter / return shapes (`DiscoverOptions`, `DiscoverResult`, `AddModuleOptions`, `AddModulesOptions`, `MountResult`, `FailureEntry`) live in [`docs/MODULE-DISCOVERY.md`](../docs/MODULE-DISCOVERY.md), which also covers multi-version routing, error codes, and the `modules:*` lifecycle events.
  * @property {Function} slothlet.api.modules.discover - Walk the filesystem for slothlet modules; replace the per-instance discovery cache and return the fresh results. %%sig: ([options]: Object): Promise.<DiscoverResult[]>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const found = await api.slothlet.api.modules.discover({ scanRoot: process.cwd(), prefix: "@cldmv/packrat-driver-" });%%
- * @property {Function} slothlet.api.modules.sort - Pure sort; default comparator is `priority` desc with `packageName` asc tiebreak. Pass a custom comparator to override. %%sig: (results: DiscoverResult[], [comparator]: function): DiscoverResult[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const ordered = api.slothlet.api.modules.sort(await api.slothlet.api.modules.discover());%%
- * @property {Function} slothlet.api.modules.addModule - Mount one module by package name (cache lookup) or by DiscoverResult directly. Lazy-triggers `discover()` when the cache is empty. %%sig: (nameOrResult: string|DiscoverResult, [options]: Object): Promise.<MountResult>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.modules.addModule("@cldmv/packrat-driver-opensearch");%%
- * @property {Function} slothlet.api.modules.addModules - Batch mount a list of modules. Accepts a heterogeneous `Array<string | DiscoverResult>`. Supports `onFailure: "throw" | "rollback" | "best-effort"` and `concurrency` for parallel batches; under `best-effort` returns the `{ mounted, failed }` aggregate instead of a plain array. %%sig: (items: Array.<string|DiscoverResult>, [options]: Object): Promise.<MountResult[]|Object>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.modules.addModules(["@org/a", "@org/b"], { onFailure: "best-effort", concurrency: 4 });%%
- * @property {Function} slothlet.api.modules.removeModule - Unmount a previously-mounted module. %%sig: (name: string, [options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.modules.removeModule("@cldmv/packrat-driver-opensearch");%%
- * @property {Function} slothlet.api.modules.addDiscovered - One-shot convenience: chains `discover()` → `sort()` → `addModules()` for the most common boot-time flow. %%sig: ([options]: Object): Promise.<MountResult[]>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.modules.addDiscovered({ scanRoot: process.cwd(), prefix: "@cldmv/packrat-driver-" });%%
- * @property {Function} slothlet.api.modules.getDiscoveryCache - Snapshot of the current discovery cache. Returns the same `DiscoverResult[]` shape `discover()` produces. %%sig: (): DiscoverResult[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const cached = api.slothlet.api.modules.getDiscoveryCache();%%
- * @property {Function} slothlet.api.modules.clearDiscoveryCache - Empty the discovery cache (does NOT unmount anything already mounted). %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.api.modules.clearDiscoveryCache();%%
- * @property {Function} slothlet.api.modules.getStaleMounts - Reconciliation aid: returns mounts whose `${packageName}@${version}` no longer appears in the discovery cache. Useful for hot-reload prune logic. %%sig: (): MountResult[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const stale = api.slothlet.api.modules.getStaleMounts();%%
+ * @property {Function} slothlet.api.modules.sort - Pure sort; default comparator is `priority` desc with `package` asc tiebreak. Pass a custom comparator to override. %%sig: (results: DiscoverResult[], [comparator]: function): DiscoverResult[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const ordered = api.slothlet.api.modules.sort(await api.slothlet.api.modules.discover());%%
+ * @property {Function} slothlet.api.modules.add - Mount modules. `add(name | result)` mounts one module (a package name looked up in the discovery cache, which is filled by `discover()` when empty, or a result `discover()` returned); `add([...])` mounts a batch (`onFailure: "throw" | "rollback" | "best-effort"`, `concurrency`); `add()` or `add(options)` runs `discover()` (with `options.discover`), `sort()` (with `options.sort`) and mounts every result. Only results slothlet returned count as a result: any other object is the options. %%sig: ([target]: string|DiscoverResult|Array.<(string|DiscoverResult)>|Object, [options]: Object): Promise.<*>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.modules.add("@org/driver");|await api.slothlet.api.modules.add(["@org/a", "@org/b"], { concurrency: 2 });|await api.slothlet.api.modules.add({ discover: { prefix: "@org/" } });%%
+ * @property {Function} slothlet.api.modules.remove - Unmount a previously-mounted module. %%sig: (name: string, [options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.modules.remove("@cldmv/packrat-driver-opensearch");%%
+ * @property {object} slothlet.api.modules.cache - The discovery cache: what the last `discover()` found.
+ * @property {Function} slothlet.api.modules.cache.get - Snapshot of the current discovery cache. Returns the same `DiscoverResult[]` shape `discover()` produces. %%sig: (): DiscoverResult[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const cached = api.slothlet.api.modules.cache.get();%%
+ * @property {Function} slothlet.api.modules.cache.clear - Empty the discovery cache (does NOT unmount anything already mounted). %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.api.modules.cache.clear();%%
+ * @property {Function} slothlet.api.modules.stale - Reconciliation aid: returns mounts whose `${package}@${version}` no longer appears in the discovery cache. Useful for hot-reload prune logic. %%sig: (): MountResult[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const stale = api.slothlet.api.modules.stale();%%
  * @property {object} slothlet.context - Per-request context helpers.
  * @property {Function} slothlet.context.get - Get a value from the current per-request context store. %%sig: ([key]: string): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.context.run({ userId: 42 }, async () => {|  const userId = api.slothlet.context.get('userId'); // 42|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.context.run({ userId: 42 }, async () => {|    const userId = api.slothlet.context.get('userId'); // 42|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.context.run({ userId: 42 }, async () => {|    const userId = api.slothlet.context.get('userId'); // 42|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.context.run({ userId: 42 }, async () => {|  const userId = api.slothlet.context.get('userId'); // 42|});%%
- * @property {function(): Object} slothlet.context.inspect - Return a snapshot of the current context state (for debugging). %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.context.run({ userId: 42 }, async () => {|  const snapshot = api.slothlet.context.inspect();|  // { data: { userId: 42 }, ... }|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.context.run({ userId: 42 }, async () => {|    const snapshot = api.slothlet.context.inspect();|    // { data: { userId: 42 }, ... }|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.context.run({ userId: 42 }, async () => {|    const snapshot = api.slothlet.context.inspect();|    // { data: { userId: 42 }, ... }|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.context.run({ userId: 42 }, async () => {|  const snapshot = api.slothlet.context.inspect();|  // { data: { userId: 42 }, ... }|});%%
- * @property {Function} slothlet.context.run - Execute a callback with isolated context data merged in. %%sig: (contextData: Object, callback: function, args: *): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.run({ userId: 42 }, async () => {|  return api.myModule.getUser(); // sees context.userId = 42|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.run({ userId: 42 }, async () => {|    return api.myModule.getUser(); // sees context.userId = 42|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.run({ userId: 42 }, async () => {|    return api.myModule.getUser(); // sees context.userId = 42|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.run({ userId: 42 }, async () => {|  return api.myModule.getUser(); // sees context.userId = 42|});%%
- * @property {Function} slothlet.context.scope - Execute a function with structured context options (`context`, `fn`, `args`, `merge`, `isolation`). %%sig: (options: Object): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.scope({|  context: { userId: 42 },|  fn: async () => api.myModule.getUser()|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.scope({|    context: { userId: 42 },|    fn: async () => api.myModule.getUser()|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.scope({|    context: { userId: 42 },|    fn: async () => api.myModule.getUser()|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.scope({|  context: { userId: 42 },|  fn: async () => api.myModule.getUser()|});%%
- * @property {Function} slothlet.context.set - Set a value in the current per-request context store. %%sig: (key: string, value: *): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.context.run({}, async () => {|  api.slothlet.context.set('traceId', 'abc-123');|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.context.run({}, async () => {|    api.slothlet.context.set('traceId', 'abc-123');|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.context.run({}, async () => {|    api.slothlet.context.set('traceId', 'abc-123');|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.context.run({}, async () => {|  api.slothlet.context.set('traceId', 'abc-123');|});%%
+ * @property {Function & { self: (contextData: object, callback: Function, ...args: any[]) => Promise<any> }} slothlet.context.run - Execute a callback with isolated context data merged in. `run.self(contextData, callback, ...args)` is `run()` with the run's own view handed to the callback first, called as `callback(view, ...args)`. Inside a run `api` is the instance, so a change made through it (a write, a definition, a deletion, closing a node, setting its prototype) reaches the instance; the same change made through `view` stays in the run, as one through a module's `self` there does. Called from module code, `view` is that module's own `self`. A rule on `slothlet.context.run` covers `run` and `run.self`; one on `slothlet.context.run.self` applies to `run.self` only. %%sig: (contextData: Object, callback: function, args: *): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.run({ userId: 42 }, async () => {|  return api.myModule.getUser(); // sees context.userId = 42|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.run({ userId: 42 }, async () => {|    return api.myModule.getUser(); // sees context.userId = 42|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.run({ userId: 42 }, async () => {|    return api.myModule.getUser(); // sees context.userId = 42|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.run({ userId: 42 }, async () => {|  return api.myModule.getUser(); // sees context.userId = 42|});%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.context.run.self({ userId: 42 }, (view, label) => {|  view.draft = label; // stays in the run|  api.saved = label;  // reaches the instance|}, 'note');%% %%example: // Inside a module: view is the module's own self|import { self } from "@cldmv/slothlet/runtime";|export function work() {|  return self.slothlet.context.run.self({}, (view) => view === self); // true|}%%
+ * @property {Function} slothlet.context.scope - Execute a function with structured context options (`context`, `fn`, `args`, `merge`, `isolation`, `protect`, `owners`, `self`). With `self: true`, `fn` is called as `fn(view, ...args)`, where `view` is the run's own view (see `slothlet.context.run.self`). %%sig: (options: Object): *%% %%example: // The run's view: a write through it stays in the run|const api = await slothlet({ base: './api' });|await api.slothlet.context.scope({|  context: { userId: 42 },|  self: true,|  fn: (view) => {|    view.draft = 'run only'; // stays in the run|    api.saved = 'kept';      // api inside a run is the instance|  }|});%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.scope({|  context: { userId: 42 },|  fn: async () => api.myModule.getUser()|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.scope({|    context: { userId: 42 },|    fn: async () => api.myModule.getUser()|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.scope({|    context: { userId: 42 },|    fn: async () => api.myModule.getUser()|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.scope({|  context: { userId: 42 },|  fn: async () => api.myModule.getUser()|});%%
+ * @property {Function} slothlet.context.set - Change the instance-level context every leaf reads, one key or several; a `run()` / `scope()`'s own keys still win inside it. Host only unless a rule allows `slothlet.context.set`. %%sig: (keyOrValues: string|Object, value: *): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', context: { tenant: 'acme' } });|api.slothlet.context.set('region', 'eu');|api.slothlet.context.set({ tenant: 'globex', region: 'us' });%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.context.set('region', 'eu');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.context.set('region', 'eu');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.context.set('region', 'eu');%%
  * @property {object} [slothlet.diag] - Diagnostics namespace — only present when `diagnostics: true`. Do not enable in production.
  * @property {object} [slothlet.diag.caches] - Cache diagnostics sub-namespace.
- * @property {function(): Object} [slothlet.diag.caches.get] - Get full cache diagnostic data (`{ totalCaches, caches[] }`). Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const cacheData = api.slothlet.diag.caches.get();|// { totalCaches: 2, caches: [...] }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const cacheData = api.slothlet.diag.caches.get();|  // { totalCaches: 2, caches: [...] }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const cacheData = api.slothlet.diag.caches.get();|  // { totalCaches: 2, caches: [...] }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const cacheData = api.slothlet.diag.caches.get();|// { totalCaches: 2, caches: [...] }%%
- * @property {function(): string[]} [slothlet.diag.caches.getAllModuleIDs] - Return all moduleIDs currently in cache. Only available when `diagnostics: true`. %%sig: (): string[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const ids = api.slothlet.diag.caches.getAllModuleIDs();|// ['utils/math.mjs', 'utils/strings.mjs']%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const ids = api.slothlet.diag.caches.getAllModuleIDs();|  // ['utils/math.mjs', 'utils/strings.mjs']|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const ids = api.slothlet.diag.caches.getAllModuleIDs();|  // ['utils/math.mjs', 'utils/strings.mjs']|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const ids = api.slothlet.diag.caches.getAllModuleIDs();|// ['utils/math.mjs', 'utils/strings.mjs']%%
+ * @property {function(): Object} [slothlet.diag.caches.get] - Get full cache diagnostic data (`{ caches[] }`). Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const cacheData = api.slothlet.diag.caches.get();|// { caches: [...] }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const cacheData = api.slothlet.diag.caches.get();|  // { caches: [...] }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const cacheData = api.slothlet.diag.caches.get();|  // { caches: [...] }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const cacheData = api.slothlet.diag.caches.get();|// { caches: [...] }%%
+ * @property {function(): string[]} [slothlet.diag.caches.ids] - Return all moduleIDs currently in cache. Only available when `diagnostics: true`. %%sig: (): string[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const ids = api.slothlet.diag.caches.ids();|// ['utils/math.mjs', 'utils/strings.mjs']%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const ids = api.slothlet.diag.caches.ids();|  // ['utils/math.mjs', 'utils/strings.mjs']|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const ids = api.slothlet.diag.caches.ids();|  // ['utils/math.mjs', 'utils/strings.mjs']|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const ids = api.slothlet.diag.caches.ids();|// ['utils/math.mjs', 'utils/strings.mjs']%%
  * @property {Function} [slothlet.diag.caches.has] - Check whether a cache entry exists for a given moduleID. Only available when `diagnostics: true`. %%sig: (moduleID: string): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false%%
  * @property {object} [slothlet.diag.context] - The `context` config value as passed to `slothlet()`.
  * @property {Function} [slothlet.diag.describe] - Describe API structure. Pass `true` to return the full API object; omit for top-level keys only. Only available when `diagnostics: true`. %%sig: ([showAll]: boolean): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const keys = api.slothlet.diag.describe();|const full = api.slothlet.diag.describe(true);%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const keys = api.slothlet.diag.describe();|  const full = api.slothlet.diag.describe(true);|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const keys = api.slothlet.diag.describe();|  const full = api.slothlet.diag.describe(true);|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const keys = api.slothlet.diag.describe();|const full = api.slothlet.diag.describe(true);%%
- * @property {function(): Object} [slothlet.diag.getAPI] - Return the live bound API proxy object. Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy%%
- * @property {function(): Object} [slothlet.diag.getOwnership] - Return ownership diagnostics for all registered API paths. Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const ownership = api.slothlet.diag.getOwnership();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const ownership = api.slothlet.diag.getOwnership();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const ownership = api.slothlet.diag.getOwnership();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const ownership = api.slothlet.diag.getOwnership();%%
+ * @property {function(): Object} [slothlet.diag.api] - Return the live bound API proxy object. Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const proxy = api.slothlet.diag.api(); // the live bound API proxy%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const proxy = api.slothlet.diag.api(); // the live bound API proxy|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const proxy = api.slothlet.diag.api(); // the live bound API proxy|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const proxy = api.slothlet.diag.api(); // the live bound API proxy%%
  * @property {object} [slothlet.diag.hook] - Hook system diagnostics sub-namespace (present only when hooks are enabled).
- * @property {function(): Object} [slothlet.diag.inspect] - Return a full diagnostic snapshot of current instance state. Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const snapshot = api.slothlet.diag.inspect();|console.log(snapshot.modules, snapshot.hooks);%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const snapshot = api.slothlet.diag.inspect();|  console.log(snapshot.modules, snapshot.hooks);|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const snapshot = api.slothlet.diag.inspect();|  console.log(snapshot.modules, snapshot.hooks);|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const snapshot = api.slothlet.diag.inspect();|console.log(snapshot.modules, snapshot.hooks);%%
+ * @property {function(): Object} [slothlet.diag.inspect] - Return a full diagnostic snapshot of current instance state. Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const snapshot = api.slothlet.diag.inspect();|console.log(snapshot.instance, snapshot.ownership);%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const snapshot = api.slothlet.diag.inspect();|  console.log(snapshot.instance, snapshot.ownership);|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const snapshot = api.slothlet.diag.inspect();|  console.log(snapshot.instance, snapshot.ownership);|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const snapshot = api.slothlet.diag.inspect();|console.log(snapshot.instance, snapshot.ownership);%%
  * @property {object} [slothlet.diag.owner] - Ownership sub-namespace for diagnostics.
  * @property {Function} [slothlet.diag.owner.get] - Get the owning moduleIDs for a specific API path. Only available when `diagnostics: true`. %%sig: (apiPath: string): string[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const owners = api.slothlet.diag.owner.get('math.add');|// ['utils/math.mjs']%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const owners = api.slothlet.diag.owner.get('math.add');|  // ['utils/math.mjs']|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const owners = api.slothlet.diag.owner.get('math.add');|  // ['utils/math.mjs']|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const owners = api.slothlet.diag.owner.get('math.add');|// ['utils/math.mjs']%%
+ * @property {function(): Object} [slothlet.diag.owner.list] - Return ownership diagnostics for all registered API paths. Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const ownership = api.slothlet.diag.owner.list();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const ownership = api.slothlet.diag.owner.list();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const ownership = api.slothlet.diag.owner.list();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const ownership = api.slothlet.diag.owner.list();%%
  * @property {object} [slothlet.diag.reference] - The `reference` config value as passed to `slothlet()`.
- * @property {function(): SlothletWarning} [slothlet.diag.SlothletWarning] - The `SlothletWarning` class — access `.captured` for warnings emitted during tests. Only available when `diagnostics: true`. %%sig: (): SlothletWarning%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const SlothletWarning = api.slothlet.diag.SlothletWarning;|console.log(SlothletWarning.captured); // array of captured warnings%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const SlothletWarning = api.slothlet.diag.SlothletWarning;|  console.log(SlothletWarning.captured); // array of captured warnings|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const SlothletWarning = api.slothlet.diag.SlothletWarning;|  console.log(SlothletWarning.captured); // array of captured warnings|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const SlothletWarning = api.slothlet.diag.SlothletWarning;|console.log(SlothletWarning.captured); // array of captured warnings%%
- * @property {object} slothlet.hook - Hook registration surface — only present when the `hook` option is enabled.
+ * @property {object} slothlet.hook - Hook registration surface — present on every instance; the `hook` option only sets whether hooks start enabled, and `slothlet.hook.enable()` turns them on at runtime.
  * @property {Function} slothlet.hook.clear - Alias for `remove()`. %%sig: ([filter]: Object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.clear({ type: 'before' });%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.clear({ type: 'before' });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.clear({ type: 'before' });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.clear({ type: 'before' });%%
  * @property {Function} slothlet.hook.disable - Disable hooks matching a filter (empty = disable all). %%sig: ([filter]: Object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.disable(); // disable all|api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.disable(); // disable all|  api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.disable(); // disable all|  api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.disable(); // disable all|api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks%%
- * @property {Function} slothlet.hook.disablePattern - Remove a path pattern from the runtime global path filter; when the last pattern is removed the filter deactivates and hooks apply to every path again. %%sig: (pattern: string): number%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.enablePattern('database.*');|api.slothlet.hook.disablePattern('database.*'); // stop restricting%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.disablePattern('database.*');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.disablePattern('database.*');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.disablePattern('database.*');%%
  * @property {Function} slothlet.hook.enable - Enable hooks matching a filter (empty = enable all). %%sig: ([filter]: Object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.disable();|// later...|api.slothlet.hook.enable(); // re-enable all%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.disable();|  // later...|  api.slothlet.hook.enable(); // re-enable all|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.disable();|  // later...|  api.slothlet.hook.enable(); // re-enable all|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.disable();|// later...|api.slothlet.hook.enable(); // re-enable all%%
- * @property {Function} slothlet.hook.enablePattern - Restrict hook execution to an API path pattern at runtime (global path filter; the runtime form of `hook.pattern`). Distinct from enable/disable, which toggle individual registered hooks. %%sig: (pattern: string): number%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.enablePattern('database.*'); // only intercept database.* paths%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.enablePattern('database.*');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.enablePattern('database.*');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.enablePattern('database.*');%%
  * @property {Function} slothlet.hook.list - List registered hooks matching a filter. %%sig: ([filter]: Object): Object[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|const allHooks = api.slothlet.hook.list();|const beforeHooks = api.slothlet.hook.list({ type: 'before' });%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  const allHooks = api.slothlet.hook.list();|  const beforeHooks = api.slothlet.hook.list({ type: 'before' });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  const allHooks = api.slothlet.hook.list();|  const beforeHooks = api.slothlet.hook.list({ type: 'before' });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|const allHooks = api.slothlet.hook.list();|const beforeHooks = api.slothlet.hook.list({ type: 'before' });%%
  * @property {Function} slothlet.hook.off - Remove hooks by ID or filter object (v2 alias for `remove()`). %%sig: (idOrFilter: string|Object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|const hookId = api.slothlet.hook.on('math.*:before', handler);|api.slothlet.hook.off(hookId); // remove by ID|api.slothlet.hook.off({ type: 'after' }); // remove by filter%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  const hookId = api.slothlet.hook.on('math.*:before', handler);|  api.slothlet.hook.off(hookId); // remove by ID|  api.slothlet.hook.off({ type: 'after' }); // remove by filter|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  const hookId = api.slothlet.hook.on('math.*:before', handler);|  api.slothlet.hook.off(hookId); // remove by ID|  api.slothlet.hook.off({ type: 'after' }); // remove by filter|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|const hookId = api.slothlet.hook.on('math.*:before', handler);|api.slothlet.hook.off(hookId); // remove by ID|api.slothlet.hook.off({ type: 'after' }); // remove by filter%%
  * @property {Function} slothlet.hook.on - Register a hook handler for a path-then-type pattern (e.g. `"math.*:before"`; the legacy `"before:math.*"` form is deprecated). Types: `before`, `after`, `always`, `error`, and `around` (wraps the rest of the pipeline through `next(args?)`). %%sig: (typePattern: string, handler: function, [options]: Object): string%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|  console.log('math called with', args);|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|    console.log('math called with', args);|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|    console.log('math called with', args);|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|const hookId = api.slothlet.hook.on('math.*:before', ({ args }) => {|  console.log('math called with', args);|});%%
+ * @property {object} slothlet.hook.pattern - The runtime global path filter: which api paths hooks apply to (`enable`, `disable`, `reset`).
+ * @property {Function} slothlet.hook.pattern.enable - Restrict hook execution to an API path pattern at runtime (global path filter; the runtime form of `hook.pattern`). Distinct from enable/disable, which toggle individual registered hooks. %%sig: (pattern: string): number%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.pattern.enable('database.*'); // only intercept database.* paths%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.pattern.enable('database.*');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.pattern.enable('database.*');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.pattern.enable('database.*');%%
+ * @property {Function} slothlet.hook.pattern.disable - Remove a path pattern from the runtime global path filter; when the last pattern is removed the filter deactivates and hooks apply to every path again. %%sig: (pattern: string): number%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.pattern.enable('database.*');|api.slothlet.hook.pattern.disable('database.*'); // stop restricting%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.pattern.disable('database.*');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.pattern.disable('database.*');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.pattern.disable('database.*');%%
+ * @property {Function} slothlet.hook.pattern.reset - Reset the runtime global path filter back to the configured `hook.pattern` default (fully unrestricted if that default was `"**"`). %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: 'database.*' });|api.slothlet.hook.pattern.enable('cache.*');|api.slothlet.hook.pattern.reset(); // back to database.* only%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: 'database.*' });|  api.slothlet.hook.pattern.reset();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: 'database.*' });|  api.slothlet.hook.pattern.reset();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: 'database.*' });|api.slothlet.hook.pattern.reset();%%
  * @property {object} slothlet.hook.pin - Host-only runtime control over hook-pinning enforcement (mirrors `permissions.control`). "Host-only" is enforced by the built-in `slothlet.hook.**` permission deny baseline, so it only holds when the permission system is enabled — without permissions a module reaching the hook surface can toggle it. Force-pinning makes a module hook always run under its registering module's identity; an unpinned module hook is a permission-bypass vector. Enabled by default (config `hook.pin`).
  * @property {boolean} slothlet.hook.pin.enabled - Whether hook pinning is currently enforced (true = module hooks are force-pinned, the default). %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|const enforced = api.slothlet.hook.pin.enabled;%%
- * @property {Function} slothlet.hook.pin.enable - Enforce hook pinning: a module hook's `lockCaller: false` is ignored (force-pinned). Host-only. %%sig: (): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.pin.enable(); // force-pin module hooks (host only)%%
- * @property {Function} slothlet.hook.pin.disable - Stop enforcing hook pinning: permit a per-registration `lockCaller: false` on module hooks. Host-only. %%sig: (): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.pin.disable(); // permit unpinned module hooks (host only)%%
+ * @property {Function} slothlet.hook.pin.enable - Enforce hook pinning: a module hook's `pin: false` is ignored (force-pinned). Host-only. %%sig: (): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.pin.enable(); // force-pin module hooks (host only)%%
+ * @property {Function} slothlet.hook.pin.disable - Stop enforcing hook pinning: permit a per-registration `pin: false` on module hooks. Host-only. %%sig: (): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.pin.disable(); // permit unpinned module hooks (host only)%%
  * @property {Function} slothlet.hook.remove - Remove hooks matching a filter (`id`, `type`, `pattern`). %%sig: ([filter]: Object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.remove({ type: 'before', pattern: 'math.*' });%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.remove({ type: 'before', pattern: 'math.*' });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.remove({ type: 'before', pattern: 'math.*' });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.remove({ type: 'before', pattern: 'math.*' });%%
- * @property {Function} slothlet.hook.resetPatternFilter - Reset the runtime global path filter back to the configured `hook.pattern` default (fully unrestricted if that default was `"**"`). %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: 'database.*' });|api.slothlet.hook.enablePattern('cache.*');|api.slothlet.hook.resetPatternFilter(); // back to database.* only%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: 'database.*' });|  api.slothlet.hook.resetPatternFilter();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: 'database.*' });|  api.slothlet.hook.resetPatternFilter();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: 'database.*' });|api.slothlet.hook.resetPatternFilter();%%
  * @property {object} slothlet.event - Instance-wide, permission-gated event system — named pub/sub scoped to this instance. Each subscriber's delivery level (`deny`/`notify`/`allow`) is resolved from the event-rule pool. `on`/`once`/`off`/`emit` are open to modules; `resolveLevel`, `rules.*`, `strategy` and `deliver` are host-only (built-in `slothlet.event.**` deny).
  * @property {Function} slothlet.event.on - Subscribe a listener, called `(payload, meta)`. Returns the granted level, an unsubscribe, and the listener id `<owner moduleID>:<event>:<n>` (`options.key` replaces `n`; the host's owner is empty). %%sig: (event: string, listener: function, options?: { once?: boolean, key?: string|number }): { level: string, off: function, id: string }%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const { level, off, id } = api.slothlet.event.on('orders.created', (payload, meta) => {});%%
  * @property {Function} slothlet.event.once - Subscribe for a single delivery, then auto-unsubscribe. %%sig: (event: string, listener: function, options?: { key?: string|number }): { level: string, off: function, id: string }%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.event.once('orders.created', (payload) => console.log(payload));%%
  * @property {Function} slothlet.event.off - Remove a listener by reference. %%sig: (event: string, listener: function): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const onCreated = () => {};|api.slothlet.event.on('orders.created', onCreated);|api.slothlet.event.off('orders.created', onCreated);%%
  * @property {Function} slothlet.event.emit - Publish an event. Ungated. Resolves once every listener has settled — or, under a strategy that defers, once the strategy has accepted it. %%sig: (event: string, payload?: any): Promise<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.event.emit('orders.created', { id: 42 });%%
- * @property {Function} slothlet.event.resolveLevel - Resolve the delivery level a supplied subscriber identity would be granted, without subscribing. Host-only. %%sig: (subscriberPath: string|null, event: string): string%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.event.resolveLevel('reporting.dashboard', 'orders.created'); // "deny" | "notify" | "allow"%%
+ * @property {Function} slothlet.event.level - Resolve the delivery level a supplied subscriber identity would be granted, without subscribing. Host-only. %%sig: (subscriberPath: string|null, event: string): string%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.event.level('reporting.dashboard', 'orders.created'); // "deny" | "notify" | "allow"%%
  * @property {object} slothlet.event.rules - Runtime event-rule mutation. Host-only; gated by `api.mutations.events`.
  * @property {Function} slothlet.event.rules.add - Add an event rule in the runtime layer; returns its id. %%sig: (rule: { caller: string, event: string, effect: string, condition?: any }): string%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const ruleId = api.slothlet.event.rules.add({ caller: 'reporting.**', event: 'orders.*', effect: 'allow' });%%
  * @property {Function} slothlet.event.rules.remove - Remove a runtime event rule by id. %%sig: (ruleId: string): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.event.rules.remove(ruleId);%%
@@ -2143,44 +5097,49 @@ export default slothlet;
  * @property {Function} slothlet.lifecycle.on - Subscribe to a lifecycle event (e.g. `"materialized:complete"`). %%sig: (event: string, handler: function): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.lifecycle.on('shutdown', () => {|  console.log('Slothlet is shutting down');|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.lifecycle.on('shutdown', () => {|    console.log('Slothlet is shutting down');|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.lifecycle.on('shutdown', () => {|    console.log('Slothlet is shutting down');|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.lifecycle.on('shutdown', () => {|  console.log('Slothlet is shutting down');|});%%
  * @property {object} slothlet.materialize - Lazy materialization tracking (meaningful only when `mode: "lazy"`).
  * @property {function(): Object} slothlet.materialize.get - Get current materialization statistics (`{ total, materialized, remaining, percentage }`). %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', mode: 'lazy' });|const stats = api.slothlet.materialize.get();|// { total: 5, materialized: 3, remaining: 2, percentage: 60 }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', mode: 'lazy' });|  const stats = api.slothlet.materialize.get();|  // { total: 5, materialized: 3, remaining: 2, percentage: 60 }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', mode: 'lazy' });|  const stats = api.slothlet.materialize.get();|  // { total: 5, materialized: 3, remaining: 2, percentage: 60 }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', mode: 'lazy' });|const stats = api.slothlet.materialize.get();|// { total: 5, materialized: 3, remaining: 2, percentage: 60 }%%
- * @property {boolean} slothlet.materialize.materialized - `true` once all lazy folders have been fully loaded.
+ * @property {boolean} slothlet.materialize.complete - `true` once all lazy folders have been fully loaded.
  * @property {function(): Promise.<void>} slothlet.materialize.wait - Returns a Promise that resolves when all lazy folders are fully materialized. %%sig: (): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', mode: 'lazy' });|await api.slothlet.materialize.wait(); // resolves when all lazy modules are loaded%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', mode: 'lazy' });|  await api.slothlet.materialize.wait(); // resolves when all lazy modules are loaded|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', mode: 'lazy' });|  await api.slothlet.materialize.wait(); // resolves when all lazy modules are loaded|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', mode: 'lazy' });|await api.slothlet.materialize.wait(); // resolves when all lazy modules are loaded%%
  * @property {object} slothlet.metadata - Module metadata accessor.
- * @property {function(): Object|null} slothlet.metadata.caller - Get metadata for the function that invoked the current one (runtime-injected). %%sig: (): Object|null%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|// Inside an API module, get metadata of the calling function:|const callerMeta = api.slothlet.metadata.caller(); // null if no caller%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  // Inside an API module, get metadata of the calling function:|  const callerMeta = api.slothlet.metadata.caller(); // null if no caller|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  // Inside an API module, get metadata of the calling function:|  const callerMeta = api.slothlet.metadata.caller(); // null if no caller|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|// Inside an API module, get metadata of the calling function:|const callerMeta = api.slothlet.metadata.caller(); // null if no caller%%
- * @property {Function} slothlet.metadata.get - Get metadata for a specific function reference. %%sig: (fn: function): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|const meta = api.slothlet.metadata.get(api.math.add);|// { label: 'Addition' }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  const meta = api.slothlet.metadata.get(api.math.add);|  // { label: 'Addition' }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  const meta = api.slothlet.metadata.get(api.math.add);|  // { label: 'Addition' }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|const meta = api.slothlet.metadata.get(api.math.add);|// { label: 'Addition' }%%
- * @property {Function} slothlet.metadata.remove - Remove per-function metadata (all keys or a specific key). %%sig: (fn: function, [key]: string): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|api.slothlet.metadata.remove(api.math.add, 'label'); // remove key|api.slothlet.metadata.remove(api.math.add); // remove all%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  api.slothlet.metadata.remove(api.math.add, 'label'); // remove key|  api.slothlet.metadata.remove(api.math.add); // remove all|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  api.slothlet.metadata.remove(api.math.add, 'label'); // remove key|  api.slothlet.metadata.remove(api.math.add); // remove all|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|api.slothlet.metadata.remove(api.math.add, 'label'); // remove key|api.slothlet.metadata.remove(api.math.add); // remove all%%
- * @property {Function} slothlet.metadata.getFor - Get merged user metadata for an API path or moduleID. Walks root-to-leaf so descendants inherit ancestor entries automatically. Returns an empty object when no metadata is registered for the path. The returned object is not frozen — callers MUST NOT mutate it, since modifications would affect the live metadata store. Used internally by the module discovery system to round-trip the per-module manifest stored at the mount point under the `_module` key. %%sig: (pathOrModuleId: string): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.modules.addDiscovered({ scanRoot: process.cwd() });|const meta = api.slothlet.metadata.getFor('drivers.opensearch');|console.log(meta._module?.manifest); // { schemaVersion: 1, name: '@org/foo', version: '1.4.2', ... }%%
- * @property {Function} slothlet.metadata.removeFor - Remove path-level metadata for a given API path or moduleID. %%sig: (pathOrModuleId: string, [key]: string|Array.<string>): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.removeFor('math', 'label'); // remove 'label' from all math functions|api.slothlet.metadata.removeFor('math'); // remove all metadata%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.removeFor('math', 'label'); // remove 'label' from all math functions|  api.slothlet.metadata.removeFor('math'); // remove all metadata|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.removeFor('math', 'label'); // remove 'label' from all math functions|  api.slothlet.metadata.removeFor('math'); // remove all metadata|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.removeFor('math', 'label'); // remove 'label' from all math functions|api.slothlet.metadata.removeFor('math'); // remove all metadata%%
- * @property {function(): Object|null} slothlet.metadata.self - Get metadata for the currently-executing API function (runtime-injected). %%sig: (): Object|null%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|// Inside api.math.add, get its own metadata:|const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  // Inside api.math.add, get its own metadata:|  const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  // Inside api.math.add, get its own metadata:|  const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|// Inside api.math.add, get its own metadata:|const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }%%
- * @property {Function} slothlet.metadata.set - Set per-function metadata by direct function reference. %%sig: (fn: function, key: string, value: *): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|api.slothlet.metadata.set(api.math.add, 'tags', ['math', 'util']);%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  api.slothlet.metadata.set(api.math.add, 'tags', ['math', 'util']);|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  api.slothlet.metadata.set(api.math.add, 'tags', ['math', 'util']);|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|api.slothlet.metadata.set(api.math.add, 'tags', ['math', 'util']);%%
- * @property {Function} slothlet.metadata.setFor - Set metadata for all functions reachable under an API path or moduleID. %%sig: (pathOrModuleId: string, keyOrObj: string|Object, [value]: *): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.setFor('math', 'category', 'utilities');|api.slothlet.metadata.setFor('math', { category: 'utils', version: '1.0' });%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.setFor('math', 'category', 'utilities');|  api.slothlet.metadata.setFor('math', { category: 'utils', version: '1.0' });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.setFor('math', 'category', 'utilities');|  api.slothlet.metadata.setFor('math', { category: 'utils', version: '1.0' });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.setFor('math', 'category', 'utilities');|api.slothlet.metadata.setFor('math', { category: 'utils', version: '1.0' });%%
- * @property {Function} slothlet.metadata.setGlobal - Set global metadata applied to every function in the instance. %%sig: (key: string, value: *): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.setGlobal('version', '2.0');|// Every function now has metadata: { version: '2.0' }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.setGlobal('version', '2.0');|  // Every function now has metadata: { version: '2.0' }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.setGlobal('version', '2.0');|  // Every function now has metadata: { version: '2.0' }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.setGlobal('version', '2.0');|// Every function now has metadata: { version: '2.0' }%%
- * @property {object} slothlet.owner - Direct path ownership accessor (shorthand for `slothlet.ownership`).
+ * @property {function(): Object|null} slothlet.metadata.caller - Get the function that invoked the current one, as a caller object ({ path, module, metadata, version }) (runtime-injected). %%sig: (): Object|null%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|// Inside an API module, get metadata of the calling function:|const callerMeta = api.slothlet.metadata.caller(); // null if no caller%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  // Inside an API module, get metadata of the calling function:|  const callerMeta = api.slothlet.metadata.caller(); // null if no caller|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  // Inside an API module, get metadata of the calling function:|  const callerMeta = api.slothlet.metadata.caller(); // null if no caller|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|// Inside an API module, get metadata of the calling function:|const callerMeta = api.slothlet.metadata.caller(); // null if no caller%%
+ * @property {Function} slothlet.metadata.get - Get user metadata, synchronously: global < api path chain < the function's own. `target` is a function or node, an api path (dotted or a segment array, a versioned path such as `'v1.auth'` included) or a module id; `options.version` reads that version of a logical path. Never includes the facts slothlet records about a node (file, folder, path, module): `slothlet.node(target)` reports those. %%sig: (target: function|Object|string|Array.<string>, [options]: Object): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|const meta = api.slothlet.metadata.get(api.math.add);|// { label: 'Addition' }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  const meta = api.slothlet.metadata.get(api.math.add);|  // { label: 'Addition' }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  const meta = api.slothlet.metadata.get(api.math.add);|  // { label: 'Addition' }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|const meta = api.slothlet.metadata.get(api.math.add);|// { label: 'Addition' }%%
+ * @property {Function} slothlet.metadata.remove - Remove user metadata set on a target (a function or node, an api path, or a module id): the named key(s), or all of it. %%sig: (target: function|Object|string|Array.<string>, [key]: string|Array.<string>): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set('math', 'label', 'Math');|api.slothlet.metadata.remove('math', 'label');%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set('math', 'label', 'Math');|  api.slothlet.metadata.remove('math', 'label');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set('math', 'label', 'Math');|  api.slothlet.metadata.remove('math', 'label');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set('math', 'label', 'Math');|api.slothlet.metadata.remove('math', 'label');%%
+ * @property {function(): Object|null} slothlet.metadata.self - Get the currently-executing API function, as a caller object ({ path, module, metadata, version }) (runtime-injected). %%sig: (): Object|null%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|// Inside api.math.add, get its own metadata:|const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  // Inside api.math.add, get its own metadata:|  const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  // Inside api.math.add, get its own metadata:|  const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|// Inside api.math.add, get its own metadata:|const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }%%
+ * @property {Function} slothlet.metadata.set - Set user metadata on a function or node, or for every function at or under an api path or module id. %%sig: (target: function|Object|string|Array.<string>, keyOrObj: string|Object, [value]: *): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|api.slothlet.metadata.set('math', { category: 'utilities' });%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  api.slothlet.metadata.set('math', { category: 'utilities' });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|  api.slothlet.metadata.set('math', { category: 'utilities' });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.set(api.math.add, 'label', 'Addition');|api.slothlet.metadata.set('math', { category: 'utilities' });%%
+ * @property {Function} slothlet.metadata.global - Set global metadata applied to every function in the instance. %%sig: (key: string, value: *): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.metadata.global('version', '2.0');|// Every function now has metadata: { version: '2.0' }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.global('version', '2.0');|  // Every function now has metadata: { version: '2.0' }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.metadata.global('version', '2.0');|  // Every function now has metadata: { version: '2.0' }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.metadata.global('version', '2.0');|// Every function now has metadata: { version: '2.0' }%%
+ * @property {Function} slothlet.node - Report what slothlet knows about an api node: one frozen `{ callable, file, folder, loading, logical?, manifest?, materialized, mode, module, path, type }`. `target` is a node or its api path (dotted or a segment array); `path` and `logical` are segment arrays; `type` is `slothlet.types.UNMATERIALIZED` / `IN_FLIGHT` until a lazy node loads, then `'function'`, `'data'` or `'namespace'`. The caller must be allowed to reach the target. %%sig: (target: function|Object|string|Array.<string>): Object|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const report = api.slothlet.node(api.math.add);|// { callable: true, mode: 'eager', module: 'base_slothlet', path: ['math', 'add'], type: 'function', … }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const report = api.slothlet.node(api.math.add);|  // { callable: true, mode: 'eager', module: 'base_slothlet', path: ['math', 'add'], type: 'function', … }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const report = api.slothlet.node(api.math.add);|  // { callable: true, mode: 'eager', module: 'base_slothlet', path: ['math', 'add'], type: 'function', … }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const report = api.slothlet.node(api.math.add);|// { callable: true, mode: 'eager', module: 'base_slothlet', path: ['math', 'add'], type: 'function', … }%%
+ * @property {object} slothlet.owner - Path ownership accessor.
  * @property {Function} slothlet.owner.get - Get ownership info for a specific API path. %%sig: (apiPath: string): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const info = api.slothlet.owner.get('math.add');|// { path: 'math.add', owners: Set { 'utils/math.mjs' } }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const info = api.slothlet.owner.get('math.add');|  // { path: 'math.add', owners: Set { 'utils/math.mjs' } }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const info = api.slothlet.owner.get('math.add');|  // { path: 'math.add', owners: Set { 'utils/math.mjs' } }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const info = api.slothlet.owner.get('math.add');|// { path: 'math.add', owners: Set { 'utils/math.mjs' } }%%
- * @property {object} slothlet.ownership - Module ownership registry.
- * @property {Function} slothlet.ownership.get - Get the set of moduleIDs that own a given API path. %%sig: (apiPath: string): Set.<string>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const owners = api.slothlet.ownership.get('math.add');|// Set { 'utils/math.mjs' }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const owners = api.slothlet.ownership.get('math.add');|  // Set { 'utils/math.mjs' }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const owners = api.slothlet.ownership.get('math.add');|  // Set { 'utils/math.mjs' }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const owners = api.slothlet.ownership.get('math.add');|// Set { 'utils/math.mjs' }%%
- * @property {Function} slothlet.ownership.unregister - Unregister a module from all ownership records. %%sig: (moduleID: string): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.api.remove('math');|api.slothlet.ownership.unregister('utils/math.mjs');%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.remove('math');|  api.slothlet.ownership.unregister('utils/math.mjs');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.api.remove('math');|  api.slothlet.ownership.unregister('utils/math.mjs');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.api.remove('math');|api.slothlet.ownership.unregister('utils/math.mjs');%%
- * @property {object} slothlet.permissions - Permission system surface — present whenever a `permissions` block is configured. Rule registration (`addRule`/`removeRule`), principal resolvers (`principal.*`), self/global introspection (`self.*`, `global.*`), and runtime control (`control.*`) live here. Only the `control` sub-namespace is typed in this typedef; the rule-management methods are documented in [`docs/PERMISSIONS.md`](../docs/PERMISSIONS.md).
+ * @property {object} slothlet.warnings - The warnings this instance raised, printed or not. Host only by default (built-in deny on `slothlet.warnings.**`).
+ * @property {Function} slothlet.warnings.get - This instance's warnings, oldest first (a copy). %%sig: (): SlothletWarning[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const codes = api.slothlet.warnings.get().map((w) => w.code);%%
+ * @property {Function} slothlet.warnings.clear - Empty this instance's warning list. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.slothlet.warnings.clear();%%
+ * @property {object} slothlet.permissions - Permission system surface — present whenever a `permissions` block is configured. Rule registration (`rules.add`/`rules.remove`), principal resolvers (`principal.*`), self/global introspection (`self.*`, `global.*`), and runtime control (`control.*`) live here. Only the `control` sub-namespace is typed in this typedef; the rule-management methods are documented in [`docs/PERMISSIONS.md`](../docs/PERMISSIONS.md).
+ * @property {object} slothlet.permissions.rules - Runtime permission rules. Gated by `api.mutations.permissions`.
+ * @property {Function} slothlet.permissions.rules.add - Add a permission rule; returns its id. A target under `slothlet.` or `capability:` must name a real member or capability (`PERMISSION_RULE_UNKNOWN_TARGET` otherwise). %%sig: (rule: { caller: string, target: string, effect: string, condition?: any, requires?: string[] }): string%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { mode: "on" } });|const id = api.slothlet.permissions.rules.add({ caller: "untrusted.**", target: "db.**", effect: "deny" });%%
+ * @property {Function} slothlet.permissions.rules.remove - Remove a permission rule by id. %%sig: (ruleId: string): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { mode: "on" } });|api.slothlet.permissions.rules.remove(id);%%
+ * @property {object} slothlet.permissions.global - Permission queries and rule listings for any caller or target.
+ * @property {object} slothlet.permissions.global.check - Would a caller be allowed? `access` is the silent query; `call` is the audited call-gate query (host only by default).
+ * @property {Function} slothlet.permissions.global.check.access - Whether `caller` may reach `target`. No audit. %%sig: (caller: string, target: string): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { mode: "on" } });|api.slothlet.permissions.global.check.access("payments.charge", "db.write");%%
+ * @property {Function} slothlet.permissions.global.check.call - Whether `caller` may call `target` with `args`, evaluated as the real call gate does (audited). A promise only when a principal had to be resolved. %%sig: (caller: string, target: string, [args]: Array): boolean|Promise.<boolean>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { mode: "on" } });|await api.slothlet.permissions.global.check.call("client.app", "files.list", ["p1"]);%%
+ * @property {object} slothlet.permissions.global.rules - The rules that apply: `path(target)` by target path, `module(id)` by owning module.
+ * @property {Function} slothlet.permissions.global.rules.path - Rules that match a target path. %%sig: (path: string): Object[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { mode: "on" } });|api.slothlet.permissions.global.rules.path("db.write");%%
+ * @property {Function} slothlet.permissions.global.rules.module - Rules a module owns. %%sig: (moduleID: string): Object[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { mode: "on" } });|api.slothlet.permissions.global.rules.module("mod_abc123");%%
  * @property {object} slothlet.permissions.control - Runtime control over permission enforcement.
- * @property {boolean} slothlet.permissions.control.enabled - Current permission-enforcement state. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|const on = api.slothlet.permissions.control.enabled;%%
- * @property {function(): void} slothlet.permissions.control.enable - Enable permission enforcement globally. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.enable();%%
- * @property {function(): void} slothlet.permissions.control.disable - Disable permission enforcement globally (all calls allowed). %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'deny' } });|api.slothlet.permissions.control.disable();%%
- * @property {boolean} slothlet.permissions.control.readGatingEnabled - Current read-level gating state. `true` when terminal data-value property reads are permission-gated. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|const gated = api.slothlet.permissions.control.readGatingEnabled;%%
- * @property {function(boolean): void} slothlet.permissions.control.readGating - Enable or disable read-level permission gating at runtime. Throws `INVALID_ARGUMENT` for a non-boolean argument. %%sig: (value: boolean): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.readGating(false); // stop gating reads|api.slothlet.permissions.control.readGating(true);  // resume%%
- * @property {function(): void} slothlet.permissions.control.seal - Seal the permission control surface (one-way, no unseal). After sealing, `enable`/`disable`, `addRule`/`removeRule`, `readGating`, and `principal.register`/`principal.unregister` throw `PERMISSION_SEALED`. Enforcement continues to evaluate, `principal.invalidate` and `shutdown()` still work. Idempotent. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.seal();%%
+ * @property {function(("on"|"off"|boolean)=): ("on"|"strict"|"off"|"disabled")} slothlet.permissions.control.mode() - The permission system's mode, or switch it: no argument returns it; `"on"`/`true` or `"off"`/`false` switches and returns the new mode. `"strict"` is config-only; `"disabled"` can be left but not entered; locked by `seal()`. %%sig: (value?: "on"|"off"|boolean): string%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.mode(); // "on"|api.slothlet.permissions.control.mode("off");%%
+ * @property {object} slothlet.permissions.control.gating - Runtime gating switches; matches the config's `permissions.gating` group.
+ * @property {function(boolean=): boolean} slothlet.permissions.control.gating.read - Read-level gating state, or switch it: no argument returns whether terminal data-value reads are gated; a boolean switches it and returns the new state. Throws `INVALID_ARGUMENT` for a non-boolean. %%sig: (value?: boolean): boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.gating.read(false); // stop gating reads|api.slothlet.permissions.control.gating.read(); // false%%
+ * @property {function(): void} slothlet.permissions.control.seal - Seal the permission control surface (one-way, no unseal). After sealing, switching `mode(value)` / `gating.read(value)`, `rules.add`/`rules.remove`, and `principal.register`/`principal.unregister` throw `PERMISSION_SEALED`. Enforcement continues to evaluate, `principal.invalidate` and `shutdown()` still work. Idempotent. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|api.slothlet.permissions.control.seal();%%
  * @property {boolean} slothlet.permissions.control.sealed - Whether the permission control surface has been sealed. Exposed as a getter so descriptor-based reads remain permission-gated. %%sig: boolean%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { defaultPolicy: 'allow' } });|const sealed = api.slothlet.permissions.control.sealed;%%
- * @property {object} slothlet.versioning - Runtime version management API. This namespace is always present on `api.slothlet`; before any module has been registered via `api.slothlet.api.add()` with a `versionConfig` argument, its methods return `undefined` where documented or otherwise have no effect until versioning data exists.
- * @property {Function} slothlet.versioning.list - List all registered versions for a logical API path. Returns `undefined` if the path has no registered versions or if versioning has not yet been used. %%sig: (logicalPath: string): {versions: object, default: string|null}|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1', default: true });|const info = api.slothlet.versioning.list('auth');|if (info) console.log(info.default); // "v1"%%
- * @property {Function} slothlet.versioning.setDefault - Override the default version for a logical API path at runtime. If no versions are registered for the path, this call has no effect until versioning data exists. %%sig: (logicalPath: string, versionTag: string): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1' });|await api.slothlet.api.add('auth', './api/v2', {}, { version: 'v2' });|api.slothlet.versioning.setDefault('auth', 'v1');%%
- * @property {Function} slothlet.versioning.unregister - Unregister a specific version from a logical API path. Removes the versioned namespace (`vX.path`) and updates or tears down the dispatcher. If the logical path/version is not registered, this resolves without removing anything. %%sig: (logicalPath: string, versionTag: string): Promise.<boolean>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1' });|await api.slothlet.api.add('auth', './api/v2', {}, { version: 'v2' });|const removed = await api.slothlet.versioning.unregister('auth', 'v2'); // true%%
- * @property {Function} slothlet.versioning.getVersionMetadata - Retrieve the VersionManager-only metadata stored at registration time via `versionConfig.metadata`. Returns `undefined` if the path or version is not registered, or if versioning has not yet been used. %%sig: (logicalPath: string, versionTag: string): object|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1', metadata: { stable: true } });|const meta = api.slothlet.versioning.getVersionMetadata('auth', 'v1'); // { stable: true, version: 'v1', logicalPath: 'auth' }%%
- * @property {Function} slothlet.versioning.setVersionMetadata - Patch (merge) the VersionManager-only metadata for a registered version at runtime. The injected `version` and `logicalPath` keys always win over supplied patch fields. Throws `VERSION_NOT_FOUND` if the path or version is not registered. %%sig: (logicalPath: string, versionTag: string, patch: object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1' });|api.slothlet.versioning.setVersionMetadata('auth', 'v1', { stable: true });%%
- * @property {Function} slothlet.lockCaller - Freeze the registering module's caller identity onto a callback. The returned wrapper overrides only the caller identity when invoked; request-scoped context stays live. In **async** runtime mode the pinned identity propagates through `AsyncLocalStorage` for the callback's full async lifetime. In **live** runtime mode identity is pinned only for the synchronous portion — once `fn` returns its promise the live context is restored, so an async callback that `await`s before calling `self.*` resumes with no slothlet caller at all (an identity check sees `unknown`); use async runtime mode for async hooks (e.g. Fastify `addHook`) that must keep identity past the first `await`. **`slothlet.lockCaller.caller(fn)`** (a property of this function, same signature) pins the current leaf's **caller** instead — the identity `slothlet.metadata.caller()` reports — so a service that runs callbacks on behalf of whoever called it (a scheduler, a registry) runs each one as that caller rather than as itself. It is denied to modules by a built-in rule on `slothlet.lockCaller.caller`; the host grants it (e.g. `{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }`). When the leaf was called from outside any module the callback is pinned to no module caller and runs as the host (`metadata.caller()` returns null inside it). Otherwise it behaves like `lockCaller`, including the runtime-mode caveat. %%sig: (fn: function): function%% %%example: // Inside a module's init()|server.addHook("onRequest", self.slothlet.lockCaller(handler));%% %%example: // Inside a scheduler leaf (host-granted `slothlet.lockCaller.caller`)|export function every(ms, job) {|  setInterval(self.slothlet.lockCaller.caller(job), ms);|}%%
- * @property {Function} slothlet.bind - Freeze the entire async context onto a callback at registration time (convenience re-export of `AsyncResource.bind`). Unlike `lockCaller`, which overrides only caller identity and leaves request-scoped context live, `bind` freezes every `AsyncLocalStorage`, including slothlet's caller and context. Meaningful in async runtime mode; degrades to non-slothlet ALS context in live mode. %%sig: (fn: function): function%% %%example: // Inside a module's init()|server.addHook("onRequest", self.slothlet.bind(handler));%%
- * @property {object} [slothlet.reference] - The `reference` object from config, merged onto the root API and accessible here.
- * @property {Function} slothlet.reload - Reload the entire instance (re-scans the directory and recreates all module references). Accepts `{ keepInstanceID: boolean }`. %%sig: ([options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.reload(); // full reload%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.reload(); // full reload|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.reload(); // full reload|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.reload(); // full reload%%
- * @property {Function} slothlet.restart - Clean-slate restart: shut this instance down through the normal teardown path and build a new one from the ORIGINAL `slothlet({...})` config behind the same `api` reference. Unlike `reload()`, nothing runtime is carried over — no replayed `add()`/`remove()` history, runtime hooks, permission rules, event or lifecycle subscriptions, metadata, runtime assignments or module-scope state (modules are re-imported under a new instance ID). Held child references are re-pointed to the node at the same path in the new instance; one whose path no longer exists throws `RESTART_REFERENCE_UNRESOLVED` on use. Emits `restart` → `shutdown` → `init` → `restarted`. Refused with `INVALID_CONFIG_MUTATIONS_DISABLED` when `api.mutations.reload` is `false`, and, when a `permissions` config is present, host-only (a built-in rule denies `slothlet.restart` to modules; an explicit host rule can allow a trusted module — with no `permissions` config the permission system is off and modules can call it). The new instance comes up with only the original config's permission rules and unsealed, even if the old one was sealed. See [RELOAD.md](docs/RELOAD.md#apislothletrestart). %%sig: (): Promise.<Object>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.conn.handlers = { onSend };|await api.slothlet.restart(); // clean slate from the original config|api.conn.handlers; // undefined%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.restart();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.restart();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.restart();%%
- * @property {Function} slothlet.run - Execute a callback with isolated per-request context data. Convenience alias for `slothlet.context.run()`. %%sig: (contextData: Object, callback: function, args: *): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const result = await api.slothlet.run({ userId: 42 }, async () => {|  return api.myModule.getUser();|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.run({ userId: 42 }, async () => {|    return api.myModule.getUser();|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.run({ userId: 42 }, async () => {|    return api.myModule.getUser();|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const result = await api.slothlet.run({ userId: 42 }, async () => {|  return api.myModule.getUser();|});%%
- * @property {Function} slothlet.scope - Execute a function with full structured per-request context options. Convenience alias for `slothlet.context.scope()`. %%sig: (options: Object): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const result = await api.slothlet.scope({|  context: { userId: 42 },|  fn: async () => api.myModule.getUser()|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.scope({|    context: { userId: 42 },|    fn: async () => api.myModule.getUser()|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.scope({|    context: { userId: 42 },|    fn: async () => api.myModule.getUser()|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const result = await api.slothlet.scope({|  context: { userId: 42 },|  fn: async () => api.myModule.getUser()|});%%
- * @property {function(): Promise.<void>} slothlet.shutdown - Shut down the instance and release all resources. Framework-only teardown: runs the `mode: "shutdown"` routines (with `autoRoutines: true` a root `shutdown` export runs once, as a contribution) but never calls the root `shutdown`/`destroy` hooks itself, so with `autoRoutines: false` no module code runs — use `api.shutdown()` to also call the root `shutdown` hook. %%sig: (): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.shutdown();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.shutdown();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.shutdown();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.shutdown();%%
+ * @property {function(): {mode: string, baseline: {met: (boolean|null), checks: Array<{id: string, met: boolean, reason: (string|null)}>}, capabilities: Array<{name: string, allowed: Array<string>}>}} slothlet.permissions.control.report - The mode, what the permission baseline found when the instance started (`met: null` when no check ran), and the capabilities rules open. A met baseline means only that the checks slothlet can make passed; code that ran before slothlet can have changed what they read. %%sig: (): { mode, baseline, capabilities }%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', permissions: { mode: 'on' } });|const { baseline } = api.slothlet.permissions.control.report();%%
+ * @property {object} slothlet.versioning - Runtime version management API. This namespace is always present on `api.slothlet`; before any module has been registered via `api.slothlet.api.add()` with a `version` option, its methods return `undefined` where documented or otherwise have no effect until versioning data exists.
+ * @property {Function} slothlet.versioning.list - List all registered versions for a logical API path. Returns `undefined` if the path has no registered versions or if versioning has not yet been used. %%sig: (logicalPath: string): {versions: Object<string, {at: number, default: boolean, metadata: object, module: string, path: string[], tag: string}>, default: string|null}|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versioning: { dispatcher: "version" } });|await api.slothlet.api.add('auth', './api/v1', { version: { tag: 'v1', default: true } });|const info = api.slothlet.versioning.list('auth');|if (info) console.log(info.default); // "v1"%%
+ * @property {Function} slothlet.versioning.default - Override the default version for a logical API path at runtime. If no versions are registered for the path, this call has no effect until versioning data exists. %%sig: (logicalPath: string, versionTag: string): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versioning: { dispatcher: "version" } });|await api.slothlet.api.add('auth', './api/v1', { version: { tag: 'v1' } });|await api.slothlet.api.add('auth', './api/v2', { version: { tag: 'v2' } });|api.slothlet.versioning.default('auth', 'v1');%%
+ * @property {Function} slothlet.versioning.remove - Unregister a specific version from a logical API path. Removes the versioned namespace (`vX.path`) and updates or tears down the dispatcher. If the logical path/version is not registered, this resolves without removing anything. %%sig: (logicalPath: string, versionTag: string): Promise.<boolean>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versioning: { dispatcher: "version" } });|await api.slothlet.api.add('auth', './api/v1', { version: { tag: 'v1' } });|await api.slothlet.api.add('auth', './api/v2', { version: { tag: 'v2' } });|const removed = await api.slothlet.versioning.remove('auth', 'v2'); // true%%
+ * @property {object} slothlet.versioning.metadata - Version-manager-only metadata (not the store `metadata.set` writes).
+ * @property {Function} slothlet.versioning.metadata.get - Retrieve the VersionManager-only metadata stored at registration time via `options.version.metadata`. Returns `undefined` if the path or version is not registered, or if versioning has not yet been used. %%sig: (logicalPath: string, versionTag: string): object|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versioning: { dispatcher: "version" } });|await api.slothlet.api.add('auth', './api/v1', { version: { tag: 'v1', metadata: { stable: true } } });|const meta = api.slothlet.versioning.metadata.get('auth', 'v1'); // { stable: true, version: 'v1', path: ['auth'] }%%
+ * @property {Function} slothlet.versioning.metadata.set - Patch (merge) the VersionManager-only metadata for a registered version at runtime. The injected `version` and `path` keys always win over supplied patch fields. Throws `VERSION_NOT_FOUND` if the path or version is not registered. %%sig: (logicalPath: string, versionTag: string, patch: object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', versioning: { dispatcher: "version" } });|await api.slothlet.api.add('auth', './api/v1', { version: { tag: 'v1' } });|api.slothlet.versioning.metadata.set('auth', 'v1', { stable: true });%%
+ * @property {Function} slothlet.pin - Freeze the registering module's caller identity onto a callback. The returned wrapper overrides only the caller identity when invoked; request-scoped context stays live. In **async** runtime mode the pinned identity propagates through `AsyncLocalStorage` for the callback's full async lifetime. In **live** runtime mode identity is pinned only for the synchronous portion — once `fn` returns its promise the live context is restored, so an async callback that `await`s before calling `self.*` resumes with no slothlet caller at all (an identity check sees `unknown`); use async runtime mode for async hooks (e.g. Fastify `addHook`) that must keep identity past the first `await`. **`slothlet.pin.caller(fn)`** (a property of this function, same signature) pins the current leaf's **caller** instead — the identity `slothlet.metadata.caller()` reports — so a service that runs callbacks on behalf of whoever called it (a scheduler, a registry) runs each one as that caller rather than as itself. It is denied to modules by a built-in rule on `slothlet.pin.caller`; the host grants it (e.g. `{ caller: "scheduler.**", target: "slothlet.pin.caller", effect: "allow" }`). When the leaf was called from outside any module the callback is pinned to no module caller and runs as the host (`metadata.caller()` returns null inside it). Otherwise it behaves like `lockCaller`, including the runtime-mode caveat. %%sig: (fn: function): function%% %%example: // Inside a module's init()|server.addHook("onRequest", self.slothlet.pin(handler));%% %%example: // Inside a scheduler leaf (host-granted `slothlet.pin.caller`)|export function every(ms, job) {|  setInterval(self.slothlet.pin.caller(job), ms);|}%%
+ * @property {Function} slothlet.bind - Freeze the entire context onto a callback at registration time. Unlike `pin`, which overrides only caller identity and leaves request-scoped context live, `bind` freezes slothlet's caller and context (the running `run()` / `scope()` included). On the async runtime it is `AsyncResource.bind`, so every `AsyncLocalStorage` is frozen with it; on the live runtime, which uses no `node:async_hooks`, the live context manager binds the flow and caller the callback was bound in. %%sig: (fn: function): function%% %%example: // Inside a module's init()|server.addHook("onRequest", self.slothlet.bind(handler));%%
+ * @property {Function} slothlet.reload - Reload the entire instance (re-scans the directory and recreates all module references). Accepts `{ instance: "keep" | "new" }` (default `"new"`: the reloaded instance gets a new instance id). %%sig: ([options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.reload(); // full reload%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.reload(); // full reload|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.reload(); // full reload|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.reload(); // full reload%%
+ * @property {Function} slothlet.restart - Clean-slate restart: shut this instance down through the normal teardown path and build a new one from the ORIGINAL `slothlet({...})` config behind the same `api` reference. Unlike `reload()`, nothing runtime is carried over — no replayed `add()`/`remove()` history, runtime hooks, permission rules, event or lifecycle subscriptions, metadata, runtime assignments or module-scope state (modules are re-imported under a new instance ID). Held child references are re-pointed to the node at the same path in the new instance; one whose path no longer exists throws `RESTART_REFERENCE_UNRESOLVED` on use. Emits `restart` → `shutdown` → `init` → `restarted`. Refused with `API_MUTATION_DISABLED` when `api.mutations.reload` is `false`, and, when a `permissions` config is present, host-only (a built-in rule denies `slothlet.restart` to modules; an explicit host rule can allow a trusted module — with no `permissions` config the permission system is off and modules can call it). The new instance comes up with only the original config's permission rules and unsealed, even if the old one was sealed. See [RELOAD.md](docs/RELOAD.md#apislothletrestart). %%sig: (): Promise.<Object>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|api.conn.handlers = { onSend };|await api.slothlet.restart(); // clean slate from the original config|api.conn.handlers; // undefined%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.restart();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.restart();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.restart();%%
+ * @property {function(): Promise.<void>} slothlet.shutdown - Shut down the instance and release all resources. Framework-only teardown: runs the `mode: "shutdown"` routines (with `routines.auto: true` a root `shutdown` export runs once, as a contribution) but never calls the root `shutdown`/`destroy` hooks itself, so with `routines.auto: false` no module code runs — use `api.shutdown()` to also call the root `shutdown` hook. %%sig: (): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.shutdown();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.shutdown();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.shutdown();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.shutdown();%%
  */

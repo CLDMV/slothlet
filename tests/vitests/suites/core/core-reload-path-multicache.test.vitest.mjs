@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/core-reload-path-multicache.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/core-reload-path-multicache.test.vitest.mjs
  *	@Date: 2026-02-10T06:29:29-08:00 (1770733769)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:26-07:00 (1791091706)
+ *	@Last modified time: 2026-11-28T04:31:36-08:00 (1795869096)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,8 +58,10 @@ for (const { config, name } of configs) {
 					base: TEST_DIRS.API_TEST,
 					api: {
 						collision: {
-							initial: "replace",
-							api: "merge"
+							mode: {
+								initial: "replace",
+								api: "merge"
+							}
 						},
 						mutations: {
 							add: true,
@@ -154,8 +156,10 @@ for (const { config, name } of configs) {
 					base: TEST_DIRS.API_TEST,
 					api: {
 						collision: {
-							initial: "replace",
-							api: "merge"
+							mode: {
+								initial: "replace",
+								api: "merge"
+							}
 						},
 						mutations: {
 							add: true,
@@ -217,8 +221,10 @@ for (const { config, name } of configs) {
 						// the entire losing side of a file/folder collision, not just its overlapping
 						// keys, which is incompatible with "math has all exports from both" below.
 						collision: {
-							initial: "merge",
-							api: "merge"
+							mode: {
+								initial: "merge",
+								api: "merge"
+							}
 						},
 						mutations: {
 							add: true,
@@ -300,8 +306,10 @@ for (const { config, name } of configs) {
 					base: TEST_DIRS.API_TEST,
 					api: {
 						collision: {
-							initial: "replace",
-							api: "replace"
+							mode: {
+								initial: "replace",
+								api: "replace"
+							}
 						},
 						mutations: {
 							add: true,
@@ -396,8 +404,10 @@ for (const { config, name } of configs) {
 					base: TEST_DIRS.API_TEST,
 					api: {
 						collision: {
-							initial: "replace",
-							api: "merge"
+							mode: {
+								initial: "replace",
+								api: "merge"
+							}
 						},
 						mutations: {
 							add: true,
@@ -485,8 +495,10 @@ for (const { config, name } of configs) {
 					base: TEST_DIRS.API_TEST,
 					api: {
 						collision: {
-							initial: "replace",
-							api: "merge"
+							mode: {
+								initial: "replace",
+								api: "merge"
+							}
 						},
 						mutations: {
 							add: true,
@@ -538,8 +550,10 @@ for (const { config, name } of configs) {
 					base: TEST_DIRS.API_TEST,
 					api: {
 						collision: {
-							initial: "replace",
-							api: "merge"
+							mode: {
+								initial: "replace",
+								api: "merge"
+							}
 						},
 						mutations: {
 							add: true,

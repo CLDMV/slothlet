@@ -93,7 +93,7 @@ The function is called with the full runtime context object and must return a tr
 
 The function receives the same object the user passed to `context.run()`, or `{}` if no run is active. It may inspect any field at any depth.
 
-A condition in a rule that module code registered — through `self.slothlet.permissions.addRule`, a manifest it mounted, or the `permissions` option of an `api.add` it made — runs as that module, whichever caller's call is being checked, the same way a hook handler a module registers is pinned to it. Anything it reaches through `self` is judged with that module's standing: it cannot write, or call, past what the module itself may.
+A condition in a rule that module code registered — through `self.slothlet.permissions.rules.add`, a manifest it mounted, or the `permissions` option of an `api.add` it made — runs as that module, whichever caller's call is being checked, the same way a hook handler a module registers is pinned to it. Anything it reaches through `self` is judged with that module's standing: it cannot write, or call, past what the module itself may.
 
 #### Second argument: call metadata (`callMeta`)
 
@@ -114,7 +114,7 @@ At a **call** or **construct** gate the function condition also receives a secon
 }
 ```
 
-`callMeta` is provided at the **call** gate (`self.x.leaf(...)`), the **construct** gate (`new self.x.Foo(...)`), and when a **captured reference** (`const f = self.x.leaf; f(...)`) is later invoked — all three see the invocation's real arguments. It is **`null`** everywhere else a condition is evaluated: terminal-value **reads**, **hook** gating, **event** delivery, the internal `slothlet.*` control surface, and silent queries (`permissions.global.checkAccess`, `permissions.self.access`, `matchesCondition`). The one query that is _not_ silent is the host-only [`permissions.global.checkCall(caller, target, args)`](./PERMISSIONS.md#checkcall-vs-checkaccess): it is handed the arguments of the call being asked about and forwards `{ args, target }` exactly as the call gate does, so a condition sees the same second argument whether the call is real or queried. Because `target` is the concrete leaf (never the rule's glob), one `**`-globbed rule can branch on exactly which leaf was called.
+`callMeta` is provided at the **call** gate (`self.x.leaf(...)`), the **construct** gate (`new self.x.Foo(...)`), and when a **captured reference** (`const f = self.x.leaf; f(...)`) is later invoked — all three see the invocation's real arguments. It is **`null`** everywhere else a condition is evaluated: terminal-value **reads**, **hook** gating, **event** delivery, the internal `slothlet.*` control surface, and silent queries (`permissions.global.check.access`, `permissions.self.access`, `matchesCondition`). The one query that is _not_ silent is the host-only [`permissions.global.check.call(caller, target, args)`](./PERMISSIONS.md#checkcall-vs-checkaccess): it is handed the arguments of the call being asked about and forwards `{ args, target }` exactly as the call gate does, so a condition sees the same second argument whether the call is real or queried. Because `target` is the concrete leaf (never the rule's glob), one `**`-globbed rule can branch on exactly which leaf was called.
 
 **Write `callMeta`-reading conditions defensively.** Since `callMeta` can be `null`, guard the access — `(ctx, meta) => meta?.args?.[0] === id` — or scope the rule to a `target` that only ever gates at a call/construct site. A condition that throws (including a `TypeError` from reading `args` on a `null` `callMeta`) is caught and treated as a non-match, never an implicit allow.
 
@@ -158,7 +158,7 @@ Each entry in the array is evaluated independently using the same rules as its s
 - Plain object entries use `deepObjectMatches` (all keys must match)
 - Function entries are called with the full context; exceptions are non-match
 
-An empty array `[]` is rejected at `addRule()` time.
+An empty array `[]` is rejected at `rules.add()` time.
 
 ---
 
@@ -181,7 +181,7 @@ A condition is stored by value with its rule: editing the object after the rule 
 | Function condition at a call/construct gate              | Receives `(ctx, { args, target })` — the call's arguments and the concrete target path           |
 | Function condition on a captured reference invoked later | Also receives the real `{ args, target }` of that invocation                                     |
 | Function condition off the call/construct path           | Second argument is `null` (reads, hooks, events, control surface, silent queries)                |
-| Function condition queried via `global.checkCall`        | Receives `(ctx, { args, target })` with the supplied `args` — the call-gate query is not silent  |
+| Function condition queried via `global.check.call`       | Receives `(ctx, { args, target })` with the supplied `args` — the call-gate query is not silent  |
 | Function condition returns a Promise / thenable          | Non-match; rejection absorbed; `DEBUG_PERMISSION_CONDITION_THENABLE` emitted                     |
 | Rule declares `requires`                                 | Second argument carries `principals`; rule does not match unless every principal is current      |
 
@@ -189,7 +189,7 @@ A condition is stored by value with its rule: editing the object after the rule 
 
 ## Validation
 
-`addRule()` validates the `condition` field at registration time. Invalid conditions throw `INVALID_PERMISSION_RULE` immediately — the rule is never stored.
+`rules.add()` validates the `condition` field at registration time. Invalid conditions throw `PERMISSION_RULE_INVALID` immediately — the rule is never stored.
 
 **Accepted values for `condition`:**
 
@@ -237,7 +237,7 @@ await api.slothlet.api.add("payments", "./payments", {
 });
 ```
 
-Each object entry in the array must have a `target` string. The `condition` field is optional and follows the same validation rules as `addRule()`.
+Each object entry in the array must have a `target` string. The `condition` field is optional and follows the same validation rules as `rules.add()`.
 
 ---
 
@@ -270,9 +270,9 @@ Isolate tenants from each other's resources using conditions on shared API paths
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
-		defaultPolicy: "deny",
+		policy: "deny",
 		rules: [
 			// Allow tenant-a modules to reach tenant-a data
 			{ caller: "**", target: "data.tenantA.**", effect: "allow", condition: { tenant: "tenant-a" } },
@@ -309,13 +309,13 @@ Because the two rules are equally specific, the last-registered rule (the allow)
 
 ### Combining With Default Policy
 
-With `defaultPolicy: "deny"`, conditions can open specific paths per context rather than using broad allow rules:
+With `policy: "deny"`, conditions can open specific paths per context rather than using broad allow rules:
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
-		defaultPolicy: "deny",
+		policy: "deny",
 		rules: [
 			// Only allow the billing module to be reached when the request is flagged as internal
 			{ caller: "**", target: "billing.**", effect: "allow", condition: { internal: true } }
@@ -336,9 +336,9 @@ A context-level condition can express "may this caller reach `project.get` at al
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	permissions: {
-		defaultPolicy: "deny",
+		policy: "deny",
 		rules: [
 			// The predicate names the resource from the call's own arguments.
 			{ caller: "**", target: "project.get", effect: "allow", condition: (ctx, { args }) => hasRole(ctx.caller, args[0], "read") },

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-lazy-collision-materialization.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-lazy-collision-materialization.test.vitest.mjs
  *	@Date: 2026-09-09T19:03:16-07:00 (1789005796)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:19-07:00 (1791091699)
+ *	@Last modified time: 2026-11-28T04:31:10-08:00 (1795869070)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -70,7 +70,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		// reliable signal that nothing under it (including "testFunc") has been touched yet.
 		expect(resolveWrapper(api.sub).____slothletInternal.state.materialized).toBe(false);
 
-		await api.slothlet.api.add(["sub"], DIR2, { collisionMode: "merge" });
+		await api.slothlet.api.add(["sub"], DIR2, { collision: { mode: "merge" } });
 
 		// "merge" is documented as "keep existing, only add new keys" — the pre-existing lazybase
 		// contribution must win, not be silently discarded in favor of dir2's.
@@ -85,22 +85,22 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 
 		const events = [];
 		api.slothlet.lifecycle.on("impl:created", (d) => {
-			if (d.apiPath === "sub.testFunc") events.push(d);
+			if (d.path.join(".") === "sub.testFunc") events.push(d);
 		});
 
-		await api.slothlet.api.add(["sub"], DIR2, { collisionMode: "merge" });
+		await api.slothlet.api.add(["sub"], DIR2, { collision: { mode: "merge" } });
 
 		// Pre-#398 this fired TWICE — once per contributor, INCLUDING the merge-discarded one — and each
 		// payload carried the raw unwrapped callable (the enforcement-bypassing leak). Now the PUBLIC
 		// event fires once, for the leaf that actually holds the path (the current owner). #433: it exposes
 		// the WRAPPED callable on a stable `impl` field (a function here) and no longer re-exposes the
-		// reserved internal `wrapper.__impl` handle. (Which module owns a merge-collided leaf is ownership's
+		// reserved internal `wrapper.____impl` handle. (Which module owns a merge-collided leaf is ownership's
 		// own concern, unchanged here — this asserts consistency with it, not a fixed id.)
 		expect(events).toHaveLength(1);
 		expect(typeof events[0].impl).toBe("function"); // the wrapped callable, on the stable public field
 		expect(events[0].wrapper).toBeUndefined(); // internal handle no longer on the public event
-		const owner = resolveWrapper(api.sub).slothlet.handlers.ownership.getCurrentOwner("sub.testFunc");
-		expect(events[0].moduleID).toBe(owner.moduleID);
+		const owner = resolveWrapper(api.sub).____slothlet.handlers.ownership.getCurrentOwner("sub.testFunc");
+		expect(events[0].module).toBe(owner.moduleID);
 		// The surviving value still resolves correctly.
 		expect(await api.sub.testFunc()).toBe("from-lazybase-sub");
 	});
@@ -114,7 +114,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		const statsBefore = api.slothlet.materialize.get();
 
 		// Force syncWrapper to materialize "sub" via a collision (replace mode swaps its content).
-		await api.slothlet.api.add(["sub"], DIR2, { collisionMode: "replace" });
+		await api.slothlet.api.add(["sub"], DIR2, { collision: { mode: "replace" } });
 
 		// syncWrapper's own force-materialization legitimately completed "sub" — it must not be
 		// reported back to unmaterialized just because its (now-superseded) impl was a function.
@@ -122,7 +122,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 
 		// A wrapper that materializes exactly once must decrement the global unmaterialized count
 		// exactly once — not twice (which would happen if state.materialized bounced back to false
-		// and something re-triggered _materialize() on it later).
+		// and something re-triggered ___materialize() on it later).
 		const statsAfter = api.slothlet.materialize.get();
 		expect(statsAfter.remaining).toBe(statsBefore.remaining - 1);
 		expect(statsAfter.remaining).toBeGreaterThanOrEqual(0);
@@ -141,7 +141,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		expect(resolveWrapper(api.sub).____slothletInternal.state.materialized).toBe(false);
 		const statsBefore = api.slothlet.materialize.get();
 
-		await api.slothlet.api.add(["sub"], DIR2, { collisionMode: "merge" });
+		await api.slothlet.api.add(["sub"], DIR2, { collision: { mode: "merge" } });
 
 		// syncWrapper's own force-materialization legitimately completed "sub" — it must not be
 		// reported back to unmaterialized just because its (now-superseded) impl was null.

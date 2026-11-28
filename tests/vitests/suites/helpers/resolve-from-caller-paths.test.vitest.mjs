@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/resolve-from-caller-paths.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/resolve-from-caller-paths.test.vitest.mjs
  *	@Date: 2026-02-27T20:33:02-08:00 (1772253182)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
+ *	@Last modified time: 2026-11-28T04:31:51-08:00 (1795869111)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, it, expect } from "vitest";
-import { Resolver } from "@cldmv/slothlet/helpers/resolve-from-caller";
+import { Resolver } from "#helpers/resolve-from-caller";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "../../../../");

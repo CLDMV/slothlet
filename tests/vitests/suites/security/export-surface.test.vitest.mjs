@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/security/export-surface.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/security/export-surface.test.vitest.mjs
  *	@Date: 2026-07-10T00:00:00-07:00 (1783666800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-28T04:33:02-08:00 (1795869182)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { generateImportMap } from "@cldmv/slothlet/helpers/generate-manifest";
+import { generateImportMap } from "#helpers/generate-manifest";
 
 // Build specifiers at runtime so the bundler/module-runner cannot statically resolve (and reject)
 // them at transform time — the point is to observe the resolver rejecting a no-longer-exported subpath.
@@ -42,7 +42,9 @@ describe("Security > Export surface narrowing (H1)", () => {
 	});
 
 	it("browser importmap still resolves the internal specifiers via #-prefixed keys", async () => {
-		const { imports } = await generateImportMap("/");
+		// For slothlet's own files: the scopes that map slothlet's own specifiers for them.
+		const map = await generateImportMap("/");
+		const imports = Object.assign({}, map.imports, ...Object.values(map.scopes));
 
 		const handlerKeys = Object.keys(imports).filter((k) => k.startsWith("#handlers/"));
 		const factoryKeys = Object.keys(imports).filter((k) => k.startsWith("#factories/"));

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/ownership/ownership-replacement.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/ownership/ownership-replacement.test.vitest.mjs
  *	@Date: 2026-01-15T14:07:12-08:00 (1768514832)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:13-07:00 (1791090913)
+ *	@Last modified time: 2026-11-28T04:32:10-08:00 (1795869130)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,8 +66,10 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					// Initialize slothlet with core API first
 					const mergedConfig = {
 						...config,
-						base: coreDir, // Start with core directory
-						api: { collision: { api: "replace" } } // Enable replacement for ownership tracking
+						base: coreDir,
+						// Start with core directory
+						api: { collision: { mode: { api: "replace" } } }
+						// Enable replacement for ownership tracking
 					};
 					const api = await slothlet(mergedConfig);
 
@@ -86,7 +88,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 
 					// Load v1 with moduleID (overwrites core)
 					// Use root-level addition ("") so feature.mjs creates api.feature directly
-					await api.slothlet.api.add("", v1Dir, { moduleID: "module-v1" });
+					await api.slothlet.api.add("", v1Dir, { id: "module-v1" });
 
 					// Verify v1 replaced core's implementation
 					expect(await api.feature.doSomething()).toBe("v1-implementation");
@@ -100,7 +102,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					expect([...ownershipAfterV1].pop()).toBe("module-v1");
 
 					// Load v2 with different moduleID (cross-module overwrite)
-					await api.slothlet.api.add("", v2Dir, { moduleID: "module-v2" });
+					await api.slothlet.api.add("", v2Dir, { id: "module-v2" });
 
 					// Verify v2 replaced v1's implementation
 					expect(await api.feature.doSomething()).toBe("v2-implementation");
@@ -166,13 +168,15 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					// Initialize slothlet with matrix config + test-specific overrides
 					const mergedConfig = {
 						...config,
-						base: tempBase, // Use unique temp directory instead of shared api_tests/api_test
-						api: { collision: { api: "replace" } } // Enable replacement for ownership tracking
+						base: tempBase,
+						// Use unique temp directory instead of shared api_tests/api_test
+						api: { collision: { mode: { api: "replace" } } }
+						// Enable replacement for ownership tracking
 					};
 					const api = await slothlet(mergedConfig);
 
 					// Load v1 with moduleID
-					await api.slothlet.api.add("test", v1Dir, { moduleID: "module-v1" });
+					await api.slothlet.api.add("test", v1Dir, { id: "module-v1" });
 
 					// Verify v1 loaded correctly (path is test.feature.doSomething due to filename)
 					expect(api.test).toBeDefined();
@@ -185,7 +189,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					expect(ownershipAfterV1.has("module-v1")).toBe(true);
 
 					// Load v2 with different moduleID (cross-module overwrite)
-					await api.slothlet.api.add("test", v2Dir, { moduleID: "module-v2" });
+					await api.slothlet.api.add("test", v2Dir, { id: "module-v2" });
 
 					// Verify v2 replaced v1's implementation
 					expect(api.test.feature).toBeDefined();
@@ -229,14 +233,16 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					// Initialize slothlet with matrix config + test-specific overrides
 					const mergedConfig = {
 						...config,
-						base: tempBase, // Use unique temp directory instead of shared api_tests/api_test
-						api: { collision: { api: "merge" } } // Use merge mode - different properties coexist
+						base: tempBase,
+						// Use unique temp directory instead of shared api_tests/api_test
+						api: { collision: { mode: { api: "merge" } } }
+						// Use merge mode - different properties coexist
 					};
 					const api = await slothlet(mergedConfig);
 
 					// Load both modules (merge mode - different properties should coexist)
-					await api.slothlet.api.add("merged", v1Dir, { moduleID: "module-v1" });
-					await api.slothlet.api.add("merged", v2Dir, { moduleID: "module-v2" });
+					await api.slothlet.api.add("merged", v1Dir, { id: "module-v1" });
+					await api.slothlet.api.add("merged", v2Dir, { id: "module-v2" });
 
 					// Check ownership - both modules should be tracked
 					const ownership = api.slothlet.owner.get("merged");

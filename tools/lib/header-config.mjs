@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/lib/header-config.mjs
+ *	@Filename: tools/lib/header-config.mjs
  *	@Date: 2026-02-05T06:45:03-08:00 (1770302703)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:29-07:00 (1791090929)
+ *	@Last modified time: 2026-11-28T04:33:19-08:00 (1795869199)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,6 +26,7 @@ export const FILE_HEADER_CHECK_FOLDERS = [
 	{ path: ".configs", recursive: true }, // .configs/ folder (recursive)
 	{ path: ".github", recursive: true }, // .github/ folder (recursive)
 	{ path: "api_tests", recursive: true }, // api_tests/ folder (recursive)
+	{ path: "packaging", recursive: true }, // packaging/ folder: satellite packages that carry code (recursive)
 	{ path: ".", recursive: false }, // Root folder only (non-recursive)
 	{ path: "src", recursive: true }, // src/ folder (recursive)
 	{ path: "tests", recursive: true }, // tests/ folder (recursive)

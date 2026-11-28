@@ -1,26 +1,26 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/lock-caller-caller.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/lock-caller-caller.test.vitest.mjs
  *	@Date: 2026-09-28T00:00:00-07:00 (1790578800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:49-07:00 (1793485489)
+ *	@Last modified time: 2026-11-28T04:32:16-08:00 (1795869136)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview #477 — `self.slothlet.lockCaller.caller(fn)` pins the current leaf's CALLER onto a
+ * @fileoverview #477 — `self.slothlet.pin.caller(fn)` pins the current leaf's CALLER onto a
  * callback, so a service that runs callbacks on behalf of whoever called it (a scheduler, a registry)
  * runs each one as that caller rather than as itself. Acting as your caller is a privilege: the path
- * `slothlet.lockCaller.caller` is denied to every module by a built-in rule and granted by the host.
+ * `slothlet.pin.caller` is denied to every module by a built-in rule and granted by the host.
  *
  * Fixture: `scheduler.service` stores jobs (`every` pins the caller, `everyAsSelf` pins itself via
- * plain `lockCaller`); `client.app` schedules jobs that call `target.probe.*`, which reports / gates on
+ * plain `pin`); `client.app` schedules jobs that call `target.probe.*`, which reports / gates on
  * the identity it is called with; `roles.registry` owns a #459 principal.
  *
  * @module tests/vitests/suites/permissions/lock-caller-caller
@@ -33,7 +33,7 @@ import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "
 const BASE = TEST_DIRS.API_TEST_LOCK_CALLER_CALLER;
 
 /** The host grant that lets the scheduler pin its callers. */
-const GRANT = { caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" };
+const GRANT = { caller: "scheduler.**", target: "slothlet.pin.caller", effect: "allow" };
 
 /** `target.probe.guarded` is for the client only. */
 const GUARD_RULES = [
@@ -84,11 +84,11 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 	 * Build the fixture api.
 	 * @param {object[]} rules - Permission rules.
 	 * @param {"allow"|"deny"} [defaultPolicy="allow"] - Default policy.
-	 * @param {object} [extra] - Further permission options (`{ provenance: false }`).
+	 * @param {object} [extra] - Further permission options (`{ caller: { provenance: false } }`).
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async (rules, defaultPolicy = "allow", extra = {}) => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy, rules, ...extra } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: defaultPolicy, rules, ...extra } });
 		await api.scheduler.service.clear();
 		return api;
 	};
@@ -101,16 +101,16 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		expect(await api.scheduler.service.fire()).toEqual([CLIENT_WHOAMI]);
 	});
 
-	it("plain lockCaller in the same leaf pins the service itself (the problem lockCaller.caller solves)", async () => {
+	it("plain pin in the same leaf pins the service itself (the problem pin.caller solves)", async () => {
 		// With provenance off, the client's job code runs as whatever the service pinned.
-		await build([GRANT], "allow", { provenance: false });
+		await build([GRANT], "allow", { caller: { provenance: false } });
 		await api.client.app.scheduleWhoamiAsService();
 		expect(await api.scheduler.service.fire()).toEqual(["scheduler.service.everyAsSelf"]);
 	});
 
 	it("a permission rule keyed to the caller applies inside the pinned job", async () => {
-		// What a plain lockCaller pins decides only with provenance off; with it on, see provenance-native (#597).
-		await build([GRANT, ...GUARD_RULES], "allow", { provenance: false });
+		// What a plain pin pins decides only with provenance off; with it on, see provenance-native (#597).
+		await build([GRANT, ...GUARD_RULES], "allow", { caller: { provenance: false } });
 		await api.client.app.scheduleGuarded();
 		expect(await api.scheduler.service.fire()).toEqual(["guarded-ok"]);
 
@@ -146,14 +146,14 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		await api.scheduler.service.every(job);
 		const [wrapper] = await api.scheduler.service.list();
 		expect(wrapper).not.toBe(job);
-		expect(wrapper._slothletOriginal).toBe(job);
+		expect(wrapper.____slothletOriginal).toBe(job);
 		expect(wrapper()).toBe(1);
 	});
 
-	it("host code calling lockCaller.caller directly gets a host pin and does not throw", async () => {
+	it("host code calling pin.caller directly gets a host pin and does not throw", async () => {
 		await build([]);
 		const job = () => api.target.probe.whoami();
-		const pinned = api.slothlet.lockCaller.caller(job);
+		const pinned = api.slothlet.pin.caller(job);
 		expect(pinned).not.toBe(job);
 		expect(await pinned()).toBeNull();
 	});
@@ -168,7 +168,7 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		expect(await job()).toBeNull();
 	});
 
-	// Async runtime only — the same caveat lockCaller carries. The live runtime keeps one identity slot
+	// Async runtime only — the same caveat pin carries. The live runtime keeps one identity slot
 	// per instance, so while the job is parked at its await, the modules awaiting it (client → scheduler)
 	// are suspended too; the job's resumed call is then attributed from the stack, which names the
 	// awaiting scheduler frame. That fails closed (a module identity, not the host), but it is not the pin.
@@ -219,19 +219,19 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		await expectDenied(() => api.client.app.pinDirectly());
 	});
 
-	it("the built-in exact allow on slothlet.lockCaller does not cover slothlet.lockCaller.caller", async () => {
+	it("the built-in exact allow on slothlet.pin does not cover slothlet.pin.caller", async () => {
 		await build([GRANT], "deny");
 		const global = api.slothlet.permissions.global;
-		expect(global.checkAccess("client.app", "slothlet.lockCaller")).toBe(true);
-		expect(global.checkAccess("client.app", "slothlet.lockCaller.caller")).toBe(false);
-		expect(global.checkAccess("scheduler.service", "slothlet.lockCaller.caller")).toBe(true);
+		expect(global.check.access("client.app", "slothlet.pin")).toBe(true);
+		expect(global.check.access("client.app", "slothlet.pin.caller")).toBe(false);
+		expect(global.check.access("scheduler.service", "slothlet.pin.caller")).toBe(true);
 	});
 
 	it("the built-in deny applies under defaultPolicy allow too", async () => {
 		await build([]);
 		const global = api.slothlet.permissions.global;
-		expect(global.checkAccess("anyModule", "slothlet.lockCaller")).toBe(true);
-		expect(global.checkAccess("anyModule", "slothlet.lockCaller.caller")).toBe(false);
+		expect(global.check.access("anyModule", "slothlet.pin")).toBe(true);
+		expect(global.check.access("anyModule", "slothlet.pin.caller")).toBe(false);
 	});
 
 	// ── Principals (#459) ───────────────────────────────────────────────────────
@@ -282,7 +282,7 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 
 	// Async runtime only: a stale principal promotes the call past an await, and in the live runtime the
 	// deferred enforcement is attributed from the stack while the scheduler is suspended awaiting the job —
-	// the same caveat lockCaller carries (see the async host-pin test above).
+	// the same caveat pin carries (see the async host-pin test above).
 	it.skipIf(config.runtime === "live")("async runtime: a principal is resolved for the pinned caller from inside the job", async () => {
 		const as = await buildPrincipals();
 		await api.client.app.scheduleFiles();
@@ -291,7 +291,7 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		await expectDenied(() => as({ user: "u2" }, () => api.scheduler.service.fire("p1")));
 	});
 
-	// ── lockCaller parity ───────────────────────────────────────────────────────
+	// ── pin parity ───────────────────────────────────────────────────────
 
 	it("errors thrown by the job propagate unchanged", async () => {
 		await build([GRANT]);
@@ -306,7 +306,7 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		expect(error).toBeInstanceOf(TypeError);
 		expect(error.message).toBe("job-boom");
 
-		const hostPinned = api.slothlet.lockCaller.caller(() => {
+		const hostPinned = api.slothlet.pin.caller(() => {
 			throw new RangeError("host-boom");
 		});
 		expect(() => hostPinned()).toThrow(RangeError);
@@ -321,10 +321,10 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		expect(result.args).toEqual([1, 2]);
 	});
 
-	it("exposes the original function via `_slothletOriginal`", async () => {
+	it("exposes the original function via `____slothletOriginal`", async () => {
 		await build([GRANT]);
 		const { wrapper, original } = await api.client.app.pinThroughScheduler();
-		expect(wrapper._slothletOriginal).toBe(original);
+		expect(wrapper.____slothletOriginal).toBe(original);
 		expect(wrapper()).toBe("original");
 	});
 
@@ -342,7 +342,7 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		await build([]);
 		let error;
 		try {
-			api.slothlet.lockCaller.caller(123);
+			api.slothlet.pin.caller(123);
 		} catch (err) {
 			error = err;
 		}
@@ -378,7 +378,7 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		expect(after?.message).toContain("client.app.scheduleGuarded");
 	});
 
-	// Same runtime-mode behaviour as lockCaller (see the lock-caller runtime suite): the identity is held
+	// Same runtime-mode behaviour as pin (see the lock-caller runtime suite): the identity is held
 	// across the job's await in both runtimes.
 	it("an async job keeps the pinned caller across an await", async () => {
 		await build([GRANT]);
@@ -386,17 +386,17 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		expect(await api.scheduler.service.fire()).toEqual(["client.app.scheduleAsyncWhoami"]);
 	});
 
-	it("plain lockCaller is unchanged: a function, host passthrough, and reachable .caller", async () => {
+	it("plain pin is unchanged: a function, host passthrough, and reachable .caller", async () => {
 		await build([]);
-		expect(typeof api.slothlet.lockCaller).toBe("function");
-		expect(typeof api.slothlet.lockCaller.caller).toBe("function");
+		expect(typeof api.slothlet.pin).toBe("function");
+		expect(typeof api.slothlet.pin.caller).toBe("function");
 		const fn = () => 42;
-		expect(api.slothlet.lockCaller(fn)).toBe(fn);
-		expect(api.slothlet.lockCaller(fn)()).toBe(42);
+		expect(api.slothlet.pin(fn)).toBe(fn);
+		expect(api.slothlet.pin(fn)()).toBe(42);
 	});
 
-	it("lockCaller.caller is reachable through self for a granted module", async () => {
-		await build([{ caller: "client.**", target: "slothlet.lockCaller.caller", effect: "allow" }]);
+	it("pin.caller is reachable through self for a granted module", async () => {
+		await build([{ caller: "client.**", target: "slothlet.pin.caller", effect: "allow" }]);
 		const pinned = await api.client.app.pinDirectly();
 		expect(typeof pinned).toBe("function");
 		expect(pinned()).toBe(0);

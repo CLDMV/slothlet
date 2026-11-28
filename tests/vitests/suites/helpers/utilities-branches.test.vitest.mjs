@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/utilities-branches.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/utilities-branches.test.vitest.mjs
  *	@Date: 2026-02-27T06:19:24-08:00 (1772201964)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-28T04:31:52-08:00 (1795869112)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { Utilities } from "@cldmv/slothlet/helpers/utilities";
+import { Utilities } from "#helpers/utilities";
 
 /**
  * Return a minimal slothlet mock sufficient for ComponentBase.
@@ -172,8 +172,7 @@ describe("Utilities.deepClone — inner catch fallback (line 113)", () => {
 		const utils = new Utilities(makeMock());
 		// The outer object has a function property so structuredClone(outer) throws,
 		// putting us in the fallback loop. The 'bad' property holds a Proxy whose
-		// GET trap throws for every key access. When the fallback calls
-		// deepClone(badProxy), obj?.__type inside deepClone triggers the trap →
+		// traps throw. When the fallback calls deepClone(badProxy), enumerating its keys
 		// throws → inner catch fires (line 111) → line 113: cloned.bad = original proxy.
 		const badProxy = new Proxy(
 			{},
@@ -182,7 +181,7 @@ describe("Utilities.deepClone — inner catch fallback (line 113)", () => {
 					throw new Error("proxy: no access to " + String(k));
 				},
 				ownKeys() {
-					return [];
+					throw new Error("proxy: no keys");
 				},
 				getOwnPropertyDescriptor() {
 					return undefined;

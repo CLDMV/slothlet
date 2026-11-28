@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/smart-flattening/smart-flattening-same-name.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/smart-flattening/smart-flattening-same-name.test.vitest.mjs
  *	@Date: 2026-10-08T00:00:00-07:00 (1791442800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T21:28:45-07:00 (1791520125)
+ *	@Last modified time: 2026-11-28T04:33:06-08:00 (1795869186)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,8 +20,9 @@
  * The rules (docs/API-RULES.md):
  * - A file named after its folder flattens into it: a default export becomes the folder itself,
  *   with the other files as properties (Rule 8); named exports become the folder's members (Rule 1).
- * - A FOLDER named after its parent is never hoisted on a normal load; it stays a nested namespace.
- *   (Only an `api.add` mount hoists a same-named direct child, Rule 13.)
+ * - A FOLDER named after its parent stays a nested namespace when anything else sits beside it. When it is its
+ *   parent's only entry the two are one level (Rule 22, #743). (An `api.add` mount also hoists a same-named direct
+ *   child, Rule 13.)
  * - A sibling file is never dropped.
  *
  * Each fixture is `api_tests/smart_flatten/api_smart_flatten_same_name_<case>`; every leaf returns its
@@ -49,7 +50,8 @@ async function shapeOf(api) {
 	const walk = async (node, at, depth) => {
 		await node;
 		if (at) {
-			const callable = typeof node === "function" && (node.__isCallable === undefined ? true : node.__isCallable === true);
+			const callable =
+				typeof node === "function" && (api.slothlet.node(node).callable === undefined ? true : api.slothlet.node(node).callable === true);
 			const kind =
 				typeof node === "function" ? (callable ? "fn" : "ns") : node !== null && typeof node === "object" ? "ns" : JSON.stringify(node);
 			out.push(`${at} : ${kind}`);
@@ -94,10 +96,10 @@ const CASES = {
 		shape: ["s : fn", "s.helper : ns", "s.helper.fmt : fn"],
 		calls: { s: "s", "s.helper.fmt": "s.helper.fmt" }
 	},
-	// s/s/worker.mjs
+	// s/s/worker.mjs: the outer folder holds only the same-named folder, so the two are one level (#743)
 	f: {
-		shape: ["s : ns", "s.s : ns", "s.s.worker : ns", "s.s.worker.doWork : fn"],
-		calls: { "s.s.worker.doWork": "s.s.worker.doWork" }
+		shape: ["s : ns", "s.worker : ns", "s.worker.doWork : fn"],
+		calls: { "s.worker.doWork": "s.worker.doWork" }
 	},
 	// s/s.mjs (only named s) + s/helper.mjs
 	g: {
@@ -158,7 +160,11 @@ describe.each(getMatrixConfigs())("self-named object vs sibling conflict (#583 r
 	});
 
 	it.each(Object.entries(SIBLING_CONFLICT))("collision.initial %s", async (initial, { a, keys }) => {
-		api = await slothlet({ ...config, base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_same_name_j"), collision: { initial } });
+		api = await slothlet({
+			...config,
+			base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_same_name_j"),
+			api: { collision: { mode: { initial } } }
+		});
 		expect(await api.s.a()).toBe(a);
 		expect(await api.s.b()).toBe("object-b");
 		await api.s;
@@ -196,13 +202,15 @@ describe.each(getMatrixConfigs())("object default vs a same-named named export (
 	 * @returns {Promise<object>} `{ node }` or `{ error }`.
 	 */
 	const compose = async (initial, shape) => {
-		const collision = { initial, api: initial };
+		const collision = { mode: { initial, api: initial } };
 		try {
 			if (shape === "mount") {
 				api = await slothlet({
 					...config,
 					silent: true,
-					collision,
+					api: {
+						collision
+					},
 					base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_same_name_i")
 				});
 				await api.slothlet.api.add("plugin", path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_addapi_conflict_mount"));
@@ -210,7 +218,7 @@ describe.each(getMatrixConfigs())("object default vs a same-named named export (
 				return { node: api.plugin };
 			}
 			const base = shape === "folder" ? "api_smart_flatten_addapi_conflict" : "api_smart_flatten_object_default_conflict";
-			api = await slothlet({ ...config, silent: true, collision, base: path.join(TEST_DIRS.SMART_FLATTEN, base) });
+			api = await slothlet({ ...config, silent: true, api: { collision }, base: path.join(TEST_DIRS.SMART_FLATTEN, base) });
 			const node = shape === "folder" ? api.addapi : api.cfg;
 			await node;
 			// Lazy defers a module's load until first access; touch a member so its import runs here.

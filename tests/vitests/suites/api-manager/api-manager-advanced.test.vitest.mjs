@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-advanced.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-advanced.test.vitest.mjs
  *	@Date: 2026-01-27T22:45:42-08:00 (1769582742)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-28T04:31:09-08:00 (1795869069)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -85,8 +85,8 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 
 	it("reloads a specific API path without affecting siblings", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, { moduleID: "module-1" });
-		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST, { moduleID: "module-2" });
+		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, { id: "module-1" });
+		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST, { id: "module-2" });
 
 		const extra1Ref = api.extra1;
 		await api.slothlet.api.reload("extra1");
@@ -95,14 +95,17 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 		expect(api.extra2?.math?.add).toBeTypeOf("function");
 	});
 
-	it("reloads combined modules on the same path", async () => {
+	it("reloads a path a forced add replaced, leaving it as the add left it", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("features", TEST_DIRS.API_TEST, { moduleID: "core" });
-		await api.slothlet.api.add("features", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra", forceOverwrite: true });
+		await api.slothlet.api.add("features", TEST_DIRS.API_TEST, { id: "core" });
+		// A forced add replaces everything at the mount, so `core`'s `math` is gone before the reload.
+		await api.slothlet.api.add("features", TEST_DIRS.API_TEST_MIXED, { id: "extra", collision: { force: true } });
+		expect(api.features?.math).toBeUndefined();
 
 		await api.slothlet.api.reload("features");
 
-		expect(api.features?.math?.add).toBeTypeOf("function");
+		expect(api.features?.math).toBeUndefined();
+		expect(await api.features?.mathCjs?.multiply(2, 3)).toBe(6);
 	});
 
 	it("preserves context across reloads", async () => {
@@ -131,8 +134,8 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 
 	it("reloads nested API paths while preserving siblings", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("features.core", TEST_DIRS.API_TEST, { moduleID: "core" });
-		await api.slothlet.api.add("features.extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra" });
+		await api.slothlet.api.add("features.core", TEST_DIRS.API_TEST, { id: "core" });
+		await api.slothlet.api.add("features.extra", TEST_DIRS.API_TEST_MIXED, { id: "extra" });
 
 		await api.slothlet.api.reload("features.core");
 
@@ -142,7 +145,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 
 	it("preserves deep references when mutateExisting is used", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, { moduleID: "deep-test" });
+		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, { id: "deep-test" });
 
 		// Materialize lazy wrappers so references are concrete before capturing
 		const preReloadResult = await api.deep.math.add(1, 2);

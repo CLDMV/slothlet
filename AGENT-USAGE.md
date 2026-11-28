@@ -151,7 +151,7 @@ Slothlet supports two loading modes set via `mode:` in the config:
 All modules are loaded synchronously at `await slothlet(...)`. The API is fully populated before `slothlet()` resolves.
 
 ```js
-const api = await slothlet({ dir: "./api" }); // mode: "eager" is default
+const api = await slothlet({ base: "./api" }); // mode: "eager" is default
 // All api.* properties are immediately available
 ```
 
@@ -161,7 +161,7 @@ Modules are loaded on first access via transparent proxy. `slothlet()` resolves 
 
 ```js
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	mode: "lazy"
 });
 // api.math is a proxy - file not loaded yet
@@ -170,13 +170,13 @@ const result = api.math.add(2, 3); // First access triggers load
 
 #### Background Materialization
 
-Enable `backgroundMaterialize: true` to pre-load all modules in the background immediately after init (still non-blocking):
+Enable `loader: { materialize: true }` to pre-load all modules in the background immediately after init (still non-blocking):
 
 ```js
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	mode: "lazy",
-	backgroundMaterialize: true
+	loader: { materialize: true }
 });
 
 // Subscribe to completion event
@@ -204,18 +204,18 @@ Hooks intercept API function calls. They work across all modes. See [`docs/HOOKS
 
 ```js
 // Simple enable (default pattern "**")
-const api = await slothlet({ dir: "./api", hook: true });
+const api = await slothlet({ base: "./api", hook: true });
 
 // Enable with default pattern filter
-const api = await slothlet({ dir: "./api", hook: "database.*" });
+const api = await slothlet({ base: "./api", hook: "database.*" });
 
 // Full configuration
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	hook: {
 		enabled: true,
 		pattern: "**",
-		suppressErrors: false // true = errors suppressed (returns undefined instead of throwing)
+		errors: false // "suppress" (or true) = errors suppressed (returns undefined instead of throwing)
 	}
 });
 ```
@@ -337,7 +337,7 @@ Execute functions with temporary merged context using `api.slothlet.context`:
 
 ```js
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { appName: "MyApp", version: "3.0" }
 });
 
@@ -411,8 +411,12 @@ await api.slothlet.api.add("plugins.trusted", "./trusted-dir", {
 
 // Set metadata at runtime
 api.slothlet.metadata.set(api.plugins.trusted.someFunc, "version", 2); // set(fn, key, value) — by function reference
-api.slothlet.metadata.setGlobal({ environment: "production" });
-api.slothlet.metadata.setFor("plugins.trusted", { owner: "core-team" }); // setFor(path, keyOrObj, value) — by path
+api.slothlet.metadata.global({ environment: "production" });
+api.slothlet.metadata.set("plugins.trusted", { owner: "core-team" }); // set(path, keyOrObj, value) — by path
+api.slothlet.metadata.get(api.plugins.trusted.someFunc); // user metadata only, synchronous
+
+// What slothlet records about a node is not metadata: read it with node()
+api.slothlet.node(api.plugins.trusted.someFunc); // { path: ["plugins", "trusted", "someFunc"], file, folder, module, mode, type, callable, ... }
 
 // Read metadata inside a module
 import { self } from "@cldmv/slothlet/runtime";
@@ -435,7 +439,7 @@ Slothlet captures a **frozen snapshot of `process.env` at init time** and expose
 
 ```js
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	env: true
 	// env: { include: ["NODE_ENV", "DATABASE_URL", "PORT"] }  // allowlist
 });
@@ -514,14 +518,14 @@ Mount multiple versions of the same logical path and dispatch to the correct ver
 
 ```js
 const api = await slothlet({
-	dir: "./api",
-	versionDispatcher: "version" // use caller's versionMetadata.version field
-	// versionDispatcher: (allVersions, caller) => { ... }  // custom function
+	base: "./api",
+	versioning: { dispatcher: "version" } // use caller.version.metadata.version
+	// versioning: { dispatcher: (versions, caller) => { ... } }  // custom function
 });
 
-// Register versioned modules — 4th argument is versionConfig
-await api.slothlet.api.add("auth", "./api/v1", {}, { version: "v1", default: true });
-await api.slothlet.api.add("auth", "./api/v2", {}, { version: "v2" });
+// Register versioned modules — the version goes under options.version
+await api.slothlet.api.add("auth", "./api/v1", { version: { tag: "v1", default: true } });
+await api.slothlet.api.add("auth", "./api/v2", { version: { tag: "v2" } });
 ```
 
 ### Access Patterns
@@ -539,18 +543,15 @@ api.v2.auth.login(user, pass); // → always v2
 
 ```js
 // Register a module WITH a version tag so the discriminator can use it
-await api.slothlet.api.add(
-	"services/payments",
-	"./payments",
-	{},
-	{
-		version: "v2",
-		metadata: { stable: true } // versionConfig.metadata — stored in VersionManager only
+await api.slothlet.api.add("services/payments", "./payments", {
+	version: {
+		tag: "v2",
+		metadata: { stable: true } // options.version.metadata — stored in VersionManager only
 	}
-);
+});
 
-// options.metadata (3rd arg)     → regular Metadata system (metadata.caller() etc.)
-// versionConfig.metadata (4th arg) → version-system only, used by the discriminator
+// options.metadata         → regular Metadata system (metadata.caller() etc.)
+// options.version.metadata → version-system only, used by the discriminator
 ```
 
 ### Runtime Version Management
@@ -561,13 +562,13 @@ api.slothlet.versioning.list("auth");
 // → { versions: { v1: { ... }, v2: { ... } }, default: "v2" }
 
 // Change the default dispatcher fallback
-api.slothlet.versioning.setDefault("auth", "v1");
+api.slothlet.versioning.default("auth", "v1");
 
 // Unregister a version (removes api.v1.auth; dispatcher updates automatically)
-await api.slothlet.versioning.unregister("auth", "v1");
+await api.slothlet.versioning.remove("auth", "v1");
 
 // Read version metadata stored at registration
-api.slothlet.versioning.getVersionMetadata(moduleID);
+api.slothlet.versioning.metadata.get(moduleID);
 ```
 
 > 📖 See [`docs/VERSIONING.md`](docs/VERSIONING.md) for full documentation.
@@ -619,16 +620,16 @@ import { self } from "@cldmv/slothlet/runtime";
 ### ❌ Mistake 2: Using V2 API Surface
 
 ```js
-// ❌ WRONG (v2 API - does not exist in v3)
+// ❌ WRONG (v2 API, removed in v3 and absent from v4)
 await api.addApi("plugins", "./dir");
 await api.reloadApi("math.*");
 api.hooks.on("validate", "before", handler, { pattern: "math.*" });
 await api.run({ userId: "alice" }, fn);
 
-// ✅ CORRECT (v3 API)
+// ✅ CORRECT (v4 API)
 await api.slothlet.api.add("plugins", "./dir");
-await api.slothlet.api.reload("math.*");
-api.slothlet.hook.on("before:math.*", handler);
+await api.slothlet.api.reload("math"); // a path or module id, not a glob
+api.slothlet.hook.on("math.*:before", handler);
 await api.slothlet.context.run({ userId: "alice" }, fn);
 ```
 
@@ -636,10 +637,10 @@ await api.slothlet.context.run({ userId: "alice" }, fn);
 
 ```js
 // ❌ WRONG
-const api = await slothlet({ dir: "./api", hooks: true }); // "hooks" plural
+const api = await slothlet({ base: "./api", hooks: true }); // "hooks" plural
 
 // ✅ CORRECT
-const api = await slothlet({ dir: "./api", hook: true }); // "hook" singular
+const api = await slothlet({ base: "./api", hook: true }); // "hook" singular
 ```
 
 ### ❌ Mistake 4: Breaking Auto-Flattening
@@ -680,22 +681,22 @@ api.auth.login(user, pass); // routes based on caller version metadata
 
 ```js
 // ❌ WRONG
-const api = await slothlet({ dir: "./api", versionResolver: "version" });
+const api = await slothlet({ base: "./api", versionResolver: "version" });
 
 // ✅ CORRECT
-const api = await slothlet({ dir: "./api", versionDispatcher: "version" });
+const api = await slothlet({ base: "./api", versioning: { dispatcher: "version" } });
 ```
 
-### ❌ Mistake 8: Conflating versionConfig.metadata with options.metadata
+### ❌ Mistake 8: Conflating options.version.metadata with options.metadata
 
 ```js
 // ❌ WRONG — puts version tag in the regular Metadata system instead of VersionManager
 await api.slothlet.api.add("auth", "./v2", { metadata: { version: "v2" } });
 
 // ✅ CORRECT
-// options.metadata (3rd arg)       → regular Metadata system (metadata.caller() etc.)
-// versionConfig.metadata (4th arg) → VersionManager only, used by the discriminator
-await api.slothlet.api.add("auth", "./v2", { metadata: { role: "core" } }, { version: "v2", metadata: { stable: true } });
+// options.metadata         → regular Metadata system (metadata.caller() etc.)
+// options.version.metadata → VersionManager only, used by the discriminator
+await api.slothlet.api.add("auth", "./v2", { metadata: { role: "core" }, version: { tag: "v2", metadata: { stable: true } } });
 ```
 
 ---
@@ -711,9 +712,9 @@ await api.slothlet.api.add("auth", "./v2", { metadata: { role: "core" } }, { ver
 - [ ] **Lifecycle** uses `api.slothlet.lifecycle.on/off()` only
 - [ ] **Lazy mode**: if using background materialization, use `api.slothlet.materialize.wait()` before accessing the API
 - [ ] **Hook subsets**: auth/security → `subset: "before"`, main logic → `"primary"`, audit → `"after"`
-- [ ] **Versioning config key is `versionDispatcher:`**, not `versionResolver:` or `versionDiscriminator:`
+- [ ] **Versioning config key is `versioning: { dispatcher }`**, not `versionDispatcher:`, `versionResolver:` or `versionDiscriminator:`
 - [ ] **Use `api.auth` (dispatcher path) for dynamic routing**, not `api.v1.auth` (direct path bypasses discriminator)
-- [ ] **`versionConfig.metadata` (4th arg)** and **`options.metadata` (3rd arg)** are separate systems — don't conflate them
+- [ ] **`options.version.metadata`** and **`options.metadata`** are separate systems — don't conflate them
 - [ ] **Double quotes everywhere** - follow Slothlet coding standards
 
 ---

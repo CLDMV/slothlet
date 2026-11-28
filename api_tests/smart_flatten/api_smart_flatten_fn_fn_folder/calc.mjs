@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/smart_flatten/api_smart_flatten_fn_fn_folder/calc.mjs
+ *	@Filename: api_tests/smart_flatten/api_smart_flatten_fn_fn_folder/calc.mjs
  *	@Date: 2026-03-02T19:00:00-08:00 (1772506800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:49-07:00 (1791090889)
+ *	@Last modified time: 2026-11-28T04:30:23-08:00 (1795869023)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  * Purpose: in LAZY mode with merge collision, when processSubdirectories encounters
  * the calc/ subfolder it captures the existing wrapper at targetApi["calc"]:
  *
- *   existImpl = wrapper.__impl = function calc   (typeof "function", not "object")
+ *   existImpl = wrapper.____impl = function calc   (typeof "function", not "object")
  *   → modes_fileFolderImpl stays null (line 1133–1134 is skipped)
  *
  *   existChildKeys = Object.keys(wrapper) = ["add"]  (add was adopted as child wrapper)

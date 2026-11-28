@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/processors/loader-ts-cache-coverage.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/processors/loader-ts-cache-coverage.test.vitest.mjs
  *	@Date: 2026-05-12T19:35:50-07:00 (1778639750)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-28T04:32:49-08:00 (1795869169)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,7 +52,7 @@ describe("loader.mjs #buildTypescriptModuleUrl coverage", () => {
 		// 2) api.add(..., { moduleID }) → loadModule receives a truthy moduleID,
 		//    hitting the TRUE arm of `if (moduleID)`.
 		await api.slothlet.api.add("tsAdded", "./api_tests/api_test_typescript", {
-			moduleID: "ts-cov-moduleid"
+			id: "ts-cov-moduleid"
 		});
 		expect(api.tsAdded.math.add(2, 3)).toBe(5);
 

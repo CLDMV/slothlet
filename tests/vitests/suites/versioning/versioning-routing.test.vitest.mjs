@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/versioning/versioning-routing.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/versioning/versioning-routing.test.vitest.mjs
  *	@Date: 2026-04-01T22:41:41-07:00 (1775108501)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-28T04:33:17-08:00 (1795869197)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,14 +40,16 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: (allVersions, caller) => caller.metadata?.callerVersion ?? null
+			versioning: {
+				dispatcher: (allVersions, caller) => caller.metadata?.callerVersion ?? null
+			}
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Tag the v2-caller with callerVersion "v2" via regular metadata
-		api.slothlet.metadata.setFor("v2Caller", { callerVersion: "v2" });
+		api.slothlet.metadata.set("v2Caller", { callerVersion: "v2" });
 
 		const result = await api.v2Caller.callLogin("testUser", "pass");
 		expect(result.version).toBe("v2");
@@ -58,14 +60,16 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: (allVersions, caller) => caller.metadata?.callerVersion ?? null
+			versioning: {
+				dispatcher: (allVersions, caller) => caller.metadata?.callerVersion ?? null
+			}
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Tag v1-caller with callerVersion "v1"
-		api.slothlet.metadata.setFor("v1Caller", { callerVersion: "v1" });
+		api.slothlet.metadata.set("v1Caller", { callerVersion: "v1" });
 
 		const result = await api.v1Caller.callLogin("testUser");
 		expect(result.version).toBe("v1");
@@ -73,13 +77,13 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 	});
 
 	it("routes via string discriminator using caller versionMetadata.version", async () => {
-		api = await slothlet({ ...config, base: `${BASE}/callers`, versionDispatcher: "version" });
+		api = await slothlet({ ...config, base: `${BASE}/callers`, versioning: { dispatcher: "version" } });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Register v2Caller as a versioned module so it gets version metadata
-		await api.slothlet.api.add("vCaller", `${BASE}/callers/v2-caller.mjs`, {}, { version: "v2" });
+		await api.slothlet.api.add("vCaller", `${BASE}/callers/v2-caller.mjs`, { version: { tag: "v2" } });
 
 		// Call through the versioned path — caller has versionMetadata.version = "v2"
 		const result = api.v2.vCaller.callLogin("alice", "secret");

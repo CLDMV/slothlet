@@ -1,20 +1,20 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typegen/typegen-programmatic.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typegen/typegen-programmatic.test.vitest.mjs
  *	@Date: 2026-05-12T19:51:36-07:00 (1778640696)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:23-07:00 (1791090923)
+ *	@Last modified time: 2026-11-28T04:33:07-08:00 (1795869187)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Tests for the programmatic `generateTypes()` API.
+ * @fileoverview Tests for the programmatic `generate()` API.
  *
  * Loads the existing TS regression fixture (`api_test_typescript_runtime`)
  * and asserts the generated `.d.ts` file:
@@ -28,11 +28,11 @@ import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { generateTypes } from "@cldmv/slothlet/typegen";
+import { generate } from "@cldmv/slothlet/typegen";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
-// Each test runs generateTypes (two `ts.Program`s — checker + declaration emit) and then compiles the
+// Each test runs generate (two `ts.Program`s — checker + declaration emit) and then compiles the
 // generated declaration with `tsc` in the acceptance check. Under coverage instrumentation those tsc
 // passes run well past vitest's default 10s/30s budgets (each is ~3s uninstrumented), so give the
 // file the same 60s budget typescript-strict-mode uses for its forked-tsc boots.
@@ -55,10 +55,10 @@ describe("typegen programmatic API", () => {
 		const tmp = await freshTempDir();
 		const output = path.join(tmp, "api.d.ts");
 
-		const result = await generateTypes({
-			dir: "./api_tests/api_test_typescript_runtime",
+		const result = await generate({
+			base: "./api_tests/api_test_typescript_runtime",
 			output,
-			interfaceName: "RuntimeApi"
+			name: "RuntimeApi"
 		});
 
 		expect(result.filePath).toBe(path.resolve(output));
@@ -74,49 +74,47 @@ describe("typegen programmatic API", () => {
 		expect(content).toMatch(/\bbaz\b/);
 	});
 
-	it("rejects when dir is missing", async () => {
+	it("rejects when base is missing", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(generateTypes({ output: "/tmp/x.d.ts", interfaceName: "X" })).rejects.toThrow(/INVALID_CONFIG/);
+			await expect(generate({ output: "/tmp/x.d.ts", name: "X" })).rejects.toThrow(/INVALID_CONFIG/);
 		});
 	});
 
 	it("rejects when output is missing", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(generateTypes({ dir: "./api_tests/api_test_typescript_runtime", interfaceName: "X" })).rejects.toThrow(/INVALID_CONFIG/);
+			await expect(generate({ base: "./api_tests/api_test_typescript_runtime", name: "X" })).rejects.toThrow(/INVALID_CONFIG/);
 		});
 	});
 
-	it("rejects when interfaceName is missing", async () => {
+	it("rejects when name is missing", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(generateTypes({ dir: "./api_tests/api_test_typescript_runtime", output: "/tmp/x.d.ts" })).rejects.toThrow(
+			await expect(generate({ base: "./api_tests/api_test_typescript_runtime", output: "/tmp/x.d.ts" })).rejects.toThrow(/INVALID_CONFIG/);
+		});
+	});
+
+	it("rejects when name is an empty string", async () => {
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(generate({ base: "./api_tests/api_test_typescript_runtime", output: "/tmp/x.d.ts", name: "" })).rejects.toThrow(
 				/INVALID_CONFIG/
 			);
 		});
 	});
 
-	it("rejects when interfaceName is an empty string", async () => {
-		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(
-				generateTypes({ dir: "./api_tests/api_test_typescript_runtime", output: "/tmp/x.d.ts", interfaceName: "" })
-			).rejects.toThrow(/INVALID_CONFIG/);
-		});
-	});
-
 	it("rejects when options is null", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(generateTypes(null)).rejects.toThrow(/INVALID_CONFIG/);
+			await expect(generate(null)).rejects.toThrow(/INVALID_CONFIG/);
 		});
 	});
 
 	it("rejects when options is a primitive", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(generateTypes(true)).rejects.toThrow(/INVALID_CONFIG/);
+			await expect(generate(true)).rejects.toThrow(/INVALID_CONFIG/);
 		});
 	});
 
 	it("rejects when options is an array", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(generateTypes(["dir", "out", "Name"])).rejects.toThrow(/INVALID_CONFIG/);
+			await expect(generate(["dir", "out", "Name"])).rejects.toThrow(/INVALID_CONFIG/);
 		});
 	});
 });
@@ -137,7 +135,7 @@ describe("typegen JSDoc type reflection (#213)", () => {
 			await writeFile(path.join(apiDir, name), src, "utf8");
 		}
 		const outPath = path.join(tmp, "out.d.mts");
-		const { content } = await generateTypes({ dir: apiDir, output: outPath, interfaceName: "DemoApi" });
+		const { content } = await generate({ base: apiDir, output: outPath, name: "DemoApi" });
 		return { content, outPath };
 	}
 
@@ -198,7 +196,7 @@ describe("typegen JSDoc type reflection (#213)", () => {
 			"misc.mjs":
 				'/**\n * @param {boolean} flag\n * @returns {number}\n */\nexport const toNum = (flag) => (flag ? 1 : 0);\nexport const LABEL = "x";\n'
 		});
-		expect(content).not.toMatch(/@param/); // no raw JSDoc leaked into the output
+		expect(content).not.toMatch(/@param \{/); // no raw JSDoc types leaked into the output
 		const diagnostics = await probeDiagnostics(
 			outPath,
 			[

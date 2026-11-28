@@ -1,0 +1,5 @@
+{
+	"name": "@local/unknown-suffix",
+	"version": "0.1.0",
+	"description": "Test fixture: slothlet module whose manifest declares a permission rule whose target ends in an unknown suffix."
+}

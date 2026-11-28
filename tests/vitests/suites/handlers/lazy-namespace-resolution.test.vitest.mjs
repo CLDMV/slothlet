@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/handlers/lazy-namespace-resolution.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/handlers/lazy-namespace-resolution.test.vitest.mjs
  *	@Date: 2026-08-01T12:00:00-07:00 (1785610800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-28T04:31:45-08:00 (1795869105)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,8 +17,8 @@
  * @fileoverview The first await of a lazy chain resolves to the same thing every later access does.
  *
  * @description
- * Materialization adopts a module's members out of `_impl` onto the wrapper, so the waiting-proxy
- * resolver handing back `_impl` for a chain ending on an object-valued node resolved every FIRST
+ * Materialization adopts a module's members out of `____impl` onto the wrapper, so the waiting-proxy
+ * resolver handing back `____impl` for a chain ending on an object-valued node resolved every FIRST
  * await of such a chain to a permanently-empty object — while the second access, served by the
  * getTrap against the materialized tree, was correct (#255). The contract pinned here is eager
  * parity: an awaited namespace or plain-object leaf resolves to the same live object later accesses

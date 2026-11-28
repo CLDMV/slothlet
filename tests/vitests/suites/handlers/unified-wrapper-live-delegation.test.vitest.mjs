@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/handlers/unified-wrapper-live-delegation.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/handlers/unified-wrapper-live-delegation.test.vitest.mjs
  *	@Date: 2026-09-07T00:00:49-07:00 (1788764449)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:29-07:00 (1791091709)
+ *	@Last modified time: 2026-11-28T04:31:46-08:00 (1795869106)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  *  - the same, two levels of nesting deep
  *  - read-level permission gating still enforced on the live-delegated path
  *  - an EventEmitter-derived instance assigned via wrap-on-set gets real `self`-context
- *    access on its own methods instead of throwing RUNTIME_NO_ACTIVE_CONTEXT_SELF
+ *    access on its own methods instead of throwing CONTEXT_NOT_ACTIVE_SELF
  */
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "../../../../index.mjs";
@@ -42,7 +42,7 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("raw mutation of the assigned object is visible through the wrapper", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		const obj = await api.mod.assignX();
 		expect(await api.mod.readXY()).toBe(1);
@@ -52,7 +52,7 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("a wrapper write reaches the original raw object", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		const obj = await api.mod.assignX();
 		api.mod.x.y = 5;
@@ -62,7 +62,7 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("stays live two levels deep", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		const obj = await api.mod.assignX();
 		expect(await api.mod.readNestedZ()).toBe(1);
@@ -79,8 +79,10 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 			base: BASE,
 			mode: "eager",
 			permissions: {
-				defaultPolicy: "allow",
-				readGating: true,
+				policy: "allow",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.untrustedCaller.**", target: "mod.**", effect: "deny" }]
 			}
 		});
@@ -100,14 +102,14 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("an EventEmitter-derived instance assigned via wrap-on-set resolves self in its own methods", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		await api.mod.assignDriver();
 		await expect(api.mod.driverDoWork()).resolves.toBe("mod-label");
 	});
 
 	it("still behaves as a real EventEmitter (on/emit) after wrap-on-set, through the wrapped proxy", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		await api.mod.assignDriver();
 		// Exercise the wrapped proxy (getTrap/applyTrap, including the thisArg substitution),
@@ -123,7 +125,7 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("a primitive write against a frozen live impl throws instead of silently reporting success", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		const obj = await api.mod.assignX();
 		Object.freeze(obj);
@@ -138,7 +140,7 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("a BRAND NEW primitive property on a live-identity wrapper forwards to impl on first write", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		const obj = await api.mod.assignX();
 		// `brandNewProp` was never part of the originally-assigned object, so this is the FIRST
@@ -171,7 +173,7 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("a primitive write against a live-identity wrapper whose impl is a FUNCTION forwards to impl", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		const fn = await api.mod.assignFn();
 		// `fn` (the impl) is callable, not a plain object — exercises the live-impl-forwarding
@@ -183,7 +185,7 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("a Map child under a deferred wrap-on-set subtree is returned raw and uncached on first access", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		const obj = await api.mod.assignMapChild();
 		// `___createChildWrapper` bails to null for opaque built-ins (Map/Set/Date/…) before any
@@ -200,7 +202,7 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("a primitive write against an ORDINARY (non-live-identity) namespace stores on the wrapper, not its impl", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		// `cache.store` is an ordinary built module — not wrap-on-set, not an EventEmitter — so
 		// this write must NOT take the live-impl-forwarding path (that's scoped to
@@ -209,13 +211,14 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 		// module untouched.
 		api.cache.store.tag = "v1";
 		expect(api.cache.store.tag).toBe("v1");
-		expect(Object.getOwnPropertyDescriptor(api.cache.store, "tag")).toMatchObject({ value: "v1", writable: false });
+		// The member is described as an assigned member of an object is: it takes another write (#749).
+		expect(Object.getOwnPropertyDescriptor(api.cache.store, "tag")).toMatchObject({ value: "v1", writable: true });
 
 		expect(await api.cache.store.get("k")).toEqual({ ok: true, module: "cache", action: "get", key: "k" });
 	});
 
 	it("a deferred descendant's primitive stays live-forwarding across an internal eager re-adopt", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		await api.mod.assignX();
 		// Force lazy adoption of `nested` (a deferred descendant TWO levels under the wrap-on-set
@@ -260,7 +263,7 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("Object.preventExtensions() on a live-identity wrapper does not break instanceof/getPrototypeOf", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		await api.mod.assignX();
 		const xProxy = api.mod.x;
@@ -277,7 +280,7 @@ describe("UnifiedWrapper > wrap-on-set live delegation (#340)", () => {
 	});
 
 	it("a deferred descendant's null field stays live-forwarding across an internal eager re-adopt", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		await api.mod.assignX();
 		const xProxy = api.mod.x;

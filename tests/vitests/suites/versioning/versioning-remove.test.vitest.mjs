@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/versioning/versioning-remove.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/versioning/versioning-remove.test.vitest.mjs
  *	@Date: 2026-04-01T22:43:03-07:00 (1775108583)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-28T04:33:17-08:00 (1795869197)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,11 +46,14 @@ describe.each(getMatrixConfigs())("Versioning > Remove > $name", ({ config }) =>
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: () => null // always fall to default
+			versioning: {
+				dispatcher: () => null
+			}
+			// always fall to default
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Both exist before removal
 		expect(api.v1.auth).toBeDefined();
@@ -58,7 +61,7 @@ describe.each(getMatrixConfigs())("Versioning > Remove > $name", ({ config }) =>
 		expect(api.auth).toBeDefined();
 
 		// Remove v2
-		await api.slothlet.versioning.unregister("auth", "v2");
+		await api.slothlet.versioning.remove("auth", "v2");
 
 		// v2 namespace should be gone
 		expect(api.v2).toBeUndefined();
@@ -75,12 +78,12 @@ describe.each(getMatrixConfigs())("Versioning > Remove > $name", ({ config }) =>
 	it("version list reflects removal", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		expect(Object.keys(api.slothlet.versioning.list("auth").versions)).toHaveLength(2);
 
-		await api.slothlet.versioning.unregister("auth", "v2");
+		await api.slothlet.versioning.remove("auth", "v2");
 
 		const info = api.slothlet.versioning.list("auth");
 		expect(Object.keys(info.versions)).toHaveLength(1);
@@ -113,8 +116,8 @@ describe.each(getMatrixConfigs())("Versioning > Remove > $name", ({ config }) =>
 		// real version owner always has a version key. Covered at handler level instead.)
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, { moduleID: "authV1mod" }, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, { moduleID: "authV2mod" }, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { id: "authV1mod", version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { id: "authV2mod", version: { tag: "v2" } });
 
 		// Before removal: both versioned namespaces and the dispatcher are live.
 		expect(api.v1.auth).toBeDefined();

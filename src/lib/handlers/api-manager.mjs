@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/handlers/api-manager.mjs
+ *	@Filename: src/lib/handlers/api-manager.mjs
  *	@Date: 2026-01-24T07:14:02-08:00 (1769267642)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:44-07:00 (1793426624)
+ *	@Last modified time: 2026-11-28T04:30:37-08:00 (1795869037)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,18 +26,9 @@
  * per-instance state as class properties and applies updates without requiring a full instance rebuild.
  *
  * @example
- * // ESM
- * import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
- * const manager = new ApiManager(instance);
- * await manager.addApiComponent({
- * 	apiPath: "plugins",
- * 	folderPath: "./plugins",
- * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
- * });
- *
- * @example
- * // CJS
- * const { ApiManager } = require("@cldmv/slothlet/handlers/api-manager");
+ * // Internal: `#handlers/*` resolves only from slothlet's own modules. `@cldmv/slothlet/handlers/*`
+ * // is not in the package `exports`, so consumers cannot import it.
+ * import { ApiManager } from "#handlers/api-manager";
  * const manager = new ApiManager(instance);
  * await manager.addApiComponent({
  * 	apiPath: "plugins",
@@ -45,33 +36,85 @@
  * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
  * });
  */
-import { translate } from "@cldmv/slothlet/i18n";
+import { segmentsOf, UNSAFE_PATH_SEGMENTS } from "#helpers/segments";
+import { translate } from "#i18n";
 import { ComponentBase } from "#factories/component-base";
 import {
-	UnifiedWrapper,
-	resolveWrapper,
 	readApiMember,
-	runtime_nodeBehind,
+	holdsApiMembers,
 	loadApiMember,
 	isWrapperAnsweredName,
+	isLazyStandIn,
 	isFrameworkReservedKey,
-	runtime_frameworkWrite,
-	runtime_selfModuleCeilings,
-	runtime_selfModuleReader,
-	runtime_unwrapSelfView,
-	releaseModuleMakers
+	internals as unifiedWrapperInternals
 } from "#handlers/unified-wrapper";
-import { isFrameworkInternal, versionDispatcherRecord } from "#handlers/framework-internals";
-import { dataMemberOf } from "@cldmv/slothlet/helpers/reserved-keys";
-import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
+import { isFrameworkInternal, isFrameworkRoutineMarker, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { dataMemberOf, isFrameworkName } from "#helpers/reserved-keys";
+import { builtinCopy, CURRENT, versionAt } from "#helpers/run-snapshot";
+import { MODULE_ID_SEPARATOR, MODULE_MANIFEST } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
-// enters the static-import graph in browser bundles. ApiManager methods that
-// rely on `fs`/`path` (filesystem-backed add/reload/remove) are Node-only —
-// browser mode mounts from the manifest tree and does not touch the filesystem.
-// fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
-// the filesystem-backed add/reload/remove paths are Node-only and never run in browser mode.
-import { fsp, path, util } from "@cldmv/slothlet/helpers/platform";
+// enters the static-import graph in browser bundles. fsp (fs/promises) is resolved in the platform
+// module (#123) and is null in a browser, where add/reload/remove mount from the manifest tree and never
+// touch the filesystem. A file's folder, name and extension come from `fileParts`, which answers in both
+// hosts: a browser adds and reloads single files too (#805).
+import { fsp, fileParts, util } from "#helpers/platform";
+import {
+	ArrayMethods,
+	Arrays,
+	Boolean,
+	concatLists,
+	copyList,
+	Dates,
+	filterList,
+	FunctionMethods,
+	listPush,
+	listSplice,
+	Map,
+	mapEntries,
+	mapEntriesToArray,
+	mapFrom,
+	mapKeys,
+	mapKeysToArray,
+	mapList,
+	MapMethods,
+	mapValues,
+	mapValuesToArray,
+	Math,
+	NumberMethods,
+	objectFromEntries,
+	Objects,
+	promiseAll,
+	Reflect,
+	regExpMatch,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	splitText,
+	String,
+	StringMethods,
+	Symbol,
+	WeakSet,
+	WeakSetMethods
+} from "#helpers/intrinsics";
+const unifiedWrapperOwn = unifiedWrapperInternals("lib/handlers/api-manager");
+const {
+	resolveWrapper,
+	nodeBehind,
+	settleStandInChanges,
+	frameworkWrite,
+	selfModuleCeilings,
+	selfModuleReader,
+	unwrapSelfView,
+	dataReadOptions,
+	releaseModuleMakers,
+	nodeVersion,
+	sameSnapshotMember,
+	builtinBehind
+} = unifiedWrapperOwn;
+const { versionDispatcherRecord } = frameworkInternalsInternals("lib/handlers/api-manager");
 
 /**
  * Mount-path segment names that must never be written through to the object graph.
@@ -92,14 +135,44 @@ import { fsp, path, util } from "@cldmv/slothlet/helpers/platform";
 // Rule 18 (M08): Bare-function merged value → callable container — ~L2260
 // Rule 18 (M09): Removal remove-if-sole vs revert-if-shared — ~L2874 / ~L3095
 
-const UNSAFE_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+/**
+ * The key {@link ApiManager#carryRuntimeMembers} keeps an array node's length as of a run's start under, among the
+ * members it held then.
+ * @type {symbol}
+ * @private
+ */
+const LENGTH_AT_START = Symbol("lengthAtStart");
 
 /**
  * Root members of the api the framework itself serves: its namespace and its root functions (#625).
  * @type {Set<string>}
  * @private
  */
-const FRAMEWORK_ROOT_SEGMENTS = new Set(["slothlet", "shutdown", "destroy"]);
+const FRAMEWORK_ROOT_SEGMENTS = setFrom(["slothlet", "shutdown", "destroy"]);
+
+/**
+ * The ownership source of a member module code created at runtime: the module that wrote it owns it, as a module owns
+ * what it loads, until it is deleted, its module is removed, or the api is rebuilt.
+ * @type {string}
+ * @private
+ */
+const CREATED_SOURCE = "created";
+
+/**
+ * Member names the language reads off a value by itself, to serialize it or turn it into a primitive: a module that
+ * gives a value one of them takes over how the value reads, whether or not the value had the member before.
+ * @type {Set<string>}
+ * @private
+ */
+const PROTOCOL_KEYS = setFrom(["toJSON", "toString", "toLocaleString", "valueOf"]);
+
+/**
+ * Own members of a function that are part of the function itself rather than members it holds: a write over the
+ * function is judged at the function's own path, not at these.
+ * @type {Set<string>}
+ * @private
+ */
+const FUNCTION_OWN_KEYS = setFrom(["length", "name", "prototype", "arguments", "caller"]);
 
 /**
  * Where an `api.add`'s history record keeps how each of its `permissions` rules was placed (#625), so a reload replays
@@ -117,6 +190,19 @@ const PERMISSION_RULE_LAYERS = Symbol("permissionRuleLayers");
  * @private
  */
 const MOUNTED_BY = Symbol("mountedBy");
+
+/**
+ * One change a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
+ * `handlers/unified-wrapper/run`), replayed by {@link ApiManager#carryRunWrites}.
+ * @typedef {object} RunWrite
+ * @property {string[]} parts - The path of the object changed, from the api root.
+ * @property {string|symbol} prop - The member changed.
+ * @property {string} op - The change: `"set"`, `"define"` or `"delete"`.
+ * @property {*} [value] - The value set, for `"set"`.
+ * @property {object} [descriptor] - The descriptor defined, for `"define"`.
+ * @property {string|null} [created] - The module that created the member, when the run's module created it.
+ * @private
+ */
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -171,6 +257,59 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * The ids of the modules this instance has built with `api.add` (#793), for the instance ID they were imported
+	 * under. Node caches an imported file by its URL, which names the instance and the moduleID; a new instance ID
+	 * (a full reload or a restart) imports under new URLs, so the record starts over with it.
+	 * @type {{ instanceID: string|null, ids: Set<string> }}
+	 * @private
+	 */
+	#builtModules = { instanceID: null, ids: new Set() };
+
+	/**
+	 * The last stamp a re-add was given, so two re-adds within one millisecond still differ.
+	 * @type {number}
+	 * @private
+	 */
+	#lastReAddStamp = 0;
+
+	/**
+	 * The existing nodes {@link ApiManager#syncWrapper} is merging into right now. A node that holds itself, or a node
+	 * above it, as a member (a function's `fn.me = fn`) is reached again through that member while it is being merged.
+	 * @type {WeakSet<object>}
+	 */
+	#syncing = new WeakSet();
+
+	/**
+	 * The ids of the modules built under the current instance ID.
+	 * @returns {Set<string>} The ids.
+	 * @private
+	 */
+	#builtModuleIDs() {
+		const instanceID = this.slothlet.instanceID ?? null;
+		if (this.#builtModules.instanceID !== instanceID) this.#builtModules = { instanceID, ids: new Set() };
+		return this.#builtModules.ids;
+	}
+
+	/**
+	 * The reload stamp an `api.add` imports its files with (#793). A module built before under this id and since
+	 * removed (no mount of it is live) is imported fresh, the way `api.slothlet.api.reload()` re-imports a module, so
+	 * the add runs the code on disk now and its files' top level runs again: the import Node cached for the removed
+	 * module is not served. A first add, and an add under an id that still has a live mount, use no stamp, so a live
+	 * module's files are never imported a second time.
+	 * @param {string} moduleID - The id the add mounts under.
+	 * @returns {number|null} The stamp, or null for a plain import.
+	 * @private
+	 */
+	#reAddCacheBust(moduleID) {
+		const id = splitText(String(moduleID), MODULE_ID_SEPARATOR)[0];
+		if (!SetMethods.has(this.#builtModuleIDs(), id)) return null;
+		if (this.slothlet.handlers.ownership.getModuleMounts(moduleID).length > 0) return null;
+		const now = Dates.now();
+		this.#lastReAddStamp = now > this.#lastReAddStamp ? now : this.#lastReAddStamp + 1;
+		return this.#lastReAddStamp;
+	}
+
+	/**
 	 * Normalize and validate an API path.
 	 * @param {string|string[]} apiPath - Dot-delimited API path, array of path segments, or empty/null for root.
 	 * @returns {{ apiPath: string, parts: string[] }} Normalized path data.
@@ -196,7 +335,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Handle array input - convert to dot-separated string
-		if (Array.isArray(apiPath)) {
+		if (Arrays.isArray(apiPath)) {
 			// Validate array elements
 			if (apiPath.length === 0) {
 				return { apiPath: "", parts: [] };
@@ -204,76 +343,70 @@ export class ApiManager extends ComponentBase {
 
 			for (let i = 0; i < apiPath.length; i++) {
 				if (typeof apiPath[i] !== "string") {
-					throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-						apiPath,
+					throw new this.SlothletError("API_PATH_INVALID", {
+						path: segmentsOf(apiPath),
 						segment: apiPath[i],
 						index: i,
-						reason: translate("API_PATH_REASON_ARRAY_ELEMENTS"),
-						validationError: true
+						reason: translate("API_PATH_REASON_ARRAY_ELEMENTS")
 					});
 				}
-				if (apiPath[i].trim() === "") {
-					throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-						apiPath,
+				if (StringMethods.trim(apiPath[i]) === "") {
+					throw new this.SlothletError("API_PATH_INVALID", {
+						path: segmentsOf(apiPath),
 						segment: apiPath[i],
 						index: i,
-						reason: translate("API_PATH_REASON_ARRAY_EMPTY_SEGMENTS"),
-						validationError: true
+						reason: translate("API_PATH_REASON_ARRAY_EMPTY_SEGMENTS")
 					});
 				}
 			}
 
 			// Check for reserved names
 			if (apiPath[0] === "slothlet" || (apiPath.length === 1 && (apiPath[0] === "shutdown" || apiPath[0] === "destroy"))) {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath,
+				throw new this.SlothletError("API_PATH_INVALID", {
+					path: segmentsOf(apiPath),
 					reason: translate("API_PATH_REASON_RESERVED_NAME"),
 					index: undefined,
-					segment: undefined,
-					validationError: true
+					segment: undefined
 				});
 			}
 
 			this.#assertSafeSegments(apiPath, apiPath);
 
-			return { apiPath: apiPath.join("."), parts: apiPath };
+			return { apiPath: ArrayMethods.join(apiPath, "."), parts: apiPath };
 		}
 
 		if (typeof apiPath !== "string") {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath,
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: segmentsOf(apiPath),
 				reason: translate("API_PATH_REASON_INVALID_TYPE"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 
-		const normalized = apiPath.trim();
+		const normalized = StringMethods.trim(apiPath);
 
 		// Empty string after trim means root
 		if (normalized === "") {
 			return { apiPath: "", parts: [] };
 		}
 
-		const parts = normalized.split(".");
-		if (parts.length === 0 || parts.some((part) => part.trim() === "")) {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: normalized,
+		const parts = splitText(normalized, ".");
+		if (parts.length === 0 || ArrayMethods.some(parts, (part) => StringMethods.trim(part) === "")) {
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: segmentsOf(normalized),
 				reason: translate("API_PATH_REASON_EMPTY_SEGMENTS"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 
 		if (parts[0] === "slothlet" || normalized === "shutdown" || normalized === "destroy") {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: normalized,
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: segmentsOf(normalized),
 				reason: translate("API_PATH_REASON_RESERVED_NAME"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 
@@ -284,7 +417,8 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Refuse a path segment no api path can hold: `__proto__` / `constructor` / `prototype`, the
-	 * prototype-pollution guard (#302). With `refuseThen`, also refuse `then`, which a new node must not be
+	 * prototype-pollution guard (#302), and any name with the framework's `___` / `____` prefix, which only the
+	 * framework's own members carry. With `refuseThen`, also refuse `then`, which a new node must not be
 	 * mounted under, since it would make its namespace thenable and so unreachable (#571). An existing
 	 * member may still be named `then` when it holds data, so a lookup or removal by path accepts it.
 	 * Checked in segment order, so the first offending segment is the one reported.
@@ -292,18 +426,26 @@ export class ApiManager extends ComponentBase {
 	 * @param {string[]} parts - Its segments.
 	 * @param {boolean} [refuseThen=false] - Also refuse a `then` segment.
 	 * @returns {void}
-	 * @throws {SlothletError} INVALID_CONFIG_API_PATH_INVALID naming the segment and its index.
+	 * @throws {SlothletError} API_PATH_INVALID naming the segment and its index.
 	 * @private
 	 */
 	#assertSafeSegments(apiPath, parts, refuseThen = false) {
-		const index = parts.findIndex((segment) => (refuseThen && segment === "then") || UNSAFE_PATH_SEGMENTS.has(segment));
+		const index = ArrayMethods.findIndex(
+			parts,
+			(segment) => (refuseThen && segment === "then") || SetMethods.has(UNSAFE_PATH_SEGMENTS, segment) || isFrameworkName(segment)
+		);
 		if (index === -1) return;
-		throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-			apiPath,
-			reason: parts[index] === "then" ? translate("API_PATH_REASON_THENABLE_SEGMENT") : translate("API_PATH_REASON_UNSAFE_SEGMENT"),
+		const segment = parts[index];
+		throw new this.SlothletError("API_PATH_INVALID", {
+			path: segmentsOf(apiPath),
+			reason:
+				segment === "then"
+					? translate("API_PATH_REASON_THENABLE_SEGMENT")
+					: isFrameworkName(segment)
+						? translate("API_PATH_REASON_FRAMEWORK_SEGMENT")
+						: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
 			index,
-			segment: parts[index],
-			validationError: true
+			segment: parts[index]
 		});
 	}
 
@@ -324,9 +466,8 @@ export class ApiManager extends ComponentBase {
 	 */
 	async resolvePath(inputPath) {
 		if (!inputPath || typeof inputPath !== "string") {
-			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
-				dir: inputPath,
-				validationError: true
+			throw new this.SlothletError("FOLDER_INVALID", {
+				folder: inputPath
 			});
 		}
 
@@ -335,12 +476,12 @@ export class ApiManager extends ComponentBase {
 		// Browser mode: no filesystem available. Determine file vs directory from the
 		// path string: if the last segment contains a dot we treat it as a file,
 		// otherwise as a directory. The caller's loader is responsible for honouring
-		// this classification via resolveModuleSpecifier + the manifest.
+		// this classification via loader.resolve + the file list.
 		if (this.slothlet.envTarget === "browser") {
 			// `resolvedPath` is guaranteed a string by the validation above, so
 			// `.split("/").pop()` always returns a string (possibly empty) — no fallback needed.
-			const lastSegment = resolvedPath.split("/").pop();
-			const isFile = lastSegment.includes(".");
+			const lastSegment = ArrayMethods.pop(splitText(resolvedPath, "/"));
+			const isFile = typeof lastSegment === "string" ? StringMethods.includes(lastSegment, ".") : ArrayMethods.includes(lastSegment, ".");
 			return { resolvedPath, isDirectory: !isFile, isFile };
 		}
 
@@ -355,15 +496,13 @@ export class ApiManager extends ComponentBase {
 			// fsp.stat only throws native Node.js errors (ENOENT, EACCES, etc.),
 			// never a SlothletError — this guard is a defensive re-throw that
 			// cannot be reached in practice.
-			/* v8 ignore start */
+			/* v8 ignore if */
 			if (error instanceof this.SlothletError) {
 				throw error;
 			}
-			/* v8 ignore stop */
 			// Use same error code as before for consistency with existing tests
-			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
-				dir: resolvedPath,
-				validationError: true
+			throw new this.SlothletError("FOLDER_INVALID", {
+				folder: resolvedPath
 			});
 		}
 	}
@@ -385,9 +524,8 @@ export class ApiManager extends ComponentBase {
 	 */
 	async resolveFolderPath(folderPath) {
 		if (!folderPath || typeof folderPath !== "string") {
-			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
-				dir: folderPath,
-				validationError: true
+			throw new this.SlothletError("FOLDER_INVALID", {
+				folder: folderPath
 			});
 		}
 
@@ -395,18 +533,16 @@ export class ApiManager extends ComponentBase {
 		try {
 			const stats = await fsp.stat(resolvedPath);
 			if (!stats.isDirectory()) {
-				throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
-					dir: resolvedPath,
-					validationError: true
+				throw new this.SlothletError("FOLDER_INVALID", {
+					folder: resolvedPath
 				});
 			}
 		} catch (error) {
 			if (error instanceof this.SlothletError) {
 				throw error;
 			}
-			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
-				dir: resolvedPath,
-				validationError: true
+			throw new this.SlothletError("FOLDER_INVALID", {
+				folder: resolvedPath
 			});
 		}
 
@@ -427,7 +563,7 @@ export class ApiManager extends ComponentBase {
 	 * const moduleID = this.buildDefaultModuleId("plugins", "/abs/path/plugins");
 	 */
 	buildDefaultModuleId(apiPath, ____resolvedFolderPath) {
-		const randomSuffix = Math.random().toString(36).substring(2, 8);
+		const randomSuffix = StringMethods.substring(NumberMethods.toString(Math.random(), 36), 2, 8);
 		const prefix = apiPath || "auto";
 		return `${prefix}_${randomSuffix}`;
 	}
@@ -447,13 +583,104 @@ export class ApiManager extends ComponentBase {
 	 */
 	getValueAtPath(root, parts) {
 		let current = root;
-		for (const part of parts) {
+		for (let ofIndex = 0, ofList = parts; ofIndex < ofList.length; ofIndex++) {
+			const part = ofList[ofIndex];
 			if (!current || (typeof current !== "object" && typeof current !== "function")) {
 				return undefined;
 			}
 			current = current[part];
 		}
 		return current;
+	}
+
+	/**
+	 * Whether the member at `parts` is a plain member of the value a node above it holds (not a node of its own), and
+	 * that node is among the paths a removal deletes: it leaves the api with that node.
+	 * @param {string[]} parts - Segments of the member's api path.
+	 * @param {Set<string>} removed - The api paths the removal deletes.
+	 * @returns {boolean} True when deleting the node above takes the member off the api.
+	 * @private
+	 */
+	#heldByRemovedNode(parts, removed) {
+		if (parts.length < 2) return false;
+		let removedAbove = false;
+		for (let length = parts.length - 1; length > 0 && !removedAbove; length--) {
+			removedAbove = SetMethods.has(removed, ArrayMethods.join(copyList(parts, 0, length), "."));
+		}
+		if (!removedAbove) return false;
+		const parent = resolveWrapper(this.#memberAtPath(this.slothlet.api, copyList(parts, 0, parts.length - 1)));
+		const holder = parent?.____slothletInternal.impl;
+		if (holder === null || holder === undefined || (typeof holder !== "object" && typeof holder !== "function")) return false;
+		const descriptor = Reflect.getOwnPropertyDescriptor(holder, parts[parts.length - 1]);
+		return descriptor !== undefined && (!("value" in descriptor) || resolveWrapper(descriptor.value) === null);
+	}
+
+	/**
+	 * Read the member at an api path as slothlet's own bookkeeping: through each node's wrapper, never through the api's
+	 * proxies, so no reader's rules (a module-private member's host policy among them) apply to it (#815).
+	 * @param {function|object} root - API root object.
+	 * @param {string[]} parts - Path segments.
+	 * @returns {unknown} The member, or undefined when the path holds none.
+	 * @private
+	 *
+	 * @description
+	 * The api root's own members are namespaces, whose reads nothing gates; below it each node's member is its wrapper's
+	 * own data property, or its implementation's. An accessor is not run: what it answers is not the node's.
+	 *
+	 * @example
+	 * const live = resolveWrapper(this.#memberAtPath(this.slothlet.api, ["billing", "internals"]));
+	 */
+	#memberAtPath(root, parts) {
+		let current = root;
+		for (let index = 0; index < parts.length; index++) {
+			if (!current || (typeof current !== "object" && typeof current !== "function")) return undefined;
+			const raw = index === 0 ? null : resolveWrapper(current);
+			if (!raw) {
+				current = current[parts[index]];
+				continue;
+			}
+			const holders = [raw, raw.____slothletInternal.impl];
+			let next;
+			for (let ofIndex = 0, ofList = holders; ofIndex < ofList.length; ofIndex++) {
+				const holder = ofList[ofIndex];
+				if (!holder || (typeof holder !== "object" && typeof holder !== "function")) continue;
+				const descriptor = Reflect.getOwnPropertyDescriptor(holder, parts[index]);
+				if (descriptor && "value" in descriptor) {
+					next = descriptor.value;
+					break;
+				}
+			}
+			current = next;
+		}
+		return current;
+	}
+
+	/**
+	 * Materialize every lazy, not yet loaded namespace on the live api from the root down to `parts`' parent.
+	 * @param {string[]} parts - Path segments.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #materializeAlong(parts) {
+		let current = this.slothlet.api;
+		for (let index = 0; index < parts.length - 1; index++) {
+			current = this.#memberAtPath(current, [parts[index]]);
+			const raw = resolveWrapper(current);
+			if (!raw) return;
+			if (raw.____slothletInternal.mode === "lazy" && !raw.____slothletInternal.state.materialized) await raw.___materialize();
+		}
+	}
+
+	/**
+	 * Before the framework changes the instance's api root object itself (a member placed on or removed from it, not
+	 * through its proxy): a `run()` / `scope()` that started before reads the root as it was then (see
+	 * helpers/run-snapshot), as it does after a change made through the proxy.
+	 * @param {*} container - The object about to be changed.
+	 * @returns {void}
+	 * @private
+	 */
+	#beforeRootChange(container) {
+		if (container === this.slothlet.api) this.slothlet.____rootBarrier?.();
 	}
 
 	/**
@@ -480,8 +707,8 @@ export class ApiManager extends ComponentBase {
 			const next = readApiMember(current, part);
 			if (next === undefined) {
 				// Create a UnifiedWrapper for the container instead of plain object
-				const containerPath = parts.slice(0, i + 1).join(".");
-				const containerWrapper = new UnifiedWrapper(this.slothlet, {
+				const containerPath = ArrayMethods.join(copyList(parts, 0, i + 1), ".");
+				const containerWrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 					mode: this.____config.mode,
 					apiPath: containerPath,
 					moduleID: moduleID,
@@ -490,8 +717,9 @@ export class ApiManager extends ComponentBase {
 				// Set impl to empty object so it acts as a namespace container
 				containerWrapper.___setImpl({}, moduleID);
 				const container = current;
-				runtime_frameworkWrite(container, () => {
-					container[part] = containerWrapper.createProxy();
+				this.#beforeRootChange(container);
+				frameworkWrite(container, () => {
+					container[part] = containerWrapper.___createProxy();
 				});
 				// The node as placed, not a module's view of it (#625).
 				current = readApiMember(container, part);
@@ -501,12 +729,11 @@ export class ApiManager extends ComponentBase {
 				current = next;
 				continue;
 			}
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: parts.slice(0, i + 1).join("."),
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: segmentsOf(ArrayMethods.join(copyList(parts, 0, i + 1), ".")),
 				reason: translate("API_PATH_REASON_NOT_TRAVERSABLE"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 		return current;
@@ -538,12 +765,14 @@ export class ApiManager extends ComponentBase {
 	 * @param {unknown} value - Value to write. Functions/objects are wrapped via UnifiedWrapper; primitives stored as-is.
 	 * @param {object|Array<object>|null} callerWrapper - Caller's wrapper from ALS (may be null for external code); a list,
 	 *   the executing wrapper first, when the writer acts for several modules (#597) — each has to own the path.
-	 * @returns {void}
+	 * @returns {boolean} Whether the write was made, as `Reflect.set` answers it: false when the parent refuses the member
+	 *   (a closed root or node, a read-only member), so the caller's set trap answers false and an assignment in strict
+	 *   code throws, as it would on a plain object (#960).
 	 * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
 	 *   writes outside its own namespace.
 	 * @throws {SlothletError} `LOOSE_SET_RESERVED_KEY` when any path segment is
 	 *   a prototype-pollution key (`__proto__`, `prototype`, `constructor`).
-	 * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty,
+	 * @throws {SlothletError} `API_PATH_INVALID` when the path is empty,
 	 *   contains empty segments (e.g. `"a..b"`), or targets a reserved root name
 	 *   (`slothlet`, `shutdown`, `destroy`).
 	 * @public
@@ -551,7 +780,7 @@ export class ApiManager extends ComponentBase {
 	setOwnedProperty(apiPath, value, callerWrapper) {
 		// Reject prototype-pollution segments BEFORE the canonical normalizer runs. This surface has
 		// its own dedicated LOOSE_SET_RESERVED_KEY error; `normalizeApiPath` now also blocks these
-		// segments, but with a generic INVALID_CONFIG_API_PATH_INVALID, so the check must run first to
+		// segments, but with a generic API_PATH_INVALID, so the check must run first to
 		// keep the loose-set error. `self.__proto__ = obj` would assign onto the API root's prototype
 		// chain; `self.a.__proto__ = obj` (via the dotted form) would do the same on the wrapper at `a`.
 		// Reuses the module-level UNSAFE_PATH_SEGMENTS (same set the add-path guard uses). `String()`
@@ -559,12 +788,12 @@ export class ApiManager extends ComponentBase {
 		// always pass `String(prop)`, and null/undefined stringify to a non-reserved token that falls
 		// through to the empty-path guard below.
 		const coercedPath = String(apiPath);
-		for (const segment of coercedPath.split(".")) {
-			if (UNSAFE_PATH_SEGMENTS.has(segment)) {
+		for (let ofIndex = 0, ofList = splitText(coercedPath, "."); ofIndex < ofList.length; ofIndex++) {
+			const segment = ofList[ofIndex];
+			if (SetMethods.has(UNSAFE_PATH_SEGMENTS, segment)) {
 				throw new this.SlothletError("LOOSE_SET_RESERVED_KEY", {
-					apiPath: coercedPath,
-					segment,
-					validationError: true
+					path: segmentsOf(coercedPath),
+					segment
 				});
 			}
 		}
@@ -577,59 +806,77 @@ export class ApiManager extends ComponentBase {
 		// the reserved-name check the host meets.
 		// Code a caller supplied to another module's call writes as every module it acts for (#597): a list of
 		// wrappers, the executing one first, each of which has to own the path. The first owns what is created.
-		const writers = (Array.isArray(callerWrapper) ? callerWrapper : [callerWrapper]).filter(Boolean);
+		const writers = filterList(Arrays.isArray(callerWrapper) ? callerWrapper : [callerWrapper], Boolean);
 		callerWrapper = writers[0] ?? null;
-		const rootSegment = coercedPath.split(".")[0];
-		if (callerWrapper && FRAMEWORK_ROOT_SEGMENTS.has(rootSegment)) {
-			for (const writer of writers) this.assertOwnedWrite(coercedPath.split("."), writer);
+		const rootSegment = splitText(coercedPath, ".")[0];
+		if (callerWrapper && SetMethods.has(FRAMEWORK_ROOT_SEGMENTS, rootSegment)) {
+			for (let ofIndex = 0, ofList = writers; ofIndex < ofList.length; ofIndex++) {
+				const writer = ofList[ofIndex];
+				this.assertOwnedWrite(splitText(coercedPath, "."), writer);
+			}
 		}
 		const { parts } = this.normalizeApiPath(apiPath);
 		// normalizeApiPath returns parts: [] for empty/null input — root-level writes
 		// don't make sense here (no key to set), so reject explicitly. The runtime
-		// self set trap always passes `String(prop)` (non-empty), so this only fires
-		// for direct programmatic callers passing "" / null / undefined — defensive.
-		/* v8 ignore next 8 */
+		// self set trap passes `String(prop)` unfiltered, so a write to an empty or blank key (`self[""] = v`)
+		// normalizes to no parts and lands here, as does a direct caller passing "" / null / undefined.
 		if (parts.length === 0) {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: String(apiPath ?? ""),
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: segmentsOf(String(apiPath ?? "")),
 				reason: translate("API_PATH_REASON_EMPTY_SEGMENTS"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 
-		for (const writer of writers) this.assertOwnedWrite(parts, writer);
+		for (let ofIndex = 0, ofList = writers; ofIndex < ofList.length; ofIndex++) {
+			const writer = ofList[ofIndex];
+			this.assertOwnedWrite(parts, writer);
+		}
 		// A view `self` handed out stands for its node: the node is what is stored (#625).
-		value = runtime_unwrapSelfView(value);
+		value = unwrapSelfView(value);
+		// A member the write creates is the writing module's own once written.
+		const placed = this.writeOwnerOf(parts, callerWrapper);
 
-		// Walk to the parent container, creating namespace wrappers as needed.
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
 		const callerSourceFolder = callerWrapper?.____slothletInternal?.sourceFolder ?? null;
-		const root = this.slothlet.boundApi;
-		const parent = this.ensureParentPath(root, parts, {
-			moduleID: callerModuleID,
-			sourceFolder: callerSourceFolder
-		});
 		const finalKey = parts[parts.length - 1];
 
 		// Stage 3: wrap callable / object-shaped values via UnifiedWrapper so
 		// they get the same hook / permission / lifecycle treatment that
 		// `api.slothlet.api.add()`-loaded modules get. Primitives stored verbatim.
+		let stored = value;
 		const isWrappable = typeof value === "function" || (value !== null && typeof value === "object");
 		if (isWrappable) {
-			const wrapper = new UnifiedWrapper(this.slothlet, {
+			const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 				mode: this.____config.mode,
-				apiPath: parts.join("."),
+				apiPath: ArrayMethods.join(parts, "."),
 				moduleID: callerModuleID,
 				isCallable: typeof value === "function",
 				sourceFolder: callerSourceFolder
 			});
 			wrapper.___setImpl(value, callerModuleID);
-			parent[finalKey] = wrapper.createProxy();
-		} else {
-			parent[finalKey] = value;
+			stored = wrapper.___createProxy();
 		}
+
+		// A full-isolation run's `self` keeps the write in the run's own record, once every check above has passed (see
+		// `runWrite` in unified-wrapper): the tree it reads is left as it is, its parent namespaces included.
+		const runSink = unifiedWrapperOwn.takeRunWrite(this.slothlet.boundApi, coercedPath);
+		if (runSink !== null) {
+			return runSink({ op: "set", parts, value: stored, created: placed?.created ? placed.owner : null });
+		}
+
+		// Walk to the parent container, creating namespace wrappers as needed.
+		const root = this.slothlet.boundApi;
+		const parent = this.ensureParentPath(root, parts, {
+			moduleID: callerModuleID,
+			sourceFolder: callerSourceFolder
+		});
+		// The parent answers the write as an object does: a closed parent or a read-only member refuses it with false, which
+		// the set trap hands back, rather than a TypeError from this (strict) code whatever the caller's mode (#960).
+		const written = Reflect.set(parent, finalKey, stored);
+		if (written && placed?.created) this.recordCreated(parts, placed.owner, value);
+		return written;
 	}
 
 	/**
@@ -647,40 +894,453 @@ export class ApiManager extends ComponentBase {
 	 * the module owns. The built-in ones keep every module off the framework's namespace and root functions and off
 	 * the framework's own keys on api nodes, until an allow lifts one for the callers it names. With the system off
 	 * only those built-in rules (and host rules on what they cover) are checked and ownership refuses nothing, so a
-	 * module writes anywhere outside the framework's own; with it disabled nothing is checked.
+	 * module writes anywhere outside the framework's own; with it disabled nothing is checked. While it is on, a write
+	 * that passes is also held to the read the module would need of the member it changes: there is no write without
+	 * the read.
 	 *
 	 * @param {string[]} parts - Segments of the api path being written.
 	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
 	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
 	 *   being checked (see {@link ApiManager#ownsPath}).
 	 * @returns {void}
-	 * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write, and
-	 *   `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
+	 * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write or the module would be refused a read
+	 *   of the member it changes, and `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
 	 * @public
 	 */
 	assertOwnedWrite(parts, callerWrapper, inFlight = null) {
 		if (!this.frameworkProtected()) return;
 		if (callerWrapper) {
 			const callerPath = String(callerWrapper.____slothletInternal?.apiPath ?? "");
-			const targetPath = parts.join(".");
+			const targetPath = ArrayMethods.join(parts, ".");
 			const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
 			const decision = this.slothlet.handlers.permissionManager.decideWrite(callerPath, targetPath, runtimeContext);
 			if (decision === "deny") {
-				throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: `${targetPath}:write` });
+				throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(`${targetPath}:write`) });
 			}
 			// An allowing write rule grants the write, whatever the module owns — to a module that is still there.
-			if (decision === "grant" && !this.isRemovedCaller(callerWrapper)) return;
+			if (decision === "grant" && !this.isRemovedCaller(callerWrapper)) return this.#assertWriteAccess(parts, callerWrapper, inFlight);
 		}
-		if (!this.ownershipEnforced() || this.ownsPath(parts, callerWrapper, inFlight)) return;
+		if (!this.ownershipEnforced() || this.ownsPath(parts, callerWrapper, inFlight)) {
+			if (callerWrapper) this.#assertWriteAccess(parts, callerWrapper, inFlight);
+			return;
+		}
 		// The caller has a recorded mount point (or it would own the whole tree), so it has a module; its
 		// apiPath is always set alongside, and the `??` guards an inconsistent caller object.
-		/* v8 ignore next */
-		const callerApiPath = callerWrapper?.____slothletInternal?.apiPath ?? this.#ownedRoot(callerWrapper);
+		const callerApiPath = /* v8 ignore next */ callerWrapper?.____slothletInternal?.apiPath ?? this.#ownedRoot(callerWrapper);
 		throw new this.SlothletError("LOOSE_SET_NOT_OWNED", {
-			apiPath: parts.join("."),
-			callerApiPath,
-			validationError: true
+			path: segmentsOf(ArrayMethods.join(parts, ".")),
+			caller: callerApiPath
 		});
+	}
+
+	/**
+	 * Refuse a module a write it would not be allowed to read: there is no write without the read.
+	 *
+	 * Replacing, redefining, or deleting a member takes over every later call or read of it, so a module may do it only
+	 * where it would be allowed to read that member, as the read gate decides it (the rules whose level covers a read,
+	 * `policy`, the owner grant, module privacy, the self-call bypass), on top of the ownership and write rules. A deny
+	 * that takes the read away (`:read`, `:access`, `:full`, or no suffix) so refuses the write; a `:call` deny does not. A member that does not
+	 * exist yet takes over nothing; it is judged as the read of it would be once written, when it is the writer's own: a
+	 * rule on its path that refuses the writer refuses the write, and the default policy alone does not. Only while the
+	 * permission system is on, and only for module code.
+	 *
+	 * @param {string[]} parts - Segments of the api path being written.
+	 * @param {object} callerWrapper - The executing module's wrapper.
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is being
+	 *   checked: what it registered already is new, not a member it takes over (see {@link ApiManager#ownsPath}).
+	 * @returns {void}
+	 * @throws {SlothletError} `PERMISSION_DENIED` when the module would be refused a read of the target.
+	 * @private
+	 */
+	#assertWriteAccess(parts, callerWrapper, inFlight = null) {
+		const permissionManager = this.slothlet.handlers.permissionManager;
+		if (!permissionManager.isEnabled() || parts.length === 0) return;
+		const internal = callerWrapper.____slothletInternal;
+		const callerPath = String(internal?.apiPath ?? "");
+		const targetPath = ArrayMethods.join(parts, ".");
+		const { exists, accessor, filePath, value, inherited, holder } = this.#memberAt(parts, inFlight);
+		// A member held as an accessor is read by running its getter, which no read gate checks: the write is held to the
+		// ownership and write rules alone, as reading it is to none.
+		if (accessor) return;
+		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
+		const callerFilePath = internal?.filePath ?? null;
+		// A deny naming an object member of a module's data exactly covers what the member holds, for reads (see
+		// {@link PermissionManager#enforceAccess}'s `dataMember`): a write beneath it is held to the same extension.
+		// A write needs the read: every member it changes is held to the read rules (the rules whose level covers a read,
+		// a `:write` or `:full` allow among them), never the call rules alone.
+		const options = {
+			moduleCaller: true,
+			newMember: false,
+			operation: "read",
+			dataMember: dataReadOptions(this.slothlet).dataMember
+		};
+		// With read gating off no rule gates a read of data, so a data member is held to no read rule either.
+		const readGated = permissionManager.isReadGatingEnabled();
+		const check = (path, targetFile, newMember = false, data = false) => {
+			if (data && !readGated) return;
+			options.newMember = newMember;
+			if (!permissionManager.enforceAccess(callerPath, path, callerFilePath, targetFile, runtimeContext, null, options)) {
+				throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(path) });
+			}
+		};
+		// A member the value inherits, or one the language reads off it by itself, changes how the value behaves: shadowing
+		// it is a write to the value, held to the access of the node that holds it.
+		if (inherited) return check(ArrayMethods.join(copyList(parts, 0, parts.length - 1), "."), filePath);
+		// A member created inside a value a module holds (a data object, an array, a function or class, a prototype)
+		// changes that value: it is held to the access of the value, as reading or calling it would be decided. A member
+		// created on a node or at a mount point is not.
+		if (!exists && holder !== undefined && this.#isHeldValue(holder, parts)) {
+			check(ArrayMethods.join(copyList(parts, 0, parts.length - 1), "."), filePath);
+		}
+		check(targetPath, filePath, !exists, exists && typeof value !== "function");
+		// Replacing, redefining or deleting a node takes over every member it holds: each is held to its own access.
+		if (exists) this.#assertMembersBeneath(targetPath, value, filePath, check, inFlight);
+	}
+
+	/**
+	 * Hold a write over a node to the access of every member the node holds, at any depth: each to the read gate, as
+	 * reading it would be decided (a function's too, which the read rules decide whether or not reads of data are gated). Namespaces and object members of data
+	 * are walked, not checked, as reading one is traversal. A member held as an accessor is not followed, as no read gate
+	 * runs its getter. What the walk cannot see (a lazy node not loaded yet) is taken from the ownership registry: every
+	 * recorded function or data value beneath the path. Costs nothing for a leaf.
+	 *
+	 * @param {string} targetPath - The node's api path.
+	 * @param {*} node - The node, as the live tree holds it.
+	 * @param {string|null} filePath - The node's source file.
+	 * @param {function(string, ?string, boolean=, boolean=): void} check - Refuses one member, by its path, source file, whether
+	 *   it is new, and whether it is data (held to the read rules only while read gating is on).
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight: what it registered for
+	 *   itself is new, not a member the write takes over (see {@link ApiManager#ownsPath}).
+	 * @returns {void}
+	 * @throws {SlothletError} `PERMISSION_DENIED` for the first member the module would be refused.
+	 * @private
+	 */
+	#assertMembersBeneath(targetPath, node, filePath, check, inFlight = null) {
+		if (node === null || (typeof node !== "object" && typeof node !== "function")) return;
+		// A data value (a Buffer, a typed array, a Date, a Map, an instance) is read whole, as the read gate reads it: what
+		// it holds (a typed array's indices) is no member of the api, and the check of the value itself covered it.
+		if (typeof node !== "function") {
+			const nodeWrapper = resolveWrapper(node);
+			if (nodeWrapper !== null ? this.#holdsDataValue(nodeWrapper) : !Arrays.isArray(node) && !this.#isPlainObject(node)) return;
+		}
+		const seen = new Set();
+		const visited = new WeakSet();
+		const walk = (path, current, currentFile) => {
+			const raw = resolveWrapper(current);
+			const holder = raw ?? current;
+			if (WeakSetMethods.has(visited, holder)) return;
+			WeakSetMethods.add(visited, holder);
+			if (raw) currentFile = raw.____slothletInternal.filePath ?? currentFile;
+			const holders = raw ? [raw, raw.____slothletInternal.impl] : [current];
+			const isFunction = typeof current === "function";
+			const keys = new Set();
+			for (let h = 0; h < holders.length; h++) {
+				const own = holders[h];
+				if (own === null || (typeof own !== "object" && typeof own !== "function")) continue;
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(own); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					if (typeof key !== "string" || isFrameworkReservedKey(key)) continue;
+					// A marker the framework stamped on a callable it built (a routine stack) is the framework's, installed by
+					// the framework whoever's write the stack takes in, never a member that write takes over.
+					if (isFrameworkRoutineMarker(own, key)) continue;
+					if (isFunction && SetMethods.has(FUNCTION_OWN_KEYS, key)) continue;
+					if (Arrays.isArray(own) && key === "length") continue;
+					SetMethods.add(keys, key);
+				}
+			}
+			for (const key of setValues(keys)) {
+				const { found, value } = this.#rawMember(current, key);
+				if (!found) continue;
+				const childPath = `${path}.${key}`;
+				SetMethods.add(seen, childPath);
+				let child = value;
+				const dispatch = versionDispatcherRecord(child);
+				if (dispatch) child = nodeBehind(unwrapSelfView(dispatch.resolve())) ?? child;
+				const childWrapper = resolveWrapper(child);
+				const childFile = childWrapper?.____slothletInternal.filePath ?? currentFile;
+				if (typeof child === "function") {
+					check(childPath, childFile);
+					walk(childPath, child, childFile);
+				} else if (child === null || typeof child !== "object") {
+					check(childPath, childFile, false, true);
+				} else if (childWrapper !== null && this.#holdsDataValue(childWrapper)) {
+					// A node holding a data value (a primitive, a Date, a Map, an instance) is read, not traversed.
+					check(childPath, childFile, false, true);
+				} else if (childWrapper !== null || Arrays.isArray(child) || this.#isPlainObject(child)) {
+					walk(childPath, child, childFile);
+				} else {
+					check(childPath, childFile, false, true);
+				}
+			}
+		};
+		walk(targetPath, node, filePath);
+		const ownership = this.slothlet.handlers.ownership;
+		if (!ownership?.pathToModule) return;
+		const prefix = `${targetPath}.`;
+		for (const path of mapKeys(ownership.pathToModule)) {
+			if (SetMethods.has(seen, path) || !StringMethods.startsWith(path, prefix) || !this.#recordedHeld(path, inFlight)) continue;
+			const entry = ownership.getCurrentOwner(path);
+			if (entry === null) continue;
+			const recorded = entry.value;
+			const wrapper = resolveWrapper(recorded);
+			if (
+				wrapper !== null
+					? wrapper.____slothletInternal.isCallable || this.#holdsDataValue(wrapper)
+					: recorded === null || typeof recorded !== "object"
+			)
+				check(path, wrapper?.____slothletInternal.filePath ?? entry.filePath ?? null, false, !wrapper?.____slothletInternal.isCallable);
+		}
+	}
+
+	/**
+	 * Whether what holds a member about to be created is a value a module holds rather than a node of the api: an object
+	 * reached inside a node (a prototype, an array or object inside data), a node holding a module's data object, array,
+	 * or another data value, or a function or class with no members of its own as nodes. Creating a member there changes
+	 * that value, so it is held to the access of the value.
+	 * @param {*} holder - What holds the member, as the live tree holds it.
+	 * @param {string[]} parts - Segments of the member's api path.
+	 * @returns {boolean} True for a value.
+	 * @private
+	 */
+	#isHeldValue(holder, parts) {
+		if (holder === null || (typeof holder !== "object" && typeof holder !== "function")) return false;
+		const raw = resolveWrapper(holder);
+		if (raw === null) return holder !== this.slothlet.api && versionDispatcherRecord(holder) === null;
+		const internal = raw.____slothletInternal;
+		if (internal.mode === "lazy" && !internal.state.materialized) return false;
+		if (this.#holdsDataValue(raw)) return true;
+		if (Arrays.isArray(internal.impl)) return true;
+		if (dataReadOptions(this.slothlet).dataMember(ArrayMethods.join(copyList(parts, 0, parts.length - 1), "."))) return true;
+		if (!internal.isCallable) return false;
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(raw); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (typeof key === "string" && !isFrameworkReservedKey(key) && !SetMethods.has(FUNCTION_OWN_KEYS, key)) return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Whether a loaded node holds a data value of its own rather than members: its impl is a primitive or an object that
+	 * is not walked as a namespace (a Date, a Map, a Set, a class instance, …). Such a node is read, so a write over it
+	 * is held to the read gate at its own path. A lazy node not loaded yet, a callable, and a node whose impl is a
+	 * namespace, a plain object or an array are not.
+	 * @param {object} wrapper - The node's raw wrapper.
+	 * @returns {boolean} True for a node holding a data value.
+	 * @private
+	 */
+	#holdsDataValue(wrapper) {
+		const internal = wrapper.____slothletInternal;
+		if (internal.isCallable || (internal.mode === "lazy" && !internal.state.materialized)) return false;
+		const impl = internal.impl;
+		if (impl === null || impl === undefined || typeof impl === "function") return false;
+		if (typeof impl !== "object") return true;
+		return resolveWrapper(impl) === null && !Arrays.isArray(impl) && !this.#isPlainObject(impl);
+	}
+
+	/**
+	 * Whether a value is a plain object: its prototype is `Object.prototype` (of any realm) or null.
+	 * @param {object} value - The value.
+	 * @returns {boolean} True for a plain object.
+	 * @private
+	 */
+	#isPlainObject(value) {
+		const proto = Reflect.getPrototypeOf(value);
+		return proto === null || Reflect.getPrototypeOf(proto) === null;
+	}
+
+	/**
+	 * Whether the live tree holds a member at `parts`, and the source file of the node that holds it (the member's own
+	 * when it is a node), read off the nodes themselves so no read gate, view, or lazy load is involved. A path the
+	 * ownership registry records is held, except what an add in flight registered for its own content where its module
+	 * did not own the path before the add began. A path running through an accessor counts as held, since its getter is
+	 * not run here; the member itself held as an accessor is reported as such.
+	 *
+	 * @param {string[]} parts - Segments of the api path.
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is being
+	 *   checked (see {@link ApiManager#ownsPath}).
+	 * @returns {{exists: boolean, accessor: boolean, filePath: string|null, value: *, inherited: boolean, holder: *}}
+	 *   Whether the member exists, whether it is held as an accessor, the node's source file, the member's value, and, for
+	 *   a member that does not exist, whether its holder inherits one of that name or the language reads it off the holder
+	 *   by itself ({@link PROTOCOL_KEYS}), and the holder itself (undefined when the walk stopped above it).
+	 * @private
+	 */
+	#memberAt(parts, inFlight = null) {
+		let node = this.slothlet.api;
+		let filePath = null;
+		let exists = true;
+		let holder;
+		for (let index = 0; index < parts.length; index++) {
+			const { found, value, accessor } = this.#rawMember(node, parts[index]);
+			if (accessor) return { exists: true, accessor: index === parts.length - 1, filePath, value: undefined, inherited: false };
+			if (!found) {
+				exists = false;
+				if (index === parts.length - 1 && index > 0) {
+					const raw = resolveWrapper(node);
+					const holder = raw ? raw.____slothletInternal.impl : node;
+					const reachable =
+						holder !== null && (typeof holder === "object" || typeof holder === "function") && !util.types.isProxy(holder)
+							? parts[index] in holder
+							: false;
+					const owned = this.#recordedHeld(ArrayMethods.join(parts, "."), inFlight);
+					if (!owned && (reachable || SetMethods.has(PROTOCOL_KEYS, parts[index]))) {
+						return { exists: false, accessor: false, filePath, value: undefined, inherited: true };
+					}
+				}
+				if (index === parts.length - 1 && index > 0) holder = node;
+				break;
+			}
+			let next = value;
+			const dispatch = versionDispatcherRecord(next);
+			if (dispatch) next = nodeBehind(unwrapSelfView(dispatch.resolve())) ?? next;
+			const wrapper = resolveWrapper(next);
+			if (wrapper) filePath = wrapper.____slothletInternal.filePath ?? filePath;
+			node = next;
+		}
+		const reached = exists;
+		if (!exists) exists = this.#recordedHeld(ArrayMethods.join(parts, "."), inFlight);
+		return { exists, accessor: false, filePath, value: reached ? node : undefined, inherited: false, holder };
+	}
+
+	/**
+	 * Whether the ownership registry holds a member at a path: its current owner, or, while an add is in flight, any
+	 * entry other than the content that add registered for itself where its module did not own the path before it began,
+	 * which is new, not a member it takes over.
+	 *
+	 * @param {string} at - The api path.
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} inFlight - An add in flight (see {@link ApiManager#ownsPath}).
+	 * @returns {boolean} Whether a member is recorded there.
+	 * @private
+	 */
+	#recordedHeld(at, inFlight) {
+		const ownership = this.slothlet.handlers.ownership;
+		return inFlight === null
+			? ownership.getCurrentOwner(at) !== null
+			: ArrayMethods.some(
+					ownership.getPathHistory(at),
+					(entry) => String(entry.moduleID) !== inFlight.moduleID || MapMethods.has(inFlight.prior, at)
+				);
+	}
+
+	/**
+	 * Who owns what a module's write at `parts` stores: the module that owns the member already there, or, for a member
+	 * that does not exist yet where the module writes by its own mount, the writing module, which creates it. Replacing
+	 * another module's member transfers nothing, and neither does creating one through a write grant.
+	 * A node built for an object or function the write stores is attributed to that owner, and a member it creates is
+	 * recorded for it once written ({@link ApiManager#recordCreated}).
+	 *
+	 * @param {string[]} parts - Segments of the api path written.
+	 * @param {object|null} writer - The executing module's wrapper, or null for host code.
+	 * @returns {{owner: string, created: boolean}|null} The owning moduleID and whether the write creates the member;
+	 *   null for host code, a writer with no recorded owner, the framework's own roots, and an unowned member.
+	 * @public
+	 *
+	 * @example
+	 * const placed = apiManager.writeOwnerOf(["p", "counter"], writer); // { owner: "B", created: true }
+	 */
+	writeOwnerOf(parts, writer) {
+		const ownership = this.slothlet.handlers.ownership;
+		if (!writer || !ownership || parts.length === 0 || SetMethods.has(FRAMEWORK_ROOT_SEGMENTS, parts[0])) return null;
+		const existing = ownership.getCurrentOwner(ArrayMethods.join(parts, "."));
+		if (existing !== null) return { owner: existing.moduleID, created: false };
+		// Only where the module writes by its own standing: a member created through a write grant into another module's
+		// subtree becomes part of that subtree, as what the grant lets it place there does.
+		if (this.#memberAt(parts).exists || !this.ownsPath(parts, writer)) return null;
+		const callerPath = String(writer.____slothletInternal?.apiPath ?? "");
+		const owner = callerPath ? (ownership.getCurrentOwner(callerPath)?.moduleID ?? null) : null;
+		return owner === null ? null : { owner, created: true };
+	}
+
+	/**
+	 * Record the module that created a member at `parts` as its owner, once the write that created it stood: plain
+	 * JavaScript's creator owns what it creates. The entry is an ordinary ownership entry, so removing the module
+	 * removes the member with its other paths, and the owner grant, module privacy, and the write rules read it as they
+	 * read a loaded member's. A node the write built for an object or function registered it already, for the same
+	 * module ({@link ApiManager#writeOwnerOf}); the entry is marked as created either way. A runtime write is not
+	 * replayed by a reload, and neither is its entry: the rebuilt api records only what it loads.
+	 *
+	 * @param {string[]} parts - Segments of the api path created.
+	 * @param {string} moduleID - The creating module.
+	 * @param {*} value - The value written: recorded for a primitive, which no node stands for.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * apiManager.recordCreated(["p", "counter"], "B", 1);
+	 */
+	recordCreated(parts, moduleID, value) {
+		const ownership = this.slothlet.handlers.ownership;
+		const apiPath = ArrayMethods.join(parts, ".");
+		if (!ownership || !this.#memberAt(parts).exists) return;
+		// A node stored at a new key is an alias of that node, which keeps its own owner: nothing new is created (#625).
+		if (value !== null && (typeof value === "object" || typeof value === "function")) {
+			const stored = unwrapSelfView(value);
+			if (resolveWrapper(stored) !== null || versionDispatcherRecord(stored) !== null || util.types.isProxy(stored)) return;
+		}
+		const wrapped = value !== null && (typeof value === "object" || typeof value === "function");
+		ownership.register({
+			moduleID,
+			apiPath,
+			value: wrapped ? undefined : value,
+			source: CREATED_SOURCE,
+			collisionMode: "merge"
+		});
+		// What a created object holds is created with it, as what a loaded object holds is loaded with it.
+		if (wrapped && typeof value === "object" && !Arrays.isArray(value)) this.#recordCreatedMembers(value, moduleID, apiPath, new WeakSet());
+	}
+
+	/**
+	 * Record the members a created object holds as its creator's, read off the object itself (own data members with a
+	 * string key; an accessor is not run), down through the plain objects it holds, as
+	 * {@link OwnershipManager#registerSubtree} records a loaded subtree.
+	 *
+	 * @param {object} object - The object the module created.
+	 * @param {string} moduleID - The creating module.
+	 * @param {string} apiPath - The object's api path.
+	 * @param {WeakSet<object>} visited - Objects already walked, for a cycle.
+	 * @returns {void}
+	 * @private
+	 */
+	#recordCreatedMembers(object, moduleID, apiPath, visited) {
+		if (WeakSetMethods.has(visited, object)) return;
+		WeakSetMethods.add(visited, object);
+		const ownership = this.slothlet.handlers.ownership;
+		for (let ofIndex = 0, ofList = Objects.keys(object); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
+			if (!descriptor || !("value" in descriptor) || descriptor.value === undefined || isFrameworkReservedKey(key)) continue;
+			const member = descriptor.value;
+			const memberPath = `${apiPath}.${key}`;
+			const isObject = member !== null && typeof member === "object";
+			ownership.register({
+				moduleID,
+				apiPath: memberPath,
+				value: isObject || typeof member === "function" ? undefined : member,
+				source: CREATED_SOURCE,
+				collisionMode: "merge"
+			});
+			if (isObject && !Arrays.isArray(member)) this.#recordCreatedMembers(member, moduleID, memberPath, visited);
+		}
+	}
+
+	/**
+	 * Drop the record of a member module code created at runtime once it is deleted: nothing is left to own, and a module
+	 * that creates the member anew creates it as its own. A member anything else contributed to keeps its record, as a
+	 * loaded member deleted at runtime does.
+	 *
+	 * @param {string[]} parts - Segments of the api path deleted.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * apiManager.forgetCreated(["p", "counter"]);
+	 */
+	forgetCreated(parts) {
+		const ownership = this.slothlet.handlers.ownership;
+		if (!ownership) return;
+		const apiPath = ArrayMethods.join(parts, ".");
+		const history = ownership.getPathHistory(apiPath);
+		if (history.length === 0 || !ArrayMethods.every(history, (entry) => entry.source === CREATED_SOURCE)) return;
+		ownership.forgetPath(apiPath);
 	}
 
 	/**
@@ -694,7 +1354,10 @@ export class ApiManager extends ComponentBase {
 	 * if (apiManager.ownershipEnforced()) apiManager.assertOwnedWrite(parts, writer);
 	 */
 	ownershipEnforced() {
-		return this.slothlet.handlers?.permissionManager?.isEnabled?.() === true;
+		const permissionManager = this.slothlet.handlers?.permissionManager;
+		// An instance that shut down with the system on keeps holding module writes to it: a module no longer mounted
+		// owns nothing, so what it kept a view of stays as it could not write it.
+		return permissionManager?.isEnabled?.() === true || permissionManager?.wasOnAtShutdown?.() === true;
 	}
 
 	/**
@@ -720,11 +1383,11 @@ export class ApiManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * apiManager.writeChecked(["victim", "v", "__mode"]); // true unless permissions are disabled
+	 * apiManager.writeChecked(["victim", "v", "____state"]); // true unless permissions are disabled
 	 */
 	writeChecked(parts) {
 		if (this.ownershipEnforced()) return true;
-		return this.frameworkProtected() && this.slothlet.handlers.permissionManager.coversWrite(parts.join("."));
+		return this.frameworkProtected() && this.slothlet.handlers.permissionManager.coversWrite(ArrayMethods.join(parts, "."));
 	}
 
 	/**
@@ -742,7 +1405,7 @@ export class ApiManager extends ComponentBase {
 	mayWrite(parts, callerWrapper) {
 		if (!this.ownershipEnforced() || this.ownsPath(parts, callerWrapper)) return true;
 		const callerPath = String(callerWrapper.____slothletInternal?.apiPath ?? "");
-		return this.slothlet.handlers.permissionManager.isWriteGranted(callerPath, parts.join("."));
+		return this.slothlet.handlers.permissionManager.isWriteGranted(callerPath, ArrayMethods.join(parts, "."));
 	}
 
 	/**
@@ -793,19 +1456,23 @@ export class ApiManager extends ComponentBase {
 			// An add in flight has registered its own content already: that is not who owned the path before it. Its
 			// module's entry counts only where that module owned the path before the add began, whichever module writes
 			// (a module adding under its own id included).
-			const at = parts.slice(0, length).join(".");
-			const stack = ownership
-				.getPathHistory(at)
-				.filter((entry) => inFlight === null || String(entry.moduleID) !== inFlight.moduleID || inFlight.prior.has(at));
+			const at = ArrayMethods.join(copyList(parts, 0, length), ".");
+			const stack = filterList(
+				ownership.getPathHistory(at),
+				(entry) => inFlight === null || String(entry.moduleID) !== inFlight.moduleID || MapMethods.has(inFlight.prior, at)
+			);
 			if (stack.length === 0) continue;
 			// Modules mounted at one point share that point's subtree only, never each other's other mounts.
-			const path = parts.join(".");
-			const sharedHere = (mount) => mount !== "." && mount !== "" && (path === mount || path.startsWith(`${mount}.`));
-			const ownMounts = ownership.getModuleMounts(moduleID).filter(sharedHere);
-			return stack.some(
+			const path = ArrayMethods.join(parts, ".");
+			const sharedHere = (mount) => mount !== "." && mount !== "" && (path === mount || StringMethods.startsWith(path, `${mount}.`));
+			const ownMounts = filterList(ownership.getModuleMounts(moduleID), sharedHere);
+			return ArrayMethods.some(
+				stack,
 				(entry) =>
 					String(entry.moduleID) === moduleID ||
-					ownership.getModuleMounts(String(entry.moduleID)).some((mount) => ownMounts.includes(mount))
+					ArrayMethods.some(ownership.getModuleMounts(String(entry.moduleID)), (mount) =>
+						typeof ownMounts === "string" ? StringMethods.includes(ownMounts, mount) : ArrayMethods.includes(ownMounts, mount)
+					)
 			);
 		}
 		return false;
@@ -817,7 +1484,7 @@ export class ApiManager extends ComponentBase {
 	 * not checked.
 	 *
 	 * @param {string[]} parts - Segments of the path written.
-	 * @param {object} writer - The module's wrapper ({@link runtime_selfModuleReader}).
+	 * @param {object} writer - The module's wrapper ({@link selfModuleReader}).
 	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
 	 *   being checked (see {@link ApiManager#ownsPath}).
 	 * @param {ReadonlyArray<object>} [ceilings] - The calls the writer acts under when it is code supplied to another
@@ -827,24 +1494,29 @@ export class ApiManager extends ComponentBase {
 	 *   {@link ApiManager#assertOwnedWrite} throws.
 	 * @private
 	 */
-	#assertModuleMountWrite(parts, writer, inFlight = null, ceilings = runtime_selfModuleCeilings(this.slothlet, writer)) {
+	#assertModuleMountWrite(parts, writer, inFlight = null, ceilings = selfModuleCeilings(this.slothlet, writer)) {
 		if (!this.ownershipEnforced()) return;
 		if (!writer.____slothletInternal) {
-			throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+			throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 		}
-		for (const ceiling of ceilings) this.assertOwnedWrite(parts, ceiling, inFlight);
+		for (let ofIndex = 0, ofList = ceilings; ofIndex < ofList.length; ofIndex++) {
+			const ceiling = ofList[ofIndex];
+			this.assertOwnedWrite(parts, ceiling, inFlight);
+		}
 		this.assertOwnedWrite(parts, writer, inFlight);
 		const { paths, opaque } = this.#walkReach(parts);
 		// A path running through an accessor is not walked: what the getter answers is not known without running it,
 		// so module code is refused there rather than written past it.
 		if (opaque)
 			throw new this.SlothletError("LOOSE_SET_NOT_OWNED", {
-				apiPath: parts.join("."),
-				callerApiPath: writer.____slothletInternal.apiPath,
-				validationError: true
+				path: segmentsOf(ArrayMethods.join(parts, ".")),
+				caller: writer.____slothletInternal.apiPath
 			});
 		// A node reached through an alias is written where it really is, and held to its owner there.
-		for (const realParts of paths) this.assertOwnedWrite(realParts, writer, inFlight);
+		for (let ofIndex = 0, ofList = paths; ofIndex < ofList.length; ofIndex++) {
+			const realParts = ofList[ofIndex];
+			this.assertOwnedWrite(realParts, writer, inFlight);
+		}
 	}
 
 	/**
@@ -874,21 +1546,21 @@ export class ApiManager extends ComponentBase {
 			return { found: false, value: undefined, accessor: true };
 		}
 		const holders = raw ? [raw, raw.____slothletInternal.impl] : [node];
-		for (const holder of holders) {
+		for (let ofIndex = 0, ofList = holders; ofIndex < ofList.length; ofIndex++) {
+			const holder = ofList[ofIndex];
 			if (holder === null || (typeof holder !== "object" && typeof holder !== "function")) continue;
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, key);
 			// A view a module's read handed back, stored here, stands for the node it was built over.
-			if (descriptor && "value" in descriptor)
-				return { found: true, value: runtime_nodeBehind(runtime_unwrapSelfView(descriptor.value)), accessor: false };
+			if (descriptor && "value" in descriptor) return { found: true, value: nodeBehind(unwrapSelfView(descriptor.value)), accessor: false };
 			if (descriptor) return { found: false, value: undefined, accessor: true };
 		}
 		// A plain object a module stored can inherit the member: an inherited accessor is as unknown as an own one.
 		if (!raw && versionDispatcherRecord(node) === null) {
-			for (let proto = Reflect.getPrototypeOf(node); proto !== null && proto !== Object.prototype; proto = Reflect.getPrototypeOf(proto)) {
+			for (let proto = Reflect.getPrototypeOf(node); proto !== null && proto !== Objects.prototype; proto = Reflect.getPrototypeOf(proto)) {
 				const descriptor = Reflect.getOwnPropertyDescriptor(proto, key);
 				if (descriptor)
 					return "value" in descriptor
-						? { found: true, value: runtime_nodeBehind(runtime_unwrapSelfView(descriptor.value)), accessor: false }
+						? { found: true, value: nodeBehind(unwrapSelfView(descriptor.value)), accessor: false }
 						: { found: false, value: undefined, accessor: true };
 			}
 		}
@@ -917,15 +1589,48 @@ export class ApiManager extends ComponentBase {
 			let next = value;
 			// A dispatcher is no node of its own: the write lands in the versioned node it routes to.
 			const dispatch = versionDispatcherRecord(next);
-			if (dispatch) next = runtime_nodeBehind(runtime_unwrapSelfView(dispatch.resolve())) ?? next;
+			if (dispatch) next = nodeBehind(unwrapSelfView(dispatch.resolve())) ?? next;
 			const child = resolveWrapper(next);
 			if (child) {
 				const real = String(child.____slothletInternal.apiPath ?? "");
-				if (real !== parts.slice(0, index + 1).join(".")) paths.push([...real.split(".").filter(Boolean), ...parts.slice(index + 1)]);
+				if (real !== ArrayMethods.join(copyList(parts, 0, index + 1), "."))
+					listPush(paths, concatLists(filterList(splitText(real, "."), Boolean), copyList(parts, index + 1)));
 			}
 			node = next;
 		}
 		return { paths, opaque: false };
+	}
+
+	/**
+	 * The loaded module mounted at `apiPath` that owns nothing on the api, when nothing is live at the path.
+	 *
+	 * @param {string} apiPath - The path a removal names.
+	 * @param {string[]} ownerless - Loaded modules that own nothing on the api.
+	 * @returns {?string} That module's id, or null.
+	 * @private
+	 *
+	 * @description
+	 * A scoped removal that empties a module's mount prunes the namespace and its ownership, but the module stays
+	 * loaded with the path as its endpoint. Removing the path then removes the module. A module is matched by its exact
+	 * endpoint only; a path that holds anything is left to the other forms.
+	 *
+	 * @example
+	 * this.#ownerlessMountAt("guest.kid", ["kid"]); // "kid" once remove("kid", "guest.kid.x") pruned guest.kid
+	 */
+	#ownerlessMountAt(apiPath, ownerless) {
+		if (ownerless.length === 0) return null;
+		let normalized;
+		try {
+			normalized = this.normalizeApiPath(apiPath);
+		} catch {
+			return null;
+		}
+		if (normalized.parts.length === 0 || this.#memberAtPath(this.slothlet.api, normalized.parts) !== undefined) return null;
+		const cacheManager = this.slothlet.handlers.apiCacheManager;
+		for (let i = ownerless.length - 1; i >= 0; i--) {
+			if (cacheManager.get(ownerless[i])?.endpoint === normalized.apiPath) return ownerless[i];
+		}
+		return null;
 	}
 
 	/**
@@ -948,13 +1653,13 @@ export class ApiManager extends ComponentBase {
 		// The alias must be held at the path itself: a path that runs through one reaches the node it stands for, whose
 		// members are not removed through it.
 		if (parts.length === 0) return false;
-		const through = this.#walkReach(parts.slice(0, -1));
+		const through = this.#walkReach(copyList(parts, 0, -1));
 		if (through.opaque || through.paths.length > 0 || !this.#isAliasAt(parts)) return false;
 		if (options.recordHistory !== false) {
-			const writer = "writer" in options ? options.writer : runtime_selfModuleReader(this.slothlet);
+			const writer = "writer" in options ? options.writer : selfModuleReader(this.slothlet);
 			if (writer !== null && this.ownershipEnforced()) {
 				if (!writer.____slothletInternal) {
-					throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: parts.join("."), validationError: true });
+					throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 				}
 				this.assertOwnedWrite(parts, writer);
 			}
@@ -973,13 +1678,14 @@ export class ApiManager extends ComponentBase {
 	 */
 	#isAliasAt(parts) {
 		let node = this.slothlet.api;
-		for (const part of parts) {
+		for (let ofIndex = 0, ofList = parts; ofIndex < ofList.length; ofIndex++) {
+			const part = ofList[ofIndex];
 			const { found, value } = this.#rawMember(node, part);
 			if (!found) return false;
 			node = value;
 		}
 		const wrapper = resolveWrapper(node);
-		return wrapper !== null && String(wrapper.____slothletInternal.apiPath ?? "") !== parts.join(".");
+		return wrapper !== null && String(wrapper.____slothletInternal.apiPath ?? "") !== ArrayMethods.join(parts, ".");
 	}
 
 	/**
@@ -996,7 +1702,9 @@ export class ApiManager extends ComponentBase {
 	 */
 	incarnationOf(moduleID) {
 		if (moduleID == null) return undefined;
-		return this.slothlet._moduleIncarnations?.get(String(moduleID).split(MODULE_ID_SEPARATOR)[0]);
+		return this.slothlet._moduleIncarnations == null
+			? undefined
+			: MapMethods.get(this.slothlet._moduleIncarnations, splitText(String(moduleID), MODULE_ID_SEPARATOR)[0]);
 	}
 
 	/**
@@ -1009,11 +1717,11 @@ export class ApiManager extends ComponentBase {
 	 */
 	#beginIncarnation(moduleID) {
 		const incarnations = this.slothlet._moduleIncarnations;
-		const id = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
-		if (!incarnations || incarnations.has(id)) return;
+		const id = splitText(String(moduleID), MODULE_ID_SEPARATOR)[0];
+		if (!incarnations || MapMethods.has(incarnations, id)) return;
 		if (this.slothlet.handlers.ownership.getModuleMounts(moduleID).length > 0) return;
-		incarnations.set(id, Object.freeze({ moduleID: id }));
-		this.slothlet._retiredIncarnations?.delete(id);
+		MapMethods.set(incarnations, id, Objects.freeze({ moduleID: id }));
+		this.slothlet._retiredIncarnations == null ? undefined : MapMethods.delete(this.slothlet._retiredIncarnations, id);
 	}
 
 	/**
@@ -1026,15 +1734,16 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	#markRemovedSubtree(wrapper, visited = new WeakSet(), root = String(wrapper?.____slothletInternal?.apiPath ?? "")) {
-		if (!wrapper || visited.has(wrapper)) return;
-		visited.add(wrapper);
+		if (!wrapper || WeakSetMethods.has(visited, wrapper)) return;
+		WeakSetMethods.add(visited, wrapper);
 		wrapper.____slothletInternal.removed = true;
-		for (const key of Object.keys(wrapper)) {
+		for (let ofIndex = 0, ofList = Objects.keys(wrapper); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			if (isFrameworkReservedKey(key)) continue;
 			const child = resolveWrapper(dataMemberOf(wrapper, key));
 			// Only nodes under the removed path: an alias stored there is another node, which stays (#625).
 			const childPath = String(child?.____slothletInternal?.apiPath ?? "");
-			if (child && childPath.startsWith(root + ".")) this.#markRemovedSubtree(child, visited, root);
+			if (child && StringMethods.startsWith(childPath, root + ".")) this.#markRemovedSubtree(child, visited, root);
 		}
 	}
 
@@ -1051,11 +1760,41 @@ export class ApiManager extends ComponentBase {
 	 */
 	isRemovedCaller(callerWrapper) {
 		// A node removed from the tree, its module still mounted elsewhere (a node of the base tree), is gone all the same.
-		if (callerWrapper?.____slothletInternal?.removed === true && callerWrapper.slothlet === this.slothlet) return true;
+		if (callerWrapper?.____slothletInternal?.removed === true && callerWrapper.____slothlet === this.slothlet) return true;
+		if (callerWrapper?.____slothlet === this.slothlet && this.isRestartReplaced(callerWrapper)) return true;
 		if (!callerWrapper?.____slothletInternal?.moduleID) return false;
 		// Code of another instance is not this instance's to judge: this instance holds no record of its module.
-		if (callerWrapper.slothlet !== this.slothlet) return false;
+		if (callerWrapper.____slothlet !== this.slothlet) return false;
 		return this.#ownedRoot(callerWrapper) === null;
+	}
+
+	/**
+	 * Whether `wrapper` is a node of the instance's tree a `restart()` has since replaced, while the permission system is
+	 * on. A restart starts the instance over: the modules it replaced are gone with the instance they were in, so the
+	 * code they made (a function, a bound function or an object's method they handed out, a snapshot their call took)
+	 * has no standing, and everything it does through `self` is refused. With the permission system off nothing is
+	 * checked, and such code acts on the rebuilt instance. A reload keeps the tree's epoch, and the trees runs keep of
+	 * their own carry epochs of their own (below zero), so neither is affected by the instance's restart.
+	 *
+	 * A `restart()` in a `run()` / `scope()` starts the run's copy over the same way, for the run alone: in that run (and
+	 * the runs opened in it afterwards), a node of a tree the run read before it is replaced too. Copies take ever lower
+	 * epochs, so those are the nodes whose epoch is above the restarted tree's. Outside the run nothing changes.
+	 *
+	 * @param {object|null} wrapper - A node's wrapper.
+	 * @returns {boolean} True for a node a restart replaced, with the permission system on.
+	 * @public
+	 *
+	 * @example
+	 * if (apiManager.isRestartReplaced(wrapper)) refuse();
+	 */
+	isRestartReplaced(wrapper) {
+		const epoch = wrapper?.____slothletInternal?.epoch;
+		if (typeof epoch !== "number") return false;
+		if (epoch < 0 || epoch >= (this.slothlet._liveEpoch ?? 0)) {
+			const restart = this.slothlet._runRestart?.() ?? null;
+			if (restart === null || epoch <= restart.epoch) return false;
+		}
+		return this.slothlet.handlers?.permissionManager?.isEnabled?.() === true;
 	}
 
 	/**
@@ -1068,18 +1807,21 @@ export class ApiManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * apiManager.isOwnRetired(reader, data.moduleID);
+	 * apiManager.isOwnRetired(reader, data.module);
 	 */
 	isOwnRetired(callerWrapper, moduleID) {
 		const internal = callerWrapper?.____slothletInternal;
 		if (!internal?.moduleID || moduleID == null) return false;
-		const id = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
-		if (String(internal.moduleID).split(MODULE_ID_SEPARATOR)[0] !== id) return false;
+		const id = splitText(String(moduleID), MODULE_ID_SEPARATOR)[0];
+		if (splitText(String(internal.moduleID), MODULE_ID_SEPARATOR)[0] !== id) return false;
 		if (internal.incarnation === undefined) return false;
 		// Its removal in progress (the token still the id's), or done with no module mounted under the id since.
 		const current = this.incarnationOf(id);
 		if (current !== undefined) return internal.incarnation === current;
-		return internal.incarnation === this.slothlet._retiredIncarnations?.get(id);
+		return (
+			internal.incarnation ===
+			(this.slothlet._retiredIncarnations == null ? undefined : MapMethods.get(this.slothlet._retiredIncarnations, id))
+		);
 	}
 
 	/**
@@ -1149,6 +1891,31 @@ export class ApiManager extends ComponentBase {
 	 * await this.syncWrapper(existingProxy, nextProxy, this.____config);
 	 */
 	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace", moduleID = null, emitCollisions = false) {
+		// A node reached again through a member that refers back to it, or to a node above it, is being merged already:
+		// the member closes the cycle, as it does in plain JS, and has nothing more to merge.
+		const syncing = resolveWrapper(existingProxy);
+		if (syncing === null) return this.#syncWrapperOnce(existingProxy, nextProxy, config, collisionMode, moduleID, emitCollisions);
+		if (WeakSetMethods.has(this.#syncing, syncing)) return false;
+		WeakSetMethods.add(this.#syncing, syncing);
+		try {
+			return await this.#syncWrapperOnce(existingProxy, nextProxy, config, collisionMode, moduleID, emitCollisions);
+		} finally {
+			WeakSetMethods.delete(this.#syncing, syncing);
+		}
+	}
+
+	/**
+	 * The merge {@link ApiManager#syncWrapper} makes, once for each node it merges into.
+	 * @param {function|object} existingProxy - Existing wrapper proxy.
+	 * @param {function|object} nextProxy - New wrapper proxy.
+	 * @param {object} config - Configuration object for debug logging.
+	 * @param {string} [collisionMode="replace"] - Collision mode.
+	 * @param {string|null} [moduleID=null] - Module the new wrapper belongs to.
+	 * @param {boolean} [emitCollisions=false] - Announce collisions.
+	 * @returns {Promise<boolean>} True when a wrapper update occurred.
+	 * @private
+	 */
+	async #syncWrapperOnce(existingProxy, nextProxy, config, collisionMode = "replace", moduleID = null, emitCollisions = false) {
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_SYNC_WRAPPER_ENTRY_EXISTING",
@@ -1161,17 +1928,15 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Both arguments are always WrapperProxy instances; this guard's TRUE branch is unreachable.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!this.isWrapperProxy(existingProxy) || !this.isWrapperProxy(nextProxy)) {
 			return false;
 		}
 
 		// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallbacks are unreachable.
-		/* v8 ignore next */
-		const existingWrapper = resolveWrapper(existingProxy) ?? existingProxy;
+		const existingWrapper = /* v8 ignore next */ resolveWrapper(existingProxy) ?? existingProxy;
 		// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
-		/* v8 ignore next */
-		const nextWrapper = resolveWrapper(nextProxy) ?? nextProxy;
+		const nextWrapper = /* v8 ignore next */ resolveWrapper(nextProxy) ?? nextProxy;
 
 		// Force-materialize both sides BEFORE reading their own child keys below. An unmaterialized
 		// lazy wrapper's `Object.keys()` reflects only what's been touched SO FAR, not its full
@@ -1191,7 +1956,7 @@ export class ApiManager extends ComponentBase {
 		//     so an incomplete list there silently drops real children from the delete pass, the shadow
 		//     capture, AND the copy of nextWrapper's keys onto the survivor — not just from a moot key-exists
 		//     check. "replace" needs the accurate list exactly as much as "merge"/"merge-replace" do.
-		//   - Deriving keys from lazy metadata instead of materializing (`__childFilePathsPreMaterialize`,
+		//   - Deriving keys from lazy metadata instead of materializing (`____childFilePathsPreMaterialize`,
 		//     unified-wrapper.mjs): that map is populated ONLY as a side effect of a PRIOR merge-mode
 		//     file-vs-folder collision transferring the file side's already-known keys onto the still-lazy
 		//     folder side (api-assignment.mjs) — it never contains a lazy wrapper's own undiscovered
@@ -1202,10 +1967,10 @@ export class ApiManager extends ComponentBase {
 		// so "a side that might never otherwise be accessed" does not apply here: both sides are already
 		// being composed right now, and correctly composing them requires knowing what each one contains.
 		if (existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized) {
-			await existingWrapper._materialize();
+			await existingWrapper.___materialize();
 		}
 		if (nextWrapper.____slothletInternal.mode === "lazy" && !nextWrapper.____slothletInternal.state.materialized) {
-			await nextWrapper._materialize();
+			await nextWrapper.___materialize();
 		}
 
 		if (config?.debug?.api) {
@@ -1221,26 +1986,26 @@ export class ApiManager extends ComponentBase {
 
 		// Copy materialize function if present (lazy mode support)
 		// In merge mode, preserve existing materializer to avoid replacing existing module behavior
-		// In tests, syncWrapper is only called after materialization; materializeFunc is never set when collisionMode !== "merge".
-		/* v8 ignore next */
+		// A lazy wrapper keeps its materializeFunc after it loads, so a lazy replace / merge-replace collision copies it.
 		if (nextWrapper.____slothletInternal.materializeFunc && collisionMode !== "merge") {
 			existingWrapper.____slothletInternal.materializeFunc = nextWrapper.____slothletInternal.materializeFunc;
 		}
 
 		// THE ACTUAL FIX: Transfer _childCache entries directly
-		// nextProxy.__impl is empty because buildAPI already moved everything to _childCache
+		// nextProxy.____impl is empty because buildAPI already moved everything to _childCache
 		// We need to transfer the child wrappers from nextWrapper to existingWrapper
 		// Transfer children from wrapper properties
-		const existingChildKeys = Object.keys(existingWrapper).filter((k) => !isFrameworkReservedKey(k));
-		const nextChildKeys = Object.keys(nextWrapper).filter((k) => !isFrameworkReservedKey(k));
+		const existingChildKeys = filterList(Objects.keys(existingWrapper), (k) => !isFrameworkReservedKey(k));
+		const nextChildKeys = filterList(Objects.keys(nextWrapper), (k) => !isFrameworkReservedKey(k));
 
 		// User-assigned overrides (wrap-on-set, tagged `userAssigned`) must survive selective reload
 		// verbatim — not be deleted or have the reloaded module's content merged back into them. Capture
 		// them so the delete/re-adopt/copy steps below can leave them untouched (#329).
 		const userAssignedKeys = new Set();
-		for (const k of existingChildKeys) {
+		for (let ofIndex = 0, ofList = existingChildKeys; ofIndex < ofList.length; ofIndex++) {
+			const k = ofList[ofIndex];
 			const w = resolveWrapper(existingWrapper[k]);
-			if (w?.____slothletInternal?.userAssigned) userAssignedKeys.add(k);
+			if (w?.____slothletInternal?.userAssigned) SetMethods.add(userAssignedKeys, k);
 		}
 
 		if (config?.debug?.api) {
@@ -1251,9 +2016,8 @@ export class ApiManager extends ComponentBase {
 			});
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_SYNC_WRAPPER_NEXT_IMPL_KEYS",
-				// nextWrapper.impl is always an object or null (never undefined) after construction; || {} is unreachable.
-				/* v8 ignore next */
-				implKeys: Object.keys(nextWrapper.____slothletInternal.impl || {})
+				// nextWrapper.impl is an object or null after construction; `|| {}` keeps Object.keys off a null impl.
+				implKeys: Objects.keys(nextWrapper.____slothletInternal.impl || {})
 			});
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_SYNC_WRAPPER_NEXT_CHILDCACHE_KEYS",
@@ -1262,16 +2026,15 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Merge child wrappers from next to existing based on collision mode
-		// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
+		// IMPORTANT: _childCache should contain PROXIES (from ___createProxy()), not raw wrappers
 		// syncWrapper's collisionMode is always "replace" in tests; the merge else-if branch (arm1) is unreachable.
 		// Set true only when existingWrapper's impl is explicitly cleared to null below, pending a
 		// future materialization — the ONE case where the shared bookkeeping after this if/else-if/else
 		// chain must mark existingWrapper unmaterialized. Every other path through this function leaves
-		// existingWrapper's own materialized state exactly as `_materialize()`/`___setImpl()` already
+		// existingWrapper's own materialized state exactly as `___materialize()`/`___setImpl()` already
 		// set it (see the bookkeeping's own comment below for why re-deriving it from impl's content is
 		// wrong).
 		let existingImplExplicitlyCleared = false;
-		/* v8 ignore start */
 		if (collisionMode === "replace") {
 			// #3: capture the first module's exclusive members BEFORE ___setImpl detaches them, so
 			// removing the overriding module restores its FULL mount (see _recordReplaceShadows).
@@ -1279,7 +2042,7 @@ export class ApiManager extends ComponentBase {
 			// CRITICAL: Use ___setImpl to trigger lifecycle events for ownership tracking
 			// This ensures impl:changed fires with the correct moduleID
 			// existingWrapper always has ___setImpl and impl is never undefined; the else-if/else branches are unreachable.
-			/* v8 ignore next */
+			/* v8 ignore else */
 			if (existingWrapper.___setImpl && nextWrapper.____slothletInternal.impl !== undefined) {
 				// Pass moduleID for correct ownership tracking in lifecycle events
 				existingWrapper.___setImpl(nextWrapper.____slothletInternal.impl, moduleID);
@@ -1311,19 +2074,22 @@ export class ApiManager extends ComponentBase {
 
 			// Clear existing children by deleting properties — but keep user-assigned overrides attached
 			// and pristine so a selective reload preserves them (#329).
-			for (const key of existingChildKeys) {
-				if (userAssignedKeys.has(key)) continue;
+			for (let ofIndex = 0, ofList = existingChildKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				if (SetMethods.has(userAssignedKeys, key)) continue;
 				delete existingWrapper[key];
 			}
 			existingWrapper.___adoptImplChildren();
 
 			// Also copy any child wrappers that nextWrapper already has
 			// (this handles cases where nextWrapper was built with pre-existing children)
-			for (const key of nextChildKeys) {
+			for (let ofIndex = 0, ofList = nextChildKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				// A user-assigned override at this key wins over the reloaded module's version (#329).
-				if (userAssignedKeys.has(key)) continue;
+				if (SetMethods.has(userAssignedKeys, key)) continue;
 				const childValue = nextWrapper[key];
-				Object.defineProperty(existingWrapper, key, {
+				Objects.defineProperty(existingWrapper, key, {
+					__proto__: null,
 					value: childValue,
 					writable: false,
 					enumerable: true,
@@ -1331,18 +2097,19 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 		} else if (collisionMode === "merge") {
-			/* v8 ignore stop */
 			// A plain namespace takes the function the incoming module supplies (#533); one that already
 			// has a function keeps it.
 			existingWrapper.___adoptCallableImpl(nextWrapper.____slothletInternal.impl);
 			// Keep existing, only add new keys
 			// CRITICAL: Use hasOwnProperty instead of 'in' to avoid matching ComponentBase
 			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
-			for (const key of nextChildKeys) {
+			for (let ofIndex = 0, ofList = nextChildKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const isInternal = isFrameworkReservedKey(key);
-				if (!isInternal && !Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
+				if (!isInternal && !Objects.hasOwn(existingWrapper, key)) {
 					const childValue = nextWrapper[key];
-					Object.defineProperty(existingWrapper, key, {
+					Objects.defineProperty(existingWrapper, key, {
+						__proto__: null,
 						value: childValue,
 						writable: false,
 						enumerable: true,
@@ -1355,12 +2122,13 @@ export class ApiManager extends ComponentBase {
 					const nextChild = nextWrapper[key];
 					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(nextChild)) {
 						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
-						/* v8 ignore next */
-						const syncWrapper_nextChildWrapper = resolveWrapper(nextChild) ?? nextChild;
+						const syncWrapper_nextChildWrapper = /* v8 ignore next */ resolveWrapper(nextChild) ?? nextChild;
 						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
-						/* v8 ignore next */
-						const syncWrapper_existingChildWrapper = resolveWrapper(existingChild) ?? existingChild;
-						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some((k) => !isFrameworkReservedKey(k));
+						const syncWrapper_existingChildWrapper = /* v8 ignore next */ resolveWrapper(existingChild) ?? existingChild;
+						const syncWrapper_hasGrandChildren = ArrayMethods.some(
+							Objects.keys(syncWrapper_nextChildWrapper),
+							(k) => !isFrameworkReservedKey(k)
+						);
 						// #441: distinguish a genuine value leaf from a lazy-unmaterialized NAMESPACE whose
 						// children aren't visible yet. A leaf is fully resolved (no materializeFunc); a lazy
 						// directory carries a materializeFunc and hasn't materialized, so its own children —
@@ -1427,10 +2195,11 @@ export class ApiManager extends ComponentBase {
 			// per-key internal guard is needed. Add new keys and replace existing.
 			// The incoming module's function fills the namespace's function slot, replacing an existing one (#533).
 			existingWrapper.___adoptCallableImpl(nextWrapper.____slothletInternal.impl, true);
-			for (const key of nextChildKeys) {
+			for (let ofIndex = 0, ofList = nextChildKeys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const childValue = nextWrapper[key];
 				// Use hasOwnProperty to avoid matching ComponentBase prototype getters
-				if (Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
+				if (Objects.hasOwn(existingWrapper, key)) {
 					// Both exist - recursively sync if both are wrappers (preserves wrapper identity)
 					const existingChild = existingWrapper[key];
 					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(childValue)) {
@@ -1439,9 +2208,8 @@ export class ApiManager extends ComponentBase {
 						// SWAPS the live child rather than mutating the first module's wrapper in place, so the first's
 						// recorded ownership value survives and remove() can revert the overwritten leaf back to it. #5
 						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
-						/* v8 ignore next */
-						const nextChildWrapper = resolveWrapper(childValue) ?? childValue;
-						const hasGrandChildren = Object.keys(nextChildWrapper).some((k) => !isFrameworkReservedKey(k));
+						const nextChildWrapper = /* v8 ignore next */ resolveWrapper(childValue) ?? childValue;
+						const hasGrandChildren = ArrayMethods.some(Objects.keys(nextChildWrapper), (k) => !isFrameworkReservedKey(k));
 						// A still-lazy incoming folder is a namespace too, whose children are not visible yet:
 						// merge it rather than swapping it in, which dropped the existing side's children (#525).
 						// The recursive call materializes both sides before comparing their keys.
@@ -1453,25 +2221,30 @@ export class ApiManager extends ComponentBase {
 							await this.syncWrapper(existingChild, childValue, config, collisionMode, moduleID);
 						} else {
 							delete existingWrapper[key];
-							Object.defineProperty(existingWrapper, key, { value: childValue, writable: false, enumerable: true, configurable: true });
+							Objects.defineProperty(existingWrapper, key, {
+								__proto__: null,
+								value: childValue,
+								writable: false,
+								enumerable: true,
+								configurable: true
+							});
 						}
 					} else {
-						// Defensive: every api leaf (callable, data, or namespace) is a UnifiedWrapper proxy, so both
-						// children are always wrappers and this non-wrapper fallback is unreachable in practice — kept
-						// only for non-proxy adapter values (mirrors the defensive fallbacks in the replace branch).
-						/* v8 ignore start */
+						// A child that is not a wrapper on either side (a primitive a host write stored as it is) is
+						// overwritten outright.
 						delete existingWrapper[key];
-						Object.defineProperty(existingWrapper, key, {
+						Objects.defineProperty(existingWrapper, key, {
+							__proto__: null,
 							value: childValue,
 							writable: false,
 							enumerable: true,
 							configurable: true
 						});
-						/* v8 ignore stop */
 					}
 				} else {
 					// New key - add it
-					Object.defineProperty(existingWrapper, key, {
+					Objects.defineProperty(existingWrapper, key, {
+						__proto__: null,
 						value: childValue,
 						writable: false,
 						enumerable: true,
@@ -1484,12 +2257,12 @@ export class ApiManager extends ComponentBase {
 		// Only the "replace" branch's explicit-clear-to-null case needs existingWrapper marked
 		// unmaterialized here. Every other path (___setImpl, and "merge"/"merge-replace"'s child-key
 		// copying, which never touches existingWrapper's own impl) already leaves
-		// existingWrapper.____slothletInternal.state exactly as `_materialize()`/`___setImpl()` set it —
+		// existingWrapper.____slothletInternal.state exactly as `___materialize()`/`___setImpl()` set it —
 		// both unconditionally mark materialized=true and clear inFlight on real completion, regardless
 		// of what the actual content turns out to be. A prior version of this block re-derived
 		// "materialized" from impl's own value/type instead of trusting that — first misreading a
 		// legitimately callable impl (a self-named single-file lazy folder) as unmaterialized, which let
-		// a later access re-run `_materialize()` and double-fire `_onWrapperMaterialized()`, corrupting
+		// a later access re-run `___materialize()` and double-fire `_onWrapperMaterialized()`, corrupting
 		// the global unmaterialized-lazy-wrapper count (#364 review); the equivalent content-based check
 		// would misread any other falsy-by-type-check impl (e.g. a legitimate null/undefined export) the
 		// same way. Content is never a valid signal for "was this wrapper actually materialized."
@@ -1534,37 +2307,46 @@ export class ApiManager extends ComponentBase {
 		const ownership = this.slothlet.handlers.ownership;
 		// Shadowing needs ownership to tell a cross-module override from a self-replace; the add/reload
 		// flow always supplies a moduleID. Both are defensive — the feature simply no-ops without them.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!ownership || !moduleID) return;
 		const moduleIDKey = String(moduleID);
 		// syncWrapper's replace path always operates on a NAMED container (a top-level or nested mount
 		// key), so apiPath is non-empty; the api root itself is never synced through here.
 		const containerPath = existingWrapper.____slothletInternal.apiPath;
-		const nextSet = new Set(nextChildKeys);
-		for (const key of existingChildKeys) {
+		const nextSet = setFrom(nextChildKeys);
+		for (let ofIndex = 0, ofList = existingChildKeys; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			// A member the overriding module also provides is co-owned/overwritten — the per-path
-			// rollback reverts it on removal, so it is not a shadow.
-			if (nextSet.has(key)) continue;
+			// rollback reverts it on removal, so it is not a shadow. Its whole subtree is the overriding
+			// module's while it is live, though: what another module had under it is off the api, so that
+			// module owns none of it until the rollback puts it back.
+			if (SetMethods.has(nextSet, key)) {
+				const existingOwner = resolveWrapper(existingWrapper[key])?.____slothletInternal?.moduleID;
+				if (existingOwner != null && splitText(String(existingOwner), MODULE_ID_SEPARATOR)[0] !== moduleIDKey) {
+					ownership.shadowSubtree(`${containerPath}.${key}`, moduleIDKey);
+				}
+				continue;
+			}
 			const owner = ownership.getCurrentOwner(`${containerPath}.${key}`);
-			// A shadowed member is always ownership-registered; the no-owner guard is defensive.
-			/* v8 ignore next */
+			// A host-written member has no owner, and nothing to shadow.
 			if (!owner) continue;
 			// A module replacing itself (a same-moduleID re-add / reload) genuinely drops the export —
 			// do not shadow it, or the removed export would wrongly reappear.
 			if (String(owner.moduleID) === moduleIDKey) continue;
 			const child = existingWrapper[key];
-			// Every api member is a wrapper proxy; a non-wrapper has no subtree to preserve (defensive).
-			/* v8 ignore next */
+			// A primitive stored by a write has no subtree to preserve.
 			if (!this.isWrapperProxy(child)) continue;
-			let list = this.state.replaceShadows.get(moduleIDKey);
+			let list = MapMethods.get(this.state.replaceShadows, moduleIDKey);
 			if (!list) {
 				list = [];
-				this.state.replaceShadows.set(moduleIDKey, list);
+				MapMethods.set(this.state.replaceShadows, moduleIDKey, list);
 			}
-			list.push({ container: existingWrapper, key, child, ownerModuleID: String(owner.moduleID) });
+			listPush(list, { container: existingWrapper, key, child, ownerModuleID: String(owner.moduleID) });
 			// Off the api surface, nothing can load it, so its unloaded wrappers stop counting until it is
 			// put back; otherwise materialize.wait() never settles while it is hidden.
 			this._setShadowParked(child, true);
+			// Nobody's value is live at the member while it is off the api, so nobody owns it until it is put back.
+			ownership.shadowSubtree(`${containerPath}.${key}`, moduleIDKey);
 		}
 	}
 
@@ -1579,11 +2361,12 @@ export class ApiManager extends ComponentBase {
 	 */
 	_setShadowParked(node, parked, seen = new Set()) {
 		const raw = resolveWrapper(node);
-		if (!raw || seen.has(raw)) return;
-		seen.add(raw);
+		if (!raw || SetMethods.has(seen, raw)) return;
+		SetMethods.add(seen, raw);
 		raw.___trackLazyLoad(parked ? "park" : "unpark");
-		for (const key of Object.keys(raw)) {
-			const descriptor = Object.getOwnPropertyDescriptor(raw, key);
+		for (let ofIndex = 0, ofList = Objects.keys(raw); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			const descriptor = Objects.getOwnPropertyDescriptor(raw, key);
 			if (descriptor && "value" in descriptor) this._setShadowParked(descriptor.value, parked, seen);
 		}
 	}
@@ -1601,7 +2384,8 @@ export class ApiManager extends ComponentBase {
 	#isLiveWrapper(raw) {
 		if (!raw) return false;
 		let node = this.slothlet.api;
-		for (const segment of String(raw.____slothletInternal.apiPath).split(".")) {
+		for (let ofIndex = 0, ofList = splitText(String(raw.____slothletInternal.apiPath), "."); ofIndex < ofList.length; ofIndex++) {
+			const segment = ofList[ofIndex];
 			node = (resolveWrapper(node) ?? node)?.[segment];
 		}
 		return resolveWrapper(node) === raw;
@@ -1609,7 +2393,7 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
-	 * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
+	 * `loader.materialize: true` materialization cannot re-apply the rejected content later.
 	 * @param {unknown} api - Candidate subtree (or leaf) to walk.
 	 * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
 	 * @param {?Array<object>} [liveKept=null] - When given, a wrapper that is still the live node at its own
@@ -1620,7 +2404,7 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 *
 	 * @description
-	 * `createProxy()` can kick off a wrapper's `_materialize()` in the background before
+	 * `___createProxy()` can kick off a wrapper's `___materialize()` in the background before
 	 * `setValueAtPath()`'s collision decision is even known. When that decision rejects the
 	 * candidate, `revertSpeculativeSubtree()` correctly undoes ownership/raw-capture state
 	 * immediately — but the in-flight materialization is a separate, already-running async
@@ -1636,10 +2420,10 @@ export class ApiManager extends ComponentBase {
 	 */
 	invalidateSpeculativeWrappers(api, visited = new WeakSet(), liveKept = null) {
 		if (!api || (typeof api !== "object" && typeof api !== "function")) return;
-		if (visited.has(api)) return;
-		visited.add(api);
+		if (WeakSetMethods.has(visited, api)) return;
+		WeakSetMethods.add(visited, api);
 		if (liveKept && this.#isLiveWrapper(resolveWrapper(api))) {
-			liveKept.push(api);
+			listPush(liveKept, api);
 			return;
 		}
 
@@ -1650,9 +2434,10 @@ export class ApiManager extends ComponentBase {
 		// node survives this call entirely (#372/#373 review, suppressed finding).
 		// Members are read by descriptor: an accessor holds no wrapper of its own, and it is the module's code, which
 		// runs when something reads it, never as a side effect of this walk (#597).
-		for (const key of Object.keys(api)) {
-			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
-			if (skipProps.includes(key)) continue;
+		for (let ofIndex = 0, ofList = Objects.keys(api); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			const skipProps = ["___materialize", "____impl", "____slothletInternal"];
+			if (ArrayMethods.includes(skipProps, key)) continue;
 			const value = dataMemberOf(api, key);
 			if (typeof value === "function" || (value && typeof value === "object")) {
 				this.invalidateSpeculativeWrappers(value, visited, liveKept);
@@ -1698,8 +2483,7 @@ export class ApiManager extends ComponentBase {
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_MUTATE_API_VALUE_NEXT_VALUE_KEYS",
 				// nextValue is always an object here (caller checks nextIsObjectLike first); the [] fallback is unreachable.
-				/* v8 ignore next */
-				nextValueKeys: nextValue ? Object.keys(nextValue) : []
+				nextValueKeys: nextValue ? Objects.keys(nextValue) : /* v8 ignore next */ []
 			});
 		}
 
@@ -1723,7 +2507,7 @@ export class ApiManager extends ComponentBase {
 		if (this.isWrapperProxy(existingValue) && !this.isWrapperProxy(nextValue)) {
 			// Check if next is an object or function with properties
 			const nextIsObjectLike = nextValue && (typeof nextValue === "object" || typeof nextValue === "function");
-			const nextHasKeys = nextIsObjectLike && Object.keys(nextValue).length > 0;
+			const nextHasKeys = nextIsObjectLike && Objects.keys(nextValue).length > 0;
 
 			if (nextHasKeys) {
 				if (config?.debug?.api) {
@@ -1732,7 +2516,7 @@ export class ApiManager extends ComponentBase {
 					});
 					this.slothlet.debug("api", {
 						key: "DEBUG_MODE_MUTATE_API_VALUE_MERGE_KEYS",
-						keys: Object.keys(nextValue)
+						keys: Objects.keys(nextValue)
 					});
 				}
 				// Merge each child from nextValue into the existing wrapper
@@ -1740,7 +2524,7 @@ export class ApiManager extends ComponentBase {
 					removeMissing: options.removeMissing,
 					mutateExisting: true,
 					allowOverwrite: true,
-					syncWrapper: this.syncWrapper.bind(this),
+					syncWrapper: FunctionMethods.bind(this.syncWrapper, this),
 					collisionMode: options.collisionMode,
 					moduleID: options.moduleID
 				});
@@ -1750,7 +2534,7 @@ export class ApiManager extends ComponentBase {
 			// Fallback: if nextValue has no properties, try ___setImpl via resolveWrapper
 			const existingValueRaw = resolveWrapper(existingValue);
 			// resolveWrapper always returns a non-null wrapper in this branch; the FALSE arm is unreachable in tests.
-			/* v8 ignore next */
+			/* v8 ignore else */
 			if (existingValueRaw !== null) {
 				if (config?.debug?.api) {
 					this.slothlet.debug("api", {
@@ -1764,7 +2548,7 @@ export class ApiManager extends ComponentBase {
 				// previous owner) would then have RoutineManager capture the restored function under
 				// the WRONG (just-removed) moduleID — a phantom entry that duplicates the real one and
 				// invokes the same function twice (#372 review).
-				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.__impl ?? nextValue, options.moduleID);
+				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.____impl ?? nextValue, options.moduleID);
 				return;
 			}
 		}
@@ -1775,7 +2559,7 @@ export class ApiManager extends ComponentBase {
 				removeMissing: options.removeMissing,
 				mutateExisting: true,
 				allowOverwrite: true,
-				syncWrapper: this.syncWrapper.bind(this),
+				syncWrapper: FunctionMethods.bind(this.syncWrapper, this),
 				collisionMode: options.collisionMode,
 				moduleID: options.moduleID
 			});
@@ -1820,18 +2604,17 @@ export class ApiManager extends ComponentBase {
 		// until it loads (#571). Step through the intermediate segments once, loading only the nodes
 		// this path reaches by such a name, so the synchronous walk below reads real members. A path with
 		// no such segment needs no walk, and mounts without yielding first, as before.
-		const intermediate = parts.slice(0, -1);
-		if (intermediate.some(isWrapperAnsweredName)) {
+		const intermediate = copyList(parts, 0, -1);
+		if (ArrayMethods.some(intermediate, isWrapperAnsweredName)) {
 			let node = root;
-			for (const part of intermediate) {
+			for (let ofIndex = 0, ofList = intermediate; ofIndex < ofList.length; ofIndex++) {
+				const part = ofList[ofIndex];
 				({ value: node } = await loadApiMember(node, part));
 				if (!node || (typeof node !== "object" && typeof node !== "function")) break;
 			}
 		}
-		const parent = this.ensureParentPath(root, parts, {
-			moduleID: options.moduleID,
-			sourceFolder: options.sourceFolder
-		});
+		const parentOptions = { moduleID: options.moduleID, sourceFolder: options.sourceFolder };
+		let parent = this.ensureParentPath(root, parts, parentOptions);
 		const finalKey = parts[parts.length - 1];
 
 		// Materialize a lazy-unmaterialized parent BEFORE probing for an existing child.
@@ -1847,18 +2630,30 @@ export class ApiManager extends ComponentBase {
 		// effect of a root ("") add. Materializing first makes the probe reflect the real child
 		// set, so an absent key correctly reads as `undefined` (no collision) and the new value
 		// is assigned as a genuine nested namespace.
-		const parentWrapper = resolveWrapper(parent);
-		if (parentWrapper && parentWrapper.____slothletInternal.mode === "lazy" && !parentWrapper.____slothletInternal.state.materialized) {
-			await parentWrapper._materialize();
+		// A parent reached through a node that had not loaded is a stand-in for the path below it, which a write is made
+		// on only once that node loads (#653): the path is walked again once it has, so the mount lands on the real
+		// parent, created where the loaded node has none.
+		// Each walk loads a node further down the path, so the path's length bounds the walks.
+		let parentWrapper = resolveWrapper(parent);
+		for (
+			let walk = 0;
+			walk < parts.length &&
+			parentWrapper &&
+			parentWrapper.____slothletInternal.mode === "lazy" &&
+			!parentWrapper.____slothletInternal.state.materialized;
+			walk += 1
+		) {
+			await parentWrapper.___materialize();
+			if (!isLazyStandIn(parent)) break;
+			parent = this.ensureParentPath(root, parts, parentOptions);
+			parentWrapper = resolveWrapper(parent);
 		}
 
 		// ensureParentPath always returns a defined parent object; the undefined fallback is unreachable.
-		/* v8 ignore next */
 		// A member read (#571): a wrapper's own answer for `name` / `length` is not an existing value.
-		const existing = parent ? readApiMember(parent, finalKey) : undefined;
+		const existing = parent ? readApiMember(parent, finalKey) : /* v8 ignore next */ undefined;
 		// options.collisionMode is always provided by callers; the "merge" fallback is unreachable.
-		/* v8 ignore next */
-		const collisionMode = options.collisionMode || "merge";
+		const collisionMode = /* v8 ignore next */ options.collisionMode || "merge";
 		const moduleID = options.moduleID; // Extract moduleID for lifecycle events
 		// #441: addApiComponent writes to BOTH the api and boundApi trees in two separate
 		// setValueAtPath calls (boundApi is a pass-through proxy over api, so the same underlying
@@ -1895,30 +2690,27 @@ export class ApiManager extends ComponentBase {
 				return true;
 			}
 			if (collisionMode === "error") {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath: parts.join("."),
+				throw new this.SlothletError("API_PATH_INVALID", {
+					path: segmentsOf(ArrayMethods.join(parts, ".")),
 					reason: translate("API_PATH_REASON_COLLISION_ERROR"),
 					index: undefined,
-					segment: undefined,
-					validationError: true
+					segment: undefined
 				});
 			}
 
 			if (collisionMode === "skip") {
 				this.slothlet.debug("api", {
 					key: "DEBUG_MODE_SET_VALUE_AT_PATH_SKIP_COLLISION",
-					path: parts.join("."),
+					path: ArrayMethods.join(parts, "."),
 					mode: "skip"
 				});
 				return false;
 			}
 
 			if (collisionMode === "warn") {
-				if (this.slothlet && !this.____config?.silent) {
-					new this.SlothletWarning("WARNING_HOT_RELOAD_PATH_COLLISION", {
-						apiPath: parts.join(".")
-					});
-				}
+				new this.SlothletWarning("WARNING_COLLISION_PATH_KEPT", {
+					path: segmentsOf(ArrayMethods.join(parts, "."))
+				});
 				return false;
 			}
 
@@ -1931,12 +2723,11 @@ export class ApiManager extends ComponentBase {
 						// #441: replace swaps the incoming contribution onto the slot, shadowing the existing
 						// owner. Announce once, from the primary api tree only (boundApi re-runs this).
 						const replacedWrapper = resolveWrapper(existing);
-						// `existing` at an object/object replace collision is always a composed wrapper; the
-						// non-wrapper else is a defensive guard for a hypothetical plain-object override.
-						/* v8 ignore else */
+						// `existing` is a composed wrapper, except at a versioned logical path, which holds the
+						// version dispatcher.
 						if (replacedWrapper) {
 							this.emitImplCollision({
-								apiPath: parts.join("."),
+								apiPath: ArrayMethods.join(parts, "."),
 								resolution: "replaced",
 								incoming: moduleID,
 								owner: replacedWrapper.____slothletInternal.moduleID,
@@ -1947,7 +2738,7 @@ export class ApiManager extends ComponentBase {
 					}
 					this.slothlet.debug("api", {
 						key: "DEBUG_MODE_SET_VALUE_AT_PATH_REPLACE_MERGE",
-						path: parts.join("."),
+						path: ArrayMethods.join(parts, "."),
 						mode: "replace"
 					});
 					// Replace mode: call mutateApiValue to preserve wrapper, syncWrapper will clear children.
@@ -1970,22 +2761,23 @@ export class ApiManager extends ComponentBase {
 						this.____config
 					);
 					if (mutated !== undefined) {
-						runtime_frameworkWrite(parent, () => {
+						this.#beforeRootChange(parent);
+						frameworkWrite(parent, () => {
 							parent[finalKey] = mutated;
 						});
 					}
 					return true;
 				} else {
 					// Primitives - just replace
-					runtime_frameworkWrite(parent, () => {
+					this.#beforeRootChange(parent);
+					frameworkWrite(parent, () => {
 						parent[finalKey] = value;
 					});
 					return true;
 				}
 			}
 
-			// In tests, all collisions use "replace" or primitives; the merge/merge-replace branch FALSE arm is unreachable.
-			/* v8 ignore next */
+			// Any other mode falls through to the plain overwrite below.
 			if (collisionMode === "merge" || collisionMode === "merge-replace") {
 				const existingIsObject = typeof existing === "object" || typeof existing === "function";
 				const valueIsObject = typeof value === "object" || typeof value === "function";
@@ -2005,27 +2797,26 @@ export class ApiManager extends ComponentBase {
 						this.____config
 					);
 					if (mutated !== undefined) {
-						runtime_frameworkWrite(parent, () => {
+						this.#beforeRootChange(parent);
+						frameworkWrite(parent, () => {
 							parent[finalKey] = mutated;
 						});
 					}
 					return true;
 				} else {
 					// Can't merge primitives - a handled hot-reload failure: keep the existing value and
-					// continue WITHOUT throwing. The console warning stays silent-gated; the impl:error
+					// continue WITHOUT throwing. The warning prints unless the instance is silent; the impl:error
 					// event fires regardless of `silent`, carrying a non-thrown SlothletError so
 					// programmatic observers can react to the rejected mutation (#148).
-					const apiPath = parts.join(".");
-					if (this.slothlet && !this.____config?.silent) {
-						new this.SlothletWarning("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", { apiPath });
-					}
+					const apiPath = ArrayMethods.join(parts, ".");
+					new this.SlothletWarning("WARNING_COLLISION_MERGE_PRIMITIVES", { path: segmentsOf(apiPath) });
 					await this.emitImplDiagnostic("error", {
 						apiPath,
-						code: "WARNING_HOT_RELOAD_MERGE_PRIMITIVES",
-						context: { apiPath },
+						code: "WARNING_COLLISION_MERGE_PRIMITIVES",
+						context: { path: segmentsOf(apiPath) },
 						source: "addApi",
 						moduleID,
-						error: new this.SlothletError("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", { apiPath })
+						error: new this.SlothletError("WARNING_COLLISION_MERGE_PRIMITIVES", { path: segmentsOf(apiPath) })
 					});
 					return false;
 				}
@@ -2037,7 +2828,8 @@ export class ApiManager extends ComponentBase {
 			key: "DEBUG_MODE_SET_VALUE_AT_PATH_ASSIGN",
 			finalKey
 		});
-		runtime_frameworkWrite(parent, () => {
+		this.#beforeRootChange(parent);
+		frameworkWrite(parent, () => {
 			parent[finalKey] = value;
 		});
 		return true;
@@ -2076,14 +2868,15 @@ export class ApiManager extends ComponentBase {
 			const node = member.found ? resolveWrapper(member.value) : null;
 			return node !== null && String(node.____slothletInternal.apiPath ?? "") !== atPath;
 		};
-		for (const part of parts.slice(0, -1)) {
+		for (let ofIndex = 0, ofList = copyList(parts, 0, -1); ofIndex < ofList.length; ofIndex++) {
+			const part = ofList[ofIndex];
 			if (!current || (typeof current !== "object" && typeof current !== "function")) {
 				return false;
 			}
-			stack.push({ parent: current, key: part });
-			walked.push(part);
+			listPush(stack, { parent: current, key: part });
+			listPush(walked, part);
 			// Nothing at this path is removed through an alias: the node there is another node, which keeps what it holds.
-			if (isAlias(current, part, walked.join("."))) return false;
+			if (isAlias(current, part, ArrayMethods.join(walked, "."))) return false;
 			// The node itself, never the view a read under a module's identity hands back: a removal a module
 			// started is the framework's write, not the module's (#625).
 			current = readApiMember(current, part);
@@ -2093,44 +2886,43 @@ export class ApiManager extends ComponentBase {
 		if (!current || (typeof current !== "object" && typeof current !== "function")) {
 			return false;
 		}
-		if (!Object.prototype.hasOwnProperty.call(current, finalKey)) {
+		if (!Objects.hasOwn(current, finalKey)) {
 			return false;
 		}
 
 		// Get the impl being removed and its metadata before deletion
 		const removedImpl = readApiMember(current, finalKey);
-		const apiPath = parts.join(".");
+		const apiPath = ArrayMethods.join(parts, ".");
 		// An alias removed is only the member holding it: the node it stands for is another node, left whole (#625).
 		const removesAlias = isAlias(current, finalKey, apiPath);
 
 		// Emit lifecycle event for removal BEFORE deletion
 		if (removedImpl && !removesAlias && this.slothlet.handlers?.lifecycle) {
-			const metadata = this.slothlet.handlers.metadata?.getMetadata?.(removedImpl);
+			const metadata = this.slothlet.handlers.metadata?.getSystemMetadata?.(removedImpl);
 			await this.slothlet.handlers.lifecycle.emit("impl:removed", {
-				apiPath,
+				path: copyList(parts),
 				impl: removedImpl,
 				source: "removal",
-				moduleID: metadata?.moduleID,
-				filePath: metadata?.filePath,
-				sourceFolder: metadata?.sourceFolder
+				module: metadata?.moduleID,
+				file: metadata?.filePath,
+				folder: metadata?.sourceFolder
 			});
 		}
 
-		// CRITICAL: Delete from wrapper's child properties AND _impl if current is a proxy
-		// Properties are stored in wrapper and _impl, not on the proxy itself
+		// CRITICAL: Delete from wrapper's child properties AND ____impl if current is a proxy
+		// Properties are stored in wrapper and ____impl, not on the proxy itself
 		if (resolveWrapper(current)) {
 			const wrapper = resolveWrapper(current);
 			// Delete from wrapper (child properties). The else-arm (an internal `_`/`__` key, or a key
-			// that lives only in _impl and not on the wrapper) is a defensive location guard for leaf
+			// that lives only in ____impl and not on the wrapper) is a defensive location guard for leaf
 			// shapes the test suite does not construct here.
 			const isInternal = isFrameworkReservedKey(finalKey);
 			/* v8 ignore else */
 			if (!isInternal && finalKey in wrapper) {
 				delete wrapper[finalKey];
 			}
-			// Delete from _impl (the actual implementation object). The else-arm (a callable leaf whose
-			// impl is a function, or an absent impl) is a defensive shape guard not exercised here.
-			/* v8 ignore else */
+			// Delete from ____impl (the actual implementation object). A callable leaf's impl is a function and
+			// keeps its members.
 			if (wrapper.____slothletInternal.impl && typeof wrapper.____slothletInternal.impl === "object") {
 				// The impl can be the module's own frozen/sealed export (#485). Reflect.deleteProperty
 				// reports a non-configurable key with `false` instead of throwing; the key then stays on
@@ -2143,20 +2935,19 @@ export class ApiManager extends ComponentBase {
 		// export reports the key as non-deletable (`false`); Reflect.deleteProperty takes that answer
 		// instead of throwing, so one frozen constant table cannot abort the rest of the removal (#485).
 		// The removed node's wrapper is invalidated below regardless.
-		runtime_frameworkWrite(current, () => Reflect.deleteProperty(current, finalKey));
+		this.#beforeRootChange(current);
+		frameworkWrite(current, () => Reflect.deleteProperty(current, finalKey));
 
 		// AFTER deletion, clean up wrapper state for removed proxy
-		// removedImpl from deletePath is always an object or function; the FALSE branch is unreachable.
-		/* v8 ignore next */
+		// An alias removal leaves the target's wrapper alone.
 		if (!removesAlias && removedImpl && (typeof removedImpl === "object" || typeof removedImpl === "function")) {
 			// If this is a proxy with a wrapper, clean it up
-			// resolveWrapper always returns a wrapper for proxies in this path; FALSE is unreachable.
-			/* v8 ignore next */
+			// A version dispatcher removed with the last version is not a wrapper.
 			if (resolveWrapper(removedImpl)) {
 				const wrapper = resolveWrapper(removedImpl);
 				// Permanently invalidate — checked by ___materialize()'s own `invalid` guard (both
 				// before starting and again after its async work resolves) so a still-in-flight
-				// backgroundMaterialize: true materialization on this now-removed wrapper can't apply
+				// loader.materialize: true materialization on this now-removed wrapper can't apply
 				// its result later. Without this, a later impl:changed from that stale materialization
 				// would be silently accepted if the same moduleID is re-added before it resolves — the
 				// re-add's own clearUnregistered() call lifts the ownership-level stale-registration
@@ -2171,13 +2962,14 @@ export class ApiManager extends ComponentBase {
 					wrapper.____slothletInternal.impl = null;
 				}
 				// Clear children from wrapper to release references
-				const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
-				for (const key of childKeys) {
+				const childKeys = filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k));
+				for (let ofIndex = 0, ofList = childKeys; ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					delete wrapper[key];
 				}
 				// Mark as un-materialized so it won't try to access null impl
 				// wrapper.____slothletInternal.state is always populated; the FALSE branch is unreachable.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (wrapper.____slothletInternal.state) {
 					wrapper.____slothletInternal.state.materialized = false;
 					wrapper.____slothletInternal.state.inFlight = false;
@@ -2186,19 +2978,36 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Clean up user metadata for removed impl using root segment; an alias removed takes none with it.
-		// metadata handler is always registered in all test configurations, so its absence is unreachable.
-		/* v8 ignore next */
 		if (!removesAlias && this.slothlet.handlers?.metadata) {
-			const rootSegment = apiPath.split(".")[0];
+			const rootSegment = splitText(apiPath, ".")[0];
 			this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 		}
 
+		// A namespace a cross-module replace hid members of still holds them, off the api until they are put back: it is
+		// not empty, so it stays (and so does every namespace above it).
+		const holdsHidden = (value) => {
+			const raw = resolveWrapper(value);
+			if (!raw) return false;
+			for (const shadows of mapValues(this.state.replaceShadows)) {
+				if (ArrayMethods.some(shadows, (shadow) => shadow.container === raw)) return true;
+			}
+			return false;
+		};
 		for (let i = stack.length - 1; i >= 0; i -= 1) {
 			const { parent, key } = stack[i];
-			const value = parent[key];
-			if (value && (typeof value === "object" || typeof value === "function") && Object.keys(value).length === 0) {
+			// The node itself, and whether it still holds anything, as the node holds it: never a listing made through the
+			// view a module's read hands back, which hides what that module may not read and, in the live runtime, reads
+			// the stack again for every member it describes.
+			const value = readApiMember(parent, key);
+			if (holdsHidden(value)) break;
+			if (value && (typeof value === "object" || typeof value === "function") && !holdsApiMembers(value)) {
 				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
-				runtime_frameworkWrite(parent, () => Reflect.deleteProperty(parent, key));
+				this.#beforeRootChange(parent);
+				frameworkWrite(parent, () => Reflect.deleteProperty(parent, key));
+				// Pruned from the api, so nobody owns it any more: the owner of a path is whoever's value is live there.
+				if (root === this.slothlet.api) {
+					this.slothlet.handlers.ownership.forgetPath(ArrayMethods.join(copyList(parts, 0, i + 1), "."));
+				}
 			}
 		}
 
@@ -2218,18 +3027,14 @@ export class ApiManager extends ComponentBase {
 	 * await this.restoreApiPath("plugins", "plugins-core");
 	 */
 	async restoreApiPath(apiPath, moduleID) {
-		// Unreachable in the test suite, and by construction: restoreApiPath is a defensive rollback
-		// fallback whose four call sites are all in unreachable branches — the "getCurrentValue returned
-		// undefined" else in each removeApiComponent restore path (a restored node always resolves to a
-		// concrete value, so that else never runs) and the reload "zero affected caches" fallback (a
-		// reload always has at least one cache). No reachable path executes this method, so the whole
-		// body is ignored as genuinely-dead defensive code rather than with a per-line "never in tests".
-		/* v8 ignore start */
+		// A defensive rollback fallback: its call sites are the "getCurrentValue returned undefined" else in each
+		// removeApiComponent restore path and the reload "zero affected caches" fallback (a reload after the base
+		// module itself was removed). The suite drives it directly.
 		const normalizedModuleId = moduleID || null;
-		const historyEntry = this.state.addHistory
-			.slice()
-			.reverse()
-			.find((entry) => entry.apiPath === apiPath && (normalizedModuleId ? entry.moduleID === normalizedModuleId : true));
+		const historyEntry = ArrayMethods.find(
+			ArrayMethods.reverse(copyList(this.state.addHistory)),
+			(entry) => entry.apiPath === apiPath && (normalizedModuleId ? entry.moduleID === normalizedModuleId : true)
+		);
 
 		if (historyEntry) {
 			await this.addApiComponent({
@@ -2249,9 +3054,9 @@ export class ApiManager extends ComponentBase {
 
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
 			const baseApi = await this.slothlet.builders.builder.buildAPI({
-				dir: this.____config.dir,
+				dir: this.____config.base,
 				// #471: an instance with no base directory restores from an empty root.
-				noBase: this.____config.dir === null,
+				noBase: this.____config.base === null,
 				mode: this.____config.mode,
 				moduleID: "base" // Use "base" as moduleID for temporary API
 			});
@@ -2266,11 +3071,11 @@ export class ApiManager extends ComponentBase {
 
 			// Extract raw implementation from temporary wrapper IF it's materialized
 			// The temporary buildAPI creates wrappers which we need to unwrap
-			// For eager mode: __impl is the actual implementation (object/function) - extract it
-			// For lazy mode: if __impl is a function, it's unmaterialized - extract it anyway for reload
+			// For eager mode: ____impl is the actual implementation (object/function) - extract it
+			// For lazy mode: if ____impl is a function, it's unmaterialized - extract it anyway for reload
 			const baseValueRaw = resolveWrapper(baseValue);
 			if (baseValue && baseValueRaw !== null) {
-				baseValue = baseValueRaw.__impl;
+				baseValue = baseValueRaw.____impl;
 			}
 
 			await this.setValueAtPath(this.slothlet.api, parts, baseValue, {
@@ -2286,7 +3091,6 @@ export class ApiManager extends ComponentBase {
 				moduleID: normalizedModuleId
 			});
 		}
-		/* v8 ignore stop */
 	}
 
 	/**
@@ -2299,23 +3103,28 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	#forgetRemovedModule(moduleID, recordHistory) {
-		const id = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
+		const id = splitText(String(moduleID), MODULE_ID_SEPARATOR)[0];
 		this.slothlet.handlers.permissionManager.onModuleRemoved(moduleID);
 		this.slothlet.handlers.eventManager?.onModuleRemoved?.(moduleID);
 		// Its code keeps no standing, whoever takes the id next (#625). A replay leaves the incarnations as they are.
 		if (recordHistory) {
-			const incarnation = this.slothlet._moduleIncarnations?.get(id);
+			const incarnation = this.slothlet._moduleIncarnations == null ? undefined : MapMethods.get(this.slothlet._moduleIncarnations, id);
 			// Kept as the id's last token, so what the module subscribed still hears about its own removal (see
 			// isOwnRetired), until another module is mounted under the id.
-			if (incarnation) this.slothlet._retiredIncarnations?.set(id, incarnation);
-			this.slothlet._moduleIncarnations?.delete(id);
+			if (incarnation)
+				this.slothlet._retiredIncarnations == null ? undefined : MapMethods.set(this.slothlet._retiredIncarnations, id, incarnation);
+			this.slothlet._moduleIncarnations == null ? undefined : MapMethods.delete(this.slothlet._moduleIncarnations, id);
 		}
 		// Its mounts' records go, and so does every record naming it as the mounting module: a module that later takes
 		// the freed id inherits no right to remove what it mounted, live or after a reload.
-		for (const [key, mounter] of [...this.mountedBy]) {
-			if (key.startsWith(`${id}\u0000`) || mounter === id) this.mountedBy.delete(key);
+		for (let ofIndex = 0, ofList = mapEntriesToArray(this.mountedBy); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				key = ofEntry[0],
+				mounter = ofEntry[1];
+			if (StringMethods.startsWith(key, `${id}\u0000`) || mounter === id) MapMethods.delete(this.mountedBy, key);
 		}
-		for (const operation of this.state.operationHistory) {
+		for (let ofIndex = 0, ofList = this.state.operationHistory; ofIndex < ofList.length; ofIndex++) {
+			const operation = ofList[ofIndex];
 			if (operation.type === "add" && operation.options?.[MOUNTED_BY] === id) operation.options[MOUNTED_BY] = null;
 		}
 		if (recordHistory) this.#dropRuleHistory(moduleID);
@@ -2333,7 +3142,7 @@ export class ApiManager extends ComponentBase {
 	 * apiManager.mountKey("kid", "guest.kid");
 	 */
 	mountKey(moduleID, mount) {
-		return `${String(moduleID).split(MODULE_ID_SEPARATOR)[0]}\u0000${mount}`;
+		return `${splitText(String(moduleID), MODULE_ID_SEPARATOR)[0]}\u0000${mount}`;
 	}
 
 	/**
@@ -2349,10 +3158,14 @@ export class ApiManager extends ComponentBase {
 	 */
 	#releaseMountsUnder(path, recordHistory, onlyModuleID = null) {
 		const ownership = this.slothlet.handlers.ownership;
-		for (const [id, mounts] of [...ownership.moduleMounts]) {
+		for (let ofIndex = 0, ofList = mapEntriesToArray(ownership.moduleMounts); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				id = ofEntry[0],
+				mounts = ofEntry[1];
 			if (onlyModuleID !== null && id !== onlyModuleID) continue;
-			for (const mount of [...mounts]) {
-				if (mount === "." || mount === "" || (mount !== path && !mount.startsWith(`${path}.`))) continue;
+			for (let ofIndex = 0, ofList = setToArray(mounts); ofIndex < ofList.length; ofIndex++) {
+				const mount = ofList[ofIndex];
+				if (mount === "." || mount === "" || (mount !== path && !StringMethods.startsWith(mount, `${path}.`))) continue;
 				this.#releaseMount(id, mount, recordHistory);
 			}
 		}
@@ -2372,10 +3185,10 @@ export class ApiManager extends ComponentBase {
 	#hasLiveForeignContent(path, moduleID) {
 		const ownership = this.slothlet.handlers.ownership;
 		const prefix = path === "" ? "" : `${path}.`;
-		for (const owned of ownership.pathToModule.keys()) {
-			if (!owned.startsWith(prefix) || owned === path) continue;
+		for (const owned of mapKeys(ownership.pathToModule)) {
+			if (!StringMethods.startsWith(owned, prefix) || owned === path) continue;
 			const owner = String(ownership.getCurrentOwner(owned)?.moduleID ?? "");
-			if (owner !== moduleID && ownership.moduleMounts.has(owner)) return true;
+			if (owner !== moduleID && MapMethods.has(ownership.moduleMounts, owner)) return true;
 		}
 		return false;
 	}
@@ -2390,9 +3203,9 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	#modulePathParts(apiPath) {
-		if (Array.isArray(apiPath)) return apiPath.map(String);
-		const trimmed = String(apiPath ?? "").trim();
-		return trimmed === "" ? [] : trimmed.split(".");
+		if (Arrays.isArray(apiPath)) return mapList(apiPath, String);
+		const trimmed = StringMethods.trim(String(apiPath ?? ""));
+		return trimmed === "" ? [] : splitText(trimmed, ".");
 	}
 
 	/**
@@ -2408,7 +3221,7 @@ export class ApiManager extends ComponentBase {
 	 * apiManager.assertModuleWrite("victim.v"); // throws inside another module's call
 	 */
 	assertModuleWrite(apiPath) {
-		const writer = runtime_selfModuleReader(this.slothlet);
+		const writer = selfModuleReader(this.slothlet);
 		if (writer !== null) this.#assertModuleMountWrite(this.#modulePathParts(apiPath), writer);
 	}
 
@@ -2436,6 +3249,8 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string|null} moduleID - The module reloaded by its moduleID.
 	 * @param {string|null} apiPath - The path reloaded.
+	 * @param {object|null} [writer] - The module asking for the reload, read where it asked; the code running now when
+	 *   omitted.
 	 * @returns {void}
 	 * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
 	 * @public
@@ -2443,8 +3258,7 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * apiManager.assertModuleReload(null, "victim.v"); // throws inside another module's call
 	 */
-	assertModuleReload(moduleID, apiPath) {
-		const writer = runtime_selfModuleReader(this.slothlet);
+	assertModuleReload(moduleID, apiPath, writer = selfModuleReader(this.slothlet)) {
 		if (writer === null) return;
 		// The base's reload rebuilds the whole tree: a write at its root.
 		if (moduleID === null && apiPath === "") return this.#assertModuleMountWrite([], writer);
@@ -2476,26 +3290,34 @@ export class ApiManager extends ComponentBase {
 			if (node === null || (typeof node !== "object" && typeof node !== "function")) return;
 			const raw = resolveWrapper(node);
 			const target = raw ?? node;
-			if (seen.has(target)) return;
-			seen.add(target);
+			if (WeakSetMethods.has(seen, target)) return;
+			WeakSetMethods.add(seen, target);
 			let members;
 			if (raw) {
 				const internal = raw.____slothletInternal;
-				if (internal.mode === "lazy" && !internal.state.materialized) await raw._materialize();
+				if (internal.mode === "lazy" && !internal.state.materialized) await raw.___materialize();
 				const impl = internal.impl;
 				members = new Map();
 				// Members are read by descriptor: an accessor is still a path the content writes, but it is the module's code,
 				// which runs when something reads it, never as a side effect of this check (#597).
 				if (impl !== null && (typeof impl === "object" || typeof impl === "function")) {
-					for (const key of Object.keys(impl)) members.set(key, dataMemberOf(impl, key));
+					for (let ofIndex = 0, ofList = Objects.keys(impl); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
+						MapMethods.set(members, key, dataMemberOf(impl, key));
+					}
 				}
-				for (const key of Object.keys(raw)) members.set(key, dataMemberOf(raw, key));
+				for (let ofIndex = 0, ofList = Objects.keys(raw); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					MapMethods.set(members, key, dataMemberOf(raw, key));
+				}
 			} else {
-				members = new Map(Object.keys(node).map((key) => [key, dataMemberOf(node, key)]));
+				members = mapFrom(mapList(Objects.keys(node), (key) => [key, dataMemberOf(node, key)]));
 			}
-			for (const [key, value] of members) {
+			for (const ofEntry of mapEntries(members)) {
+				const key = ofEntry[0],
+					value = ofEntry[1];
 				if (isFrameworkReservedKey(key)) continue;
-				const childParts = [...parts, key];
+				const childParts = concatLists(parts, [key]);
 				this.#assertModuleMountWrite(childParts, writer, inFlight, ceilings);
 				await walk(value, childParts);
 			}
@@ -2517,10 +3339,10 @@ export class ApiManager extends ComponentBase {
 	 */
 	#assertModuleReplace(parts, writer, options, ceilings = []) {
 		if (options.forceOverwrite !== true && options.collisionMode !== "replace" && options.collisionMode !== "merge-replace") return;
-		const mountPath = parts.join(".");
-		for (const registered of this.slothlet.handlers.ownership.pathToModule.keys()) {
-			if (mountPath === "" || registered === mountPath || registered.startsWith(`${mountPath}.`)) {
-				this.#assertModuleMountWrite(registered.split("."), writer, null, ceilings);
+		const mountPath = ArrayMethods.join(parts, ".");
+		for (const registered of mapKeys(this.slothlet.handlers.ownership.pathToModule)) {
+			if (mountPath === "" || registered === mountPath || StringMethods.startsWith(registered, `${mountPath}.`)) {
+				this.#assertModuleMountWrite(splitText(registered, "."), writer, null, ceilings);
 			}
 		}
 	}
@@ -2531,7 +3353,7 @@ export class ApiManager extends ComponentBase {
 	 * removed path, the module's paths at or below a scoped path — and each must be one the caller owns, one a write
 	 * rule grants it, or one inside a mount the caller itself performed.
 	 *
-	 * @param {object} writer - The removing module's wrapper ({@link runtime_selfModuleReader}).
+	 * @param {object} writer - The removing module's wrapper ({@link selfModuleReader}).
 	 * @param {string} moduleID - The module the removal resolved to.
 	 * @param {string|null} apiPath - The path removed, for a removal by path.
 	 * @param {string|null} scopedApiPath - The path a scoped removal removes the module's share of.
@@ -2542,29 +3364,30 @@ export class ApiManager extends ComponentBase {
 	#assertModuleRemoval(writer, moduleID, apiPath, scopedApiPath) {
 		const ownership = this.slothlet.handlers.ownership;
 		const id = String(moduleID);
-		const own = String(writer.____slothletInternal?.moduleID ?? "").split(MODULE_ID_SEPARATOR)[0];
-		const under = (root) => (candidate) => root === "" || candidate === root || candidate.startsWith(`${root}.`);
+		const own = splitText(String(writer.____slothletInternal?.moduleID ?? ""), MODULE_ID_SEPARATOR)[0];
+		const under = (root) => (candidate) => root === "" || candidate === root || StringMethods.startsWith(candidate, `${root}.`);
 		let reached;
 		if (scopedApiPath !== null) {
 			const scoped = this.normalizeApiPath(scopedApiPath).apiPath;
-			reached = [scoped, ...ownership.getModulePaths(id).filter(under(scoped))];
+			reached = concatLists([scoped], filterList(ownership.getModulePaths(id), under(scoped)));
 		} else if (apiPath) {
 			const removed = this.normalizeApiPath(apiPath).apiPath;
-			reached = [removed, ...[...ownership.pathToModule.keys()].filter(under(removed))];
+			reached = concatLists([removed], filterList(mapKeysToArray(ownership.pathToModule), under(removed)));
 		} else {
-			const mounts = ownership.getModuleMounts(id).filter((mount) => mount !== "." && mount !== "");
-			reached = mounts.length === 0 && ownership.getModuleEndpoint(id) !== undefined ? [""] : [...mounts, ...ownership.getModulePaths(id)];
+			const mounts = filterList(ownership.getModuleMounts(id), (mount) => mount !== "." && mount !== "");
+			reached =
+				mounts.length === 0 && ownership.getModuleEndpoint(id) !== undefined ? [""] : concatLists(mounts, ownership.getModulePaths(id));
 		}
-		for (const path of new Set(reached)) {
+		for (const path of setValues(setFrom(reached))) {
 			const owner = scopedApiPath !== null || !apiPath ? id : String(ownership.getCurrentOwner(path)?.moduleID ?? id);
 			// Only the owner's innermost mount around the path counts: a mount the host made inside one the caller made
 			// is the host's, whoever made the mount around it.
-			const innermost = ownership
-				.getModuleMounts(owner)
-				.filter((mount) => mount !== "." && mount !== "" && under(mount)(path))
-				.sort((a, b) => b.length - a.length)[0];
-			const mountedByCaller = innermost !== undefined && this.mountedBy.get(this.mountKey(owner, innermost)) === own;
-			if (!mountedByCaller) this.#assertModuleMountWrite(path.split(".").filter(Boolean), writer);
+			const innermost = ArrayMethods.sort(
+				filterList(ownership.getModuleMounts(owner), (mount) => mount !== "." && mount !== "" && under(mount)(path)),
+				(a, b) => b.length - a.length
+			)[0];
+			const mountedByCaller = innermost !== undefined && MapMethods.get(this.mountedBy, this.mountKey(owner, innermost)) === own;
+			if (!mountedByCaller) this.#assertModuleMountWrite(filterList(splitText(path, "."), Boolean), writer);
 		}
 	}
 
@@ -2581,10 +3404,11 @@ export class ApiManager extends ComponentBase {
 	 */
 	#releaseMount(moduleID, mount, recordHistory) {
 		const ownership = this.slothlet.handlers.ownership;
-		this.mountedBy.delete(this.mountKey(moduleID, mount));
+		MapMethods.delete(this.mountedBy, this.mountKey(moduleID, mount));
 		if (ownership.releaseMount(moduleID, mount) > 0) {
-			for (const owned of ownership.getModulePaths(moduleID)) {
-				if (owned === mount || owned.startsWith(`${mount}.`)) ownership.removePath(owned, moduleID);
+			for (let ofIndex = 0, ofList = ownership.getModulePaths(moduleID); ofIndex < ofList.length; ofIndex++) {
+				const owned = ofList[ofIndex];
+				if (owned === mount || StringMethods.startsWith(owned, `${mount}.`)) ownership.removePath(owned, moduleID);
 			}
 			return;
 		}
@@ -2604,16 +3428,16 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	#dropRuleHistory(moduleID) {
-		const base = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
+		const base = splitText(String(moduleID), MODULE_ID_SEPARATOR)[0];
 		const history = this.state.operationHistory;
 		for (let i = history.length - 1; i >= 0; i--) {
 			const operation = history[i];
 			if (
 				(operation.type === "addPermissionRule" || operation.type === "addEventRule") &&
 				operation.ownerModuleID != null &&
-				String(operation.ownerModuleID).split(MODULE_ID_SEPARATOR)[0] === base
+				splitText(String(operation.ownerModuleID), MODULE_ID_SEPARATOR)[0] === base
 			)
-				history.splice(i, 1);
+				listSplice(history, i, 1);
 		}
 	}
 
@@ -2624,27 +3448,27 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {object} permissions - The option.
 	 * @returns {object} The frozen copy.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when `deny` / `allow` or an entry's field is an accessor.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when `deny` / `allow` or an entry's field is an accessor.
 	 * @private
 	 */
 	#snapshotPermissionsOption(permissions) {
 		const permissionManager = this.slothlet.handlers.permissionManager;
 		const copy = {};
-		for (const effect of ["deny", "allow"]) {
+		for (let ofIndex = 0, ofList = ["deny", "allow"]; ofIndex < ofList.length; ofIndex++) {
+			const effect = ofList[ofIndex];
 			const descriptor = Reflect.getOwnPropertyDescriptor(permissions, effect);
 			if (descriptor === undefined) continue;
 			if (!("value" in descriptor)) {
-				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-					reason: translate("PERM_RULE_FIELD_ACCESSOR"),
-					received: effect,
-					validationError: true
+				throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+					reason: translate("PERMISSION_RULE_REASON_FIELD_ACCESSOR"),
+					received: effect
 				});
 			}
-			copy[effect] = Array.isArray(descriptor.value)
-				? Object.freeze(Array.from(descriptor.value, (entry) => permissionManager.snapshotRule(entry)))
+			copy[effect] = Arrays.isArray(descriptor.value)
+				? Objects.freeze(mapList(descriptor.value, (entry) => permissionManager.snapshotRule(entry)))
 				: descriptor.value;
 		}
-		return Object.freeze(copy);
+		return Objects.freeze(copy);
 	}
 
 	/**
@@ -2653,7 +3477,7 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string|object} entry - One shorthand allow/deny entry.
 	 * @returns {{ target: string, condition: unknown }} Normalized target/condition pair.
-	 * @throws {SlothletError} INVALID_PERMISSION_RULE when the shorthand entry shape is invalid.
+	 * @throws {SlothletError} PERMISSION_RULE_INVALID when the shorthand entry shape is invalid.
 	 * @private
 	 *
 	 * @example
@@ -2663,7 +3487,7 @@ export class ApiManager extends ComponentBase {
 	#normalizePermissionShorthandEntry(entry) {
 		const getValueType = (value) => {
 			if (value === null) return "null";
-			if (Array.isArray(value)) return "array";
+			if (Arrays.isArray(value)) return "array";
 			return typeof value;
 		};
 
@@ -2671,19 +3495,17 @@ export class ApiManager extends ComponentBase {
 			return { target: entry, condition: undefined };
 		}
 
-		if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_NOT_OBJECT"),
-				received: getValueType(entry),
-				validationError: true
+		if (!entry || typeof entry !== "object" || Arrays.isArray(entry)) {
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_NOT_OBJECT"),
+				received: getValueType(entry)
 			});
 		}
 
 		if (typeof entry.target !== "string" || !entry.target) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_TARGET_REQUIRED"),
-				received: typeof entry.target,
-				validationError: true
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_TARGET_REQUIRED"),
+				received: typeof entry.target
 			});
 		}
 
@@ -2743,19 +3565,18 @@ export class ApiManager extends ComponentBase {
 	 */
 	async addApiComponent(params) {
 		// params is always provided; options is always provided; both fallbacks are unreachable.
-		/* v8 ignore next */
-		const { apiPath, folderPath, options = {}, versionConfig = null } = params || {};
+		const { apiPath, folderPath, options = {}, versionConfig = null } = /* v8 ignore next */ params || {};
 		// The module code making the add, when an entry point captured it before an await lost it: the live runtime
 		// attributes code by its stack, which an `await` leaves (#625). Otherwise it is read here.
-		const callerWriter = params && "writer" in params ? params.writer : runtime_selfModuleReader(this.slothlet);
+		const callerWriter = params && "writer" in params ? params.writer : selfModuleReader(this.slothlet);
 		// The calls it acts under when it is code supplied to another module's call, captured with it (#597).
-		const callerCeilings =
-			params && "writerCeilings" in params ? params.writerCeilings : runtime_selfModuleCeilings(this.slothlet, callerWriter);
+		const callerCeilings = params && "writerCeilings" in params ? params.writerCeilings : selfModuleCeilings(this.slothlet, callerWriter);
 
 		// Handle array of paths - process each sequentially
-		if (Array.isArray(folderPath)) {
+		if (Arrays.isArray(folderPath)) {
 			const moduleIDs = [];
-			for (const singlePath of folderPath) {
+			for (let ofIndex = 0, ofList = folderPath; ofIndex < ofList.length; ofIndex++) {
+				const singlePath = ofList[ofIndex];
 				const moduleID = await this.addApiComponent({
 					apiPath,
 					folderPath: singlePath,
@@ -2764,7 +3585,7 @@ export class ApiManager extends ComponentBase {
 					writer: callerWriter,
 					writerCeilings: callerCeilings
 				});
-				moduleIDs.push(moduleID);
+				listPush(moduleIDs, moduleID);
 			}
 			return moduleIDs;
 		}
@@ -2775,33 +3596,26 @@ export class ApiManager extends ComponentBase {
 		// key. `exports` MUST be present for this; without it the whole object is content / an export
 		// map (handled in the synthetic detection below). (#136 review)
 		let effectiveOptions = options;
-		if (
-			folderPath &&
-			typeof folderPath === "object" &&
-			!Array.isArray(folderPath) &&
-			Object.prototype.hasOwnProperty.call(folderPath, "exports")
-		) {
+		if (folderPath && typeof folderPath === "object" && !Arrays.isArray(folderPath) && Objects.hasOwn(folderPath, "exports")) {
 			const siblingOptions = { ...folderPath };
 			delete siblingOptions.exports;
-			if (Object.keys(siblingOptions).length > 0) effectiveOptions = { ...siblingOptions, ...options };
+			if (Objects.keys(siblingOptions).length > 0) effectiveOptions = { ...siblingOptions, ...options };
 		}
 
 		const { metadata = {}, ...restOptions } = effectiveOptions;
 		if (!this.slothlet || !this.slothlet.isLoaded) {
-			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "addApi",
-				validationError: true
+			throw new this.SlothletError("INSTANCE_NOT_LOADED", {
+				operation: ["slothlet", "api", "add"]
 			});
 		}
 
 		// A user-supplied moduleID must not contain the reserved composite separator: it is the delimiter
 		// slothlet joins `moduleID` and `apiPath` with in the internal metadata key, so a moduleID carrying
 		// it would corrupt that key and make the mount unresolvable. Refuse it up front with a named error.
-		if (restOptions.moduleID && String(restOptions.moduleID).includes(MODULE_ID_SEPARATOR)) {
+		if (restOptions.moduleID && StringMethods.includes(String(restOptions.moduleID), MODULE_ID_SEPARATOR)) {
 			throw new this.SlothletError("MODULE_ID_RESERVED_SEPARATOR", {
-				moduleID: String(restOptions.moduleID),
-				separator: MODULE_ID_SEPARATOR,
-				validationError: true
+				module: String(restOptions.moduleID),
+				separator: MODULE_ID_SEPARATOR
 			});
 		}
 
@@ -2821,9 +3635,9 @@ export class ApiManager extends ComponentBase {
 			// paths, a re-add).
 			if (restOptions.moduleID) {
 				const requested = String(restOptions.moduleID);
-				const own = String(writer.____slothletInternal.moduleID ?? "").split(MODULE_ID_SEPARATOR)[0];
+				const own = splitText(String(writer.____slothletInternal.moduleID ?? ""), MODULE_ID_SEPARATOR)[0];
 				if (requested !== own && this.slothlet.handlers.ownership.getModuleEndpoint(requested) !== undefined) {
-					throw new this.SlothletError("MODULE_ID_IN_USE", { moduleID: requested, validationError: true });
+					throw new this.SlothletError("MODULE_ID_IN_USE", { module: requested });
 				}
 			}
 			this.#assertModuleReplace(mountParts, writer, restOptions, callerCeilings);
@@ -2831,6 +3645,12 @@ export class ApiManager extends ComponentBase {
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
 		this.#assertSafeSegments(normalizedPath, parts, true);
+		// A closed api root takes no new member, as a closed object takes none: an add at the root, or under a key it does
+		// not hold, is refused before anything is mounted.
+		const root = this.slothlet.boundApi;
+		if (root && !Reflect.isExtensible(root) && (parts.length === 0 || !ArrayMethods.includes(Reflect.ownKeys(root), parts[0]))) {
+			throw new this.SlothletError("API_ROOT_CLOSED", { operation: ["slothlet", "api", "add"] });
+		}
 
 		// A rule module code mounts with is held to the module's own subtree unless an explicit allow lifts the
 		// built-in reach default, and sits at the module layer (#625): checked before anything is mounted. A replay
@@ -2841,11 +3661,19 @@ export class ApiManager extends ComponentBase {
 			if (restOptions.permissions !== null && typeof restOptions.permissions === "object") {
 				restOptions.permissions = this.#snapshotPermissionsOption(restOptions.permissions);
 			}
-			for (const effect of ["deny", "allow"]) {
-				for (const entry of Array.isArray(restOptions.permissions?.[effect]) ? restOptions.permissions[effect] : []) {
-					const { target } = this.#normalizePermissionShorthandEntry(entry);
+			for (let ofIndex = 0, ofList = ["deny", "allow"]; ofIndex < ofList.length; ofIndex++) {
+				const effect = ofList[ofIndex];
+				for (
+					let ofIndex = 0, ofList = Arrays.isArray(restOptions.permissions?.[effect]) ? restOptions.permissions[effect] : [];
+					ofIndex < ofList.length;
+					ofIndex++
+				) {
+					const entry = ofList[ofIndex];
+					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
+					// The rule is checked as it will be registered, before anything is mounted, so a refused one leaves the api as it was.
+					this.slothlet.handlers.permissionManager.assertRuleValid({ caller: `${normalizedPath}.**`, target, effect, condition });
 					// Placed for the module code making the add, read before the build ran as no module (#597).
-					ruleLayers[effect].push(this.slothlet.handlers.permissionManager.placeModuleRule({ target, effect }, writer));
+					listPush(ruleLayers[effect], this.slothlet.handlers.permissionManager.placeModuleRule({ target, effect }, writer));
 				}
 			}
 		}
@@ -2856,14 +3684,13 @@ export class ApiManager extends ComponentBase {
 		// the wrong module. When an explicit (clean) moduleID is supplied the auto-generated-id guard below
 		// can't catch it, so reject the apiPath here as a path-validation error. The no-moduleID case falls
 		// through to that guard instead, where the offending token surfaces as the auto-generated moduleID.
-		if (restOptions.moduleID && normalizedPath.includes(MODULE_ID_SEPARATOR)) {
-			const segIndex = parts.findIndex((p) => p.includes(MODULE_ID_SEPARATOR));
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: normalizedPath,
+		if (restOptions.moduleID && StringMethods.includes(normalizedPath, MODULE_ID_SEPARATOR)) {
+			const segIndex = ArrayMethods.findIndex(parts, (p) => StringMethods.includes(p, MODULE_ID_SEPARATOR));
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: segmentsOf(normalizedPath),
 				segment: parts[segIndex],
 				index: segIndex,
-				reason: translate("API_PATH_REASON_RESERVED_SEPARATOR"),
-				validationError: true
+				reason: translate("API_PATH_REASON_RESERVED_SEPARATOR")
 			});
 		}
 
@@ -2875,27 +3702,35 @@ export class ApiManager extends ComponentBase {
 			// VersionManager would build versionedPath as "v1." (trailing dot) and mount the
 			// dispatcher at api[""] — both of which produce broken tree entries.
 			if (normalizedPath === "") {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath,
+				throw new this.SlothletError("API_PATH_INVALID", {
+					path: segmentsOf(apiPath),
 					reason: translate("API_PATH_REASON_VERSIONED_ROOT"),
 					index: undefined,
-					segment: undefined,
-					validationError: true
+					segment: undefined
 				});
 			}
-			if (typeof versionConfig.version !== "string" || !String(versionConfig.version).trim()) {
-				throw new this.SlothletError("INVALID_CONFIG_VERSION_TAG", {
-					received: versionConfig.version,
-					validationError: true
+			if (typeof versionConfig.version !== "string" || !StringMethods.trim(String(versionConfig.version))) {
+				throw new this.SlothletError("VERSION_TAG_INVALID", {
+					received: versionConfig.version
 				});
 			}
-			const versionTag = String(versionConfig.version).trim();
+			const versionTag = StringMethods.trim(String(versionConfig.version));
+			// A tag already registered at this path fails registration once the add has mounted, and the rollback that
+			// then undoes the mount goes by module id: an add reusing the registered module's id would take that module
+			// with it (#986). Refused here, before anything changes. An add that loses a race to the same tag still
+			// fails at registration and rolls back.
+			if (this.slothlet.handlers.versionManager?.getVersionMetadataByPath(normalizedPath, versionTag) !== undefined) {
+				throw new this.SlothletError("VERSION_REGISTER_DUPLICATE", {
+					version: versionTag,
+					path: segmentsOf(normalizedPath)
+				});
+			}
 			// Build effectiveParts as [versionTag, ...parts] rather than splitting effectivePath
 			// on ".". Splitting would fragment version tags that contain dots (e.g. "2.3.0" →
 			// ["2","3","0"]) creating unintended nested namespaces. Using the pre-split `parts`
 			// array keeps the version tag atomic and handles empty normalizedPath cleanly.
-			effectiveParts = [versionTag, ...parts];
-			effectivePath = effectiveParts.join(".");
+			effectiveParts = concatLists([versionTag], parts);
+			effectivePath = ArrayMethods.join(effectiveParts, ".");
 			// The tag becomes the mount's first segment, so it is held to the rules of any path segment: not
 			// `slothlet`, not a prototype-pollution key, and not `then`, which would make the api root thenable.
 			// Nor may it hold the reserved separator: remove() and leaves() split their argument on it, so a
@@ -2903,13 +3738,12 @@ export class ApiManager extends ComponentBase {
 			// logical path and the moduleID, which the tag is not part of.
 			this.normalizeApiPath(effectiveParts);
 			this.#assertSafeSegments(effectivePath, effectiveParts, true);
-			if (versionTag.includes(MODULE_ID_SEPARATOR)) {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath: effectivePath,
+			if (StringMethods.includes(versionTag, MODULE_ID_SEPARATOR)) {
+				throw new this.SlothletError("API_PATH_INVALID", {
+					path: segmentsOf(effectivePath),
 					segment: versionTag,
 					index: 0,
-					reason: translate("API_PATH_REASON_RESERVED_SEPARATOR"),
-					validationError: true
+					reason: translate("API_PATH_REASON_RESERVED_SEPARATOR")
 				});
 			}
 		}
@@ -2927,7 +3761,7 @@ export class ApiManager extends ComponentBase {
 		// filesystem is touched — it flows through buildAPI's synthetic path, so flatten / wrap /
 		// self / context / hooks / permissions apply exactly as for a file-loaded leaf.
 		const isSynthetic =
-			typeof folderPath === "function" || (folderPath !== null && typeof folderPath === "object" && !Array.isArray(folderPath));
+			typeof folderPath === "function" || (folderPath !== null && typeof folderPath === "object" && !Arrays.isArray(folderPath));
 		let syntheticExports = null;
 		let resolvedPath, isDirectory, isFile;
 		if (isSynthetic) {
@@ -2941,20 +3775,20 @@ export class ApiManager extends ComponentBase {
 			// instead of a structured validation error (#136 review).
 			const isPlainObject = (value) => {
 				if (value === null || typeof value !== "object") return false;
-				const proto = Object.getPrototypeOf(value);
-				return proto === Object.prototype || proto === null;
+				const proto = Objects.getPrototypeOf(value);
+				return proto === Objects.prototype || proto === null;
 			};
 			const describeNonPlain = (value) =>
 				value === null
 					? "null"
-					: Array.isArray(value)
+					: Arrays.isArray(value)
 						? "array"
 						: typeof value === "object"
 							? `${value.constructor?.name ?? "non-plain object"} instance`
 							: typeof value;
 			if (typeof folderPath === "function") {
 				syntheticExports = { default: folderPath };
-			} else if (Object.prototype.hasOwnProperty.call(folderPath, "exports")) {
+			} else if (Objects.hasOwn(folderPath, "exports")) {
 				// Explicit `{ exports: <map> }` wrapper: the inner value must be the module's
 				// { default?, ...named } export map (a plain, non-array object). Without this guard a
 				// malformed wrapper ({ exports: null }, { exports: () => {} }, { exports: [] },
@@ -2962,9 +3796,8 @@ export class ApiManager extends ComponentBase {
 				// silently mounts a leaf named "exports".
 				const inner = folderPath.exports;
 				if (!isPlainObject(inner)) {
-					throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE", {
-						received: describeNonPlain(inner),
-						validationError: true
+					throw new this.SlothletError("INLINE_EXPORTS_INVALID", {
+						received: describeNonPlain(inner)
 					});
 				}
 				syntheticExports = inner;
@@ -2979,9 +3812,8 @@ export class ApiManager extends ComponentBase {
 			} else {
 				// A non-plain object (Map/Date/Buffer/TypedArray/class instance) is not a valid export
 				// map; reject with a structured error rather than flowing into the flatten pipeline.
-				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_INPUT", {
-					received: describeNonPlain(folderPath),
-					validationError: true
+				throw new this.SlothletError("INLINE_CONTENT_INVALID", {
+					received: describeNonPlain(folderPath)
 				});
 			}
 			// At root there is no mount-path segment for a `default` export to land on, and slothlet
@@ -3000,14 +3832,12 @@ export class ApiManager extends ComponentBase {
 					// No usable name — "default" is only inferred from the `default:` key (an anonymous
 					// value). There is nothing to key it onto at root, so warn and drop it; any named
 					// exports still mount (if none remain, the empty-root warning below covers it).
-					// The console warning stays silent-gated; the impl:warning event fires regardless of
+					// The warning prints unless the instance is silent; the impl:warning event fires regardless of
 					// `silent` so programmatic observers see the dropped default even under silent (#148).
-					if (this.slothlet && !this.____config?.silent) {
-						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_UNNAMED", {});
-					}
+					new this.SlothletWarning("WARNING_INLINE_ROOT_UNNAMED", {});
 					await this.emitImplDiagnostic("warning", {
 						apiPath: normalizedPath,
-						code: "WARN_SYNTHETIC_ROOT_UNNAMED",
+						code: "WARNING_INLINE_ROOT_UNNAMED",
 						context: {},
 						source: "addApi",
 						moduleID: restOptions.moduleID
@@ -3016,14 +3846,12 @@ export class ApiManager extends ComponentBase {
 				} else {
 					// The default re-keys to def.name; if a named export already claims that key, warn and
 					// let the named export win (the spread below overwrites the re-keyed default). Console
-					// warning stays silent-gated; impl:warning fires regardless of `silent` (#148).
-					if (Object.prototype.hasOwnProperty.call(named, def.name)) {
-						if (this.slothlet && !this.____config?.silent) {
-							new this.SlothletWarning("WARN_SYNTHETIC_ROOT_COLLISION", { name: def.name });
-						}
+					// warning prints unless the instance is silent; impl:warning fires regardless of `silent` (#148).
+					if (Objects.hasOwn(named, def.name)) {
+						new this.SlothletWarning("WARNING_INLINE_ROOT_COLLISION", { name: def.name });
 						await this.emitImplDiagnostic("warning", {
 							apiPath: normalizedPath,
-							code: "WARN_SYNTHETIC_ROOT_COLLISION",
+							code: "WARNING_INLINE_ROOT_COLLISION",
 							context: { name: def.name },
 							source: "addApi",
 							moduleID: restOptions.moduleID
@@ -3042,20 +3870,18 @@ export class ApiManager extends ComponentBase {
 
 			// Validate that the path is either a directory or a supported file type
 			if (!isDirectory && !isFile) {
-				throw new this.SlothletError("INVALID_CONFIG_PATH_TYPE", {
-					path: resolvedPath,
-					validationError: true
+				throw new this.SlothletError("PATH_TYPE_UNSUPPORTED", {
+					path: resolvedPath
 				});
 			}
 
 			if (isFile) {
 				// Validate file extension for files
-				const ext = path.extname(resolvedPath);
-				if (![".mjs", ".cjs", ".js"].includes(ext)) {
-					throw new this.SlothletError("INVALID_CONFIG_FILE_TYPE", {
+				const { ext } = fileParts(resolvedPath);
+				if (!ArrayMethods.includes([".mjs", ".cjs", ".js"], ext)) {
+					throw new this.SlothletError("FILE_TYPE_UNSUPPORTED", {
 						path: resolvedPath,
-						extension: ext,
-						validationError: true
+						extension: ext
 					});
 				}
 			}
@@ -3072,30 +3898,21 @@ export class ApiManager extends ComponentBase {
 			collisionMode = "replace";
 		} else {
 			// collision.api is always set in config; the "error" fallback is unreachable.
-			/* v8 ignore next */
-			collisionMode = restOptions.collisionMode || this.____config.api?.collision?.api || "error";
+			collisionMode = /* v8 ignore next */ restOptions.collisionMode || this.____config.api?.collision?.mode?.api || "error";
 		}
 
 		const mutateExisting = !!(restOptions.mutateExisting || collisionMode === "merge");
-
-		// Deprecated escape hatch: scanning hidden-prefixed folders. The per-call option wins; it
-		// falls back to the instance config. Warn whenever the per-call option is supplied at all.
-		const scanHiddenFolders = (restOptions.scanHiddenFolders ?? this.____config.scanHiddenFolders) === true;
-		if (restOptions.scanHiddenFolders !== undefined && !this.____config?.silent) {
-			new this.SlothletWarning("CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED", { option: "scanHiddenFolders" });
-		}
 
 		const moduleID = restOptions.moduleID ? String(restOptions.moduleID) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
 		// No moduleID was supplied, so the id is derived from the apiPath; if that apiPath carries the reserved
 		// separator the auto-generated id inherits it, breaking the "no moduleID contains the separator"
 		// invariant that composite splitting (remove/metadata) relies on. A user-supplied id is refused above,
-		// and a supplied id with a separator-bearing apiPath is refused as an INVALID_CONFIG_API_PATH_INVALID
+		// and a supplied id with a separator-bearing apiPath is refused as an API_PATH_INVALID
 		// after normalizeApiPath; this catches the remaining auto-generated case at the point the id is finalized.
-		if (moduleID.includes(MODULE_ID_SEPARATOR)) {
+		if (StringMethods.includes(moduleID, MODULE_ID_SEPARATOR)) {
 			throw new this.SlothletError("MODULE_ID_RESERVED_SEPARATOR", {
-				moduleID,
-				separator: MODULE_ID_SEPARATOR,
-				validationError: true
+				module: moduleID,
+				separator: MODULE_ID_SEPARATOR
 			});
 		}
 		// Re-arm this moduleID before any registration below: a prior removal (unregister()/
@@ -3105,14 +3922,12 @@ export class ApiManager extends ComponentBase {
 		// buildDefaultModuleId always returns a non-empty "<prefix>_<random>" string (randomSuffix is
 		// always 6 chars), and String(truthy-moduleID) always produces a non-empty string.
 		// So !moduleID is never true — this guard is a defensive belt-and-suspenders check.
-		/* v8 ignore start */
+		/* v8 ignore if */
 		if (restOptions.forceOverwrite && !moduleID) {
-			throw new this.SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
-				apiPath: normalizedPath,
-				validationError: true
+			throw new this.SlothletError("MODULE_ID_REQUIRED", {
+				path: segmentsOf(normalizedPath)
 			});
 		}
-		/* v8 ignore stop */
 
 		// For single files, we need to pass the parent directory to buildAPI
 		// along with a file filter to load only that specific file
@@ -3120,11 +3935,13 @@ export class ApiManager extends ComponentBase {
 		let fileFilter = null;
 
 		if (isFile) {
-			dirForBuild = path.dirname(resolvedFolderPath);
-			const fileName = path.basename(resolvedFolderPath);
+			const { dir, name: fileName } = fileParts(resolvedFolderPath);
+			dirForBuild = dir;
 			fileFilter = (file) => file === fileName;
 		}
 
+		// Decided before this add records its mount: a removed module mounted again is imported fresh (#793).
+		const cacheBust = isSynthetic ? null : this.#reAddCacheBust(moduleID);
 		// A module mounted under an id no live module has is a new one (#625): its code, built from here on, stands for
 		// this mount, and code of an earlier module under the id does not. A replay rebuilds the mounts that are there.
 		if (restOptions.recordHistory !== false) this.#beginIncarnation(moduleID);
@@ -3140,15 +3957,13 @@ export class ApiManager extends ComponentBase {
 		// the SAME entry moduleID already legitimately held, so merely skipping deletion still left
 		// getCurrentValue() able to return the rejected candidate's content (#366 review).
 		// ownership is always registered and snapshotModuleEntries always returns a Map, so the `|| new Map()` fallback is unreachable.
-		/* v8 ignore next */
-		const priorEntriesForModule = this.slothlet.handlers.ownership?.snapshotModuleEntries(moduleID) || new Map();
+		const priorEntriesForModule = /* v8 ignore next */ this.slothlet.handlers.ownership?.snapshotModuleEntries(moduleID) || new Map();
 		// Same reasoning, for RoutineManager's independent raw-capture cache (#372/#373): its
 		// onImplCreated subscriber captures every constructed wrapper's function too, regardless of
-		// whether this build is later accepted — relevant only under stackRoutines: true, which
+		// whether this build is later accepted — relevant only under routines.stack: true, which
 		// bypasses the ownership filter entirely.
 		// routineManager is always registered and snapshotRawEntries always returns a Map, so the `|| new Map()` fallback is unreachable.
-		/* v8 ignore next */
-		const priorRawEntriesForModule = this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) || new Map();
+		const priorRawEntriesForModule = /* v8 ignore next */ this.slothlet.handlers.routineManager?.snapshotRawEntries(moduleID) || new Map();
 		// Record the collision mode this add places moduleID's content under BEFORE buildAPI runs, so the
 		// registrations its wrapper construction (and any later lazy materialization) triggers through the
 		// generic impl:created/impl:changed subscribers use it rather than the instance default — under
@@ -3197,8 +4012,8 @@ export class ApiManager extends ComponentBase {
 				// (the intermediate filename key is unwrapped below), so the builder must not path that
 				// level either — otherwise every leaf keeps a filename segment the api never exposes.
 				rootUnwrap: isFile || isSynthetic,
+				cacheBust,
 				hidden: restOptions.hidden ?? null,
-				scanHiddenFolders,
 				// Synthetic / in-memory leaf (#117): supply the raw inline exports + a name for the
 				// intermediate key (unwrapped below, exactly like a single file).
 				...(isSynthetic
@@ -3211,27 +4026,32 @@ export class ApiManager extends ComponentBase {
 		} catch (err) {
 			revertSpeculativeState();
 			throw err;
+		} finally {
+			// Whatever the build imported is in Node's cache under this id now, whether or not the add goes live.
+			if (!isSynthetic) SetMethods.add(this.#builtModuleIDs(), splitText(String(moduleID), MODULE_ID_SEPARATOR)[0]);
 		}
 
 		this.slothlet.debug("api", {
 			key: "DEBUG_MODE_ADD_API_COMPONENT_BUILD_RETURN",
-			topLevelKeys: Object.keys(newApi),
-			dottedKeys: Object.keys(newApi).filter((k) => k.includes(".")),
-			wrappers: Object.keys(newApi)
-				.filter((k) => resolveWrapper(newApi[k]) !== null)
-				.map((k) => {
+			topLevelKeys: Objects.keys(newApi),
+			dottedKeys: filterList(Objects.keys(newApi), (k) => StringMethods.includes(k, ".")),
+			wrappers: mapList(
+				filterList(Objects.keys(newApi), (k) => resolveWrapper(newApi[k]) !== null),
+				(k) => {
 					const _w = resolveWrapper(newApi[k]);
 					return {
 						key: k,
 						apiPath: _w.apiPath,
-						implKeys: Object.keys(_w.____slothletInternal.impl || {}),
-						childCacheSize: Object.keys(_w).filter((k) => !isFrameworkReservedKey(k)).length,
-						childCacheKeys: Object.keys(_w).filter((k) => !isFrameworkReservedKey(k))
+						implKeys: Objects.keys(_w.____slothletInternal.impl || {}),
+						childCacheSize: filterList(Objects.keys(_w), (k) => !isFrameworkReservedKey(k)).length,
+						childCacheKeys: filterList(Objects.keys(_w), (k) => !isFrameworkReservedKey(k))
 					};
-				}),
-			nonWrappers: Object.keys(newApi)
-				.filter((k) => resolveWrapper(newApi[k]) === null)
-				.map((k) => ({ key: k, type: typeof newApi[k] }))
+				}
+			),
+			nonWrappers: mapList(
+				filterList(Objects.keys(newApi), (k) => resolveWrapper(newApi[k]) === null),
+				(k) => ({ key: k, type: typeof newApi[k] })
+			)
 		});
 
 		// Use the full newApi structure - user specified the path, folder loads under it
@@ -3242,9 +4062,12 @@ export class ApiManager extends ComponentBase {
 
 		// Special handling for single file loads:
 		// When loading a single file, buildAPI returns { filename: exports }
-		// We want to expose the exports directly at the target path, not nested under filename
-		if ((isFile || isSynthetic) && Object.keys(newApi).length === 1) {
-			const fileName = Object.keys(newApi)[0];
+		// We want to expose the exports directly at the target path, not nested under filename.
+		// A callable newApi is not that `{ filename: exports }` holder: it is the module's default
+		// function itself, already flattened to the build root, and its keys are the module's other
+		// exports (`{ default: fn, extra }` → fn with member `extra`), which stay its members.
+		if ((isFile || isSynthetic) && typeof newApi !== "function" && Objects.keys(newApi).length === 1) {
+			const fileName = Objects.keys(newApi)[0];
 			apiToMerge = newApi[fileName];
 		}
 
@@ -3256,47 +4079,38 @@ export class ApiManager extends ComponentBase {
 		//   1. normalizedPath is non-empty (not a root-level add)
 		//   2. newApi contains a key equal to the last segment of normalizedPath
 		//   3. The value at that key is an object or function (a real namespace, not a primitive)
-		//   4. The matching value originates from a direct child of the mounted directory:
-		//      a) A FILE at the root of the mounted folder (config.mjs → dupFileDir === resolvedFolderPath)
-		//      b) A DIRECT subfolder of the mounted directory (config/ → dupFileDir === resolvedFolderPath/lastPart)
-		//      Deeper paths (e.g. services/services/services.mjs) match neither and are correctly rejected.
+		//   4. The matching value comes from a direct child of the mounted directory: a FILE at its root
+		//      (config.mjs), or a file of its subfolder of that name (config/config.mjs), that subfolder being the one
+		//      Rule 22 leaves standing for it (config/config/config.mjs when config/ holds nothing else). A FOLDER of
+		//      that name inside the hoisted one is a nested namespace and stays (config/z.mjs + config/config/x.mjs is
+		//      config.z and config.config.x).
+		//   The builder decides (4) as it places the entry and records the mount path itself on a node this hoists
+		//   (modes-processor's `hoistedOntoMount`); the node's recorded path is read here, so the tree and the recorded
+		//   path cannot disagree (#743).
 		if (!isFile && normalizedPath) {
-			const lastPart = normalizedPath.includes(".") ? normalizedPath.split(".").pop() : normalizedPath;
-			if (lastPart && Object.prototype.hasOwnProperty.call(apiToMerge, lastPart)) {
+			const lastPart = StringMethods.includes(normalizedPath, ".") ? ArrayMethods.pop(splitText(normalizedPath, ".")) : normalizedPath;
+			if (lastPart && Objects.hasOwn(apiToMerge, lastPart)) {
 				const dupValue = apiToMerge[lastPart];
 				const dupType = typeof dupValue;
 				// dupValue from buildAPI is always a wrapper proxy (object/function); null and non-object arms unreachable.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (dupValue !== null && (dupType === "object" || dupType === "function")) {
-					// Verify the value came from a direct subfolder of the mounted directory.
-					// Compare path.dirname(filePath) to resolvedFolderPath/lastPart.
-					// This prevents hoisting deeper subfolders that share the mount-path name
-					// (e.g. services/services/ inside a "services" mount).
+					// The builder recorded the mount path itself on a node it places for this hoist; any other node at
+					// the key keeps its own segment (a folder nested in the hoisted one, an entry from deeper down).
 					const dupWrapper = resolveWrapper(dupValue);
-					const dupFilePath = dupWrapper?.____slothletInternal?.filePath;
-					// dupFilePath is always set on a wrapper proxy from buildAPI; null fallback is unreachable.
-					/* v8 ignore next */
-					const dupFileDir = dupFilePath ? dupFilePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/") : null;
-					const normalizedFolderPath = resolvedFolderPath.replace(/\\/g, "/").replace(/\/$/, "");
-					const expectedDir = normalizedFolderPath + "/" + lastPart;
-					// Accept two cases:
-					// 1. dupFileDir === expectedDir: the value came from a direct subfolder
-					//    (e.g. config/config.mjs inside a "config" mount)
-					// 2. dupFileDir === normalizedFolderPath: the value came from a file at the
-					//    root of the mounted folder (e.g. config.mjs inside a "config" mount)
-					// Deeper paths (e.g. services/services/services.mjs) match neither and are
-					// correctly rejected.
-					const isDirectChild = dupFileDir === expectedDir || dupFileDir === normalizedFolderPath;
+					// dupValue from buildAPI is always a wrapper proxy; the optional arms are defensive.
+					const isDirectChild = dupWrapper?.____slothletInternal?.apiPath === effectivePath;
 
 					if (isDirectChild) {
 						// dupWrapper is always set (buildAPI always produces wrappers); else branch is unreachable.
-						/* v8 ignore next */
-						const dupChildKeys = dupWrapper ? Object.keys(dupWrapper).filter((k) => !isFrameworkReservedKey(k)) : Object.keys(dupValue);
+						const dupChildKeys = dupWrapper
+							? filterList(Objects.keys(dupWrapper), (k) => !isFrameworkReservedKey(k))
+							: /* v8 ignore next */ Objects.keys(dupValue);
 
 						// Alone at the mounted folder's root, the duplicate is the whole mount: it is used as it is, so
 						// what its value answers (a getter reading a later write, a Proxy's trapped members) stays live
 						// instead of being copied key by key into a new object (#585 review).
-						const dupHasSiblings = Object.keys(apiToMerge).some((k) => k !== lastPart);
+						const dupHasSiblings = ArrayMethods.some(Objects.keys(apiToMerge), (k) => k !== lastPart);
 						if (dupChildKeys.length === 0 || !dupHasSiblings) {
 							// The duplicate value is a leaf with nothing to hoist (e.g. a single self-named
 							// exported function) — it already IS what belongs at the mount path. Rebuilding it
@@ -3305,27 +4119,31 @@ export class ApiManager extends ComponentBase {
 							// the leaf (another file at the mounted folder's root) rides along as a property
 							// on the leaf itself, mirroring the callable-namespace-with-children pattern this
 							// function already supports below.
-							const siblingKeys = Object.keys(apiToMerge).filter((k) => k !== lastPart);
-							for (const k of siblingKeys) dupValue[k] = apiToMerge[k];
+							const siblingKeys = filterList(Objects.keys(apiToMerge), (k) => k !== lastPart);
+							for (let ofIndex = 0, ofList = siblingKeys; ofIndex < ofList.length; ofIndex++) {
+								const k = ofList[ofIndex];
+								dupValue[k] = apiToMerge[k];
+							}
 							apiToMerge = dupValue;
 						} else {
 							// Hoist all children of the duplicate key up to the same level
 							const hoisted = {};
-							for (const k of Object.keys(apiToMerge)) {
+							for (let ofIndex = 0, ofList = Objects.keys(apiToMerge); ofIndex < ofList.length; ofIndex++) {
+								const k = ofList[ofIndex];
 								if (k !== lastPart) hoisted[k] = apiToMerge[k];
 							}
 							// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
-							for (const k of dupChildKeys) {
+							for (let ofIndex = 0, ofList = dupChildKeys; ofIndex < ofList.length; ofIndex++) {
+								const k = ofList[ofIndex];
 								// dupWrapper is always set (buildAPI always produces wrappers); the dupValue[k] arm is unreachable.
-								/* v8 ignore next */
-								hoisted[k] = dupWrapper ? dupWrapper[k] : dupValue[k];
+								hoisted[k] = dupWrapper ? dupWrapper[k] : /* v8 ignore next */ dupValue[k];
 							}
 							apiToMerge = hoisted;
 						}
 						this.slothlet.debug("api", {
 							key: "DEBUG_MODE_RULE_13_DEDUP_HOISTED_KEY",
 							lastPart,
-							newKeys: Object.keys(apiToMerge)
+							newKeys: Objects.keys(apiToMerge)
 						});
 					}
 				}
@@ -3335,7 +4153,7 @@ export class ApiManager extends ComponentBase {
 		if (this.____config.debug?.api) {
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_ADD_API_COMPONENT_MERGE_KEYS",
-				keys: Object.keys(apiToMerge),
+				keys: Objects.keys(apiToMerge),
 				isRootLevel: parts.length === 0
 			});
 		}
@@ -3388,31 +4206,30 @@ export class ApiManager extends ComponentBase {
 				// key into apiToMerge; iterate that so they land at root, not nested under the placeholder.
 				// File adds keep newApi (each file is already a top-level key).
 				rootSource = isSynthetic ? apiToMerge : newApi;
-				rootKeys = Object.keys(rootSource);
+				rootKeys = Objects.keys(rootSource);
 				// Nothing to mount at root: an empty synthetic export map, an empty directory, or a callable
 				// default with no named exports flattens to a value with no enumerable keys, so the merge
 				// loop below assigns nothing. A root add is allowed — this is a no-op, not a hard error
 				// (#136 review r3360502555): it follows the same warn-on-empty rule a normal directory add
-				// does. A directory source is already warned by the Loader (WARN_DIRECTORY_EMPTY); a
+				// does. A directory source is already warned by the Loader (WARNING_FOLDER_EMPTY); a
 				// synthetic source has no scan, so surface the equivalent warning here, then fall through
 				// (the merge loop iterates nothing and the add completes having mounted nothing).
 				if (rootKeys.length === 0 && isSynthetic) {
-					// Console warning stays silent-gated; the impl:warning event fires regardless of `silent`
+					// Console warning prints unless the instance is silent; the impl:warning event fires regardless of `silent`
 					// so a no-op root add is still observable programmatically (#148).
-					if (this.slothlet && !this.____config?.silent) {
-						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
-							apiPath: normalizedPath || "(root)"
-						});
-					}
+					new this.SlothletWarning("WARNING_INLINE_ROOT_EMPTY", {
+						path: segmentsOf(normalizedPath)
+					});
 					await this.emitImplDiagnostic("warning", {
 						apiPath: normalizedPath,
-						code: "WARN_SYNTHETIC_ROOT_EMPTY",
-						context: { apiPath: normalizedPath || "(root)" },
+						code: "WARNING_INLINE_ROOT_EMPTY",
+						context: { path: segmentsOf(normalizedPath) },
 						source: "addApi",
 						moduleID
 					});
 				}
-				for (const key of rootKeys) {
+				for (let ofIndex = 0, ofList = rootKeys; ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					const result1 = await this.setValueAtPath(this.slothlet.api, [key], rootSource[key], {
 						mutateExisting,
 						collisionMode,
@@ -3430,23 +4247,23 @@ export class ApiManager extends ComponentBase {
 					// If at least one succeeded, mark as successful
 					if (result1 || result2) {
 						anyAssignmentSucceeded = true;
-						rootSucceededKeys.add(key);
+						SetMethods.add(rootSucceededKeys, key);
 					} else {
 						// Both the api and boundApi assignments were rejected (skip/warn): the live tree
 						// never adopted this key, so revert the speculative registrations buildAPI's
 						// construction triggered via impl:created before this decision ran — restoring a
 						// genuinely pre-existing entry rather than deleting it (#366 review, #372/#373).
 						// ownership/routineManager are always auto-registered (slothletProperty); false arms unreachable.
-						/* v8 ignore next */
+						/* v8 ignore else */
 						if (this.slothlet.handlers.ownership) {
 							this.slothlet.handlers.ownership.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
 						}
-						/* v8 ignore next */
+						/* v8 ignore else */
 						if (this.slothlet.handlers.routineManager) {
 							this.slothlet.handlers.routineManager.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
 						}
 						// Also invalidate any wrapper in this rejected key's subtree: with
-						// backgroundMaterialize: true its materialization may already be in flight, and
+						// loader.materialize: true its materialization may already be in flight, and
 						// left alone its later completion would re-emit impl:changed and re-capture this
 						// never-mounted content, undoing the revert above (#372 review).
 						this.invalidateSpeculativeWrappers(rootSource[key]);
@@ -3454,7 +4271,7 @@ export class ApiManager extends ComponentBase {
 				}
 			} else {
 				// Nested path - wrap apiToMerge in a UnifiedWrapper for the container
-				// This ensures api.lookup.__metadata exists and works properly
+				// This ensures metadata.get(api.lookup) and slothlet.node(api.lookup) work
 				// The wrapper acts as a namespace container for the loaded API modules
 				if (resolveWrapper(apiToMerge) === null) {
 					// Check if apiToMerge is a function (root contributor pattern).
@@ -3462,7 +4279,7 @@ export class ApiManager extends ComponentBase {
 					// This supports patterns like: api.logger() callable + api.logger.utils.debug()
 					const isCallableNamespace = typeof apiToMerge === "function";
 
-					const containerWrapper = new UnifiedWrapper(this.slothlet, {
+					const containerWrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 						apiPath: effectivePath,
 						mode: this.____config.mode,
 						isCallable: isCallableNamespace, // Preserve callable nature
@@ -3473,7 +4290,7 @@ export class ApiManager extends ComponentBase {
 					// Set apiToMerge as the impl (function or object)
 					containerWrapper.___setImpl(apiToMerge, moduleID);
 					// Replace apiToMerge with the wrapped proxy
-					apiToMerge = containerWrapper.createProxy();
+					apiToMerge = containerWrapper.___createProxy();
 				}
 
 				const result1 = await this.setValueAtPath(this.slothlet.api, effectiveParts, apiToMerge, {
@@ -3499,11 +4316,11 @@ export class ApiManager extends ComponentBase {
 					// triggered via impl:created before this decision ran — restoring a genuinely
 					// pre-existing entry rather than deleting it (#366 review, #372/#373).
 					// ownership/routineManager are always auto-registered (slothletProperty); false arms unreachable.
-					/* v8 ignore next */
+					/* v8 ignore else */
 					if (this.slothlet.handlers.ownership) {
 						this.slothlet.handlers.ownership.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorEntriesForModule);
 					}
-					/* v8 ignore next */
+					/* v8 ignore else */
 					if (this.slothlet.handlers.routineManager) {
 						this.slothlet.handlers.routineManager.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorRawEntriesForModule);
 					}
@@ -3521,8 +4338,9 @@ export class ApiManager extends ComponentBase {
 			// add has nothing that could have partially succeeded before the same throw, so the
 			// original apiToMerge/effectivePath subtree is always the correct, complete scope there.
 			if (parts.length === 0) {
-				for (const key of rootKeys) {
-					if (rootSucceededKeys.has(key)) continue;
+				for (let ofIndex = 0, ofList = rootKeys; ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					if (SetMethods.has(rootSucceededKeys, key)) continue;
 					this.slothlet.handlers.ownership?.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
 					this.slothlet.handlers.routineManager?.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
 					this.invalidateSpeculativeWrappers(rootSource[key]);
@@ -3557,7 +4375,7 @@ export class ApiManager extends ComponentBase {
 				// Skip version dispatcher proxies — accessing their routing properties would
 				// prematurely invoke user discriminator functions during setup, before all
 				// versions are registered. Dispatchers have no pending materializations anyway.
-				// Detect by the module-private brand, never by reading `.__isVersionDispatcher`: that
+				// Detect by the module-private brand, never by reading `.____isVersionDispatcher`: that
 				// read is a `__`-private access that the permission gate denies on ANY gated data node
 				// (e.g. a `manifest.activationEvents` array) under `private.host: deny` (#287).
 				if (isFrameworkInternal(obj)) return;
@@ -3565,32 +4383,33 @@ export class ApiManager extends ComponentBase {
 				const wrapper = resolveWrapper(obj);
 				if (wrapper) {
 					// Skip if we've already processed this wrapper (avoid infinite recursion)
-					if (seenWrappers.has(wrapper)) return;
-					seenWrappers.add(wrapper);
+					if (SetMethods.has(seenWrappers, wrapper)) return;
+					SetMethods.add(seenWrappers, wrapper);
 
 					// Check if materialization is in-flight
-					// materializationPromise is always null after eager-mode add; this path never fires.
-					/* v8 ignore next 3 */
+					// A lazy mount can still be materializing in the background.
 					if (wrapper.____slothletInternal.materializationPromise) {
-						pendingMaterializations.push(wrapper.____slothletInternal.materializationPromise);
+						listPush(pendingMaterializations, wrapper.____slothletInternal.materializationPromise);
 					}
 
 					// Check wrapper child properties for nested wrappers that might be materializing
-					const childKeys = Object.keys(wrapper).filter((k) => !isFrameworkReservedKey(k));
-					for (const key of childKeys) {
+					const childKeys = filterList(Objects.keys(wrapper), (k) => !isFrameworkReservedKey(k));
+					for (let ofIndex = 0, ofList = childKeys; ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
 						collectPendingMaterializations(dataMemberOf(wrapper, key), depth + 1);
 					}
 					// Walked the raw wrapper's children; do NOT also walk the proxy below — `Object.keys()` on a
-					// lazy, function-typed proxy triggers its ownKeys trap, which calls `_materialize()` and
+					// lazy, function-typed proxy triggers its ownKeys trap, which calls `___materialize()` and
 					// would eagerly materialize the very wrappers lazy mode defers. Matches _drainInFlightLoads,
 					// which returns after the wrapper branch for the same reason.
 					return;
 				}
 
 				// Non-wrapper value (plain object/array/function): recurse into its own child properties.
-				for (const key of Object.keys(obj)) {
+				for (let ofIndex = 0, ofList = Objects.keys(obj); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
 					// ____slothletInternal is only present on raw wrappers, not proxy wrapper objects; never equal here.
-					/* v8 ignore next */
+					/* v8 ignore else */
 					if (key !== "____slothletInternal") {
 						collectPendingMaterializations(dataMemberOf(obj, key), depth + 1);
 					}
@@ -3606,9 +4425,9 @@ export class ApiManager extends ComponentBase {
 				// root) rather than Object.keys(newApi): for a synthetic add newApi holds only the
 				// placeholder key, so iterating it would skip the real root wrappers and miss their
 				// in-flight materializations in lazy mode (#136 review).
-				for (const key of rootKeys) {
-					// api[key] is always truthy immediately after assignment; FALSE never fires.
-					/* v8 ignore next */
+				for (let ofIndex = 0, ofList = rootKeys; ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					// A falsy root member (a primitive 0 / "") has nothing to materialize.
 					if (this.slothlet.api[key]) {
 						collectPendingMaterializations(this.slothlet.api[key]);
 					}
@@ -3616,26 +4435,24 @@ export class ApiManager extends ComponentBase {
 			} else {
 				// Nested path - check the container we just modified
 				let current = this.slothlet.api;
-				for (const part of effectiveParts) {
-					// Nested container path always resolves; the missing-part else never fires in tests.
-					/* v8 ignore start */
+				for (let ofIndex = 0, ofList = effectiveParts; ofIndex < ofList.length; ofIndex++) {
+					const part = ofList[ofIndex];
+					// Nested container path always resolves; the missing-part else is unreachable.
+					/* v8 ignore else */
 					if (current && current[part]) {
 						current = current[part];
 					} else {
 						break;
 					}
-					/* v8 ignore stop */
 				}
 				// When all parts resolve, current is always truthy; the falsy fallback is unreachable.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (current) {
 					collectPendingMaterializations(current);
 				}
 			}
 
 			// Wait for all pending materializations to complete
-			// Eager mode always completes synchronously; pendingMaterializations is always empty.
-			/* v8 ignore start */
 			if (pendingMaterializations.length > 0) {
 				if (this.____config.debug?.api) {
 					this.slothlet.debug("api", {
@@ -3644,9 +4461,8 @@ export class ApiManager extends ComponentBase {
 						apiPath: normalizedPath
 					});
 				}
-				await Promise.all(pendingMaterializations);
+				await promiseAll(pendingMaterializations);
 			}
-			/* v8 ignore stop */
 		}
 
 		// Only register user metadata if the API was actually set (not skipped due to collision)
@@ -3654,14 +4470,14 @@ export class ApiManager extends ComponentBase {
 		// CRITICAL: Use root segment only (first part) for metadata key to ensure proper merging
 		// e.g., "testMerge.config" → "testMerge", "nested.deep.path" → "nested"
 		// For root level (empty path), register metadata on each top-level key
-		if (anyAssignmentSucceeded && metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
+		if (anyAssignmentSucceeded && metadata && Objects.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
 			if (parts.length === 0) {
 				// Root level - register metadata only on the keys that actually landed. The full
 				// newApi includes keys a skip/warn collision rejected (never assigned onto the live
 				// tree) — registering metadata for those attaches it to a placeholder/rejected key,
 				// the same class of bug the ownership/cache gating below this block already fixed
 				// (#372 review — suppressed finding, api-manager.mjs:2366).
-				for (const key of rootSucceededKeys) {
+				for (const key of setValues(rootSucceededKeys)) {
 					this.slothlet.handlers.metadata.registerUserMetadata(key, metadata);
 				}
 			} else {
@@ -3674,6 +4490,11 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
+		// A package mount's manifest is reported by slothlet.node(target) for every node of the module, never as metadata.
+		if (anyAssignmentSucceeded && this.slothlet.handlers.metadata) {
+			this.slothlet.handlers.metadata.setModuleManifest(moduleID, restOptions[MODULE_MANIFEST]);
+		}
+
 		// Register ownership for added API
 		// For versioned adds effectivePath is the actual mount point (e.g. "v1.auth"); for non-versioned
 		// effectivePath === normalizedPath, so this is always correct for both cases.
@@ -3682,15 +4503,14 @@ export class ApiManager extends ComponentBase {
 		// holds the PRIOR value, so registering this module's subtree as owned here would let a
 		// rejected module become getCurrentOwner() and get invoked by the routine system even though
 		// it was never actually composed onto the api (#366 review).
-		// ownership is always registered and moduleID is always set; FALSE arm never fires.
-		/* v8 ignore next */
+		// Nothing assigned (a skip / warn collision) registers nothing.
 		if (anyAssignmentSucceeded && this.slothlet.handlers.ownership && moduleID) {
 			if (parts.length === 0) {
 				// Root-level add: register ownership per succeeded key only. Walking the whole
 				// apiToMerge (as the nested branch below does) would re-register every key, including
 				// one whose own assignment was rejected under skip/warn and already had its
 				// speculative registration reverted above — silently undoing that revert (#366 review).
-				for (const key of rootSucceededKeys) {
+				for (const key of setValues(rootSucceededKeys)) {
 					this.slothlet.handlers.ownership.registerSubtree(rootSource[key], moduleID, key, { collisionMode });
 				}
 			} else {
@@ -3702,9 +4522,10 @@ export class ApiManager extends ComponentBase {
 			// Record the mount endpoint so setOwnedProperty can resolve this
 			// module's ownership root without consulting apiCacheManager.
 			this.slothlet.handlers.ownership.setModuleEndpoint(moduleID, effectivePath);
-			this.mountedBy.set(
+			MapMethods.set(
+				this.mountedBy,
 				this.mountKey(moduleID, effectivePath),
-				mountedBy === null ? null : String(mountedBy).split(MODULE_ID_SEPARATOR)[0]
+				mountedBy === null ? null : splitText(String(mountedBy), MODULE_ID_SEPARATOR)[0]
 			);
 		}
 		// Nothing of this add went live (skip/warn), so the placement it recorded does not apply (#524).
@@ -3718,7 +4539,8 @@ export class ApiManager extends ComponentBase {
 		// force-replaces by default, bypassing the original collision decision entirely — resurrect
 		// content that was never actually mounted (#372 review).
 		if (anyAssignmentSucceeded && this.slothlet.handlers.apiCacheManager) {
-			const cachedApi = parts.length === 0 ? Object.fromEntries([...rootSucceededKeys].map((key) => [key, rootSource[key]])) : newApi;
+			const cachedApi =
+				parts.length === 0 ? objectFromEntries(mapList(setToArray(rootSucceededKeys), (key) => [key, rootSource[key]])) : newApi;
 			this.slothlet.handlers.apiCacheManager.set(moduleID, {
 				endpoint: effectivePath,
 				moduleID: moduleID,
@@ -3727,13 +4549,15 @@ export class ApiManager extends ComponentBase {
 				// Synthetic / in-memory leaf (#117): there's no file to re-read on reload, so keep
 				// the exports here — the reload path re-applies them via buildAPI({ syntheticExports }).
 				syntheticExports: isSynthetic ? syntheticExports : null,
+				// A single-file add: the folder its build scans and the one file it loads there, so a reload builds
+				// it the way the add did, not by scanning the file's path as a folder.
+				file: isFile ? { dir: dirForBuild, name: fileParts(resolvedFolderPath).name } : null,
 				mode: this.____config.mode,
 				sanitizeOptions: this.____config.sanitize || {},
 				hidden: restOptions.hidden ?? null,
-				scanHiddenFolders,
 				collisionMode: collisionMode,
 				config: { ...this.____config },
-				timestamp: Date.now()
+				timestamp: this.clock.now()
 			});
 		}
 
@@ -3743,6 +4567,9 @@ export class ApiManager extends ComponentBase {
 		// review). A PARTIAL root-level success still records the op: replay re-derives the same
 		// per-key split from the same folderPath/options, which is how the succeeded keys survive a
 		// reload at all.
+		// The history entries this add records, so a rollback scrubs these and no other entry of the same module (#986).
+		let recordedAdd = null;
+		let recordedOperation = null;
 		if (anyAssignmentSucceeded && this.slothlet.handlers.ownership) {
 			if (restOptions.recordHistory !== false) {
 				// For a synthetic / in-memory add there is no file to re-read: record the ORIGINAL inline
@@ -3750,24 +4577,29 @@ export class ApiManager extends ComponentBase {
 				// so replay and restore re-run the identical synthetic add. `resolvedFolderPath` is only the
 				// `synthetic:<path>` sentinel, which replay would wrongly treat as a filesystem path (#117).
 				const historyFolderPath = isSynthetic ? folderPath : resolvedFolderPath;
-				this.state.addHistory.push({
+				// The history of the api manager the instance has now, which is not this one when a full reload swapped
+				// in its new copy while this add loaded: recorded here, the add would be lost at the next reload.
+				const history = this._historyState();
+				recordedAdd = {
 					apiPath: normalizedPath,
 					folderPath: historyFolderPath,
 					options: { ...restOptions, metadata, moduleID, [PERMISSION_RULE_LAYERS]: ruleLayers, [MOUNTED_BY]: mountedBy },
 					moduleID,
 					versionConfig: versionConfig || null
-				});
+				};
+				listPush(history.addHistory, recordedAdd);
 
 				// Track in operation history for reload replay
 				// Use normalizedPath (not effectivePath) so replay can re-apply versionConfig correctly
-				this.state.operationHistory.push({
+				recordedOperation = {
 					type: "add",
 					apiPath: normalizedPath,
 					folderPath: historyFolderPath,
 					options: { ...restOptions, metadata, moduleID, [PERMISSION_RULE_LAYERS]: ruleLayers, [MOUNTED_BY]: mountedBy },
 					moduleID,
 					versionConfig: versionConfig || null
-				});
+				};
+				listPush(history.operationHistory, recordedOperation);
 			}
 		}
 
@@ -3776,7 +4608,7 @@ export class ApiManager extends ComponentBase {
 		// subtree so addApiComponent() does not leave the instance in a partially-mutated state
 		// (orphaned cache entry, ownership record, and history entries).
 		if (versionConfig?.version && this.slothlet.handlers.versionManager) {
-			const versionTag = String(versionConfig.version).trim();
+			const versionTag = StringMethods.trim(String(versionConfig.version));
 			try {
 				await this.slothlet.handlers.versionManager.registerVersion(
 					normalizedPath,
@@ -3789,7 +4621,8 @@ export class ApiManager extends ComponentBase {
 				await this._rollbackFailedVersionedAdd({
 					moduleID,
 					effectivePath,
-					normalizedPath
+					recordedAdd,
+					recordedOperation
 				});
 				throw error;
 			}
@@ -3801,8 +4634,8 @@ export class ApiManager extends ComponentBase {
 			const perms = restOptions.permissions;
 			const callerPattern = `${normalizedPath}.**`;
 
-			if (Array.isArray(perms.deny)) {
-				perms.deny.forEach((entry, i) => {
+			if (Arrays.isArray(perms.deny)) {
+				ArrayMethods.forEach(perms.deny, (entry, i) => {
 					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
 					this.slothlet.handlers.permissionManager.addRule(
 						{
@@ -3817,8 +4650,8 @@ export class ApiManager extends ComponentBase {
 					);
 				});
 			}
-			if (Array.isArray(perms.allow)) {
-				perms.allow.forEach((entry, i) => {
+			if (Arrays.isArray(perms.allow)) {
+				ArrayMethods.forEach(perms.allow, (entry, i) => {
 					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
 					this.slothlet.handlers.permissionManager.addRule(
 						{
@@ -3839,12 +4672,27 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * The state whose history an add records into: that of the api manager the instance (or the run's copy) has now. It
+	 * is this manager's own, except for an add that began before a full reload swapped in its new copy and finishes
+	 * after: that add mounts into the new tree, so it goes in the new copy's history, and is replayed by the reloads
+	 * after it.
+	 * @returns {{addHistory: object[], operationHistory: object[]}} The state.
+	 * @private
+	 *
+	 * @example
+	 * listPush(this._historyState().operationHistory, entry);
+	 */
+	_historyState() {
+		return this.slothlet.handlers.apiManager.state;
+	}
+
+	/**
 	 * Roll back a failed versioned add.
 	 *
 	 * @description
 	 * Called when `versionManager.registerVersion()` throws after the API tree, cache,
 	 * ownership, and history have already been mutated by `addApiComponent()`. Scrubs
-	 * the orphaned "add" entry from `operationHistory`, then delegates tree/cache/ownership
+	 * the "add" entries this add recorded (and no other) from the history, then delegates tree/cache/ownership
 	 * and `addHistory` cleanup to `removeApiComponent({ recordHistory: false })` so that
 	 * no spurious "remove" entry is pushed into `operationHistory`.
 	 *
@@ -3854,49 +4702,38 @@ export class ApiManager extends ComponentBase {
 	 * @param {object} opts - Rollback context.
 	 * @param {string} opts.moduleID - The moduleID of the just-added component.
 	 * @param {string} opts.effectivePath - The effective (versioned) mount path, e.g. "v1.auth".
-	 * @param {string} opts.normalizedPath - The logical path, e.g. "auth".
+	 * @param {object|null} [opts.recordedAdd=null] - The `addHistory` entry the add pushed, or null when it pushed none.
+	 * @param {object|null} [opts.recordedOperation=null] - The `operationHistory` entry the add pushed, or null when it
+	 *   pushed none.
 	 * @returns {Promise<void>}
 	 * @package
 	 *
 	 * @example
-	 * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
+	 * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, recordedAdd, recordedOperation });
 	 */
-	async _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath }) {
+	async _rollbackFailedVersionedAdd({ moduleID, effectivePath, recordedAdd = null, recordedOperation = null }) {
+		// The history the add was recorded in (see _historyState).
+		const history = this._historyState();
 		// --- Step 1: Scrub operationHistory ---
 		// removeApiComponent does not touch operationHistory. When called with
 		// { recordHistory: false } it suppresses its own "remove" push but leaves the "add"
-		// entry we already recorded. Remove it explicitly so no orphaned add survives.
-		// Use a manual reverse loop for Node 16 compatibility.
-		let addIndex = -1;
-		for (let i = this.state.operationHistory.length - 1; i >= 0; i--) {
-			const entry = this.state.operationHistory[i];
-			// The orphaned 'add' is the just-pushed tip, so this reverse scan matches on the first iteration;
-			// the non-match (false) arm is unreachable (same invariant as the addIndex guard below).
-			/* v8 ignore next */
-			if (entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.moduleID === moduleID) {
-				addIndex = i;
-				break;
-			}
-		}
-		// The orphaned 'add' was just pushed by addApiComponent before registerVersion threw, so addIndex is always found; the -1 guard is defensive against a corrupted history.
-		/* v8 ignore next */
-		if (addIndex !== -1) {
-			this.state.operationHistory.splice(addIndex, 1);
-		}
+		// entry we already recorded. Remove that entry explicitly so no orphaned add survives. Only the entry this add
+		// pushed is removed, matched by identity: an add run with `replay: false` pushed none (null matches nothing), and an
+		// earlier add of the same module at the same path must stay (#986).
+		history.operationHistory = filterList(history.operationHistory, (entry) => entry !== recordedOperation);
 
 		// --- Step 2: Scrub addHistory ---
 		// removeApiComponent also filters addHistory internally, but only when it succeeds.
 		// Doing it here unconditionally ensures no orphaned addHistory entry remains even if
-		// the teardown call below throws.
-		this.state.addHistory = this.state.addHistory.filter((entry) => entry?.moduleID !== moduleID);
+		// the teardown call below throws. As above, only the entry this add pushed.
+		history.addHistory = filterList(history.addHistory, (entry) => entry !== recordedAdd);
 
 		// --- Step 3: Tear down the mounted subtree, cache, and ownership ---
 		// { recordHistory: false } prevents removeApiComponent from pushing a "remove" entry.
 		// addHistory is already clean at this point so a double-filter is harmless.
 		try {
 			// moduleID is always a generated, truthy id in the versioned-add rollback flow; the effectivePath fallback is defensive and never taken.
-			/* v8 ignore next */
-			await this.removeApiComponent(moduleID || effectivePath, {
+			await this.removeApiComponent(/* v8 ignore next */ moduleID || effectivePath, {
 				recordHistory: false
 			});
 		} catch {
@@ -3913,20 +4750,23 @@ export class ApiManager extends ComponentBase {
 	 * removal by apiPath or moduleID uniformly, and preserves partial removals
 	 * (a sub-path is removed but the endpoint still resolves → entry kept).
 	 * Base modules (endpoint ".") own the whole tree and are never swept.
+	 * @param {string[]} [keep=[]] - Modules that stay loaded whatever the tree shows at their endpoints.
 	 * @returns {void}
 	 * @private
 	 */
-	#sweepOrphanedCaches() {
+	#sweepOrphanedCaches(keep = []) {
 		const cacheManager = this.slothlet.handlers?.apiCacheManager;
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!cacheManager) return;
 		const root = this.slothlet.boundApi;
-		for (const moduleID of cacheManager.getAllModuleIDs()) {
+		for (let ofIndex = 0, ofList = cacheManager.getAllModuleIDs(); ofIndex < ofList.length; ofIndex++) {
+			const moduleID = ofList[ofIndex];
+			if (ArrayMethods.includes(keep, moduleID)) continue;
 			const entry = cacheManager.get(moduleID);
 			// Base modules own the whole tree — never orphaned by a path removal.
 			if (!entry || entry.endpoint === "." || entry.endpoint === "") continue;
 			// Endpoint no longer resolves in the live tree → module gone → stale.
-			const parts = String(entry.endpoint).split(".").filter(Boolean);
+			const parts = filterList(splitText(String(entry.endpoint), "."), Boolean);
 			if (this.getValueAtPath(root, parts) === undefined) {
 				cacheManager.delete(moduleID);
 			}
@@ -3949,8 +4789,8 @@ export class ApiManager extends ComponentBase {
 		const ownership = this.slothlet.handlers.ownership;
 		if (!ownership || !apiPath) return false;
 		const prefix = apiPath + ".";
-		for (const p of ownership.pathToModule.keys()) {
-			if (!p.startsWith(prefix)) continue;
+		for (const p of mapKeys(ownership.pathToModule)) {
+			if (!StringMethods.startsWith(p, prefix)) continue;
 			const owner = ownership.getCurrentOwner(p);
 			/* v8 ignore else - the false arm is unreachable: pathToModule keys always have a non-empty
 			   owner stack (empty ones are deleted, see ownership.mjs removeOwnership) so `owner` is never
@@ -3978,9 +4818,10 @@ export class ApiManager extends ComponentBase {
 	 */
 	#survivingContributions(apiPath, live) {
 		const contributions = [];
-		for (const entry of this.slothlet.handlers.ownership.getPathHistory(apiPath)) {
+		for (let ofIndex = 0, ofList = this.slothlet.handlers.ownership.getPathHistory(apiPath); ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
 			const wrapper = resolveWrapper(entry.value);
-			if (wrapper && wrapper !== live && !contributions.includes(wrapper)) contributions.push(wrapper);
+			if (wrapper && wrapper !== live && !ArrayMethods.includes(contributions, wrapper)) listPush(contributions, wrapper);
 		}
 		return contributions;
 	}
@@ -4000,14 +4841,149 @@ export class ApiManager extends ComponentBase {
 	 */
 	#collectRolledBackNodes(rollbacks) {
 		const callable = [];
-		for (const { apiPath } of rollbacks) {
-			const live = resolveWrapper(this.getValueAtPath(this.slothlet.api, this.normalizeApiPath(apiPath).parts));
+		for (let ofIndex = 0, ofList = rollbacks; ofIndex < ofList.length; ofIndex++) {
+			const { apiPath } = ofList[ofIndex];
+			const live = resolveWrapper(this.#memberAtPath(this.slothlet.api, this.normalizeApiPath(apiPath).parts));
 			if (!live) continue;
 			const impl = live.____slothletInternal.impl;
-			if (UnifiedWrapper._isCallableImpl(impl)) this.slothlet.handlers.ownership.pinLiveEntries(apiPath, live, impl, resolveWrapper);
-			callable.push([apiPath, live]);
+			if (unifiedWrapperOwn.UnifiedWrapper._isCallableImpl(impl))
+				this.slothlet.handlers.ownership.pinLiveEntries(apiPath, live, impl, resolveWrapper);
+			listPush(callable, [apiPath, live]);
 		}
 		return callable;
+	}
+
+	/**
+	 * Put back on the api what `overwriterID`'s cross-module `replace` took off it (#3), at or under `underPath`.
+	 * @param {string} overwriterID - The module whose replace hid the members.
+	 * @param {?string} [underPath=null] - Only the members at or under this path; every one when null.
+	 * @returns {void}
+	 * @private
+	 */
+	#reattachShadows(overwriterID, underPath = null) {
+		const shadows = MapMethods.get(this.state.replaceShadows, overwriterID);
+		if (!shadows) return;
+		const kept = [];
+		for (let ofIndex = 0, ofList = shadows; ofIndex < ofList.length; ofIndex++) {
+			const shadow = ofList[ofIndex];
+			const shadowPath = `${shadow.container.____slothletInternal.apiPath}.${shadow.key}`;
+			if (underPath !== null && shadowPath !== underPath && !StringMethods.startsWith(shadowPath, `${underPath}.`)) {
+				listPush(kept, shadow);
+				continue;
+			}
+			// Skip if the key was already reinstated (e.g. a later module re-provided it) — don't
+			// clobber a live member with a stale shadow.
+			if (Objects.hasOwn(shadow.container, shadow.key)) continue;
+			frameworkWrite(shadow.container, () =>
+				Objects.defineProperty(shadow.container, shadow.key, {
+					__proto__: null,
+					value: shadow.child,
+					writable: false,
+					enumerable: true,
+					configurable: true
+				})
+			);
+			// Back on the surface, so what of it is unloaded counts again.
+			this._setShadowParked(shadow.child, false);
+		}
+		if (kept.length > 0) MapMethods.set(this.state.replaceShadows, overwriterID, kept);
+		else MapMethods.delete(this.state.replaceShadows, overwriterID);
+	}
+
+	/**
+	 * Forget the members of `ownerID` that another module's `replace` holds off the api, at or under `atPath`: the
+	 * owner removed them while they were hidden, so removing the replacing module must not bring them back.
+	 * @param {string} ownerID - The module the hidden members belong to.
+	 * @param {?string} [atPath=null] - Only the members at or under this path; every one when null.
+	 * @returns {void}
+	 * @private
+	 */
+	#dropShadowsOf(ownerID, atPath = null) {
+		for (const ofEntry of mapEntries(this.state.replaceShadows)) {
+			const overwriter = ofEntry[0];
+			const kept = filterList(ofEntry[1], (shadow) => {
+				if (shadow.ownerModuleID !== ownerID) return true;
+				const shadowPath = `${shadow.container.____slothletInternal.apiPath}.${shadow.key}`;
+				return atPath !== null && shadowPath !== atPath && !StringMethods.startsWith(shadowPath, `${atPath}.`);
+			});
+			if (kept.length > 0) MapMethods.set(this.state.replaceShadows, overwriter, kept);
+			else MapMethods.delete(this.state.replaceShadows, overwriter);
+		}
+	}
+
+	/**
+	 * Take a member a scoped removal deleted out of what another module's `replace` holds off the api: the detached
+	 * contributions at its parent path (which a removal of the replacing module restores from) and the hidden members
+	 * recorded for re-attach.
+	 * @param {string} target - The removed member's api path.
+	 * @param {string} moduleID - The module it was removed from.
+	 * @returns {void}
+	 * @private
+	 */
+	#forgetHiddenMember(target, moduleID) {
+		this.#dropShadowsOf(moduleID, target);
+		const lastDot = StringMethods.lastIndexOf(target, ".");
+		if (lastDot === -1) return;
+		const parentPath = StringMethods.slice(target, 0, lastDot);
+		const key = StringMethods.slice(target, lastDot + 1);
+		const holders = [];
+		for (let ofIndex = 0, ofList = this.slothlet.handlers.ownership.getPathHistory(parentPath); ofIndex < ofList.length; ofIndex++) {
+			const holder = resolveWrapper(ofList[ofIndex].value);
+			if (holder && !ArrayMethods.includes(holders, holder)) listPush(holders, holder);
+		}
+		// A hidden member's own subtree is held by its shadow record, not by an ownership value.
+		for (const ofEntry of mapEntries(this.state.replaceShadows)) {
+			for (let ofIndex = 0, ofList = ofEntry[1]; ofIndex < ofList.length; ofIndex++) {
+				const shadow = ofList[ofIndex];
+				const shadowPath = `${shadow.container.____slothletInternal.apiPath}.${shadow.key}`;
+				if (parentPath !== shadowPath && !StringMethods.startsWith(parentPath, `${shadowPath}.`)) continue;
+				let node = resolveWrapper(shadow.child);
+				const rest = parentPath === shadowPath ? [] : splitText(StringMethods.slice(parentPath, shadowPath.length + 1), ".");
+				for (let i = 0; node && i < rest.length; i++) node = resolveWrapper(Objects.getOwnPropertyDescriptor(node, rest[i])?.value);
+				if (node && !ArrayMethods.includes(holders, node)) listPush(holders, node);
+			}
+		}
+		for (let ofIndex = 0, ofList = holders; ofIndex < ofList.length; ofIndex++) {
+			const holder = ofList[ofIndex];
+			if (Objects.hasOwn(holder, key)) {
+				frameworkWrite(holder, () => Reflect.deleteProperty(holder, key));
+			}
+			const impl = holder.____slothletInternal.impl;
+			if (impl && typeof impl === "object" && resolveWrapper(impl) === null) Reflect.deleteProperty(impl, key);
+		}
+	}
+
+	/**
+	 * Put a primitive member's surviving value back after a removal, when the member at the path is a plain value
+	 * rather than a node.
+	 * @param {object} root - The api tree (`api` or `boundApi`).
+	 * @param {string[]} parts - The member's path segments.
+	 * @param {*} current - The value at the path now.
+	 * @param {*} value - The surviving owner's value.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @description
+	 * A primitive member is a node until code sets it at runtime; the set leaves a plain value on the namespace,
+	 * which the node restores cannot reach. The namespace takes the surviving value the way the set placed its own.
+	 */
+	#restorePrimitiveMember(root, parts, current, value) {
+		if (parts.length === 0 || resolveWrapper(current)) return;
+		if (value === undefined || typeof value === "function" || (value !== null && typeof value === "object")) return;
+		if (Objects.is(current, value)) return;
+		const container = resolveWrapper(this.#memberAtPath(root, copyList(parts, 0, -1)));
+		const key = parts[parts.length - 1];
+		if (!container || !Objects.hasOwn(container, key)) return;
+		const descriptor = Objects.getOwnPropertyDescriptor(container, key);
+		frameworkWrite(container, () =>
+			Objects.defineProperty(container, key, {
+				__proto__: null,
+				value,
+				writable: descriptor.writable === true,
+				enumerable: descriptor.enumerable !== false,
+				configurable: true
+			})
+		);
 	}
 
 	/**
@@ -4021,18 +4997,19 @@ export class ApiManager extends ComponentBase {
 	 * The function is resolved the way the adds resolved it: in ownership order, the first contributor
 	 * that supplies a function takes the slot, and a later one replaces it only when it was placed under
 	 * `merge-replace` / `replace`; a merge loser never does. With no function left, the namespace keeps
-	 * the impl the restore gave it (a call then throws `INVALID_CONFIG_NOT_A_FUNCTION`).
+	 * the impl the restore gave it (a call then throws `API_PATH_NOT_CALLABLE`).
 	 */
 	#restoreNamespaceFunction(live, apiPath) {
 		// Only a namespace: a rolled-back leaf already holds the value its current owner resolves to.
-		if (!Object.keys(live).some((key) => !isFrameworkReservedKey(key))) return;
+		if (!ArrayMethods.some(Objects.keys(live), (key) => !isFrameworkReservedKey(key))) return;
 		const ownership = this.slothlet.handlers.ownership;
 		let fn = null;
-		for (const entry of ownership.getPathHistory(apiPath)) {
+		for (let ofIndex = 0, ofList = ownership.getPathHistory(apiPath); ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
 			if (entry.isMergeLoss) continue;
 			const raw = resolveWrapper(entry.value);
 			const impl = raw ? raw.____slothletInternal.impl : entry.value;
-			if (!UnifiedWrapper._isCallableImpl(impl)) continue;
+			if (!unifiedWrapperOwn.UnifiedWrapper._isCallableImpl(impl)) continue;
 			if (fn === null || ownership.getPlacementMode(entry.moduleID, apiPath) !== null) fn = impl;
 		}
 		if (fn !== null) live.___adoptCallableImpl(fn, true);
@@ -4064,80 +5041,96 @@ export class ApiManager extends ComponentBase {
 	 * reads as it did before the overwrite.
 	 */
 	async #restoreInto(live, sources, apiPath, context, target = null) {
-		context.restored.add(live);
-		for (const wrapper of [live, ...sources]) {
+		SetMethods.add(context.restored, live);
+		for (let ofIndex = 0, ofList = concatLists([live], sources); ofIndex < ofList.length; ofIndex++) {
+			const wrapper = ofList[ofIndex];
 			if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
-				await wrapper._materialize();
+				await wrapper.___materialize();
 			}
 		}
-		const childKeys = (wrapper) => Object.keys(wrapper).filter((key) => !isFrameworkReservedKey(key));
+		const childKeys = (wrapper) => filterList(Objects.keys(wrapper), (key) => !isFrameworkReservedKey(key));
 		// Snapshot the live children first: ___setImpl re-adopts children from an impl that still carries
 		// them (a lazily materialized namespace's), building NEW child wrappers that would replace the live
 		// ones and drop any child another module merged in.
-		const liveChildren = new Map(childKeys(live).map((key) => [key, Object.getOwnPropertyDescriptor(live, key)]));
+		const liveChildren = mapFrom(mapList(childKeys(live), (key) => [key, Objects.getOwnPropertyDescriptor(live, key)]));
 		// Values set on the namespace by hand belong to neither module, so they are kept verbatim — detected
 		// exactly as a selective reload detects the custom properties it carries across (an empty fresh api:
 		// every plain or user-assigned value counts).
-		const customKeys = new Set(Object.keys(this._collectCustomProperties(live, {})));
+		const customKeys = setFrom(Objects.keys(this._collectCustomProperties(live, {})));
 		const last = sources[sources.length - 1];
 		const impl = target ? target.impl : last.____slothletInternal.impl;
 		const moduleID = target ? target.moduleID : last.____slothletInternal.moduleID;
+		// The node is the surviving module's again: the file and folder it was composed from too, which the folder
+		// privacy rule and the self-call bypass compare (#815). Set before the impl, whose export path is read
+		// against the file.
+		live.____slothletInternal.filePath = last.____slothletInternal.filePath;
+		live.____slothletInternal.sourceFolder = last.____slothletInternal.sourceFolder;
 		if (impl !== undefined) live.___setImpl(impl, moduleID);
 
 		const candidates = new Map();
-		for (const source of sources) {
-			for (const key of childKeys(source)) {
-				if (!candidates.has(key)) candidates.set(key, []);
-				candidates.get(key).push(source[key]);
+		for (let ofIndex = 0, ofList = sources; ofIndex < ofList.length; ofIndex++) {
+			const source = ofList[ofIndex];
+			for (let ofIndex = 0, ofList = childKeys(source); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				if (!MapMethods.has(candidates, key)) MapMethods.set(candidates, key, []);
+				listPush(MapMethods.get(candidates, key), source[key]);
 			}
 		}
-		const readOnly = (value) => ({ value, writable: false, enumerable: true, configurable: true });
+		const readOnly = (value) => ({ __proto__: null, value, writable: false, enumerable: true, configurable: true });
 		const layout = [];
-		for (const [key, values] of candidates) {
-			if (customKeys.has(key)) continue;
-			const liveChild = liveChildren.get(key)?.value;
+		for (const ofEntry of mapEntries(candidates)) {
+			const key = ofEntry[0],
+				values = ofEntry[1];
+			if (SetMethods.has(customKeys, key)) continue;
+			const liveChild = MapMethods.get(liveChildren, key)?.value;
 			const liveChildRaw = resolveWrapper(liveChild);
 			if (!liveChildRaw) {
-				layout.push([key, readOnly(values[values.length - 1])]);
+				listPush(layout, [key, readOnly(values[values.length - 1])]);
 				continue;
 			}
 			const childSources = [];
-			for (const value of values) {
-				const raw = resolveWrapper(value);
-				if (raw && raw !== liveChildRaw && !childSources.includes(raw)) childSources.push(raw);
+			for (let i = 0; i < values.length; i++) {
+				const raw = resolveWrapper(values[i]);
+				if (raw && raw !== liveChildRaw && !ArrayMethods.includes(childSources, raw)) listPush(childSources, raw);
 			}
-			if (childSources.length > 0 && !context.restored.has(liveChildRaw)) {
+			if (childSources.length > 0 && !SetMethods.has(context.restored, liveChildRaw)) {
 				await this.#restoreInto(liveChildRaw, childSources, `${apiPath}.${key}`, context);
 			}
-			layout.push([key, readOnly(liveChild)]);
+			listPush(layout, [key, readOnly(liveChild)]);
 		}
 		// Any other live child is kept unless ownership records it as the removed module's and no surviving
 		// module owns it; hand-set values go last, in their own order, with their own descriptors.
 		const ownership = this.slothlet.handlers.ownership;
 		const custom = [];
-		for (const [key, descriptor] of liveChildren) {
-			if (customKeys.has(key)) {
-				custom.push([key, descriptor]);
+		for (const ofEntry of mapEntries(liveChildren)) {
+			const key = ofEntry[0],
+				descriptor = ofEntry[1];
+			if (SetMethods.has(customKeys, key)) {
+				listPush(custom, [key, descriptor]);
 				continue;
 			}
-			if (candidates.has(key)) continue;
+			if (MapMethods.has(candidates, key)) continue;
 			const childPath = `${apiPath}.${key}`;
-			if (context.removedPaths.has(childPath) && !ownership.getCurrentOwner(childPath)) continue;
-			layout.push([key, descriptor]);
+			if (SetMethods.has(context.removedPaths, childPath) && !ownership.getCurrentOwner(childPath)) continue;
+			listPush(layout, [key, descriptor]);
 		}
-		runtime_frameworkWrite(live, () => {
-			for (const key of childKeys(live)) delete live[key];
-			for (const [key, descriptor] of [...layout, ...custom]) Object.defineProperty(live, key, descriptor);
+		frameworkWrite(live, () => {
+			for (let ofIndex = 0, ofList = childKeys(live); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				delete live[key];
+			}
+			for (let i = 0, entries = concatLists(layout, custom); i < entries.length; i++)
+				Objects.defineProperty(live, entries[i][0], entries[i][1]);
 		});
 	}
 
 	/**
 	 * Remove API modules at runtime.
-	 * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the composite `__metadata.moduleID`.
+	 * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the internal composite module id.
 	 * @param {object} [options={}] - Options.
 	 * @param {string} [options.scopedApiPath] - When set, `pathOrModuleId` is resolved strictly as a
 	 *   moduleID and only that module's single node at `scopedApiPath` is removed (drives the public
-	 *   two-argument `api.remove(moduleID, apiPath)`); sibling modules and the module's other mounts stay.
+	 *   two-argument `api.remove(apiPath, id)`); sibling modules and the module's other mounts stay.
 	 * @param {boolean} [options.recordHistory=true] - Whether to record the removal in the add/operation history.
 	 * @param {object|null} [options.writer] - The removing module's wrapper, or null for host code, when the caller read
 	 *   it before an await; read from the runtime otherwise (#625).
@@ -4148,7 +5141,7 @@ export class ApiManager extends ComponentBase {
 	 * @description
 	 * Removes an API subtree by apiPath, or every path owned by a moduleID. The argument is resolved by
 	 * splitting on the reserved composite separator ({@link MODULE_ID_SEPARATOR}): a plain id (which can
-	 * never contain the separator) passes through whole, while a composite `__metadata.moduleID` strips to
+	 * never contain the separator) passes through whole, while a composite module id strips to
 	 * its base. It matches a registered module verbatim or by its auto-generated `<base>_<hash>` form, and
 	 * otherwise falls back to treating the argument as an apiPath.
 	 *
@@ -4167,8 +5160,7 @@ export class ApiManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "pathOrModuleId",
 				expected: "non-empty string",
-				received: typeof pathOrModuleId,
-				validationError: true
+				received: typeof pathOrModuleId
 			});
 		}
 
@@ -4181,29 +5173,39 @@ export class ApiManager extends ComponentBase {
 		// Try moduleID first (more specific), then fall back to API path
 		let apiPath = null;
 		let moduleID;
+		// Loaded modules a scoped removal left owning nothing on the api: they stay loaded until removed by their own
+		// moduleID, whatever else a removal takes off the api (a reload brings their members back).
+		let ownerless = [];
 
 		if (this.slothlet.handlers.ownership) {
-			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
+			const ownedModules = mapKeysToArray(this.slothlet.handlers.ownership.moduleToPath);
+			// A loaded module whose every path a scoped removal pruned owns nothing on the api, yet is still loaded (a
+			// reload brings its members back), so it is still removable by its moduleID. Only by its exact id: an auto id
+			// is "<path>_<hash>", so a prefix match would take such a module for remove(path) and remove it instead of
+			// whatever is now at the path.
+			const cacheManager = this.slothlet.handlers.apiCacheManager;
+			ownerless = filterList(cacheManager.getAllModuleIDs(), (id) => !ArrayMethods.includes(ownedModules, id));
+			const registeredModules = ownedModules;
 			let matchingModule = null;
 
 			// Recover the base moduleID from the argument. The argument is either a plain moduleID (a user
 			// id — which can never contain the reserved separator, refused at add()) or the internal
-			// composite `moduleID<sep>apiPath` (e.g. a leaf's `__metadata.moduleID`). Splitting on the
+			// composite `moduleID<sep>apiPath` (the internal per-leaf id). Splitting on the
 			// reserved separator is therefore unambiguous: it yields the base for a composite and the whole
 			// id otherwise. A ':' — or any other character — in a user id is preserved intact (#303).
-			const candidateModuleID = pathOrModuleId.split(MODULE_ID_SEPARATOR)[0];
+			const candidateModuleID = splitText(pathOrModuleId, MODULE_ID_SEPARATOR)[0];
 
 			// The exact moduleID always wins. Without one, match its auto-generated "<base>_<hash>" form — this allows
 			// api.remove("removableInternal") to remove "removableInternal_abc123" — walking from the end to prefer the
 			// most recently registered module when several match, as stale entries from prior add/remove cycles may
 			// linger due to async lazy materialization. A module whose id merely starts with "<base>_" is never taken
 			// for a module that has the exact id (#625).
-			if (registeredModules.includes(candidateModuleID)) {
+			if (ArrayMethods.includes(registeredModules, candidateModuleID) || ArrayMethods.includes(ownerless, candidateModuleID)) {
 				matchingModule = candidateModuleID;
 			} else {
 				for (let i = registeredModules.length - 1; i >= 0; i--) {
 					const candidate = registeredModules[i];
-					if (candidate.startsWith(`${candidateModuleID}_`)) {
+					if (StringMethods.startsWith(candidate, `${candidateModuleID}_`)) {
 						matchingModule = candidate;
 						break;
 					}
@@ -4225,30 +5227,36 @@ export class ApiManager extends ComponentBase {
 					apiPath = pathOrModuleId;
 					moduleID = owner.moduleID;
 				} else {
-					// Neither moduleID nor a registered path. A path holding an alias — another node stored there — is
-					// removed as the member holding it, never as the node it stands for (#625); anything else is not found.
-					return this.#removeAlias(pathOrModuleId, options);
+					// A loaded module mounted exactly here whose members a scoped removal pruned owns nothing on the api,
+					// yet its mount is still this path: removing the path removes that module, as it did while the path
+					// was live. Only while nothing is live at the path, and only by its exact endpoint.
+					const mounted = this.#ownerlessMountAt(pathOrModuleId, ownerless);
+					if (mounted === null) {
+						// Neither moduleID nor a registered path. A path holding an alias — another node stored there — is
+						// removed as the member holding it, never as the node it stands for (#625); anything else is not found.
+						return this.#removeAlias(pathOrModuleId, options);
+					}
+					moduleID = mounted;
 				}
 			}
 		} else {
 			// No ownership tracking - use old heuristic (dots = apiPath). Recover the base by splitting on
 			// the reserved separator: it strips an internal composite while preserving a plain id (which
 			// cannot contain the separator), so a ':' in a user id is never truncated (#303).
-			const isModuleId = !pathOrModuleId.includes(".");
+			const isModuleId = !StringMethods.includes(pathOrModuleId, ".");
 			apiPath = isModuleId ? null : pathOrModuleId;
-			moduleID = isModuleId ? pathOrModuleId.split(MODULE_ID_SEPARATOR)[0] : null;
+			moduleID = isModuleId ? splitText(pathOrModuleId, MODULE_ID_SEPARATOR)[0] : null;
 		}
 		if (!this.slothlet || !this.slothlet.isLoaded) {
-			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "removeApi",
-				validationError: true
+			throw new this.SlothletError("INSTANCE_NOT_LOADED", {
+				operation: ["slothlet", "api", "remove"]
 			});
 		}
 
 		// Module code removing writes at every path the removal reaches, all checked before anything changes (#625). A
 		// replay, or the framework undoing its own failed add, records no history and is not the module's.
 		if (recordHistory) {
-			const writer = "writer" in options ? options.writer : runtime_selfModuleReader(this.slothlet);
+			const writer = "writer" in options ? options.writer : selfModuleReader(this.slothlet);
 			if (writer !== null) this.#assertModuleRemoval(writer, moduleID, apiPath, scopedApiPath);
 		}
 		// A module removed whole takes the record of what it made with it (#597).
@@ -4258,9 +5266,15 @@ export class ApiManager extends ComponentBase {
 		// is nothing to remove. When it does, remove only THIS module's ownership across the path's subtree.
 		if (scopedApiPath !== null) {
 			const ownership = this.slothlet.handlers.ownership;
-			const normalizedScoped = this.normalizeApiPath(scopedApiPath).apiPath;
-			const ownedPaths = ownership?.moduleToPath?.get(moduleID);
-			if (!ownedPaths || !ownedPaths.has(normalizedScoped)) {
+			const { apiPath: normalizedScoped, parts: scopedParts } = this.normalizeApiPath(scopedApiPath);
+			let ownedPaths = ownership?.moduleToPath ? MapMethods.get(ownership.moduleToPath, moduleID) : undefined;
+			if (ownedPaths && !SetMethods.has(ownedPaths, normalizedScoped)) {
+				// A lazy namespace on the way that nothing has read yet has not registered its members: load it, as
+				// reading the path would, and look again.
+				await this.#materializeAlong(scopedParts);
+				ownedPaths = MapMethods.get(ownership.moduleToPath, moduleID);
+			}
+			if (!ownedPaths || !SetMethods.has(ownedPaths, normalizedScoped)) {
 				return false;
 			}
 			// Scoped two-argument removal is recursive but pinned to THIS module: walk every path this
@@ -4272,9 +5286,10 @@ export class ApiManager extends ComponentBase {
 			const scopedModuleIDKey = String(moduleID);
 			const scopedPrefix = `${normalizedScoped}.`;
 			// Deepest-first so a container is reached only after its own leaves are gone.
-			const targets = [...ownedPaths]
-				.filter((p) => p === normalizedScoped || p.startsWith(scopedPrefix))
-				.sort((a, b) => b.length - a.length);
+			const targets = ArrayMethods.sort(
+				filterList(setToArray(ownedPaths), (p) => p === normalizedScoped || StringMethods.startsWith(p, scopedPrefix)),
+				(a, b) => b.length - a.length
+			);
 			// When this scoped removal empties the module (it owns nothing outside scopedApiPath), block it
 			// from further registration BEFORE the walk. Tearing down a lazy node materializes it to delete it,
 			// and that materialization can register previously-unregistered descendants (a lazy submodule's
@@ -4283,14 +5298,29 @@ export class ApiManager extends ComponentBase {
 			// front makes ownership.register() reject them, so the removal is complete and stays gone across a
 			// reload. Only for a full removal — a partial one keeps sibling paths outside scopedApiPath that
 			// must still be able to materialize, so it is not blocked.
-			const isFullRemoval = [...ownedPaths].every((p) => p === normalizedScoped || p.startsWith(scopedPrefix));
+			const isFullRemoval = ArrayMethods.every(
+				setToArray(ownedPaths),
+				(p) => p === normalizedScoped || StringMethods.startsWith(p, scopedPrefix)
+			);
 			if (isFullRemoval) {
 				ownership?.markUnregistered?.(scopedModuleIDKey);
 				// The module is going away entirely: its principals (#459), rules (#625), and event listeners (#497) with it.
 				this.#forgetRemovedModule(scopedModuleIDKey, recordHistory);
 			}
-			for (const target of targets) {
+			const restoreContext = { restored: new Set(), removedPaths: setFrom(targets) };
+			for (let ofIndex = 0, ofList = targets; ofIndex < ofList.length; ofIndex++) {
+				const target = ofList[ofIndex];
 				const targetParts = this.normalizeApiPath(target).parts;
+				// Whether the live node at the path is this module's own: a cross-module replace swapped its wrapper in
+				// and detached the earlier owner's, with that owner's members still on it.
+				const liveNodes = mapList([this.slothlet.api, this.slothlet.boundApi], (tree) =>
+					resolveWrapper(this.#memberAtPath(tree, targetParts))
+				);
+				const ownLive = ArrayMethods.some(
+					ownership.getPathHistory(target),
+					(entry) =>
+						entry.moduleID === scopedModuleIDKey && resolveWrapper(entry.value) !== null && resolveWrapper(entry.value) === liveNodes[0]
+				);
 				const scopedResult = ownership.removePath(target, scopedModuleIDKey);
 				// A merge-loser's raw routine contribution at this exact path is never pruned by
 				// impl:removed on a "restore" outcome (the live tree already showed the current
@@ -4299,22 +5329,41 @@ export class ApiManager extends ComponentBase {
 				// filter; harmless no-op when impl:removed already pruned it via a real "delete".
 				this.slothlet.handlers.routineManager?.onImplRemoved?.({ apiPath: target, moduleID: scopedModuleIDKey });
 				if (scopedResult.action === "restore") {
+					// What this module's replace took off the api under the node comes back with the revert.
+					ownership.unshadowSubtree(target, scopedModuleIDKey);
 					// Shared node: revert the tree value to the owner it fell back to.
 					const revertValue = ownership.getCurrentValue?.(target);
 					const revertOwner = ownership.getCurrentOwner?.(target)?.moduleID;
-					/* v8 ignore else */
-					if (revertValue !== undefined && revertOwner) {
-						const revertOptions = { mutateExisting: true, allowOverwrite: true, collisionMode: "replace", moduleID: revertOwner };
-						await this.setValueAtPath(this.slothlet.api, targetParts, revertValue, revertOptions);
-						await this.setValueAtPath(this.slothlet.boundApi, targetParts, revertValue, revertOptions);
+					const sources = ownLive ? this.#survivingContributions(target, liveNodes[0]) : [];
+					if (sources.length > 0) {
+						// This module's node was the live one, so the earlier owner's node is detached with its members on it.
+						// Restore those into the live node, exactly as removing the whole module does: setting the earlier
+						// owner's impl alone leaves out every member it had that this module does not provide.
+						const rolledBackNodes = this.#collectRolledBackNodes([{ apiPath: target }]);
+						for (let i = 0; i < liveNodes.length; i++) {
+							const live = liveNodes[i];
+							if (!live || SetMethods.has(restoreContext.restored, live)) continue;
+							await this.#restoreInto(live, this.#survivingContributions(target, live), target, restoreContext, {
+								impl: revertValue,
+								moduleID: revertOwner
+							});
+						}
+						for (let i = 0; i < rolledBackNodes.length; i++) this.#restoreNamespaceFunction(rolledBackNodes[i][1], target);
 					} else {
-						// Unreachable defensive mirror of the single-node restore path: removePath only returns
-						// "restore" when an owner remains on the node's stack, and every ownership entry carries a
-						// concrete value (a leaf's callable, or a container's object), so getCurrentValue above is
-						// never undefined for a restored node — revertValue is always defined and this else never
-						// runs. Kept so the scoped path degrades the same way the single-node path would if that
-						// invariant were ever broken.
-						await this.restoreApiPath(target, scopedResult.restoreModuleId);
+						/* v8 ignore else */
+						if (revertValue !== undefined && revertOwner) {
+							const revertOptions = { mutateExisting: true, allowOverwrite: true, collisionMode: "replace", moduleID: revertOwner };
+							await this.setValueAtPath(this.slothlet.api, targetParts, revertValue, revertOptions);
+							await this.setValueAtPath(this.slothlet.boundApi, targetParts, revertValue, revertOptions);
+						} else {
+							// Unreachable defensive mirror of the single-node restore path: removePath only returns
+							// "restore" when an owner remains on the node's stack, and every ownership entry carries a
+							// concrete value (a leaf's callable, or a container's object), so getCurrentValue above is
+							// never undefined for a restored node — revertValue is always defined and this else never
+							// runs. Kept so the scoped path degrades the same way the single-node path would if that
+							// invariant were ever broken.
+							await this.restoreApiPath(target, scopedResult.restoreModuleId);
+						}
 					}
 				} else {
 					// action "delete": this module was the node's last owner (an owned target never resolves
@@ -4323,28 +5372,35 @@ export class ApiManager extends ComponentBase {
 					// descendant can still live under a node this module was the last owner of — deleting it
 					// would take that foreign node with it. Leave such a container standing (now unowned) for
 					// its remaining descendants; a childless leaf/container is deleted.
-					const stillHasChild = [...ownership.moduleToPath.values()].some((set) => {
-						for (const owned of set) if (owned.startsWith(`${target}.`)) return true;
+					const stillHasChild = ArrayMethods.some(mapValuesToArray(ownership.moduleToPath), (set) => {
+						for (const owned of setValues(set)) if (StringMethods.startsWith(owned, `${target}.`)) return true;
 						return false;
 					});
 					if (!stillHasChild) {
 						await this.deletePath(this.slothlet.api, targetParts);
 						await this.deletePath(this.slothlet.boundApi, targetParts);
 					}
+					// A member another module's replace held off the api is removed there too, or removing that module
+					// would bring it back.
+					this.#forgetHiddenMember(target, scopedModuleIDKey);
 				}
 			}
+			// What this module's replace took off the api under the path comes back now that its share there is gone
+			// (all of it when the module is gone).
+			this.#reattachShadows(scopedModuleIDKey, isFullRemoval ? null : normalizedScoped);
 			// A mount of this module at or below the path goes with its share; the last one takes the module (#625).
 			if (!isFullRemoval) this.#releaseMountsUnder(normalizedScoped, recordHistory, scopedModuleIDKey);
 			// The apiPath branch (unlike the moduleID branch) does not call ownership.unregister(), so sweep
-			// any cache entry the removed nodes orphaned.
-			this.#sweepOrphanedCaches();
+			// any cache entry the removed nodes orphaned. A module that keeps paths outside the scoped one stays
+			// loaded even when the removal pruned its endpoint: a reload or a later add there brings the endpoint back.
+			this.#sweepOrphanedCaches(isFullRemoval ? ownerless : concatLists(ownerless, [scopedModuleIDKey]));
 			// Record a SCOPED remove for reload replay — carrying both the moduleID and the apiPath so the
 			// replay re-runs it as the two-argument form, not a whole-path removal. This is safe because a
 			// module's id survives a reload: the "add" op records `options.moduleID` and it is reused on
 			// re-add (user-supplied ids AND auto-generated `<path>_<hash>` ids alike), so the same id exists
 			// when this op replays. `scopedModuleID` is what distinguishes it from a plain apiPath remove.
 			if (recordHistory) {
-				this.state.operationHistory.push({ type: "remove", apiPath: normalizedScoped, scopedModuleID: scopedModuleIDKey });
+				listPush(this.state.operationHistory, { type: "remove", apiPath: normalizedScoped, scopedModuleID: scopedModuleIDKey });
 			}
 			return true;
 		}
@@ -4353,120 +5409,65 @@ export class ApiManager extends ComponentBase {
 			const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
 			const moduleIDKey = String(moduleID);
 			// ownership always returns an array; the empty-array fallback is unreachable.
-			/* v8 ignore next */
-			const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath) || [];
-			// A path that is the module's mount point takes the module with it (#625): checked before the removal drops it.
-			const removesModule = this.slothlet.handlers.ownership.getModuleMounts(moduleIDKey).includes(normalizedPath);
-			// ownership always returns a result object; the fallback object is unreachable.
-			/* v8 ignore next 4 */
-			const ownershipResult = this.slothlet.handlers.ownership?.removePath?.(normalizedPath, moduleIDKey) || {
-				action: "none",
-				removedModuleId: null,
-				restoreModuleId: null
-			};
-			// Same reasoning as the scoped removal loop above (#372 review): a "restore" outcome here
-			// (a prior owner remains) never fires impl:removed for the just-removed module's own raw
-			// routine entry — its function stays live in RoutineManager.raw indefinitely, still
-			// invoked under stackRoutines: true, even though this exact call removed it. Harmless
-			// no-op when impl:removed already pruned it via a real "delete" below.
+			const history = /* v8 ignore next */ this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath) || [];
+			// A path another module also holds is reverted to it: the current owner's nodes at and under the path are
+			// detached as remove(moduleID, apiPath) detaches them, so its own members go and the shared ones show the
+			// earlier owner's values again. Reverting the path's own value alone left the removed layer's members live.
+			// The removal's write check ran above; the scoped form records the history entry.
+			if (ArrayMethods.some(history, (entry) => entry.moduleID !== moduleIDKey)) {
+				return this.removeApiComponent(moduleIDKey, { ...options, scopedApiPath: normalizedPath, writer: null });
+			}
+			// moduleID is the path's only owner (a shared path took the scoped form above), so this drops the path's entry.
+			this.slothlet.handlers.ownership.removePath(normalizedPath, moduleIDKey);
+			// Harmless no-op when impl:removed prunes it on the delete below; kept as the scoped loop above keeps it (#372).
 			this.slothlet.handlers.routineManager?.onImplRemoved?.({ apiPath: normalizedPath, moduleID: moduleIDKey });
 			const pathParts = this.normalizeApiPath(apiPath).parts;
-			if (ownershipResult.action === "delete") {
-				// deletePath() below removes the WHOLE live subtree rooted at normalizedPath, but
-				// impl:removed (and therefore the onImplRemoved() call above) only ever fires for the
-				// exact property deleted — never for descendants carried away with it. Prune those too,
-				// or a nested routine capture (e.g. "auth.initialize" under a removed "auth") outlives
-				// its own subtree (#372/#373 review, suppressed finding).
-				this.slothlet.handlers.routineManager?.pruneSubtree?.(normalizedPath, moduleIDKey);
-				await this.deletePath(this.slothlet.api, pathParts);
-				await this.deletePath(this.slothlet.boundApi, pathParts);
-				// Clean up user metadata (use root segment only)
-				// metadata handler is always registered; FALSE never fires.
-				/* v8 ignore next */
-				if (this.slothlet.handlers.metadata) {
-					const rootSegment = normalizedPath.split(".")[0];
-					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
-				}
-				// Clean up VersionManager registration if this was a versioned module
-				// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable.
-				/* v8 ignore else */
-				if (this.slothlet.handlers.versionManager) {
-					const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
-					if (versionKey) {
-						this.slothlet.handlers.versionManager.unregisterVersion(versionKey.logicalPath, versionKey.versionTag);
-					}
-					// If the path being removed is a logical dispatcher (e.g. api.remove("auth")), clean up
-					// the #dispatchers entry. getVersionKeyForModule won't find it (the dispatcher's
-					// synthetic moduleID is not in #moduleToVersionKey), so we check explicitly.
-					if (this.slothlet.handlers.versionManager.hasDispatcher(normalizedPath)) {
-						this.slothlet.handlers.versionManager.teardownDispatcher(normalizedPath);
-					}
-				}
-				// Every mount at or below the removed path is gone with it (#625); a module whose last mount it was goes too.
-				this.#releaseMountsUnder(normalizedPath, recordHistory);
-				// Invalidate the apiCacheManager entry for the removed module.
-				// The apiPath branch (unlike the moduleID branch) does not call
-				// ownership.unregister(), so the cache entry would otherwise be
-				// orphaned.
-				this.#sweepOrphanedCaches();
-				// Track in operation history for reload replay
-				this.state.operationHistory.push({
-					type: "remove",
-					apiPath: normalizedPath
-				});
-				return true;
-			}
-			// In this branch moduleID is always the path's current owner (resolved from getCurrentOwner during
-			// detection), so removePath returns "delete" (single owner) or "restore" (a shadow remains) — never
-			// "none". The "delete" arm above and the "restore" primary below are both covered by the
-			// stacked-remove-by-apiPath tests; only the restore fallback and the none/return-false tail are
-			// unreachable defensive handlers, ignored precisely below. The action is always "restore" once
-			// "delete" is handled above and "none" is impossible here, so this if's else-arm never runs.
+			// deletePath() below removes the WHOLE live subtree rooted at normalizedPath, but
+			// impl:removed (and therefore the onImplRemoved() call above) only ever fires for the
+			// exact property deleted — never for descendants carried away with it. Prune those too,
+			// or a nested routine capture (e.g. "auth.initialize" under a removed "auth") outlives
+			// its own subtree (#372/#373 review, suppressed finding).
+			this.slothlet.handlers.routineManager?.pruneSubtree?.(normalizedPath, moduleIDKey);
+			await this.deletePath(this.slothlet.api, pathParts);
+			await this.deletePath(this.slothlet.boundApi, pathParts);
+			// The subtree left the api whoever owned its nodes, so nothing below the path stays recorded: a later add
+			// there is then its only owner, and removing it removes its members instead of reverting them (#799).
+			this.slothlet.handlers.ownership.removeSubtree(normalizedPath);
+			// Clean up user metadata (use root segment only)
+			// metadata handler is always registered; FALSE never fires.
 			/* v8 ignore else */
-			if (ownershipResult.action === "restore") {
-				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
-				const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleID;
-				// getCurrentValue always resolves a concrete value for a restored node (a remaining stack owner
-				// carrying a leaf callable or a container object), so the else — the restoreApiPath fallback —
-				// never runs. `v8 ignore else` drops only that dead arm while keeping the covered if-body counted.
-				/* v8 ignore else */
-				if (restoredValue !== undefined && restoredModuleId) {
-					await this.setValueAtPath(this.slothlet.api, pathParts, restoredValue, {
-						mutateExisting: true,
-						allowOverwrite: true,
-						collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
-						moduleID: restoredModuleId // Pass the restored moduleID for ownership tracking
-					});
-					await this.setValueAtPath(this.slothlet.boundApi, pathParts, restoredValue, {
-						mutateExisting: true,
-						allowOverwrite: true,
-						collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
-						moduleID: restoredModuleId // Pass the restored moduleID for ownership tracking
-					});
-					// The module's rules, rule history, principals, and listeners go with its mount point (#625).
-					if (removesModule) this.#releaseMount(moduleIDKey, normalizedPath, recordHistory);
-					// Track in operation history for reload replay
-					this.state.operationHistory.push({
-						type: "remove",
-						apiPath: normalizedPath
-					});
-					return true;
-				} else {
-					await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
-					this.state.operationHistory.push({ type: "remove", apiPath: normalizedPath });
-					return true;
+			if (this.slothlet.handlers.metadata) {
+				const rootSegment = splitText(normalizedPath, ".")[0];
+				this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
+			}
+			// Clean up VersionManager registration if this was a versioned module
+			// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable.
+			/* v8 ignore else */
+			if (this.slothlet.handlers.versionManager) {
+				const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
+				if (versionKey) {
+					this.slothlet.handlers.versionManager.unregisterVersion(versionKey.logicalPath, versionKey.versionTag);
+				}
+				// If the path being removed is a logical dispatcher (e.g. api.remove("auth")), clean up
+				// the #dispatchers entry. getVersionKeyForModule won't find it (the dispatcher's
+				// synthetic moduleID is not in #moduleToVersionKey), so we check explicitly.
+				if (this.slothlet.handlers.versionManager.hasDispatcher(normalizedPath)) {
+					this.slothlet.handlers.versionManager.teardownDispatcher(normalizedPath);
 				}
 			}
-			// Unreachable tail: moduleID is the path's current owner (above), so removePath never yields
-			// "none" here and the function never falls through — both are defensive only.
-			/* v8 ignore start */
-			if (ownershipResult.action === "none" && history.length === 0) {
-				await this.deletePath(this.slothlet.api, pathParts);
-				await this.deletePath(this.slothlet.boundApi, pathParts);
-				return true;
-			}
-			return false;
-			/* v8 ignore stop */
+			// Every mount at or below the removed path is gone with it (#625); a module whose last mount it was goes too.
+			this.#releaseMountsUnder(normalizedPath, recordHistory);
+			// Invalidate the apiCacheManager entry for the removed module.
+			// The apiPath branch (unlike the moduleID branch) does not call
+			// ownership.unregister(), so the cache entry would otherwise be
+			// orphaned.
+			this.#sweepOrphanedCaches(filterList(ownerless, (id) => id !== String(moduleID)));
+			// Track in operation history for reload replay
+			listPush(this.state.operationHistory, {
+				type: "remove",
+				apiPath: normalizedPath
+			});
+			return true;
 		}
 
 		if (moduleID) {
@@ -4487,13 +5488,19 @@ export class ApiManager extends ComponentBase {
 			// owns its whole subtree and is removed wholesale. (Mapping "." to "" also keeps it out of
 			// normalizeApiPath, which rejects "." on empty segments.)
 			const isRootMount = !mountEndpoint || mountEndpoint === ".";
+			// A loaded module a scoped removal left owning nothing (its endpoint was pruned) is still removed whole.
+			const ownerlessLoaded =
+				!MapMethods.has(this.slothlet.handlers.ownership.moduleToPath, moduleIDKey) &&
+				this.slothlet.handlers.apiCacheManager.has(moduleIDKey);
 			let mountRoot = isRootMount ? "" : mountEndpoint;
 			// Every mount of the module: a host may mount one moduleID at several paths, and a removal by moduleID takes
 			// them all (#625).
-			const moduleMounts = this.slothlet.handlers.ownership.getModuleMounts(moduleIDKey).filter((mount) => mount !== "." && mount !== "");
+			const moduleMounts = filterList(
+				this.slothlet.handlers.ownership.getModuleMounts(moduleIDKey),
+				(mount) => mount !== "." && mount !== ""
+			);
 			// ownership is always registered and unregister() always returns a valid result; falsy fallback unreachable.
-			/* v8 ignore next */
-			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
+			const result = /* v8 ignore next */ this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
 			// A merge-loser's raw routine contribution is never pruned by impl:removed (it was never
 			// the live property at its path), so it must be pruned explicitly here alongside the
 			// ownership removal that just discarded every path this module owned (#372).
@@ -4503,7 +5510,7 @@ export class ApiManager extends ComponentBase {
 
 			// Clean up VersionManager registration if this was a versioned module.
 			// The apiPath+moduleID branch above handles this for path-based removals;
-			// this branch handles moduleID-only removals (e.g. from api.slothlet.versioning.unregister).
+			// this branch handles moduleID-only removals (e.g. from api.slothlet.versioning.remove).
 			// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable (matches the metadata-handler ignore above).
 			/* v8 ignore else */
 			if (this.slothlet.handlers.versionManager) {
@@ -4514,16 +5521,27 @@ export class ApiManager extends ComponentBase {
 			}
 
 			// Collect all paths that were owned by this module
-			const allPaths = [...result.removed, ...result.rolledBack.map((r) => r.apiPath)];
+			const allPaths = concatLists(
+				result.removed,
+				mapList(result.rolledBack, (r) => r.apiPath)
+			);
 
 			// Deduplicate paths (ownership may track duplicates due to nested structures)
-			const uniquePaths = [...new Set(allPaths)];
+			const uniquePaths = setToArray(setFrom(allPaths));
+			// The rolled-back paths where the removed module's value was the live one.
+			const takenOverPaths = setFrom(
+				mapList(
+					filterList(result.rolledBack, (r) => r.wasCurrent),
+					(r) => r.apiPath
+				)
+			);
 
 			// Filter paths: separate those with no owners (delete) vs those with owners (rollback)
 			const pathsToDelete = [];
 			const pathsToRollback = [];
 
-			for (const path of uniquePaths) {
+			for (let ofIndex = 0, ofList = uniquePaths; ofIndex < ofList.length; ofIndex++) {
+				const path = ofList[ofIndex];
 				const currentOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(path);
 
 				// Check if path has children that will NOT be deleted (children owned by another module).
@@ -4536,8 +5554,8 @@ export class ApiManager extends ComponentBase {
 					this.#hasLiveForeignContent(path, moduleIDKey) ||
 					(isRootMount
 						? this._hasForeignOwnedDescendant(path, moduleIDKey)
-						: uniquePaths.some((p) => {
-								if (p === path || !p.startsWith(path + ".")) return false;
+						: ArrayMethods.some(uniquePaths, (p) => {
+								if (p === path || !StringMethods.startsWith(p, path + ".")) return false;
 								const childOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(p);
 								return childOwner && childOwner.moduleID !== moduleIDKey;
 							}));
@@ -4545,22 +5563,22 @@ export class ApiManager extends ComponentBase {
 				// Only rollback if there's an owner AND it's not the module being removed
 				if (currentOwner && currentOwner.moduleID !== moduleIDKey) {
 					// Has different owner → rollback to current owner
-					pathsToRollback.push({
+					listPush(pathsToRollback, {
 						apiPath: path,
 						restoredTo: currentOwner.moduleID
 					});
 				} else if (!hasChildrenWithOtherOwners) {
 					// No owner (or self-ownership) and no children with other owners → safe to delete
-					pathsToDelete.push(path);
+					listPush(pathsToDelete, path);
 				}
 				// If has children with other owners but no owner itself, skip - children will handle their own cleanup
 			}
 
 			// Sort paths to delete by depth (deep to shallow)
 			// This ensures we delete children before parent containers
-			pathsToDelete.sort((a, b) => {
-				const depthA = (a.match(/\./g) || []).length;
-				const depthB = (b.match(/\./g) || []).length;
+			ArrayMethods.sort(pathsToDelete, (a, b) => {
+				const depthA = (regExpMatch(/\./g, a) || []).length;
+				const depthB = (regExpMatch(/\./g, b) || []).length;
 				return depthB - depthA; // Reverse sort for deep-to-shallow
 			});
 
@@ -4569,30 +5587,41 @@ export class ApiManager extends ComponentBase {
 			// The whole subtree under a restored path is reconciled by that restore (the removed module's own
 			// children there are dropped), so the deletions below leave it alone: deletePath prunes an emptied
 			// ancestor, which took the rolled-back namespace itself off the tree before it could be restored.
-			pathsToRollback.sort((a, b) => a.apiPath.split(".").length - b.apiPath.split(".").length);
+			ArrayMethods.sort(pathsToRollback, (a, b) => splitText(a.apiPath, ".").length - splitText(b.apiPath, ".").length);
 			// A callable namespace's function is resolved separately from its children (#533): pin it first,
 			// since the restores below replace the live impl with the current owner's contribution.
 			const rolledBackNodes = this.#collectRolledBackNodes(pathsToRollback);
 			const restoredWrappers = new Set();
-			const restoreContext = { restored: restoredWrappers, removedPaths: new Set(uniquePaths) };
+			const restoreContext = { restored: restoredWrappers, removedPaths: setFrom(uniquePaths) };
 			const restoredRoots = [];
-			for (const rollback of pathsToRollback) {
+			for (let ofIndex = 0, ofList = pathsToRollback; ofIndex < ofList.length; ofIndex++) {
+				const rollback = ofList[ofIndex];
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
 				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
-				for (const tree of [this.slothlet.api, this.slothlet.boundApi]) {
-					const live = resolveWrapper(this.getValueAtPath(tree, parts));
-					if (!live || restoredWrappers.has(live)) continue;
+				for (let ofIndex = 0, ofList = [this.slothlet.api, this.slothlet.boundApi]; ofIndex < ofList.length; ofIndex++) {
+					const tree = ofList[ofIndex];
+					const live = resolveWrapper(this.#memberAtPath(tree, parts));
+					if (!live || SetMethods.has(restoredWrappers, live)) continue;
 					const sources = this.#survivingContributions(rollback.apiPath, live);
 					if (sources.length === 0) continue;
 					await this.#restoreInto(live, sources, rollback.apiPath, restoreContext, { impl: previousImpl, moduleID: rollback.restoredTo });
-					restoredRoots.push(`${rollback.apiPath}.`);
+					listPush(restoredRoots, `${rollback.apiPath}.`);
 				}
 			}
 
 			// Delete paths with no owners
-			for (const removedPath of pathsToDelete) {
-				if (restoredRoots.some((prefix) => removedPath.startsWith(prefix))) continue;
+			const removedSet = setFrom(pathsToDelete);
+			for (let ofIndex = 0, ofList = pathsToDelete; ofIndex < ofList.length; ofIndex++) {
+				const removedPath = ofList[ofIndex];
+				// What of it another module's replace holds off the api goes too: the detached node it sits on is what
+				// removing that module restores from, and would bring it back.
+				this.#forgetHiddenMember(removedPath, moduleIDKey);
+				if (ArrayMethods.some(restoredRoots, (prefix) => StringMethods.startsWith(removedPath, prefix))) continue;
 				const { parts } = this.normalizeApiPath(removedPath);
+				// A member of a value the module holds (what an object it created holds) leaves the api with the node above
+				// it, which is deleted too: deleting the member itself would change the module's own object, which code
+				// outside the api may still hold.
+				if (this.#heldByRemovedNode(parts, removedSet)) continue;
 				await this.deletePath(this.slothlet.api, parts);
 				await this.deletePath(this.slothlet.boundApi, parts);
 				// A mount of another module inside a removed container (an empty one: nothing of it was left there) is gone
@@ -4600,9 +5629,9 @@ export class ApiManager extends ComponentBase {
 				this.#releaseMountsUnder(removedPath, recordHistory);
 				// Clean up user metadata for removed path (use root segment only)
 				// metadata handler is always registered; FALSE never fires.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (this.slothlet.handlers.metadata) {
-					const rootSegment = removedPath.split(".")[0];
+					const rootSegment = splitText(removedPath, ".")[0];
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 				}
 			}
@@ -4620,15 +5649,19 @@ export class ApiManager extends ComponentBase {
 				// Fall back to the longest common dotted prefix of the owned paths when the
 				// mount endpoint was not recorded (e.g. a base module mounted at ".").
 				if (isRootMount) {
-					const segs = pathsToDelete.map((p) => p.split("."));
-					const minLen = Math.min(...segs.map((s) => s.length));
+					const segs = mapList(pathsToDelete, (p) => splitText(p, "."));
+					const minLen = Reflect.apply(
+						Math.min,
+						Math,
+						mapList(segs, (s) => s.length)
+					);
 					const common = [];
 					for (let i = 0; i < minLen; i++) {
 						const seg = segs[0][i];
-						if (segs.every((s) => s[i] === seg)) common.push(seg);
+						if (ArrayMethods.every(segs, (s) => s[i] === seg)) listPush(common, seg);
 						else break;
 					}
-					mountRoot = common.join(".");
+					mountRoot = ArrayMethods.join(common, ".");
 				}
 				const rootParts = this.normalizeApiPath(mountRoot).parts;
 				// Keep the mount-root container if anything under it survives this removal. Two cases:
@@ -4642,10 +5675,14 @@ export class ApiManager extends ComponentBase {
 				//      applies to normal mounts too. Deleting the container here would erase the wrappers
 				//      the rollback loop below restores into, silently no-opping the revert.
 				// Every mount root of the module, not only the one recorded last (#625).
-				const roots = isRootMount ? [mountRoot] : [...new Set([mountRoot, ...moduleMounts])];
-				for (const root of roots) {
+				const roots = isRootMount ? [mountRoot] : setToArray(setFrom(concatLists([mountRoot], moduleMounts)));
+				for (let ofIndex = 0, ofList = roots; ofIndex < ofList.length; ofIndex++) {
+					const root = ofList[ofIndex];
 					const rootDot = root === "" ? null : `${root}.`;
-					const survives = pathsToRollback.some((r) => r.apiPath === root || (rootDot !== null && r.apiPath.startsWith(rootDot)));
+					const survives = ArrayMethods.some(
+						pathsToRollback,
+						(r) => r.apiPath === root || (rootDot !== null && StringMethods.startsWith(r.apiPath, rootDot))
+					);
 					if (
 						!survives &&
 						!this.#hasLiveForeignContent(root, moduleIDKey) &&
@@ -4661,24 +5698,39 @@ export class ApiManager extends ComponentBase {
 			}
 
 			// Rollback paths that still have owners
-			for (const rollback of pathsToRollback) {
-				// Get the previous _impl from ownership and set it
+			for (let ofIndex = 0, ofList = pathsToRollback; ofIndex < ofList.length; ofIndex++) {
+				const rollback = ofList[ofIndex];
+				// Get the previous ____impl from ownership and set it
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
 				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
 
 				if (previousImpl !== undefined) {
-					// Get the existing wrapper and update its _impl — unless the restore above already did.
-					const existingWrapper = this.getValueAtPath(this.slothlet.api, parts);
+					// The node is the restored owner's again, the file it was composed from included (#815).
+					const restoredFile = this.slothlet.handlers.ownership.getCurrentOwner(rollback.apiPath)?.filePath ?? null;
+					const restoreFile = (raw) => {
+						if (restoredFile !== null) raw.____slothletInternal.filePath = restoredFile;
+					};
+					// Get the existing wrapper and update its ____impl — unless the restore above already did.
+					const existingWrapper = this.#memberAtPath(this.slothlet.api, parts);
 					const existingWrapperRaw = resolveWrapper(existingWrapper);
-					if (existingWrapperRaw && !restoredWrappers.has(existingWrapperRaw)) {
+					if (existingWrapperRaw && !SetMethods.has(restoredWrappers, existingWrapperRaw)) {
+						restoreFile(existingWrapperRaw);
 						// Pass the restored moduleID for correct ownership tracking
 						existingWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}
 					// Also update boundApi
-					const existingBoundWrapper = this.getValueAtPath(this.slothlet.boundApi, parts);
+					const existingBoundWrapper = this.#memberAtPath(this.slothlet.boundApi, parts);
 					const existingBoundWrapperRaw = resolveWrapper(existingBoundWrapper);
-					if (existingBoundWrapperRaw && !restoredWrappers.has(existingBoundWrapperRaw)) {
+					if (existingBoundWrapperRaw && !SetMethods.has(restoredWrappers, existingBoundWrapperRaw)) {
+						restoreFile(existingBoundWrapperRaw);
 						existingBoundWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
+					}
+					// A primitive member the removed module set at runtime is a plain value on its namespace, not a
+					// node, so there is no wrapper to restore into: put the surviving owner's value back in its place.
+					// Only where the removed module's value was the live one — otherwise the removal changed nothing.
+					if (SetMethods.has(takenOverPaths, rollback.apiPath)) {
+						this.#restorePrimitiveMember(this.slothlet.api, parts, existingWrapper, previousImpl);
+						this.#restorePrimitiveMember(this.slothlet.boundApi, parts, existingBoundWrapper, previousImpl);
 					}
 				}
 			}
@@ -4688,40 +5740,30 @@ export class ApiManager extends ComponentBase {
 			// rollback above only reverts the CO-owned paths. Re-attach each shadowed child now — AFTER the
 			// container's own rollback ___setImpl, whose replace-mode adoption would otherwise clear it —
 			// so removing the overriding module restores the first module's FULL mount (leaf + exclusives).
-			const shadows = this.state.replaceShadows.get(moduleIDKey);
-			if (shadows) {
-				for (const shadow of shadows) {
-					// Skip if the key was already reinstated (e.g. a later module re-provided it) — don't
-					// clobber a live member with a stale shadow.
-					if (Object.prototype.hasOwnProperty.call(shadow.container, shadow.key)) continue;
-					runtime_frameworkWrite(shadow.container, () =>
-						Object.defineProperty(shadow.container, shadow.key, {
-							value: shadow.child,
-							writable: false,
-							enumerable: true,
-							configurable: true
-						})
-					);
-					// Back on the surface, so what of it is unloaded counts again.
-					this._setShadowParked(shadow.child, false);
-				}
-				this.state.replaceShadows.delete(moduleIDKey);
-			}
+			this.#reattachShadows(moduleIDKey);
+			// What the removed module had under another module's replace is gone with it: removing that module later
+			// brings none of it back.
+			this.#dropShadowsOf(moduleIDKey);
 
-			for (const [apiPath, live] of rolledBackNodes) this.#restoreNamespaceFunction(live, apiPath);
+			for (let ofIndex = 0, ofList = rolledBackNodes; ofIndex < ofList.length; ofIndex++) {
+				const ofEntry = ofList[ofIndex],
+					apiPath = ofEntry[0],
+					live = ofEntry[1];
+				this.#restoreNamespaceFunction(live, apiPath);
+			}
 			// Now invalidate the removed module's captured wrappers that the passes above took off the tree; any
 			// still live (a namespace it created that other modules' children keep standing) stays usable (#555).
-			for (const wrapper of capturedLive) this.invalidateSpeculativeWrappers(wrapper, undefined, []);
+			for (let i = 0; i < capturedLive.length; i++) this.invalidateSpeculativeWrappers(capturedLive[i], undefined, []);
 
-			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleID) !== moduleIDKey);
+			this.state.addHistory = filterList(this.state.addHistory, (entry) => String(entry.moduleID) !== moduleIDKey);
 
 			// Delete cache entry for this moduleID (complete module removal)
 			// apiCacheManager is always registered after init; FALSE never fires.
-			/* v8 ignore next */
+			/* v8 ignore else */
 			if (this.slothlet.handlers.apiCacheManager) {
 				const deleted = this.slothlet.handlers.apiCacheManager.delete(moduleIDKey);
 				// delete() always returns true for a registered moduleID; FALSE never fires.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (deleted) {
 					this.slothlet.debug("cache", {
 						key: "DEBUG_MODE_CACHE_DELETED_MODULE_REMOVED",
@@ -4732,7 +5774,7 @@ export class ApiManager extends ComponentBase {
 
 			// Sweep any cache entries cascade-orphaned by this removal (e.g. a
 			// module that was stacked under the one just removed).
-			this.#sweepOrphanedCaches();
+			this.#sweepOrphanedCaches(filterList(ownerless, (id) => id !== String(moduleID)));
 
 			// Track in operation history for reload replay. The recorded apiPath is only a replay
 			// handle: replay calls removeApiComponent(apiPath), which re-resolves it to the path’s
@@ -4748,27 +5790,31 @@ export class ApiManager extends ComponentBase {
 			if (recordHistory && pathsToDelete.length > 0) {
 				// A removal by moduleID that kept another module mounted below it replays by that moduleID, so a reload
 				// keeps that module too (#625); otherwise it replays as the removal of its mount root, as before.
-				this.state.operationHistory.push({
+				listPush(this.state.operationHistory, {
 					type: "remove",
 					apiPath:
 						!isRootMount && (moduleMounts.length > 1 || this.#hasLiveForeignContent(mountRoot, moduleIDKey))
 							? moduleIDKey
-							: mountRoot || pathsToDelete[0].split(".")[0]
+							: mountRoot || splitText(pathsToDelete[0], ".")[0]
 				});
+			} else if (recordHistory && (ownerlessLoaded || pathsToRollback.length > 0)) {
+				// Nothing of it is on the api to name by path (every path it held went back to the module it covered, as
+				// after a forced add over another module's path), so a reload replays the removal by its moduleID.
+				// Without this the reload re-adds it over that module again.
+				listPush(this.state.operationHistory, { type: "remove", apiPath: moduleIDKey });
 			}
 			// Return true if we actually removed something
-			return pathsToDelete.length > 0 || pathsToRollback.length > 0;
+			return pathsToDelete.length > 0 || pathsToRollback.length > 0 || ownerlessLoaded;
 		}
 
 		// remove() is always called with a valid apiPath in tests; the guard throw is unreachable.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!apiPath) {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath,
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: segmentsOf(apiPath),
 				reason: translate("API_PATH_REASON_REQUIRED"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 
@@ -4788,15 +5834,15 @@ export class ApiManager extends ComponentBase {
 				await this.deletePath(this.slothlet.boundApi, parts);
 				// Clean up user metadata
 				// metadata handler is always registered; FALSE never fires here.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (this.slothlet.handlers.metadata) {
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
 				}
 				// Track in operation history for reload replay
 				// recordHistory is always true in the public deletePath call; FALSE never fires here.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (recordHistory) {
-					this.state.operationHistory.push({
+					listPush(this.state.operationHistory, {
 						type: "remove",
 						apiPath: normalizedPath
 					});
@@ -4820,7 +5866,7 @@ export class ApiManager extends ComponentBase {
 			}
 			// Track in operation history for reload replay
 			if (recordHistory) {
-				this.state.operationHistory.push({
+				listPush(this.state.operationHistory, {
 					type: "remove",
 					apiPath: normalizedPath
 				});
@@ -4845,7 +5891,7 @@ export class ApiManager extends ComponentBase {
 				});
 				// Track in operation history for reload replay
 				if (recordHistory) {
-					this.state.operationHistory.push({
+					listPush(this.state.operationHistory, {
 						type: "remove",
 						apiPath: normalizedPath
 					});
@@ -4855,7 +5901,7 @@ export class ApiManager extends ComponentBase {
 			await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
 			// Track in operation history for reload replay
 			if (recordHistory) {
-				this.state.operationHistory.push({
+				listPush(this.state.operationHistory, {
 					type: "remove",
 					apiPath: normalizedPath
 				});
@@ -4888,11 +5934,16 @@ export class ApiManager extends ComponentBase {
 	async reloadApiComponent(params) {
 		const { apiPath, moduleID, options } = params || {};
 		if (!this.slothlet || !this.slothlet.isLoaded) {
-			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "reloadApi",
-				validationError: true
+			throw new this.SlothletError("INSTANCE_NOT_LOADED", {
+				operation: ["slothlet", "api", "reload"]
 			});
 		}
+
+		// Changes made through lazy stand-ins are made first, so the reload keeps them as it keeps any change made on a
+		// node, as in eager mode, where they were made already (#653).
+		const cacheManager = this.slothlet.handlers.apiCacheManager;
+		const scope = moduleID ? (cacheManager?.has(moduleID) ? cacheManager.get(moduleID).endpoint : undefined) : apiPath;
+		if (scope !== undefined) await settleStandInChanges(this.slothlet, scope);
 
 		// ModuleID-based reload: rebuild single cache and restore all paths
 		if (moduleID) {
@@ -4909,8 +5960,7 @@ export class ApiManager extends ComponentBase {
 		throw new this.SlothletError("INVALID_ARGUMENT", {
 			argument: "params",
 			expected: "{ moduleID } or { apiPath }",
-			received: params,
-			validationError: true
+			received: params
 		});
 	}
 
@@ -4932,17 +5982,15 @@ export class ApiManager extends ComponentBase {
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
 		if (!cacheManager) {
 			throw new this.SlothletError("CACHE_MANAGER_NOT_AVAILABLE", {
-				operation: "reload",
-				validationError: true
+				operation: ["slothlet", "api", "reload"]
 			});
 		}
 
 		// Check if cache exists
 		if (!cacheManager.has(moduleID)) {
 			throw new this.SlothletError("CACHE_NOT_FOUND", {
-				moduleID,
-				operation: "reload",
-				validationError: true
+				module: moduleID,
+				operation: ["slothlet", "api", "reload"]
 			});
 		}
 
@@ -4966,7 +6014,7 @@ export class ApiManager extends ComponentBase {
 		// The rebuild re-registers this module's ownership under the instance's collision mode, which can
 		// move it back over paths another module has since overridden. Decide what to keep from the
 		// ownership as it stood before the rebuild, and put those paths' order back afterwards (#525).
-		const cycle = reloadGroup ?? new Set([moduleID]);
+		const cycle = reloadGroup ?? setFrom([moduleID]);
 		const ownership = this.slothlet.handlers.ownership;
 		const ownershipBefore = ownership?.snapshotStacks(oldEntry.endpoint) ?? null;
 		// Where other modules are mounted, and which of those mounts replaced what was there (#530).
@@ -4978,7 +6026,7 @@ export class ApiManager extends ComponentBase {
 		cacheManager.set(moduleID, {
 			...oldEntry,
 			api: freshApi,
-			timestamp: Date.now()
+			timestamp: this.clock.now()
 		});
 
 		// DEBUG: Log freshApi keys before restore
@@ -4988,13 +6036,21 @@ export class ApiManager extends ComponentBase {
 			endpoint: oldEntry.endpoint,
 			// freshApi is always a valid object from rebuildCache; nullish fallback is unreachable.
 			/* v8 ignore next */
-			freshApiKeys: Object.keys(freshApi || {})
+			freshApiKeys: Objects.keys(freshApi || {})
 		});
 
+		// A single-file add keeps its build as the add did, `{ <file>: exports }` (or the file's default function), and
+		// mounted the file's exports at the endpoint: restore those, as the add placed them. At the root the add mounts
+		// the build itself, the file a key of the root.
+		const atRoot = oldEntry.endpoint === "" || oldEntry.endpoint === ".";
+		const mounted = (built) =>
+			oldEntry.file && !atRoot && typeof built !== "function" && Objects.keys(built).length === 1 ? built[Objects.keys(built)[0]] : built;
+		const freshMounted = mounted(freshApi);
+
 		// Traverse fresh API and update/create wrappers
-		await this._restoreApiTree(freshApi, oldEntry.endpoint, moduleID, oldEntry.collisionMode, forceReplace, {
+		await this._restoreApiTree(freshMounted, oldEntry.endpoint, moduleID, oldEntry.collisionMode, forceReplace, {
 			reloadGroup: cycle,
-			previousApi: oldEntry.api,
+			previousApi: mounted(oldEntry.api),
 			ownershipBefore,
 			placement
 		});
@@ -5006,7 +6062,7 @@ export class ApiManager extends ComponentBase {
 			endpoint: oldEntry.endpoint,
 			// freshApi is always a valid object from rebuildCache; nullish fallback is unreachable.
 			/* v8 ignore next */
-			freshApiKeys: Object.keys(freshApi || {})
+			freshApiKeys: Objects.keys(freshApi || {})
 		});
 
 		this.slothlet.debug("reload", {
@@ -5017,7 +6073,7 @@ export class ApiManager extends ComponentBase {
 		if (ownershipBefore) ownership.restoreStacks(ownershipBefore, cycle);
 		// A later remove of a module that replaced part of this one re-attaches this module's members it
 		// shadowed: give them this reload's code, not the code from before it (#530).
-		await this._refreshReplaceShadows(moduleID, oldEntry.endpoint, freshApi);
+		await this._refreshReplaceShadows(moduleID, oldEntry.endpoint, freshMounted);
 
 		// Principals (#459) this module owns: values resolved by the pre-reload code are stale now.
 		this.slothlet.handlers.permissionManager?.onModuleReloaded?.(moduleID);
@@ -5072,19 +6128,16 @@ export class ApiManager extends ComponentBase {
 		// This ensures the first contributor lays a clean slate (replace mode)
 		// and subsequent contributors merge onto it with their original collision mode.
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
-		moduleIDsToReload.sort((a, b) => {
+		ArrayMethods.sort(moduleIDsToReload, (a, b) => {
 			const entryA = cacheManager.get(a);
 			const entryB = cacheManager.get(b);
 
 			// Base module (endpoint ".") always first
-			// In tests only one module is reloaded at a time, so this comparator never fires.
-			/* v8 ignore start */
 			if (entryA?.endpoint === "." && entryB?.endpoint !== ".") return -1;
 			if (entryB?.endpoint === "." && entryA?.endpoint !== ".") return 1;
-			/* v8 ignore stop */
 			// Then by addHistory order (chronological)
-			const indexA = this.state.addHistory.findIndex((h) => h.moduleID === a);
-			const indexB = this.state.addHistory.findIndex((h) => h.moduleID === b);
+			const indexA = ArrayMethods.findIndex(this.state.addHistory, (h) => h.moduleID === a);
+			const indexB = ArrayMethods.findIndex(this.state.addHistory, (h) => h.moduleID === b);
 			return indexA - indexB;
 		});
 
@@ -5093,19 +6146,27 @@ export class ApiManager extends ComponentBase {
 		// subsequent modules use their original collision mode (e.g., merge) to layer on top.
 		// This ensures child caches at different endpoints each start fresh.
 		const endpointOrder = new Map();
-		for (const moduleID of moduleIDsToReload) {
+		for (let ofIndex = 0, ofList = moduleIDsToReload; ofIndex < ofList.length; ofIndex++) {
+			const moduleID = ofList[ofIndex];
 			const entry = cacheManager.get(moduleID);
 			// entry always has endpoint set; the fallback "." is unreachable in practice.
-			/* v8 ignore next */
-			const ep = entry?.endpoint ?? ".";
-			if (!endpointOrder.has(ep)) endpointOrder.set(ep, []);
-			endpointOrder.get(ep).push(moduleID);
+			const ep = /* v8 ignore next */ entry?.endpoint ?? ".";
+			if (!MapMethods.has(endpointOrder, ep)) MapMethods.set(endpointOrder, ep, []);
+			listPush(MapMethods.get(endpointOrder, ep), moduleID);
 		}
 
-		for (const [, moduleIDs] of endpointOrder) {
-			const reloadGroup = new Set(moduleIDs);
+		for (const ofEntry of mapEntries(endpointOrder)) {
+			const moduleIDs = ofEntry[1];
+			// Rebuilding the modules as one clean slate and layering each later one on top decides their collisions
+			// again, and only a later "merge-replace" add comes out as it did: there the later module wins every
+			// collision, as layering it gives. A "replace" add swapped the endpoint's surface for its own, so the clean
+			// slate would put back what the earlier modules lost (#879); a "merge" add kept what was there, and layering
+			// it lets it win (#904). Otherwise each module is reloaded on its own, exactly as reloading it by its moduleID
+			// does, which keeps every collision's outcome as the adds left it.
+			const layered = ArrayMethods.some(moduleIDs, (id, i) => i > 0 && cacheManager.get(id)?.collisionMode !== "merge-replace");
+			const reloadGroup = setFrom(moduleIDs);
 			for (let i = 0; i < moduleIDs.length; i++) {
-				await this._reloadByModuleID(moduleIDs[i], { forceReplace: i === 0, reloadGroup });
+				await this._reloadByModuleID(moduleIDs[i], layered ? undefined : { forceReplace: i === 0, reloadGroup });
 			}
 		}
 
@@ -5113,11 +6174,11 @@ export class ApiManager extends ComponentBase {
 		// This ensures the freshly-tagged wrappers inherit the updated path metadata
 		// the next time getMetadata() is called on them.
 		const reloadMetadata = options?.metadata;
-		if (reloadMetadata && typeof reloadMetadata === "object" && Object.keys(reloadMetadata).length > 0) {
+		if (reloadMetadata && typeof reloadMetadata === "object" && Objects.keys(reloadMetadata).length > 0) {
 			// metadata handler is always registered when a Slothlet instance loads; FALSE never fires.
-			/* v8 ignore next */
+			/* v8 ignore else */
 			if (this.slothlet.handlers.metadata) {
-				const targetPath = apiPath === "." ? null : apiPath.split(".")[0];
+				const targetPath = apiPath === "." ? null : splitText(apiPath, ".")[0];
 				if (targetPath) {
 					this.slothlet.handlers.metadata.registerUserMetadata(targetPath, reloadMetadata);
 				}
@@ -5149,7 +6210,7 @@ export class ApiManager extends ComponentBase {
 	_findAffectedCaches(apiPath) {
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
 		// cacheManager is always set after Slothlet initializes \u2014 the truthy guard never fires in tests.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!cacheManager) return [];
 
 		const allModuleIDs = cacheManager.getAllModuleIDs();
@@ -5157,10 +6218,11 @@ export class ApiManager extends ComponentBase {
 		// Base module reload: ".", "", or nullish
 		if (apiPath === "." || apiPath === "" || apiPath == null) {
 			const baseModules = [];
-			for (const moduleID of allModuleIDs) {
+			for (let i = 0; i < allModuleIDs.length; i++) {
+				const moduleID = allModuleIDs[i];
 				const entry = cacheManager.get(moduleID);
 				if (entry && entry.endpoint === ".") {
-					baseModules.push(moduleID);
+					listPush(baseModules, moduleID);
 				}
 			}
 			return baseModules;
@@ -5168,10 +6230,11 @@ export class ApiManager extends ComponentBase {
 
 		// 1. Exact endpoint match
 		const exactMatches = [];
-		for (const moduleID of allModuleIDs) {
+		for (let i = 0; i < allModuleIDs.length; i++) {
+			const moduleID = allModuleIDs[i];
 			const entry = cacheManager.get(moduleID);
 			if (entry && entry.endpoint === apiPath) {
-				exactMatches.push(moduleID);
+				listPush(exactMatches, moduleID);
 			}
 		}
 		if (exactMatches.length > 0) return exactMatches;
@@ -5179,10 +6242,11 @@ export class ApiManager extends ComponentBase {
 		// 2. Child caches (caches mounted under this path)
 		const children = [];
 		const pathPrefix = apiPath + ".";
-		for (const moduleID of allModuleIDs) {
+		for (let i = 0; i < allModuleIDs.length; i++) {
+			const moduleID = allModuleIDs[i];
 			const entry = cacheManager.get(moduleID);
-			if (entry?.endpoint?.startsWith(pathPrefix)) {
-				children.push(moduleID);
+			if (typeof entry?.endpoint === "string" && StringMethods.startsWith(entry.endpoint, pathPrefix)) {
+				listPush(children, moduleID);
 			}
 		}
 		if (children.length > 0) return children;
@@ -5192,15 +6256,16 @@ export class ApiManager extends ComponentBase {
 		const history = ownership?.getPathHistory?.(apiPath);
 		if (history && history.length > 0) {
 			const owned = [];
-			for (const { moduleID } of history) {
+			for (let i = 0; i < history.length; i++) {
+				const { moduleID } = history[i];
 				// Ownership history only records modules that are still in the cache; this check never fails.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (cacheManager.has(moduleID)) {
-					owned.push(moduleID);
+					listPush(owned, moduleID);
 				}
 			}
 			// owned is always non-empty when history is non-empty (every entry is in the cache).
-			/* v8 ignore next */
+			/* v8 ignore else */
 			if (owned.length > 0) return owned;
 		}
 
@@ -5209,20 +6274,16 @@ export class ApiManager extends ComponentBase {
 		//    reload("custom.math") finds the "custom" cache because custom.math lives under "custom"
 		let bestMatch = null;
 		let bestLength = -1;
-		for (const moduleID of allModuleIDs) {
+		for (let i = 0; i < allModuleIDs.length; i++) {
+			const moduleID = allModuleIDs[i];
 			const entry = cacheManager.get(moduleID);
-			// All entries in the cache have an endpoint set; this guard is never true.
-			/* v8 ignore next 2 */
+			// A root-level add caches endpoint "", which no reloaded path sits under.
 			if (!entry?.endpoint) continue;
 
 			const ep = entry.endpoint;
 			// Base module (endpoint ".") covers everything
 			// Or the path starts with the cache endpoint prefix
-			// In tests the base module always covers the reloaded path; FALSE arm never fires.
-			/* v8 ignore next */
-			if (ep === "." || apiPath.startsWith(ep + ".")) {
-				// bestLength starts at -1 so the first matching ep is always longer; FALSE never fires.
-				/* v8 ignore next */
+			if (ep === "." || StringMethods.startsWith(apiPath, ep + ".")) {
 				if (ep.length > bestLength) {
 					bestLength = ep.length;
 					bestMatch = moduleID;
@@ -5230,12 +6291,283 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 		// bestMatch is always set when ownership history is present; FALSE never fires.
-		/* v8 ignore next */
+		/* v8 ignore else */
 		if (bestMatch) return [bestMatch];
 
 		// All registered endpoints have at least one module; empty result never returned in tests.
 		/* v8 ignore next */
 		return [];
+	}
+
+	/**
+	 * Carry what code wrote into an api tree at runtime (`self.x = …`, a member the host set on the api, a value written
+	 * over a module's member) into a copy of the tree built from the same modules for a run (see `Slothlet#buildCopy`),
+	 * which has only what loads and the replayed `add()` / `remove()` history. Walks the nodes both trees have; a lazy
+	 * node the copied tree loaded is loaded in the copy first. A member a module created stays that module's in the copy.
+	 * A plain object or array written at runtime is the same object in both trees, as a shallow copy shares it.
+	 *
+	 * With a run's snapshot (a copy built for a run that changes the tree it started on), what is carried is what the
+	 * tree held as of the run's start (see `helpers/run-snapshot`): `fromRoot` is the root the run started on, a node the
+	 * instance changed since is read from its version for the start, and a member a node of the copy took from a module's
+	 * object that the instance changed since is written back as it was then.
+	 *
+	 * @param {object|Function} fromRoot - The copied tree's root.
+	 * @param {object|Function} toRoot - The copy's root (this api manager's tree).
+	 * @param {object|null} fromOwnership - The copied tree's ownership records.
+	 * @param {object|null} [snap=null] - The snapshot of the run the copy is built for, or null to carry what the tree holds now.
+	 * @returns {Promise<void>}
+	 * @internal
+	 */
+	async carryRuntimeMembers(fromRoot, toRoot, fromOwnership, snap = null) {
+		const visited = new WeakSet();
+		// What a node of the copied tree held as of the run's start: its members then (by key, in their order), or null
+		// while it is as it was then (and without a snapshot). A member saved as a module's object held it is the node
+		// the tree holds for it now when that node fronts the same object, so the copy's node there is walked.
+		const startMembers = (wrapper) => {
+			if (snap === null) return null;
+			const version = nodeVersion(wrapper.____slothletInternal.proxy ?? wrapper, snap);
+			if (version === null) return null;
+			const members = new Map();
+			for (let index = 0, list = mapEntriesToArray(version.members); index < list.length; index++) {
+				const key = list[index][0];
+				const held = list[index][1];
+				if (typeof key !== "string" || SetMethods.has(ComponentBase.INTERNAL_KEYS, key)) continue;
+				if (held.live === true || held.accessor !== undefined || held.enumerable === false) continue;
+				let value = held.value;
+				if (value !== null && (typeof value === "object" || typeof value === "function") && resolveWrapper(value) === null) {
+					let live;
+					try {
+						live = wrapper[key];
+					} catch {
+						live = undefined;
+					}
+					if (sameSnapshotMember(live, value)) value = live;
+				}
+				MapMethods.set(members, key, value);
+			}
+			// An array's length as of the start, which its elements follow.
+			const length = MapMethods.get(version.members, "length");
+			if (Arrays.isArray(wrapper.____slothletInternal.impl) && length !== undefined && "value" in length)
+				MapMethods.set(members, LENGTH_AT_START, length.value);
+			return members;
+		};
+		// A built-in the copy shares with the instance (a `Map` a module exports, held by a node or fronted by one) is the
+		// run's own copy of it, as the run read it before (see `builtinCopy` in helpers/run-snapshot): what the instance
+		// changes in it after the start does not reach the run, and what the run changes stays in the run.
+		const ownBuiltin = (target, key, value, path) => {
+			if (snap === null || value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+			const builtin = builtinBehind(value);
+			if (builtin === null) return false;
+			write(target, key, builtinCopy(snap, builtin), path);
+			return true;
+		};
+		const carryValue = (value) => {
+			const wrapper = value !== null && (typeof value === "object" || typeof value === "function") ? resolveWrapper(value) : null;
+			// A node written at runtime is carried as what was written, for the copy to make its own node of.
+			return wrapper !== null ? (wrapper.____impl ?? value) : value;
+		};
+		const createdBy = (path) => {
+			const history = /* v8 ignore next */ fromOwnership?.getPathHistory?.(path) ?? [];
+			for (let index = history.length - 1; index >= 0; index--)
+				if (history[index].source === CREATED_SOURCE) return history[index].moduleID;
+			return null;
+		};
+		const write = (target, key, value, path) => {
+			try {
+				frameworkWrite(target, () => {
+					target[key] = value;
+				});
+			} catch {
+				return;
+			}
+			const creator = createdBy(path);
+			if (creator !== null) this.recordCreated(splitText(path, "."), creator, value);
+		};
+		const isTreeNode = (value) => {
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+			const wrapper = resolveWrapper(value);
+			return wrapper !== null && !wrapper.____slothletInternal?.userAssigned;
+		};
+		// A node no module mounted (an object or function the host set on the api, held as a node) is a runtime write: the
+		// copy, built from the modules, has none of its own there, and takes what was written.
+		const writtenNode = (value) => {
+			const moduleID = resolveWrapper(value).____slothletInternal?.moduleID;
+			return moduleID === null || moduleID === undefined;
+		};
+		// What such a node holds, as a value for the copy: the node keeps the members of an object it was given on itself
+		// (its value is left without them), so a plain object or array is carried as one made of the node's members, the
+		// nodes below it carried the same way. Anything else is carried as the node's value.
+		const writtenValue = (wrapper, made = new Map()) => {
+			const impl = wrapper.____impl;
+			if (impl === null || typeof impl !== "object") return impl;
+			const prototype = Reflect.getPrototypeOf(impl);
+			const isArray = Arrays.isArray(impl);
+			if (!isArray && prototype !== Objects.prototype && prototype !== null) return impl;
+			if (MapMethods.has(made, wrapper)) return MapMethods.get(made, wrapper);
+			const value = isArray ? [] : Objects.create(prototype);
+			MapMethods.set(made, wrapper, value);
+			const atStart = startMembers(wrapper);
+			if (atStart !== null) {
+				for (let index = 0, list = mapEntriesToArray(atStart); index < list.length; index++) {
+					const key = list[index][0];
+					const member = list[index][1];
+					if (key === LENGTH_AT_START) continue;
+					const child = member !== null && (typeof member === "object" || typeof member === "function") ? resolveWrapper(member) : null;
+					value[key] = child === null ? member : writtenNode(member) ? writtenValue(child, made) : (child.____impl ?? member);
+				}
+				return value;
+			}
+			const keys = setFrom(Objects.keys(impl));
+			for (let index = 0, own = Objects.keys(wrapper); index < own.length; index++)
+				if (!SetMethods.has(ComponentBase.INTERNAL_KEYS, own[index])) SetMethods.add(keys, own[index]);
+			for (let index = 0, list = setToArray(keys); index < list.length; index++) {
+				const key = list[index];
+				let member;
+				try {
+					member = Objects.hasOwn(wrapper, key) ? wrapper[key] : impl[key];
+				} catch {
+					continue;
+				}
+				const child = member !== null && (typeof member === "object" || typeof member === "function") ? resolveWrapper(member) : null;
+				value[key] = child === null ? member : writtenNode(member) ? writtenValue(child, made) : (child.____impl ?? member);
+			}
+			return value;
+		};
+		const walk = async (fromWrapper, toWrapper, path) => {
+			if (WeakSetMethods.has(visited, fromWrapper)) return;
+			WeakSetMethods.add(visited, fromWrapper);
+			if (fromWrapper.____slothletInternal?.state?.materialized && !toWrapper.____slothletInternal?.state?.materialized) {
+				await toWrapper.___materialize?.();
+			}
+			const toProxy = toWrapper.____slothletInternal.proxy;
+			const atStart = startMembers(fromWrapper);
+			if (atStart !== null) {
+				// An array the copy's node fronts holds as many elements as it did as of the run's start.
+				if (MapMethods.has(atStart, LENGTH_AT_START)) {
+					const length = MapMethods.get(atStart, LENGTH_AT_START);
+					MapMethods.delete(atStart, LENGTH_AT_START);
+					if (toProxy.length !== length) write(toProxy, "length", length, path ? `${path}.length` : "length");
+				}
+				// A member the copy's node took from a module's object that it did not hold as of the run's start goes.
+				for (let ofIndex = 0, keys = Objects.keys(toWrapper); ofIndex < keys.length; ofIndex++) {
+					const key = keys[ofIndex];
+					if (SetMethods.has(ComponentBase.INTERNAL_KEYS, key) || MapMethods.has(atStart, key)) continue;
+					let toValue;
+					try {
+						toValue = toWrapper[key];
+					} catch {
+						continue;
+					}
+					if (isTreeNode(toValue) && !writtenNode(toValue)) continue;
+					try {
+						frameworkWrite(toProxy, () => {
+							delete toProxy[key];
+						});
+					} catch {
+						// A member the copy holds fixed stays.
+					}
+				}
+			}
+			for (
+				let ofIndex = 0, keys = atStart === null ? Objects.keys(fromWrapper) : mapKeysToArray(atStart);
+				ofIndex < keys.length;
+				ofIndex++
+			) {
+				const key = keys[ofIndex];
+				if (SetMethods.has(ComponentBase.INTERNAL_KEYS, key)) continue;
+				let fromValue;
+				try {
+					fromValue = atStart === null ? fromWrapper[key] : MapMethods.get(atStart, key);
+				} catch {
+					continue;
+				}
+				const memberPath = path ? `${path}.${key}` : key;
+				if (isTreeNode(fromValue)) {
+					const toValue = toWrapper[key];
+					if (ownBuiltin(toProxy, key, toValue, memberPath)) continue;
+					if (isTreeNode(toValue)) await walk(resolveWrapper(fromValue), resolveWrapper(toValue), memberPath);
+					else if (toValue === undefined && writtenNode(fromValue))
+						write(toProxy, key, writtenValue(resolveWrapper(fromValue)), memberPath);
+					continue;
+				}
+				if (Objects.hasOwn(toWrapper, key) && Objects.is(toWrapper[key], fromValue)) {
+					ownBuiltin(toProxy, key, fromValue, memberPath);
+					continue;
+				}
+				if (!ownBuiltin(toProxy, key, fromValue, memberPath)) write(toProxy, key, carryValue(fromValue), memberPath);
+			}
+		};
+		const toTarget = this.slothlet.boundApi ?? toRoot;
+		// The root as of the run's start: the members it held then, when the instance changed it since.
+		const rootAtStart = snap === null ? CURRENT : versionAt(snap.instance, fromRoot, snap.base);
+		const rootFrom = rootAtStart === CURRENT ? fromRoot : rootAtStart;
+		for (let ofIndex = 0, keys = Objects.keys(rootFrom); ofIndex < keys.length; ofIndex++) {
+			const key = keys[ofIndex];
+			if (isFrameworkReservedKey(key) || key === "slothlet" || key === "shutdown" || key === "destroy") continue;
+			const fromValue = rootFrom[key];
+			if (isTreeNode(fromValue)) {
+				const toValue = toRoot[key];
+				if (ownBuiltin(toTarget, key, toValue, key)) continue;
+				if (isTreeNode(toValue)) await walk(resolveWrapper(fromValue), resolveWrapper(toValue), key);
+				else if (toValue === undefined && writtenNode(fromValue)) write(toTarget, key, writtenValue(resolveWrapper(fromValue)), key);
+				continue;
+			}
+			if (Objects.hasOwn(toRoot, key) && Objects.is(toRoot[key], fromValue)) continue;
+			write(toTarget, key, carryValue(fromValue), key);
+		}
+	}
+
+	/**
+	 * Write what a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
+	 * `handlers/unified-wrapper/run`) into the tree built for the run, in the order the run made the changes, as
+	 * {@link ApiManager#carryRuntimeMembers} carries what was written into a tree at runtime: each change was checked when
+	 * the run made it, so it is made here as the framework's own write, a node written being carried as what was written
+	 * for the copy to make its own node of. A member the run's module created is recorded as that module's.
+	 *
+	 * @param {RunWrite[]} log - The changes.
+	 * @returns {void}
+	 * @internal
+	 */
+	carryRunWrites(log) {
+		const root = this.slothlet.boundApi;
+		const carried = (value) => {
+			const wrapper = value !== null && (typeof value === "object" || typeof value === "function") ? resolveWrapper(value) : null;
+			return wrapper !== null ? (wrapper.____impl ?? value) : value;
+		};
+		for (let ofIndex = 0; ofIndex < log.length; ofIndex++) {
+			const entry = log[ofIndex];
+			const parts = concatLists(entry.parts, [entry.prop]);
+			let parent;
+			try {
+				parent =
+					entry.parts.length === 0
+						? root
+						: this.ensureParentPath(root, mapList(parts, String), { moduleID: entry.created ?? null, sourceFolder: null });
+			} catch {
+				continue;
+			}
+			const key = entry.prop;
+			let value;
+			try {
+				frameworkWrite(parent, () => {
+					if (entry.op === "delete") {
+						delete parent[key];
+						return;
+					}
+					if (entry.op === "define") {
+						const descriptor = { __proto__: null, ...entry.descriptor };
+						if ("value" in descriptor) descriptor.value = value = carried(descriptor.value);
+						Reflect.defineProperty(parent, key, descriptor);
+						return;
+					}
+					value = carried(entry.value);
+					parent[key] = value;
+				});
+			} catch {
+				continue;
+			}
+			if (entry.created && typeof key === "string") this.recordCreated(mapList(parts, String), entry.created, value);
+		}
 	}
 
 	/**
@@ -5251,31 +6583,29 @@ export class ApiManager extends ComponentBase {
 		const customProps = {};
 		// Accept both object and function wrappers (eager vs lazy mode).
 		// Caller always passes a valid proxy; both guards are defensive and never triggered in tests.
-		/* v8 ignore start */
+		/* v8 ignore if */
 		if (!existingProxy || (typeof existingProxy !== "object" && typeof existingProxy !== "function")) {
 			return customProps;
 		}
-		/* v8 ignore stop */
 
 		const wrapper = resolveWrapper(existingProxy);
 		// resolveWrapper always returns a valid wrapper for a slothlet proxy; null result never occurs.
-		/* v8 ignore start */
+		/* v8 ignore if */
 		if (!wrapper) {
 			return customProps;
 		}
-		/* v8 ignore stop */
 
 		// Get keys from fresh API to know which are "API" keys vs "custom" keys
 		// freshApi is always a plain object from buildAPI \u2014 the nullish fallback array is unreachable.
-		/* v8 ignore next */
-		const freshKeys = new Set(freshApi ? Object.keys(freshApi) : []);
+		const freshKeys = setFrom(freshApi ? Objects.keys(freshApi) : /* v8 ignore next */ []);
 
 		// Get all enumerable own properties on the wrapper that are user-accessible.
 		// Use the single authoritative framework key list from ComponentBase — only skip
 		// known slothlet internals, never blanket-filter by underscore prefix.
-		const ownKeys = Object.keys(wrapper).filter((k) => !ComponentBase.INTERNAL_KEYS.has(k));
+		const ownKeys = filterList(Objects.keys(wrapper), (k) => !SetMethods.has(ComponentBase.INTERNAL_KEYS, k));
 
-		for (const key of ownKeys) {
+		for (let ofIndex = 0, ofList = ownKeys; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			try {
 				// Read value from wrapper
 				const val = wrapper[key];
@@ -5290,7 +6620,7 @@ export class ApiManager extends ComponentBase {
 
 				// At this point, val is NOT a wrapper - it's either a user-set custom property
 				// or a user-overridden API key with a plain value
-				if (!freshKeys.has(key)) {
+				if (!SetMethods.has(freshKeys, key)) {
 					// Key is NOT in fresh API - purely custom property
 					customProps[key] = val;
 				} else {
@@ -5315,14 +6645,17 @@ export class ApiManager extends ComponentBase {
 	_restoreCustomProperties(proxy, customProps) {
 		// Defensive: callers always pass a real proxy and a plain-object map.
 		// Null inputs represent a programming error caught in higher-level guards.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!proxy || !customProps || typeof customProps !== "object") {
 			return;
 		}
 
-		for (const [key, value] of Object.entries(customProps)) {
+		for (let ofIndex = 0, ofList = Objects.entries(customProps); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				key = ofEntry[0],
+				value = ofEntry[1];
 			try {
-				runtime_frameworkWrite(proxy, () => {
+				frameworkWrite(proxy, () => {
 					proxy[key] = value;
 				});
 			} catch {
@@ -5371,47 +6704,49 @@ export class ApiManager extends ComponentBase {
 	) {
 		// Another module replaced this whole namespace (forceOverwrite / a "replace" add) and still holds it:
 		// the reloaded module's content here stays shadowed, exactly as that add left it (#530).
-		if (placement?.held.has(apiPath)) return;
+		if (placement == null ? undefined : SetMethods.has(placement.held, apiPath)) return;
 		const split = forceReplace ? this._partitionNamespaceChildren(wrapper, apiPath, reloadGroup, ownershipBefore, placement) : null;
 		const freshContribution = implForReload;
 		// A callable impl keeps its own properties and is applied as built; an object impl drops the
 		// keys set aside (implForReload is never null here — the caller checked the build).
-		if (split && (split.foreign.size > 0 || split.shared.size > 0) && typeof implForReload === "object") {
+		if (split && (MapMethods.size(split.foreign) > 0 || MapMethods.size(split.shared) > 0) && typeof implForReload === "object") {
 			const withoutSetAside = {};
-			for (const k of Object.keys(implForReload)) {
-				if (!split.foreign.has(k) && !split.shared.has(k)) withoutSetAside[k] = implForReload[k];
+			for (let ofIndex = 0, ofList = Objects.keys(implForReload); ofIndex < ofList.length; ofIndex++) {
+				const k = ofList[ofIndex];
+				if (!MapMethods.has(split.foreign, k) && !MapMethods.has(split.shared, k)) withoutSetAside[k] = implForReload[k];
 			}
 			implForReload = withoutSetAside;
 		}
 
-		// Recursively extract full impls from any child wrapper proxies with depleted _impl.
+		// Recursively extract full impls from any child wrapper proxies with depleted ____impl.
 		// This handles the common case where freshApi is a function (no ___getState) but
 		// its enumerable properties are wrapper proxies from eager rebuild.
 		// IMPORTANT: Only extract from MATERIALIZED wrappers (eager mode). Unmaterialized
 		// lazy wrappers should be preserved as-is so ___adoptImplChildren can call
 		// ___resetLazy with the fresh materializeFunc.
-		// implForReload is always an object here — freshApi is always a plain object from buildAPI.
-		/* v8 ignore next */
+		// A function impl (a default-export leaf) is replaced whole.
 		if (implForReload && typeof implForReload === "object") {
-			for (const key of Object.keys(implForReload)) {
+			for (let ofIndex = 0, ofList = Objects.keys(implForReload); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const val = implForReload[key];
 				if (resolveWrapper(val) !== null) {
 					const childWrapper = resolveWrapper(val);
 					if (childWrapper.____slothletInternal.state.materialized) {
-						implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
+						implForReload[key] = unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(childWrapper);
 						// The unwrapped impl no longer says which file it came from (a lazy build does not tag it), so
 						// the adopting wrapper would give the child its own folder; the child keeps its file here.
 						const childFile = childWrapper.____slothletInternal.filePath;
 						if (childFile) {
-							if (!Object.prototype.hasOwnProperty.call(implForReload, "__childFilePaths")) {
-								Object.defineProperty(implForReload, "__childFilePaths", {
+							if (!Objects.hasOwn(implForReload, "____childFilePaths")) {
+								Objects.defineProperty(implForReload, "____childFilePaths", {
+									__proto__: null,
 									value: {},
 									enumerable: false,
 									configurable: true,
 									writable: true
 								});
 							}
-							implForReload.__childFilePaths[key] ??= childFile;
+							implForReload.____childFilePaths[key] ??= childFile;
 						}
 					}
 				}
@@ -5428,7 +6763,9 @@ export class ApiManager extends ComponentBase {
 		if (keepForeignCallable) wrapper.____slothletInternal.impl = previousImpl;
 
 		// Rebuild each subfolder both sides contribute to, one level down.
-		for (const [key, descriptor] of split?.shared ?? []) {
+		for (const ofEntry of mapEntries(split?.shared)) {
+			const key = ofEntry[0],
+				descriptor = ofEntry[1];
 			const child = resolveWrapper(descriptor.value);
 			const freshChild = await this._namespaceImplOf(freshContribution?.[key]);
 			const previousChild = typeof child.____slothletInternal.impl === "function" ? previousApi?.[key] : undefined;
@@ -5462,12 +6799,15 @@ export class ApiManager extends ComponentBase {
 		const nodeWrapper = resolveWrapper(node);
 		if (!nodeWrapper) return node ?? {};
 		if (nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
-			await nodeWrapper._materialize();
+			await nodeWrapper.___materialize();
 		}
 		const impl = nodeWrapper.____slothletInternal.impl;
 		if (typeof impl === "function") return impl;
 		const children = {};
-		for (const key of Object.keys(nodeWrapper)) children[key] = nodeWrapper[key];
+		for (let ofIndex = 0, ofList = Objects.keys(nodeWrapper); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			children[key] = nodeWrapper[key];
+		}
 		return children;
 	}
 
@@ -5493,26 +6833,27 @@ export class ApiManager extends ComponentBase {
 	_foreignPlacement(reloadGroup, ownershipBefore) {
 		const ownership = this.slothlet.handlers.ownership;
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
-		const addOrder = (id) => this.state.addHistory.findIndex((entry) => entry.moduleID === id);
-		const covers = (outer, inner) => outer === "." || inner === outer || inner.startsWith(`${outer}.`);
+		const addOrder = (id) => ArrayMethods.findIndex(this.state.addHistory, (entry) => entry.moduleID === id);
+		const covers = (outer, inner) => outer === "." || inner === outer || StringMethods.startsWith(inner, `${outer}.`);
 		const held = new Set();
 		const mounts = [];
-		for (const id of cacheManager.getAllModuleIDs()) {
-			if (reloadGroup.has(id)) continue;
+		for (let ofIndex = 0, ofList = cacheManager.getAllModuleIDs(); ofIndex < ofList.length; ofIndex++) {
+			const id = ofList[ofIndex];
+			if (SetMethods.has(reloadGroup, id)) continue;
 			const entry = cacheManager.get(id);
-			mounts.push(entry.endpoint);
+			listPush(mounts, entry.endpoint);
 			if (entry.collisionMode !== "replace") continue;
 			if (ownership) {
-				const prior = ownershipBefore?.get(entry.endpoint);
+				const prior = ownershipBefore == null ? undefined : MapMethods.get(ownershipBefore, entry.endpoint);
 				const owner = prior ? ownership.snapshotOwner(prior) : ownership.getCurrentOwner(entry.endpoint)?.moduleID;
-				if (owner === id) held.add(entry.endpoint);
+				if (owner === id) SetMethods.add(held, entry.endpoint);
 				continue;
 			}
-			const retaken = [...reloadGroup].some((groupID) => {
+			const retaken = ArrayMethods.some(setToArray(reloadGroup), (groupID) => {
 				const groupEntry = cacheManager.get(groupID);
 				return groupEntry?.collisionMode === "replace" && covers(groupEntry.endpoint, entry.endpoint) && addOrder(groupID) > addOrder(id);
 			});
-			if (!retaken) held.add(entry.endpoint);
+			if (!retaken) SetMethods.add(held, entry.endpoint);
 		}
 		return { held, mounts };
 	}
@@ -5528,19 +6869,29 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	async _refreshReplaceShadows(moduleID, endpoint, freshApi) {
-		for (const [overwriter, shadows] of this.state.replaceShadows) {
+		for (const ofEntry of mapEntries(this.state.replaceShadows)) {
+			const overwriter = ofEntry[0],
+				shadows = ofEntry[1];
 			const kept = [];
-			for (const shadow of shadows) {
+			for (let ofIndex = 0, ofList = shadows; ofIndex < ofList.length; ofIndex++) {
+				const shadow = ofList[ofIndex];
 				const containerPath = shadow.container.____slothletInternal.apiPath;
 				const shadowPath = `${containerPath}.${shadow.key}`;
-				const inMount = endpoint === "." || shadowPath.startsWith(`${endpoint}.`);
+				// The base (".") and an add at the api root ("") are mounted over the whole api.
+				const wholeApi = endpoint === "." || endpoint === "";
+				const inMount = wholeApi || StringMethods.startsWith(shadowPath, `${endpoint}.`);
 				if (shadow.ownerModuleID !== moduleID || !inMount) {
-					kept.push(shadow);
+					listPush(kept, shadow);
 					continue;
 				}
 				// Find the rebuilt value at the shadowed member's path, relative to the mount.
 				let fresh = freshApi;
-				for (const part of (endpoint === "." ? shadowPath : shadowPath.slice(endpoint.length + 1)).split(".")) {
+				for (
+					let ofIndex = 0, ofList = splitText(wholeApi ? shadowPath : StringMethods.slice(shadowPath, endpoint.length + 1), ".");
+					ofIndex < ofList.length;
+					ofIndex++
+				) {
+					const part = ofList[ofIndex];
 					const node = await this._namespaceImplOf(fresh);
 					fresh = node === null || node === undefined ? undefined : node[part];
 					if (fresh === undefined) break;
@@ -5557,14 +6908,14 @@ export class ApiManager extends ComponentBase {
 				} else {
 					const originalCollisionMode = child.____slothletInternal.state.collisionMode;
 					child.____slothletInternal.state.collisionMode = "replace";
-					child.___setImpl(freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : fresh, moduleID, false, true);
+					child.___setImpl(freshWrapper ? unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(freshWrapper) : fresh, moduleID, false, true);
 					child.____slothletInternal.state.collisionMode = originalCollisionMode;
 				}
 				// Still hidden: the wrappers the refresh gave it count no more than the ones it replaced.
 				this._setShadowParked(shadow.child, true);
-				kept.push(shadow);
+				listPush(kept, shadow);
 			}
-			this.state.replaceShadows.set(overwriter, kept);
+			MapMethods.set(this.state.replaceShadows, overwriter, kept);
 		}
 	}
 
@@ -5592,51 +6943,102 @@ export class ApiManager extends ComponentBase {
 		const foreign = new Map();
 		const shared = new Map();
 		const ownership = this.slothlet.handlers.ownership;
-		const keyOrder = Object.keys(wrapper);
-		for (const key of keyOrder) {
+		const keyOrder = Objects.keys(wrapper);
+		for (let ofIndex = 0, ofList = keyOrder; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			// Read the descriptor, not the property: a getter-backed child is not a module child and
 			// resolves to no wrapper here, so it stays where it is.
-			const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+			const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
 			const child = resolveWrapper(descriptor.value);
 			if (!child || child.____slothletInternal.userAssigned) continue;
 			const childPath = `${apiPath}.${key}`;
-			if (placement?.held.has(childPath)) {
+			if (placement == null ? undefined : SetMethods.has(placement.held, childPath)) {
 				// Another module replaced this child and still holds it: keep its content as that add left it.
-				foreign.set(key, descriptor);
+				MapMethods.set(foreign, key, descriptor);
 				Reflect.deleteProperty(wrapper, key);
 				continue;
 			}
-			const prior = ownershipBefore?.get(childPath);
-			const history = prior ? prior.map(({ entry }) => entry) : (ownership?.getPathHistory(childPath) ?? []);
+			const prior = ownershipBefore == null ? undefined : MapMethods.get(ownershipBefore, childPath);
+			const history = prior ? mapList(prior, ({ entry }) => entry) : (ownership?.getPathHistory(childPath) ?? []);
 			const contributors =
 				history.length > 0
-					? history.map((entry) => entry.moduleID)
+					? mapList(history, (entry) => entry.moduleID)
 					: ownership
 						? [child.____slothletInternal.moduleID]
 						: this._subtreeModuleIDs(child);
 			// Another module mounted somewhere inside this child contributes to it too, whatever the
 			// child's own ownership stack records (a mount registers its own path and below, not its parents).
-			const hostsForeignMount = placement?.mounts.some((mount) => mount.startsWith(`${childPath}.`)) ?? false;
-			if (!hostsForeignMount && contributors.every((id) => reloadGroup.has(id))) continue;
-			if (hostsForeignMount || contributors.some((id) => reloadGroup.has(id))) {
+			const hostsForeignMount =
+				(placement == null
+					? undefined
+					: ArrayMethods.some(placement.mounts, (mount) => StringMethods.startsWith(mount, `${childPath}.`))) ?? false;
+			if (!hostsForeignMount && ArrayMethods.every(contributors, (id) => SetMethods.has(reloadGroup, id))) continue;
+			if (hostsForeignMount || ArrayMethods.some(contributors, (id) => SetMethods.has(reloadGroup, id))) {
 				// Both sides contribute here. A namespace holds children from each, so it is rebuilt level by
 				// level; a leaf has one live value, which the cycle rebuilds only when it currently owns it.
 				const internal = child.____slothletInternal;
-				const isNamespace = Object.keys(child).length > 0 || (internal.mode === "lazy" && !internal.state.materialized);
+				const isNamespace = Objects.keys(child).length > 0 || (internal.mode === "lazy" && !internal.state.materialized);
 				if (isNamespace) {
-					shared.set(key, descriptor);
+					MapMethods.set(shared, key, descriptor);
 					Reflect.deleteProperty(wrapper, key);
 					continue;
 				}
 				const owner = prior ? ownership.snapshotOwner(prior) : ownership.getCurrentOwner(childPath)?.moduleID;
-				if (reloadGroup.has(owner)) continue;
+				if (SetMethods.has(reloadGroup, owner)) continue;
 			}
-			foreign.set(key, descriptor);
+			MapMethods.set(foreign, key, descriptor);
 			// Adopted children are configurable, so this removes them. Were one not, the replace could
 			// not remove it either, and reattaching its identical descriptor is a no-op.
 			Reflect.deleteProperty(wrapper, key);
 		}
 		return { foreign, shared, keyOrder };
+	}
+
+	/**
+	 * How a namespace at the api root takes a reload of the modules in `reloadGroup`, judged as
+	 * {@link ApiManager#_partitionNamespaceChildren} judges a child of a namespace, without setting it aside: `"held"` when
+	 * another module replaced it and still holds it, `"shared"` when another module contributes to it or is mounted inside
+	 * it, and `"own"` when only the reloaded modules contribute.
+	 * @param {object} wrapper - The raw wrapper at the root key.
+	 * @param {string} key - The root key.
+	 * @param {Set<string>} reloadGroup - moduleIDs being rebuilt in this cycle.
+	 * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks from before
+	 *   the rebuild.
+	 * @param {{ held: Set<string>, mounts: string[] }} [placement] - Other modules' mounts, and the ones that replaced
+	 *   what was there.
+	 * @returns {"held"|"shared"|"own"} The answer.
+	 * @private
+	 */
+	_rootKeyContribution(wrapper, key, reloadGroup, ownershipBefore, placement) {
+		if (wrapper.____slothletInternal.userAssigned) return "own";
+		if (placement == null ? undefined : SetMethods.has(placement.held, key)) return "held";
+		const hostsForeignMount =
+			(placement == null ? undefined : ArrayMethods.some(placement.mounts, (mount) => StringMethods.startsWith(mount, `${key}.`))) ?? false;
+		if (hostsForeignMount) return "shared";
+		// Any member of the namespace another module contributes, at any depth, makes it shared.
+		const ownership = this.slothlet.handlers.ownership;
+		const contributorsOf = (path, node) => {
+			const prior = ownershipBefore == null ? undefined : MapMethods.get(ownershipBefore, path);
+			const history = prior ? mapList(prior, ({ entry }) => entry) : (ownership?.getPathHistory(path) ?? []);
+			if (history.length > 0) return mapList(history, (entry) => entry.moduleID);
+			return ownership ? [node.____slothletInternal.moduleID] : this._subtreeModuleIDs(node);
+		};
+		const pending = [[key, wrapper]];
+		const seen = new Set();
+		while (pending.length > 0) {
+			const unpacked1 = ArrayMethods.pop(pending),
+				path = unpacked1[0],
+				node = unpacked1[1];
+			if (SetMethods.has(seen, node)) continue;
+			SetMethods.add(seen, node);
+			if (!ArrayMethods.every(contributorsOf(path, node), (id) => SetMethods.has(reloadGroup, id))) return "shared";
+			for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
+				const child = ofList[ofIndex];
+				const childNode = resolveWrapper(Objects.getOwnPropertyDescriptor(node, child).value);
+				if (childNode && !childNode.____slothletInternal.userAssigned) listPush(pending, [`${path}.${child}`, childNode]);
+			}
+		}
+		return "own";
 	}
 
 	/**
@@ -5649,14 +7051,18 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	_subtreeModuleIDs(rawWrapper, seen = new Set()) {
-		seen.add(rawWrapper);
-		const ids = new Set([rawWrapper.____slothletInternal.moduleID]);
-		for (const key of Object.keys(rawWrapper)) {
-			const child = resolveWrapper(Object.getOwnPropertyDescriptor(rawWrapper, key).value);
-			if (!child || seen.has(child)) continue;
-			for (const id of this._subtreeModuleIDs(child, seen)) ids.add(id);
+		SetMethods.add(seen, rawWrapper);
+		const ids = setFrom([rawWrapper.____slothletInternal.moduleID]);
+		for (let ofIndex = 0, ofList = Objects.keys(rawWrapper); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			const child = resolveWrapper(Objects.getOwnPropertyDescriptor(rawWrapper, key).value);
+			if (!child || SetMethods.has(seen, child)) continue;
+			for (let ofIndex = 0, ofList = this._subtreeModuleIDs(child, seen); ofIndex < ofList.length; ofIndex++) {
+				const id = ofList[ofIndex];
+				SetMethods.add(ids, id);
+			}
 		}
-		return [...ids];
+		return setToArray(ids);
 	}
 
 	/**
@@ -5670,24 +7076,31 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	_reattachSetAsideChildren(wrapper, { foreign, shared, keyOrder }) {
-		for (const [key, descriptor] of [...foreign, ...shared]) {
+		for (let ofIndex = 0, ofList = concatLists(mapEntriesToArray(foreign), mapEntriesToArray(shared)); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				key = ofEntry[0],
+				descriptor = ofEntry[1];
 			// A key the rebuilt contribution also placed here yields to the set-aside child (the filter above
 			// keeps set-aside keys out of the impl, so this only replaces an adoption artefact).
 			Reflect.deleteProperty(wrapper, key);
-			Object.defineProperty(wrapper, key, descriptor);
+			Objects.defineProperty(wrapper, key, descriptor);
 		}
 		// Re-insert every enumerable child in order: prior keys first (in their prior order), then new.
-		const current = Object.keys(wrapper);
-		const currentSet = new Set(current);
-		const ordered = keyOrder.filter((k) => currentSet.has(k));
-		const orderedSet = new Set(ordered);
-		for (const k of current) if (!orderedSet.has(k)) ordered.push(k);
-		for (const key of ordered) {
-			const descriptor = Object.getOwnPropertyDescriptor(wrapper, key);
+		const current = Objects.keys(wrapper);
+		const currentSet = setFrom(current);
+		const ordered = filterList(keyOrder, (k) => SetMethods.has(currentSet, k));
+		const orderedSet = setFrom(ordered);
+		for (let ofIndex = 0, ofList = current; ofIndex < ofList.length; ofIndex++) {
+			const k = ofList[ofIndex];
+			if (!SetMethods.has(orderedSet, k)) listPush(ordered, k);
+		}
+		for (let ofIndex = 0, ofList = ordered; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			const descriptor = Objects.getOwnPropertyDescriptor(wrapper, key);
 			// A non-configurable key cannot move: the delete fails and redefining its identical
 			// descriptor is a no-op, so it simply keeps its slot.
 			Reflect.deleteProperty(wrapper, key);
-			Object.defineProperty(wrapper, key, descriptor);
+			Objects.defineProperty(wrapper, key, descriptor);
 		}
 	}
 
@@ -5721,34 +7134,64 @@ export class ApiManager extends ComponentBase {
 		moduleID,
 		collisionMode,
 		forceReplace = true,
-		{ reloadGroup = new Set([moduleID]), previousApi = null, ownershipBefore = null, placement = null } = {}
+		{ reloadGroup = setFrom([moduleID]), previousApi = null, ownershipBefore = null, placement = null } = {}
 	) {
 		// Defensive: _restoreApiTree is always called with a valid freshApi object produced
 		// by buildAPI. A null/primitive freshApi would indicate a build failure handled elsewhere.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!freshApi || (typeof freshApi !== "object" && typeof freshApi !== "function")) {
 			return;
 		}
 
-		// Parse endpoint into parts array
-		const parts = endpoint === "." ? [] : endpoint.split(".");
+		// Parse endpoint into parts array. An add at the api root ("" / null) is mounted at the root like the base (".").
+		const parts = endpoint === "." || endpoint === "" ? [] : splitText(endpoint, ".");
 
 		if (parts.length === 0) {
 			// Root level - update each existing wrapper's implementation directly
 			// Using ___setImpl preserves the wrapper proxy reference and custom properties
 			// (setValueAtPath/syncWrapper can replace the proxy reference, losing custom props)
-			for (const key of Object.keys(freshApi)) {
+			for (let ofIndex = 0, ofList = Objects.keys(freshApi); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				// Skip internal keys from the fresh API proxy's ownKeys trap
 				// Internal keys are always filtered by the proxy's ownKeysTrap before this loop; the startsWith guard never fires.
-				/* v8 ignore next */
+				/* v8 ignore if */
 				if (isFrameworkReservedKey(key)) continue;
 				// Skip built-in slothlet namespace
 				// slothlet/shutdown/destroy are always filtered by ownKeysTrap; this guard never fires.
-				/* v8 ignore next */
+				/* v8 ignore if */
 				if (key === "slothlet" || key === "shutdown" || key === "destroy") continue;
 
 				const existingAtKey = this.slothlet.api[key];
 				const freshValue = freshApi[key];
+
+				// A root namespace another module also contributes to, or holds an add that replaced part of it, is rebuilt
+				// level by level as a shared namespace one level down is, so the other modules' members stay (#525, #530);
+				// one another module replaced whole keeps that module's content.
+				const contribution =
+					forceReplace && existingAtKey && resolveWrapper(existingAtKey) !== null
+						? this._rootKeyContribution(resolveWrapper(existingAtKey), key, reloadGroup, ownershipBefore, placement)
+						: "own";
+				if (contribution === "held") continue;
+				if (contribution === "shared") {
+					const wrapper = resolveWrapper(existingAtKey);
+					const freshChild = await this._namespaceImplOf(freshValue);
+					const customProps = this._collectCustomProperties(existingAtKey, freshChild);
+					const originalCollisionMode = wrapper.____slothletInternal.state.collisionMode;
+					wrapper.____slothletInternal.state.collisionMode = "replace";
+					try {
+						await this._applyScopedImpl(wrapper, key, freshChild, moduleID, {
+							forceReplace: true,
+							reloadGroup,
+							previousApi: typeof wrapper.____slothletInternal.impl === "function" ? previousApi?.[key] : undefined,
+							ownershipBefore,
+							placement
+						});
+					} finally {
+						wrapper.____slothletInternal.state.collisionMode = originalCollisionMode;
+					}
+					this._restoreCustomProperties(existingAtKey, customProps);
+					continue;
+				}
 
 				if (existingAtKey && resolveWrapper(existingAtKey) !== null) {
 					// Existing wrapper found - collect custom props before any modification
@@ -5797,7 +7240,7 @@ export class ApiManager extends ComponentBase {
 						this.slothlet.debug("reload", {
 							key: "DEBUG_MODE_ROOT_KEY_RESET_LAZY",
 							rootKey: key,
-							restoredCustomProps: Object.keys(customProps)
+							restoredCustomProps: Objects.keys(customProps)
 						});
 					} else {
 						// EAGER PATH: Fresh value is concrete (eager mode, or root-level file
@@ -5806,19 +7249,20 @@ export class ApiManager extends ComponentBase {
 						// Extract full impl from fresh value (which is a wrapper proxy from buildAPI).
 						// CRITICAL: freshWrapper.____slothletInternal.impl may be depleted - the constructor's
 						// ___adoptImplChildren() moved children (like host, port for config) out of
-						// _impl and onto the wrapper as own properties, deleting them from _impl.
+						// ____impl and onto the wrapper as own properties, deleting them from ____impl.
 						// Use _extractFullImpl to reconstruct the complete impl from wrapper tree.
 						let implForReload;
 						// freshValue always has a wrapper (from buildAPI) and is truthy; FALSE branch is defensive.
 						// When the if is TRUE, freshWrapper is always set so the ternary FALSE arm never fires.
-						/* v8 ignore next 2 */
+						/* v8 ignore else */
 						if (freshValue && resolveWrapper(freshValue) !== null) {
-							implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshValue;
+							implForReload = freshWrapper
+								? unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(freshWrapper)
+								: /* v8 ignore next */ freshValue;
 						} else {
 							// freshValue is falsy or has no wrapper — use it as-is (e.g., a plain null/undefined
 							// impl). In practice every root key from buildAPI is a wrapper, so this arm is
 							// a defensive fallback that is never reached during reload.
-							/* v8 ignore next */
 							implForReload = freshValue;
 						}
 
@@ -5836,7 +7280,7 @@ export class ApiManager extends ComponentBase {
 						this.slothlet.debug("reload", {
 							key: "DEBUG_MODE_ROOT_KEY_UPDATED_SETIMPL",
 							rootKey: key,
-							restoredCustomProps: Object.keys(customProps)
+							restoredCustomProps: Objects.keys(customProps)
 						});
 					}
 				} else if (existingAtKey === undefined) {
@@ -5844,8 +7288,7 @@ export class ApiManager extends ComponentBase {
 					const cacheManager = this.slothlet.handlers.apiCacheManager;
 					const cacheEntry = cacheManager.get(moduleID);
 					// cacheEntry always has folderPath set; empty-string fallback is unreachable.
-					/* v8 ignore next */
-					const resolvedFolderPath = cacheEntry?.folderPath || "";
+					const resolvedFolderPath = /* v8 ignore next */ cacheEntry?.folderPath || "";
 
 					await this.setValueAtPath(this.slothlet.api, [key], freshValue, {
 						mutateExisting: true,
@@ -5855,7 +7298,7 @@ export class ApiManager extends ComponentBase {
 					});
 
 					// boundApi is always initialized before any reload — falsy branch never reached.
-					/* v8 ignore next */
+					/* v8 ignore else */
 					if (this.slothlet.boundApi) {
 						await this.setValueAtPath(this.slothlet.boundApi, [key], freshValue, {
 							mutateExisting: true,
@@ -5876,14 +7319,12 @@ export class ApiManager extends ComponentBase {
 				key: "DEBUG_MODE_RESTORE_NESTED_PATH",
 				endpoint,
 				moduleID,
-				partsPath: parts.join("."),
+				partsPath: ArrayMethods.join(parts, "."),
 				existingFound: !!existing,
 				// existing is always truthy when this debug block runs — falsy arm is defensive.
 				// freshApi is always set from buildAPI — nullish fallback never fires.
-				/* v8 ignore start */
-				hasSetImpl: existing ? resolveWrapper(existing) !== null : false,
-				freshApiKeys: Object.keys(freshApi)
-				/* v8 ignore stop */
+				hasSetImpl: existing ? resolveWrapper(existing) !== null : /* v8 ignore next */ false,
+				freshApiKeys: Objects.keys(freshApi)
 			});
 
 			if (existing && resolveWrapper(existing) !== null) {
@@ -5895,8 +7336,7 @@ export class ApiManager extends ComponentBase {
 				// forceReplace=false (subsequent in multi-cache): preserve collision mode for merge
 				const wrapper = resolveWrapper(existing);
 				// wrapper is always truthy — resolveWrapper(existing) just returned non-null in the if-guard above.
-				/* v8 ignore next */
-				const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
+				const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : /* v8 ignore next */ null;
 
 				if (forceReplace && wrapper) {
 					wrapper.____slothletInternal.state.collisionMode = "replace";
@@ -5910,19 +7350,16 @@ export class ApiManager extends ComponentBase {
 
 				// Existing wrapper found - update implementation directly
 				// This is the key: we update the WRAPPER's implementation, not replace the path
-				// CRITICAL: After eager rebuild, wrapper proxies have depleted _impl (children
+				// CRITICAL: After eager rebuild, wrapper proxies have depleted ____impl (children
 				// adopted to own properties). Reconstruct the complete impl from the wrapper tree
 				// so ___setImpl → ___adoptImplChildren receives the full key set.
 				let implForReload;
-				// Unreachable in practice: buildAPI() always returns a plain function or
-				// plain object — never a UnifiedWrapper proxy. resolveWrapper(freshApi)
-				// is therefore always null, so this branch never executes. The guard
-				// exists to safely handle any future code path that hands a pre-wrapped
-				// value to the reload pipeline.
-				/* v8 ignore next */
+				// A single-file add at a nested endpoint hands the reload the file's wrapper proxy (the
+				// `mounted()` of _reloadByModuleID); a build root is a plain function or object. Inside the
+				// wrapper arm resolveWrapper never returns null, so the ternary's fallback is unreachable.
 				if (resolveWrapper(freshApi) !== null) {
 					const freshWrapper = resolveWrapper(freshApi);
-					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
+					implForReload = freshWrapper ? unifiedWrapperOwn.UnifiedWrapper._extractFullImpl(freshWrapper) : /* v8 ignore next */ freshApi;
 				} else {
 					// freshApi is a plain object (named exports) or a function. A default-export leaf (a
 					// file's default, or a synthetic #117 function leaf) flattens to the build root, so
@@ -5940,15 +7377,21 @@ export class ApiManager extends ComponentBase {
 				// IMPORTANT: Run before recursive extraction so the wrapper proxy is still intact.
 				if (parts.length > 0 && implForReload && typeof implForReload === "object") {
 					const lastEndpointPart = parts[parts.length - 1];
-					if (lastEndpointPart && Object.prototype.hasOwnProperty.call(implForReload, lastEndpointPart)) {
+					if (lastEndpointPart && Objects.hasOwn(implForReload, lastEndpointPart)) {
 						const dupValue = implForReload[lastEndpointPart];
 						const dupWrapperForDedup = resolveWrapper(dupValue);
 						if (dupWrapperForDedup) {
 							const hoisted = {};
-							for (const k of Object.keys(implForReload)) {
+							for (let ofIndex = 0, ofList = Objects.keys(implForReload); ofIndex < ofList.length; ofIndex++) {
+								const k = ofList[ofIndex];
 								if (k !== lastEndpointPart) hoisted[k] = implForReload[k];
 							}
-							for (const k of Object.keys(dupWrapperForDedup).filter((k) => !isFrameworkReservedKey(k))) {
+							for (
+								let ofIndex = 0, ofList = filterList(Objects.keys(dupWrapperForDedup), (k) => !isFrameworkReservedKey(k));
+								ofIndex < ofList.length;
+								ofIndex++
+							) {
+								const k = ofList[ofIndex];
 								hoisted[k] = dupWrapperForDedup[k];
 							}
 							implForReload = hoisted;
@@ -5969,7 +7412,7 @@ export class ApiManager extends ComponentBase {
 				// Restore original collision mode
 				// wrapper is always truthy here — resolveWrapper(existing) returned non-null above.
 				// originalCollisionMode is never null when wrapper exists (mode is always set).
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (wrapper && originalCollisionMode !== null) {
 					wrapper.____slothletInternal.state.collisionMode = originalCollisionMode;
 				}
@@ -5982,7 +7425,7 @@ export class ApiManager extends ComponentBase {
 					endpoint,
 					moduleID,
 					forcedReplaceMode: true,
-					restoredCustomProps: Object.keys(customProps)
+					restoredCustomProps: Objects.keys(customProps)
 				});
 			} else {
 				// No wrapper exists - should not happen in reload, but handle gracefully
@@ -5990,8 +7433,7 @@ export class ApiManager extends ComponentBase {
 				const cacheManager = this.slothlet.handlers.apiCacheManager;
 				const cacheEntry = cacheManager.get(moduleID);
 				// cacheEntry always has folderPath set when stored via set(); empty-string fallback is unreachable.
-				/* v8 ignore next */
-				const resolvedFolderPath = cacheEntry?.folderPath || "";
+				const resolvedFolderPath = /* v8 ignore next */ cacheEntry?.folderPath || "";
 
 				// Wrap fresh API - extract properties if buildAPI returned a function
 				let implForContainer = freshApi;
@@ -6000,14 +7442,15 @@ export class ApiManager extends ComponentBase {
 				// plain object. Even if it did return a function, Object.keys on a
 				// typical module function yields zero keys, so the loop body would be a
 				// no-op anyway. The guard is defensive for hypothetical future callers.
-				/* v8 ignore next */
+				/* v8 ignore if */
 				if (typeof freshApi === "function") {
 					implForContainer = {};
-					for (const key of Object.keys(freshApi)) {
+					for (let ofIndex = 0, ofList = Objects.keys(freshApi); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
 						implForContainer[key] = freshApi[key];
 					}
 				}
-				const containerWrapper = new UnifiedWrapper(this.slothlet, {
+				const containerWrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
 					apiPath: endpoint,
 					mode: this.____config.mode,
 					moduleID: moduleID,
@@ -6015,7 +7458,7 @@ export class ApiManager extends ComponentBase {
 					sourceFolder: resolvedFolderPath
 				});
 				containerWrapper.___setImpl(implForContainer, moduleID);
-				const apiToSet = containerWrapper.createProxy();
+				const apiToSet = containerWrapper.___createProxy();
 
 				// Set at endpoint path
 				await this.setValueAtPath(this.slothlet.api, parts, apiToSet, {
@@ -6026,7 +7469,7 @@ export class ApiManager extends ComponentBase {
 				});
 
 				// boundApi is always initialized before any reload — falsy branch never reached.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (this.slothlet.boundApi) {
 					await this.setValueAtPath(this.slothlet.boundApi, parts, apiToSet, {
 						mutateExisting: true,

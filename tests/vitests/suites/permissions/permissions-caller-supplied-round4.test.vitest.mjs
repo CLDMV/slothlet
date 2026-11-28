@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-caller-supplied-round4.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-caller-supplied-round4.test.vitest.mjs
  *	@Date: 2026-10-17T00:00:00-07:00 (1792220400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-11-28T04:32:21-08:00 (1795869141)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,10 +72,10 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fourth ro
 	 * @param {object} [permissions] - Permissions to build with instead of the fixture's rules.
 	 * @returns {Promise<object>} The api.
 	 */
-	const build = async (permissions = { defaultPolicy: "deny", rules: RULES }) => {
+	const build = async (permissions = { policy: "deny", rules: RULES }) => {
 		api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions });
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
 		await api.vault.secret.whoami();
 		return api;
 	};
@@ -145,7 +145,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fourth ro
 		});
 
 		it("control: a generator object keeps its identity, prototype and protocol", async () => {
-			await build({ defaultPolicy: "allow", rules: [] });
+			await build({ policy: "allow", rules: [] });
 			const generator = api.supplier.bag.gen();
 			expect(Object.prototype.toString.call(generator)).toBe("[object Generator]");
 			expect(generator[Symbol.iterator]()).toBe(generator);
@@ -180,7 +180,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fourth ro
 		});
 
 		it("control: a returned function keeps its plain-JavaScript shape", async () => {
-			await build({ defaultPolicy: "allow", rules: [] });
+			await build({ policy: "allow", rules: [] });
 			const fn = api.supplier.bag.shaped();
 			expect([fn.name, fn.length, typeof fn.prototype, typeof fn]).toEqual(["shapedOne", 2, "object", "function"]);
 			expect(fn.call({ tag: "t" }, 1, 2)).toEqual(["t", 1, 2]);
@@ -218,33 +218,33 @@ describe.each(getMatrixConfigs())(
 		 */
 		const build = async () => {
 			api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { mode: "disabled" } });
-			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
 			return api;
 		};
 
 		it("an async function keeps its prototype", async () => {
 			await build();
-			expect(await api.callee.shapes.report("scope")).toEqual(describeFunction(api.slothlet.scope));
-			expect((await api.callee.shapes.report("scope")).prototype).toBe("AsyncFunction");
+			expect(await api.callee.shapes.report("context.scope")).toEqual(describeFunction(api.slothlet.context.scope));
+			expect((await api.callee.shapes.report("context.scope")).prototype).toBe("AsyncFunction");
 		});
 
 		it("a prototype set by the module is the function's", async () => {
 			await build();
-			expect(await api.callee.shapes.reparent("scope")).toBe(true);
-			expect(Object.getPrototypeOf(api.slothlet.scope)).toBe(Function.prototype);
-			expect((await api.callee.shapes.report("scope")).prototype).toBe("Function");
+			expect(await api.callee.shapes.reparent("context.scope")).toBe(true);
+			expect(Object.getPrototypeOf(api.slothlet.context.scope)).toBe(Function.prototype);
+			expect((await api.callee.shapes.report("context.scope")).prototype).toBe("Function");
 		});
 
 		it("a member defined naming only its value is reported fixed, as on the function", async () => {
 			await build();
-			const reported = await api.callee.shapes.define("scope", "extra");
+			const reported = await api.callee.shapes.define("context.scope", "extra");
 			expect(reported.member).toEqual({ configurable: false, writable: false, enumerable: false });
-			expect(reported).toEqual(describeFunction(api.slothlet.scope, "extra"));
+			expect(reported).toEqual(describeFunction(api.slothlet.context.scope, "extra"));
 		});
 
 		it("a member the function holds fixed is reported fixed", async () => {
 			await build();
-			expect(await api.callee.shapes.report("lockCaller")).toEqual(describeFunction(api.slothlet.lockCaller));
+			expect(await api.callee.shapes.report("pin")).toEqual(describeFunction(api.slothlet.pin));
 		});
 
 		it.each([
@@ -253,9 +253,9 @@ describe.each(getMatrixConfigs())(
 			["made non-extensible", Object.preventExtensions]
 		])("%s by the host after the module read it, it reports as the host's", async (_label, fix) => {
 			await build();
-			await api.callee.shapes.keep("lockCaller");
-			fix(api.slothlet.lockCaller);
-			expect(await api.callee.shapes.report("lockCaller")).toEqual(describeFunction(api.slothlet.lockCaller));
+			await api.callee.shapes.keep("pin");
+			fix(api.slothlet.pin);
+			expect(await api.callee.shapes.report("pin")).toEqual(describeFunction(api.slothlet.pin));
 		});
 	}
 );

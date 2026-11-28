@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/class-instance-wrapper-proxy.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/class-instance-wrapper-proxy.test.vitest.mjs
  *	@Date: 2026-02-26T17:01:34-08:00 (1772154094)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-28T04:31:47-08:00 (1795869107)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { runtime_wrapClassInstance, runtime_isClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
+import { runtime_wrapClassInstance, runtime_isClassInstance } from "#helpers/class-instance-wrapper";
 
 /**
  * A minimal context manager stub.  `runInContext` simply calls the function.

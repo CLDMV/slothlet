@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/performance/test-jit-optimization.mjs
+ *	@Filename: tests/performance/test-jit-optimization.mjs
  *	@Date: 2026-01-13T20:47:01-08:00 (1768366021)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
+ *	@Last modified time: 2026-11-28T04:30:54-08:00 (1795869054)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ process.env.NODE_OPTIONS = "--conditions=slothlet-dev --conditions=development";
 import { performance } from "perf_hooks";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { slothlet as rawSlothlet } from "@cldmv/slothlet/slothlet";
+import { slothlet as rawSlothlet } from "#slothlet";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

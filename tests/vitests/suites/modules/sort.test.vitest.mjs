@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/modules/sort.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/modules/sort.test.vitest.mjs
  *	@Date: 2026-05-27T11:22:33-07:00 (1779906153)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:36-07:00 (1791091716)
+ *	@Last modified time: 2026-11-28T04:32:09-08:00 (1795869129)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,15 +19,15 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
+import { sortModules } from "#helpers/module-sort";
 
-function makeResult(packageName, priority, mountPath = ["x"]) {
+function makeResult(name, priority, mount = ["x"]) {
 	return Object.freeze({
-		packageName,
-		packageRoot: `/fake/${packageName}`,
-		mountPath: Object.freeze(mountPath),
-		apiDir: `/fake/${packageName}/api`,
-		manifest: Object.freeze({ priority, name: packageName, mountPath })
+		package: name,
+		folder: `/fake/${name}`,
+		mount: Object.freeze(mount),
+		base: `/fake/${name}/api`,
+		manifest: Object.freeze({ priority, name, mount })
 	});
 }
 
@@ -37,43 +37,43 @@ describe("sortModules — default comparator", () => {
 	it("sorts by priority descending (higher first)", () => {
 		const input = [makeResult("a", 10), makeResult("b", 50), makeResult("c", 20)];
 		const out = sortModules(input);
-		expect(out.map((r) => r.packageName)).toEqual(["b", "c", "a"]);
+		expect(out.map((r) => r.package)).toEqual(["b", "c", "a"]);
 	});
 
-	it("breaks priority ties by packageName ascending", () => {
+	it("breaks priority ties by package ascending", () => {
 		const input = [makeResult("@org/zeta", 100), makeResult("@org/alpha", 100), makeResult("@org/mu", 100)];
 		const out = sortModules(input);
-		expect(out.map((r) => r.packageName)).toEqual(["@org/alpha", "@org/mu", "@org/zeta"]);
+		expect(out.map((r) => r.package)).toEqual(["@org/alpha", "@org/mu", "@org/zeta"]);
 	});
 
 	it("treats missing priority as 0", () => {
 		const input = [
-			Object.freeze({ packageName: "explicit", manifest: Object.freeze({ priority: 5 }) }),
-			Object.freeze({ packageName: "missing", manifest: Object.freeze({}) })
+			Object.freeze({ package: "explicit", manifest: Object.freeze({ priority: 5 }) }),
+			Object.freeze({ package: "missing", manifest: Object.freeze({}) })
 		];
 		const out = sortModules(input);
-		expect(out.map((r) => r.packageName)).toEqual(["explicit", "missing"]);
+		expect(out.map((r) => r.package)).toEqual(["explicit", "missing"]);
 	});
 
 	it("places negative priorities below zero-priority", () => {
 		const input = [makeResult("neg", -1), makeResult("zero", 0), makeResult("pos", 1)];
 		const out = sortModules(input);
-		expect(out.map((r) => r.packageName)).toEqual(["pos", "zero", "neg"]);
+		expect(out.map((r) => r.package)).toEqual(["pos", "zero", "neg"]);
 	});
 
 	it("handles an empty input array", () => {
 		expect(sortModules([])).toEqual([]);
 	});
 
-	it("returns 0 when two modules have identical priority and identical packageName (line 87-88 equal-name fallthrough)", () => {
-		// Same priority + same packageName forces the comparator past the
+	it("returns 0 when two modules have identical priority and identical package (line 87-88 equal-name fallthrough)", () => {
+		// Same priority + same package forces the comparator past the
 		// `na < nb` and `na > nb` checks into the final `return 0`.
-		const a = { packageName: "@org/twin", manifest: { priority: 1 } };
-		const b = { packageName: "@org/twin", manifest: { priority: 1 } };
+		const a = { package: "@org/twin", manifest: { priority: 1 } };
+		const b = { package: "@org/twin", manifest: { priority: 1 } };
 		const out = sortModules([a, b]);
 		expect(out).toHaveLength(2);
 		// Both inputs are present (order between equal entries is implementation-defined).
-		expect(out.map((x) => x.packageName).sort()).toEqual(["@org/twin", "@org/twin"]);
+		expect(out.map((x) => x.package).sort()).toEqual(["@org/twin", "@org/twin"]);
 	});
 
 	it("handles a single-element array (returns a copy)", () => {
@@ -90,9 +90,9 @@ describe("sortModules — default comparator", () => {
 describe("sortModules — purity", () => {
 	it("does not mutate the input array", () => {
 		const input = [makeResult("a", 10), makeResult("b", 50), makeResult("c", 20)];
-		const before = input.map((r) => r.packageName);
+		const before = input.map((r) => r.package);
 		sortModules(input);
-		expect(input.map((r) => r.packageName)).toEqual(before);
+		expect(input.map((r) => r.package)).toEqual(before);
 	});
 
 	it("returns a new array reference", () => {
@@ -107,36 +107,36 @@ describe("sortModules — purity", () => {
 describe("sortModules — custom comparator", () => {
 	it("uses a provided comparator instead of the default", () => {
 		const input = [makeResult("z", 100), makeResult("a", 1), makeResult("m", 50)];
-		const out = sortModules(input, (x, y) => x.packageName.localeCompare(y.packageName));
-		expect(out.map((r) => r.packageName)).toEqual(["a", "m", "z"]);
+		const out = sortModules(input, (x, y) => x.package.localeCompare(y.package));
+		expect(out.map((r) => r.package)).toEqual(["a", "m", "z"]);
 	});
 
 	it("supports a reverse-priority comparator", () => {
 		const input = [makeResult("a", 1), makeResult("b", 100), makeResult("c", 50)];
 		const out = sortModules(input, (x, y) => (x.manifest.priority ?? 0) - (y.manifest.priority ?? 0));
-		expect(out.map((r) => r.packageName)).toEqual(["a", "c", "b"]);
+		expect(out.map((r) => r.package)).toEqual(["a", "c", "b"]);
 	});
 
 	it("supports a comparator that reads arbitrary manifest fields", () => {
 		const input = [
-			Object.freeze({ packageName: "p1", manifest: Object.freeze({ kind: "driver" }) }),
-			Object.freeze({ packageName: "p2", manifest: Object.freeze({ kind: "extension" }) }),
-			Object.freeze({ packageName: "p3", manifest: Object.freeze({ kind: "driver" }) })
+			Object.freeze({ package: "p1", manifest: Object.freeze({ kind: "driver" }) }),
+			Object.freeze({ package: "p2", manifest: Object.freeze({ kind: "extension" }) }),
+			Object.freeze({ package: "p3", manifest: Object.freeze({ kind: "driver" }) })
 		];
 		const out = sortModules(input, (x, y) => x.manifest.kind.localeCompare(y.manifest.kind));
 		expect(
 			out
-				.map((r) => r.packageName)
+				.map((r) => r.package)
 				.slice(0, 2)
 				.sort()
 		).toEqual(["p1", "p3"]);
-		expect(out[2].packageName).toBe("p2");
+		expect(out[2].package).toBe("p2");
 	});
 
 	it("falls back to the default comparator when the supplied comparator is not a function", () => {
 		const input = [makeResult("a", 10), makeResult("b", 50)];
 		const out = sortModules(input, /** @type {any} */ ("not-a-fn"));
-		expect(out.map((r) => r.packageName)).toEqual(["b", "a"]); // default order
+		expect(out.map((r) => r.package)).toEqual(["b", "a"]); // default order
 	});
 });
 
@@ -145,29 +145,29 @@ describe("sortModules — custom comparator", () => {
 describe("sortModules — default comparator robustness", () => {
 	it("treats a missing manifest as priority 0", () => {
 		const input = [
-			Object.freeze({ packageName: "with-manifest", manifest: Object.freeze({ priority: 10 }) }),
-			Object.freeze({ packageName: "no-manifest" }) // no manifest at all
+			Object.freeze({ package: "with-manifest", manifest: Object.freeze({ priority: 10 }) }),
+			Object.freeze({ package: "no-manifest" }) // no manifest at all
 		];
 		const out = sortModules(input);
-		expect(out.map((r) => r.packageName)).toEqual(["with-manifest", "no-manifest"]);
+		expect(out.map((r) => r.package)).toEqual(["with-manifest", "no-manifest"]);
 	});
 
-	it("treats a missing packageName as empty string for tiebreak", () => {
+	it("treats a missing package as empty string for tiebreak", () => {
 		const input = [
-			Object.freeze({ packageName: "z", manifest: Object.freeze({ priority: 5 }) }),
+			Object.freeze({ package: "z", manifest: Object.freeze({ priority: 5 }) }),
 			Object.freeze({ manifest: Object.freeze({ priority: 5 }) })
 		];
 		const out = sortModules(input);
 		// Empty-string tiebreak should come before "z".
-		expect(out[0].packageName).toBeUndefined();
-		expect(out[1].packageName).toBe("z");
+		expect(out[0].package).toBeUndefined();
+		expect(out[1].package).toBe("z");
 	});
 });
 
 // ─── Deterministic tiebreak (host-independent) ───────────────────────────────
 
 describe("sortModules — deterministic tiebreak across hosts", () => {
-	// Regression: the default comparator's packageName tiebreak previously
+	// Regression: the default comparator's package tiebreak previously
 	// used `String.prototype.localeCompare()` without an explicit locale or
 	// options. That delegated to the host's ICU/collation defaults, so the
 	// same input could sort differently on different hosts (Node bundled-
@@ -187,7 +187,7 @@ describe("sortModules — deterministic tiebreak across hosts", () => {
 		// The codepoint order is the deterministic one — assert it.
 		const input = [makeResult("apple", 0), makeResult("Banana", 0)];
 		const out = sortModules(input);
-		expect(out.map((r) => r.packageName)).toEqual(["Banana", "apple"]);
+		expect(out.map((r) => r.package)).toEqual(["Banana", "apple"]);
 	});
 
 	it("scoped vs unscoped packageNames tiebreak by codepoint (`@` < letters)", () => {
@@ -199,7 +199,7 @@ describe("sortModules — deterministic tiebreak across hosts", () => {
 		//   varies. Pin the codepoint outcome explicitly.
 		const input = [makeResult("zoo", 0), makeResult("@scope/x", 0)];
 		const out = sortModules(input);
-		expect(out.map((r) => r.packageName)).toEqual(["@scope/x", "zoo"]);
+		expect(out.map((r) => r.package)).toEqual(["@scope/x", "zoo"]);
 	});
 
 	it("same input sorted independently produces identical output (idempotent on every host)", () => {
@@ -209,8 +209,8 @@ describe("sortModules — deterministic tiebreak across hosts", () => {
 		const input = [makeResult("Foo", 0), makeResult("bar", 0), makeResult("@a/baz", 0), makeResult("BAR", 0)];
 		const out1 = sortModules(input);
 		const out2 = sortModules(input);
-		expect(out1.map((r) => r.packageName)).toEqual(out2.map((r) => r.packageName));
+		expect(out1.map((r) => r.package)).toEqual(out2.map((r) => r.package));
 		// Also pin the exact codepoint order — '@' < 'B' < 'F' < 'b'.
-		expect(out1.map((r) => r.packageName)).toEqual(["@a/baz", "BAR", "Foo", "bar"]);
+		expect(out1.map((r) => r.package)).toEqual(["@a/baz", "BAR", "Foo", "bar"]);
 	});
 });

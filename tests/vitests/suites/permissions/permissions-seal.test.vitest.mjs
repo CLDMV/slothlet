@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-seal.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-seal.test.vitest.mjs
  *	@Date: 2026-07-10T00:00:00-07:00 (1783666800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
+ *	@Last modified time: 2026-11-28T04:32:40-08:00 (1795869160)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,7 +15,7 @@
 
 /**
  * @fileoverview H2 — opt-in control-surface seal. `permissions.control.seal()` is a one-way lock:
- * after sealing, enable/disable, addRule/removeRule, and readGating throw PERMISSION_SEALED, while
+ * after sealing, enable/disable, rules.add/rules.remove, and readGating throw PERMISSION_SEALED, while
  * enforcement keeps evaluating and shutdown() still works. seal() is idempotent, and module-land
  * calls to the control surface stay blocked by the pre-existing builtin deny rule.
  */
@@ -35,25 +35,25 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 	});
 
 	it("after seal(), policy-mutating methods throw PERMISSION_SEALED; sealed === true", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
 		const P = api.slothlet.permissions;
 
 		expect(P.control.sealed).toBe(false);
 		P.control.seal();
 		expect(P.control.sealed).toBe(true);
 
-		expect(() => P.control.enable()).toThrow(/PERMISSION_SEALED/);
-		expect(() => P.control.disable()).toThrow(/PERMISSION_SEALED/);
-		expect(() => P.addRule({ caller: "a.**", target: "b.**", effect: "deny" })).toThrow(/PERMISSION_SEALED/);
-		expect(() => P.removeRule("perm-1")).toThrow(/PERMISSION_SEALED/);
-		expect(() => P.control.readGating(false)).toThrow(/PERMISSION_SEALED/);
+		expect(() => P.control.mode("on")).toThrow(/PERMISSION_SEALED/);
+		expect(() => P.control.mode("off")).toThrow(/PERMISSION_SEALED/);
+		expect(() => P.rules.add({ caller: "a.**", target: "b.**", effect: "deny" })).toThrow(/PERMISSION_SEALED/);
+		expect(() => P.rules.remove("perm-1")).toThrow(/PERMISSION_SEALED/);
+		expect(() => P.control.gating.read(false)).toThrow(/PERMISSION_SEALED/);
 	});
 
 	it("seal() is idempotent and enforcement still evaluates after sealing", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }] }
 		});
 		const P = api.slothlet.permissions;
 
@@ -78,7 +78,7 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 	});
 
 	it("shutdown() still works after seal()", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
 		api.slothlet.permissions.control.seal();
 		await api.shutdown();
 		api = null; // shutdown succeeded
@@ -89,7 +89,7 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 		// reload() constructs a fresh PermissionManager (#sealed resets to false). Without the
 		// save/re-apply around reload, the control surface would silently unseal — contradicting
 		// seal()'s documented one-way guarantee.
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny" } });
 		const P = api.slothlet.permissions;
 		P.control.seal();
 		expect(P.control.sealed).toBe(true);
@@ -97,12 +97,12 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 		await api.slothlet.reload();
 
 		expect(api.slothlet.permissions.control.sealed).toBe(true);
-		expect(() => api.slothlet.permissions.control.disable()).toThrow(/PERMISSION_SEALED/);
-		expect(() => api.slothlet.permissions.addRule({ caller: "a.**", target: "b.**", effect: "allow" })).toThrow(/PERMISSION_SEALED/);
+		expect(() => api.slothlet.permissions.control.mode("off")).toThrow(/PERMISSION_SEALED/);
+		expect(() => api.slothlet.permissions.rules.add({ caller: "a.**", target: "b.**", effect: "allow" })).toThrow(/PERMISSION_SEALED/);
 	});
 
 	it("module-land seal() is blocked by the builtin control.** deny rule (regression)", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
 		let denied = false;
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {

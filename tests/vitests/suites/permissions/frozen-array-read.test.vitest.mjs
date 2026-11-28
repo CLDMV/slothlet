@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/frozen-array-read.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/frozen-array-read.test.vitest.mjs
  *	@Date: 2026-10-24T14:33:07-07:00 (1792877587)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-24T14:57:30-07:00 (1792879050)
+ *	@Last modified time: 2026-11-28T04:32:15-08:00 (1795869135)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,7 +52,7 @@ describe.each(getMatrixConfigs({}))("frozen array read (#655) > Config: $name", 
 	});
 
 	it.each([
-		["on", { permissions: { defaultPolicy: "allow" } }],
+		["on", { permissions: { policy: "allow" } }],
 		["off", {}]
 	])("another module reads a frozen array of objects as plain JS (permissions %s)", async (_label, options) => {
 		api = await slothlet({ ...config, base: BASE, silent: true, ...options });

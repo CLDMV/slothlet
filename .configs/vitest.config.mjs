@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /.configs/vitest.config.mjs
+ *	@Filename: .configs/vitest.config.mjs
  *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T09:22:52-08:00 (1793553772)
+ *	@Last modified time: 2026-11-28T04:27:10-08:00 (1795868830)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,7 +92,7 @@ const resolveConditions = useSourceCondition
 	? [slothletCondition, "module", "browser", "development|production"]
 	: ["module", "browser", "development|production"];
 const ssrConditions = useSourceCondition ? [slothletCondition, "node", "development|production"] : ["node", "development|production"];
-const workerNodeOptions = useSourceCondition
+const workerExecArgv = useSourceCondition
 	? [`--conditions=${slothletCondition}`, "--import=./tests/vitests/setup/env-preload.mjs"]
 	: ["--import=./tests/vitests/setup/env-preload.mjs"];
 
@@ -122,12 +122,19 @@ export default defineConfig({
 	},
 	test: {
 		// maxWorkers: 4,
+		// vitest's on-disk module cache never serves slothlet's suite: every file slothlet loads ends with a value drawn
+		// for that load, and tests write fresh fixtures each run, so the cache only grows (93 GB in one checkout).
+		fsModuleCache: false,
 		include: ["tests/vitests/**/*.vest.{js,mjs}", "tests/vitests/**/*.test.vitest.{js,mjs}"],
 		exclude: ["node_modules"],
 		environment: "node",
 		globals: true,
+		// Fixture module packages resolve slothlet from their own node_modules, as an installed module does; the links are
+		// made here, once per run, and the run stops with the package named when one still cannot resolve it.
+		globalSetup: ["./tests/vitests/setup/fixture-packages.mjs"],
 		setupFiles: ["./tests/vitests/setup/vitest.setup.mjs"],
-		nodeOptions: workerNodeOptions,
+		// `test.nodeOptions` is not a Vitest option (it passes nothing to workers); `execArgv` is (#710).
+		execArgv: workerExecArgv,
 		env: {
 			NODE_ENV: "development",
 			// Propagate the runner's "i18n pack staged" signal to workers so pack-dependent suites can assert
@@ -150,7 +157,8 @@ export default defineConfig({
 
 		coverage: {
 			provider: "v8",
-			include: ["src/**"],
+			// `npm run vitest -- --coverage.include=<glob>` narrows this through SLOTHLET_COVERAGE_INCLUDE (a JSON array).
+			include: process.env.SLOTHLET_COVERAGE_INCLUDE ? JSON.parse(process.env.SLOTHLET_COVERAGE_INCLUDE) : ["src/**"],
 			exclude: ["**/*.json", "api_tests/**", "tests/**", "tools/**"],
 			reporter: ["text", "html", "json-summary", "json"]
 		}

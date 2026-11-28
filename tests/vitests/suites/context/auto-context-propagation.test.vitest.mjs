@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/auto-context-propagation.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/auto-context-propagation.test.vitest.mjs
  *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
+ *	@Last modified time: 2026-11-28T04:31:22-08:00 (1795869082)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -67,7 +67,7 @@ describe("Auto Context Propagation", () => {
 			// V3: Use context.diagnostics() API
 			const contextDiag = api.slothlet.context.diagnostics();
 			expect(contextDiag).toBeTruthy();
-			expect(contextDiag.instanceID).toBeTruthy();
+			expect(contextDiag.instance).toBeTruthy();
 
 			// Skip test if TCP module not available (e.g., in MIXED configurations with limited depth)
 			if (!api.tcp) {

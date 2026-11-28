@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/sanitize-coverage-gaps.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/sanitize-coverage-gaps.test.vitest.mjs
  *	@Date: 2026-03-03T16:00:00-08:00 (1772582400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
+ *	@Last modified time: 2026-11-28T04:31:51-08:00 (1795869111)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect } from "vitest";
-import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
+import { sanitizePropertyName } from "#helpers/sanitize";
 
 // ─── #compileGlobPattern — non-string rule input handling ──────────────────────
 

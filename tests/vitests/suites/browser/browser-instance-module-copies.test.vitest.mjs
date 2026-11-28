@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/browser/browser-instance-module-copies.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/browser/browser-instance-module-copies.test.vitest.mjs
  *	@Date: 2026-10-09T18:00:00-07:00 (1791594000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T19:27:14-07:00 (1792204034)
+ *	@Last modified time: 2026-11-28T04:31:16-08:00 (1795869076)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,8 +33,8 @@ import { cpSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
-import { withInstanceQuery } from "@cldmv/slothlet/processors/loader";
+import { generateManifest } from "#helpers/generate-manifest";
+import { withInstanceQuery } from "#processors/loader";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { getBrowserMatrixConfigs, getManifest, makeBrowserConfig } from "../../setup/vitest-helper.mjs";
 
@@ -84,8 +84,8 @@ describe.each(getBrowserMatrixConfigs())(
 			// `resolveModuleSpecifier` may return `string | URL`; a URL must get the same per-instance query.
 			const baseUrl = pathToFileURL(ROOT + path.sep);
 			const resolveModuleSpecifier = ({ path: relative }) => new URL(relative, baseUrl);
-			const first = await create({ resolveModuleSpecifier });
-			const second = await create({ resolveModuleSpecifier });
+			const first = await create({ loader: { resolve: resolveModuleSpecifier } });
+			const second = await create({ loader: { resolve: resolveModuleSpecifier } });
 			expect(await first.counter.bump()).toBe(1);
 			expect(await first.counter.bump()).toBe(2);
 			expect(await second.counter.bump()).toBe(1);
@@ -120,7 +120,7 @@ describe.each(getBrowserMatrixConfigs())(
 			await api.counter.version();
 			await api.left.counter.version();
 			const leaf = resolveWrapper(api.counter.version);
-			const loader = leaf.slothlet.processors.loader;
+			const loader = leaf.____slothlet.processors.loader;
 			const filePath = leaf.____slothletInternal.filePath;
 			const live = loader.importedLocationsFor(filePath).size;
 			// One copy at the root and one under the `left` mount.
@@ -133,7 +133,7 @@ describe.each(getBrowserMatrixConfigs())(
 				await api.left.counter.version();
 			}
 			// A reload replaces each copy, so its old URL names a module nothing runs any more.
-			expect(resolveWrapper(api.counter.version).slothlet.processors.loader).toBe(loader);
+			expect(resolveWrapper(api.counter.version).____slothlet.processors.loader).toBe(loader);
 			expect(loader.importedLocationsFor(filePath).size).toBe(live);
 		});
 	}

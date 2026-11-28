@@ -1,25 +1,25 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/runtime/lock-caller.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/runtime/lock-caller.test.vitest.mjs
  *	@Date: 2026-05-18T09:38:51-07:00 (1779122331)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:58-07:00 (1793485498)
+ *	@Last modified time: 2026-11-28T04:32:57-08:00 (1795869177)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Tests for `self.slothlet.lockCaller()` and `self.slothlet.bind()`.
+ * @fileoverview Tests for `self.slothlet.pin()` and `self.slothlet.bind()`.
  *
  * @description
  * Callbacks stored in plain arrays — Fastify `addHook` handlers, third-party event
  * registries — never pass through slothlet's `EventEmitter` patch, so they run with
- * whatever async context is ambient at invocation time. `lockCaller` pins the
+ * whatever async context is ambient at invocation time. `pin` pins the
  * registering module's caller identity onto such a callback; `bind` freezes the
  * whole async context. These tests exercise the repro and both utilities across the
  * eager/lazy × async/live matrix.
@@ -56,14 +56,14 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 
 	/**
 	 * Build the lock-caller fixture API and register the producer's emitter listener.
-	 * @param {object} [extra] - Further permission options (`{ provenance: false }`).
+	 * @param {object} [extra] - Further permission options (`{ caller: { provenance: false } }`).
 	 * @returns {Promise<object>} The Slothlet API proxy.
 	 */
 	async function makeApi(extra = {}) {
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", rules: PERMISSION_RULES, ...extra }
+			permissions: { policy: "allow", rules: PERMISSION_RULES, ...extra }
 		});
 		await api.producer.relay.setup();
 		return api;
@@ -84,7 +84,7 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 
 	it("a plain (un-pinned) callback inherits the ambient (wrong) caller identity", async () => {
 		// With provenance off, nothing tells the callback's code apart from the module running it.
-		await makeApi({ provenance: false });
+		await makeApi({ caller: { provenance: false } });
 		const plainProbe = await api.consumer.probe.makePlainIdentityProbe();
 		// No pinning — the callback is attributed to whatever module is ambient.
 		expect(await api.producer.relay.viaEmitter(plainProbe)).toBe("producer");
@@ -100,7 +100,7 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 
 	it("a plain callback is denied because the ambient caller fails the permission rule", async () => {
 		// The ambient caller decides only with provenance off; with it on, see provenance-native (#597).
-		await makeApi({ provenance: false });
+		await makeApi({ caller: { provenance: false } });
 		const plainGuarded = await api.consumer.probe.makePlainGuardedCall();
 		await withSuppressedSlothletErrorOutput(async () => {
 			let error;
@@ -132,22 +132,22 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(result).toBe(thisArg);
 	});
 
-	it("exposes the original function via `_slothletOriginal`", async () => {
+	it("exposes the original function via `____slothletOriginal`", async () => {
 		await makeApi();
 		const lockedProbe = await api.consumer.probe.makeLockedIdentityProbe();
-		expect(typeof lockedProbe._slothletOriginal).toBe("function");
+		expect(typeof lockedProbe.____slothletOriginal).toBe("function");
 	});
 
-	it("lockCaller with no active context performs no override and does not throw", async () => {
+	it("pin with no active context performs no override and does not throw", async () => {
 		await makeApi();
 		// Called from bare test code — no module wrapper to capture.
-		const locked = api.slothlet.lockCaller(() => 42);
+		const locked = api.slothlet.pin(() => 42);
 		expect(locked()).toBe(42);
 	});
 
 	it("a locked callback propagates a thrown error unchanged (no CONTEXT_EXECUTION_FAILED re-typing)", async () => {
 		await makeApi();
-		const locked = api.slothlet.lockCaller(() => {
+		const locked = api.slothlet.pin(() => {
 			throw new TypeError("locked-bare-boom");
 		});
 		let error;
@@ -165,10 +165,10 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		await makeApi();
 		// The inner callback runs while the outer callback's context is already active,
 		// exercising the rawErrors path of the in-context branch of runInContext.
-		const inner = api.slothlet.lockCaller(() => {
+		const inner = api.slothlet.pin(() => {
 			throw new TypeError("nested-locked-boom");
 		});
-		const outer = api.slothlet.lockCaller(() => inner());
+		const outer = api.slothlet.pin(() => inner());
 		let error;
 		try {
 			outer();
@@ -179,11 +179,11 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(error.message).toBe("nested-locked-boom");
 	});
 
-	it("lockCaller rejects a non-function argument", async () => {
+	it("pin rejects a non-function argument", async () => {
 		await makeApi();
 		let error;
 		try {
-			api.slothlet.lockCaller(123);
+			api.slothlet.pin(123);
 		} catch (err) {
 			error = err;
 		}
@@ -203,7 +203,8 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(error.code).toBe("INVALID_ARGUMENT");
 	});
 
-	it("bind restores the async context captured at registration time", async () => {
+	// The live runtime has no async_hooks, so it cannot carry a host AsyncLocalStorage value.
+	it.skipIf(config.runtime === "live")("bind restores the async context captured at registration time", async () => {
 		await makeApi();
 		const als = new AsyncLocalStorage();
 		let bound;
@@ -214,12 +215,12 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(bound()).toBe(7);
 	});
 
-	it.skipIf(config.runtime === "live")("bind freezes the slothlet caller identity captured inside the registering module", async () => {
+	it("bind freezes the slothlet caller identity captured inside the registering module", async () => {
 		await makeApi();
 		// Built as consumer code → bind freezes the consumer's slothlet caller identity.
 		const boundProbe = await api.consumer.probe.makeBoundIdentityProbe();
 		// Invoked while the producer is the ambient caller; bind restores the consumer.
-		// AsyncResource.bind only meaningfully captures slothlet context in async mode.
+		// On the live runtime bind keeps the identity through its own caller tracking.
 		expect(await api.producer.relay.viaDirect(boundProbe)).toBe("consumer");
 	});
 
@@ -244,26 +245,45 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(await api.consumer.probe.getHookProbedIdentity()).toBe("consumer");
 	});
 
-	it.skipIf(!config.hook?.enabled)("{ lockCaller: false } opts a hook out of caller-identity pinning (pin enforcement off)", async () => {
+	// The hook fires inside the producer's own call (`viaSelf` calls `viaDirect` through `self`), where a pinned handler
+	// and an unpinned one are different callers. The handler records what it may reach: the rules deny `id.consumer` to
+	// the consumer and `id.producer` to the producer.
+	it.skipIf(!config.hook?.enabled)(
+		"a pinned hook that fires inside another module's call runs as the module that registered it",
+		async () => {
+			await makeApi();
+			await api.consumer.probe.registerAccessHook("producer.relay.viaDirect");
+			await api.producer.relay.viaSelf();
+			// The consumer alone: denied its own id, allowed the producer's.
+			expect(await api.consumer.probe.getHookProbedAccess()).toEqual([false, true]);
+		}
+	);
+
+	it.skipIf(!config.hook?.enabled)("{ pin: false } opts a hook out of caller-identity pinning (pin enforcement off)", async () => {
 		await makeApi();
 		// Pin enforcement is on by default and would ignore lockCaller:false; disable it (host-only)
 		// so the per-registration opt-out is honored (#118).
 		api.slothlet.hook.pin.disable();
-		await api.consumer.probe.registerIdentityHook("producer.relay.viaDirect", { lockCaller: false });
-		await api.producer.relay.viaDirect(() => 0);
-		// Opted out: the handler is not pinned, so it never resolves to the consumer.
-		// (Async runtime: no context → the probe stashes RUNTIME_NO_ACTIVE_CONTEXT_SELF;
-		// live runtime: the probe resolves to the ambient identity instead.)
-		const probed = await api.consumer.probe.getHookProbedIdentity();
-		// Non-null proves the hook actually fired (registerIdentityHook resets it to null);
-		// not "consumer" proves the opt-out took effect.
-		expect(probed).not.toBeNull();
-		expect(probed).not.toBe("consumer");
+		await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { pin: false });
+		await api.producer.relay.viaSelf();
+		// Opted out: the handler is not pinned, so it runs inside the producer's call. It is still the consumer's code
+		// (its definer), so both the consumer and the producer's call have to allow what it does: neither id is reached.
+		expect(await api.consumer.probe.getHookProbedAccess()).toEqual([false, false]);
+	});
+
+	it.skipIf(!config.hook?.enabled)("an unpinned hook runs as the call it fires in when provenance is off", async () => {
+		// With provenance off no frames are read, so nothing tells the handler's code from the call running it.
+		await makeApi({ caller: { provenance: false } });
+		api.slothlet.hook.pin.disable();
+		await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { pin: false });
+		await api.producer.relay.viaSelf();
+		// The producer alone: allowed the consumer's id, denied its own.
+		expect(await api.consumer.probe.getHookProbedAccess()).toEqual([true, false]);
 	});
 
 	it.skipIf(!config.hook?.enabled)("an already-locked hook handler is respected, not double-wrapped", async () => {
 		await makeApi();
-		// The handler is pre-wrapped with lockCaller; hook.on must keep the existing lock.
+		// The handler is pre-wrapped with pin; hook.on must keep the existing lock.
 		await api.consumer.probe.registerPreLockedHook("producer.relay.viaDirect");
 		await api.producer.relay.viaDirect(() => 0);
 		expect(await api.consumer.probe.getHookProbedIdentity()).toBe("consumer");
@@ -295,7 +315,7 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 	it.skipIf(config.runtime !== "live")("live runtime: lockCaller preserves caller identity across an await, matching async", async () => {
 		await makeApi();
 		const asyncProbe = await api.consumer.probe.makeLockedAsyncIdentityProbe();
-		// Same scenario as the async case above, and now the same answer. `lockCaller` exists to
+		// Same scenario as the async case above, and now the same answer. `pin` exists to
 		// carry the *registering* module's identity into a callback invoked later from somewhere
 		// else, so "consumer" is the contract.
 		//

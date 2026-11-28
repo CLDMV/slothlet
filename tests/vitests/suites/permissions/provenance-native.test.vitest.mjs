@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/provenance-native.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/provenance-native.test.vitest.mjs
  *	@Date: 2026-05-18T09:38:51-07:00 (1779122331)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-28T04:32:47-08:00 (1795869167)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,8 +50,8 @@ beforeAll(() => {
 			"\t\t\truntime,",
 			"\t\t\tsilent: true,",
 			"\t\t\tpermissions: {",
-			'\t\t\t\tdefaultPolicy: "allow",',
-			"\t\t\t\tprovenance,",
+			'\t\t\t\tpolicy: "allow",',
+			"\t\t\t\tcaller: { provenance },",
 			"\t\t\t\trules: [",
 			'\t\t\t\t\t{ caller: "consumer.**", target: "id.consumer", effect: "deny" },',
 			'\t\t\t\t\t{ caller: "producer.**", target: "id.producer", effect: "deny" }',
@@ -68,7 +68,7 @@ beforeAll(() => {
 			"\t\t\tmode,",
 			"\t\t\truntime,",
 			"\t\t\tsilent: true,",
-			'\t\t\tpermissions: { defaultPolicy: "allow", provenance, rules: [{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }',
+			'\t\t\tpermissions: { policy: "allow", rules: [{ caller: "scheduler.**", target: "slothlet.pin.caller", effect: "allow" }], caller: { provenance } }',
 			"\t\t});",
 			"\t\tawait sched.scheduler.service.clear();",
 			"\t\tawait sched.client.app.scheduleWhoamiAsService();",
@@ -76,7 +76,7 @@ beforeAll(() => {
 			"\t\tawait sched.slothlet.shutdown();",
 			"\t}",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);

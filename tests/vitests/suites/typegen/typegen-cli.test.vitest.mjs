@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typegen/typegen-cli.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typegen/typegen-cli.test.vitest.mjs
  *	@Date: 2026-05-12T19:54:32-07:00 (1778640872)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:23-07:00 (1791090923)
+ *	@Last modified time: 2026-11-28T04:33:07-08:00 (1795869187)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -119,15 +119,15 @@ describe("slothlet CLI", () => {
 			const { code, stdout } = await runCli(["typegen", "--help"]);
 			expect(code).toBe(0);
 			expect(stdout).toMatch(/Usage: slothlet typegen/);
-			expect(stdout).toMatch(/--dir/);
+			expect(stdout).toMatch(/--base/);
 			expect(stdout).toMatch(/--output/);
-			expect(stdout).toMatch(/--interface-name/);
+			expect(stdout).toMatch(/--name/);
 			expect(stdout).toMatch(/Examples:/);
 		});
 	});
 
 	describe("typegen with positional args", () => {
-		it("generates a .d.ts file when given dir / output / interfaceName positionally", async () => {
+		it("generates a .d.ts file when given base / output / name positionally", async () => {
 			const tmp = await freshTempDir();
 			const out = path.join(tmp, "api.d.ts");
 			const { code, stdout, stderr } = await runCli(["typegen", API_FIXTURE, out, "PositionalApi"]);
@@ -142,10 +142,10 @@ describe("slothlet CLI", () => {
 	});
 
 	describe("typegen with long flags", () => {
-		it("generates a .d.ts file when given --dir / --output / --interface-name", async () => {
+		it("generates a .d.ts file when given --base / --output / --name", async () => {
 			const tmp = await freshTempDir();
 			const out = path.join(tmp, "api.d.ts");
-			const { code } = await runCli(["typegen", "--dir", API_FIXTURE, "--output", out, "--interface-name", "FlagApi"]);
+			const { code } = await runCli(["typegen", "--base", API_FIXTURE, "--output", out, "--name", "FlagApi"]);
 			expect(code).toBe(0);
 			expect(existsSync(out)).toBe(true);
 			const content = await readFile(out, "utf8");
@@ -154,10 +154,10 @@ describe("slothlet CLI", () => {
 	});
 
 	describe("typegen with short flags", () => {
-		it("generates a .d.ts file when given -d / -o / -n", async () => {
+		it("generates a .d.ts file when given -b / -o / -n", async () => {
 			const tmp = await freshTempDir();
 			const out = path.join(tmp, "api.d.ts");
-			const { code } = await runCli(["typegen", "-d", API_FIXTURE, "-o", out, "-n", "ShortApi"]);
+			const { code } = await runCli(["typegen", "-b", API_FIXTURE, "-o", out, "-n", "ShortApi"]);
 			expect(code).toBe(0);
 			const content = await readFile(out, "utf8");
 			expect(content).toContain("interface ShortApi");
@@ -169,16 +169,7 @@ describe("slothlet CLI", () => {
 			const tmp = await freshTempDir();
 			const flagOut = path.join(tmp, "via-flag.d.ts");
 			const posOut = path.join(tmp, "via-positional.d.ts");
-			const { code } = await runCli([
-				"typegen",
-				API_FIXTURE,
-				posOut,
-				"PositionalName",
-				"--output",
-				flagOut,
-				"--interface-name",
-				"FlagName"
-			]);
+			const { code } = await runCli(["typegen", API_FIXTURE, posOut, "PositionalName", "--output", flagOut, "--name", "FlagName"]);
 			expect(code).toBe(0);
 			expect(existsSync(flagOut)).toBe(true);
 			expect(existsSync(posOut)).toBe(false);
@@ -188,14 +179,14 @@ describe("slothlet CLI", () => {
 	});
 
 	describe("typegen package.json fallback", () => {
-		it("reads dir/output/interfaceName from package.json's slothlet.typegen when no args supplied", async () => {
+		it("reads base/output/name from package.json's slothlet.typegen when no args supplied", async () => {
 			const tmp = await freshTempDir();
 			const out = path.join(tmp, "from-pkg.d.ts");
 			await writeFile(
 				path.join(tmp, "package.json"),
 				JSON.stringify({
 					name: "tmp-cli-fixture",
-					slothlet: { typegen: { dir: API_FIXTURE, output: out, interfaceName: "PkgApi" } }
+					slothlet: { typegen: { base: API_FIXTURE, output: out, name: "PkgApi" } }
 				}),
 				"utf8"
 			);
@@ -214,11 +205,11 @@ describe("slothlet CLI", () => {
 				path.join(tmp, "package.json"),
 				JSON.stringify({
 					name: "tmp-cli-fixture",
-					slothlet: { typegen: { dir: API_FIXTURE, output: pkgOut, interfaceName: "PkgName" } }
+					slothlet: { typegen: { base: API_FIXTURE, output: pkgOut, name: "PkgName" } }
 				}),
 				"utf8"
 			);
-			const { code } = await runCli(["typegen", "--output", flagOut, "--interface-name", "FlagName"], { cwd: tmp });
+			const { code } = await runCli(["typegen", "--output", flagOut, "--name", "FlagName"], { cwd: tmp });
 			expect(code).toBe(0);
 			expect(existsSync(flagOut)).toBe(true);
 			expect(existsSync(pkgOut)).toBe(false);
@@ -229,8 +220,8 @@ describe("slothlet CLI", () => {
 		it("treats unparseable package.json as empty fallback (errors with missing-option, not crash)", async () => {
 			const tmp = await freshTempDir();
 			await writeFile(path.join(tmp, "package.json"), "{ invalid json", "utf8");
-			const { code, stderr } = await runCli(["typegen", "--dir", API_FIXTURE], { cwd: tmp });
-			// Still missing output + interfaceName → clean error, not a parse crash.
+			const { code, stderr } = await runCli(["typegen", "--base", API_FIXTURE], { cwd: tmp });
+			// Still missing output + name → clean error, not a parse crash.
 			expect(code).not.toBe(0);
 			expect(stderr).toMatch(/missing required option/i);
 		});
@@ -248,21 +239,21 @@ describe("slothlet CLI", () => {
 		it("errors when only some required options are provided", async () => {
 			const tmp = await freshTempDir();
 			await writeFile(path.join(tmp, "package.json"), JSON.stringify({ name: "tmp" }), "utf8");
-			const { code, stderr } = await runCli(["typegen", "--dir", API_FIXTURE], { cwd: tmp });
+			const { code, stderr } = await runCli(["typegen", "--base", API_FIXTURE], { cwd: tmp });
 			expect(code).not.toBe(0);
 			expect(stderr).toMatch(/missing required option/i);
 			expect(stderr).toMatch(/output/);
-			expect(stderr).toMatch(/interfaceName/);
+			expect(stderr).toMatch(/output, name/);
 		});
 
 		it("errors on unknown flag", async () => {
-			const { code, stderr } = await runCli(["typegen", "--bogus", "x", "--dir", API_FIXTURE]);
+			const { code, stderr } = await runCli(["typegen", "--bogus", "x", "--base", API_FIXTURE]);
 			expect(code).not.toBe(0);
 			expect(stderr).toMatch(/unknown option/i);
 		});
 
 		it("errors when a flag is given no value", async () => {
-			const { code, stderr } = await runCli(["typegen", "--dir"]);
+			const { code, stderr } = await runCli(["typegen", "--base"]);
 			expect(code).not.toBe(0);
 			expect(stderr).toMatch(/requires a value/i);
 		});
@@ -272,32 +263,32 @@ describe("slothlet CLI", () => {
 		it("extends SlothletSelf by default", async () => {
 			const tmp = await freshTempDir();
 			const out = path.join(tmp, "api.d.ts");
-			const { code } = await runCli(["typegen", "-d", API_FIXTURE, "-o", out, "-n", "SelfApi"]);
+			const { code } = await runCli(["typegen", "-b", API_FIXTURE, "-o", out, "-n", "SelfApi"]);
 			expect(code).toBe(0);
 			const content = await readFile(out, "utf8");
 			expect(content).toContain('declare module "@cldmv/slothlet/runtime" {');
 			expect(content).toContain("interface SlothletSelf extends SelfApi {}");
 		});
 
-		it("--no-augment-runtime leaves SlothletSelf alone", async () => {
+		it("--no-augment leaves SlothletSelf alone", async () => {
 			const tmp = await freshTempDir();
 			const out = path.join(tmp, "api.d.ts");
-			const { code } = await runCli(["typegen", "-d", API_FIXTURE, "-o", out, "-n", "NoSelfApi", "--no-augment-runtime"]);
+			const { code } = await runCli(["typegen", "-b", API_FIXTURE, "-o", out, "-n", "NoSelfApi", "--no-augment"]);
 			expect(code).toBe(0);
 			const content = await readFile(out, "utf8");
 			expect(content).toContain("interface NoSelfApi");
 			expect(content).not.toContain("SlothletSelf");
 		});
 
-		it("reads augmentRuntime from package.json even when the other options come from flags", async () => {
+		it("reads augment from package.json even when the other options come from flags", async () => {
 			const tmp = await freshTempDir();
 			const out = path.join(tmp, "api.d.ts");
 			await writeFile(
 				path.join(tmp, "package.json"),
-				JSON.stringify({ name: "tmp-cli-fixture", slothlet: { typegen: { augmentRuntime: false } } }),
+				JSON.stringify({ name: "tmp-cli-fixture", slothlet: { typegen: { augment: false } } }),
 				"utf8"
 			);
-			const { code } = await runCli(["typegen", "-d", API_FIXTURE, "-o", out, "-n", "PkgNoSelfApi"], { cwd: tmp });
+			const { code } = await runCli(["typegen", "-b", API_FIXTURE, "-o", out, "-n", "PkgNoSelfApi"], { cwd: tmp });
 			expect(code).toBe(0);
 			const content = await readFile(out, "utf8");
 			expect(content).toContain("interface PkgNoSelfApi");

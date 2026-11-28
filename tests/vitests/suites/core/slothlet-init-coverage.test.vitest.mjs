@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/slothlet-init-coverage.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/slothlet-init-coverage.test.vitest.mjs
  *	@Date: 2026-03-03T00:00:00-08:00 (1772524800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-28T04:31:43-08:00 (1795869103)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@
  *   Normal `reload()` creates a brand-new `_reload_` ID, so `instances.has()` is always
  *   FALSE (the fresh ID was never registered) and the TRUE branch is never taken.
  *
- *   `reload({ keepInstanceID: true })` reuses the current instanceID instead of
+ *   `reload({ instance: "keep" })` reuses the current instanceID instead of
  *   generating a fresh one. Because the ID was registered during the first `load()`,
  *   `instances.has(preservedInstanceID)` returns TRUE, firing the cleanup branch.
  *
@@ -45,12 +45,12 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 // Normal reload() passes a fresh `${oldID}_reload_${Date.now()}` ID to load().
 // That ID has never been registered → instances.has() is FALSE → TRUE branch missed.
 //
-// reload({ keepInstanceID: true }) passes the CURRENT instanceID to load().
+// reload({ instance: "keep" }) passes the CURRENT instanceID to load().
 // That ID IS already registered → instances.has() is TRUE → cleanup+reinit fires.
 // ──────────────────────────────────────────────────────────────────────────────────
 
 describe("slothlet.mjs load() — preserved context cleanup TRUE branch", () => {
-	it("reload({ keepInstanceID: true }) triggers the cleanup+reinit branch (async)", async () => {
+	it('reload({ instance: "keep" }) triggers the cleanup+reinit branch (async)', async () => {
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			silent: true,
@@ -59,14 +59,14 @@ describe("slothlet.mjs load() — preserved context cleanup TRUE branch", () => 
 		});
 
 		// reload() normally uses a brand-new ID → instances.has() is FALSE.
-		// keepInstanceID: true reuses the live instanceID → instances.has() is TRUE
+		// instance: "keep" reuses the live instanceID → instances.has() is TRUE
 		// → load() takes the TRUE branch: cleanup(preservedInstanceID) + initialize(instanceID)
-		await expect(api.slothlet.reload({ keepInstanceID: true })).resolves.not.toThrow();
+		await expect(api.slothlet.reload({ instance: "keep" })).resolves.not.toThrow();
 
 		await api.shutdown();
 	});
 
-	it("reload({ keepInstanceID: true }) triggers the cleanup+reinit branch (live)", async () => {
+	it('reload({ instance: "keep" }) triggers the cleanup+reinit branch (live)', async () => {
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			silent: true,
@@ -74,7 +74,7 @@ describe("slothlet.mjs load() — preserved context cleanup TRUE branch", () => 
 			api: { mutations: { reload: true } }
 		});
 
-		await expect(api.slothlet.reload({ keepInstanceID: true })).resolves.not.toThrow();
+		await expect(api.slothlet.reload({ instance: "keep" })).resolves.not.toThrow();
 
 		await api.shutdown();
 	});

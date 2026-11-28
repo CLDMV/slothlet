@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typegen/typegen-origin.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typegen/typegen-origin.test.vitest.mjs
  *	@Date: 2026-09-28T00:19:50-07:00 (1790579990)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:46-07:00 (1791091726)
+ *	@Last modified time: 2026-11-28T04:33:07-08:00 (1795869187)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,8 +29,8 @@ import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
 import slothlet from "@cldmv/slothlet";
-import { generateTypes } from "@cldmv/slothlet/typegen";
-import { generateTypes as generateFromInstance } from "@cldmv/slothlet/processors/type-generator";
+import { generate } from "@cldmv/slothlet/typegen";
+import { generateTypes as generateFromInstance } from "#processors/type-generator";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
@@ -181,7 +181,7 @@ describe("typegen types the composed api from each node's module origin (#484)",
 	it("records each node's exportPath in the ownership records", async () => {
 		const api = await slothlet({ base: FIXTURE, mode: "eager", typescript: { mode: "fast" }, silent: true });
 		try {
-			const ownership = resolveWrapper(api.math).slothlet.handlers.ownership;
+			const ownership = resolveWrapper(api.math).____slothlet.handlers.ownership;
 			const origin = (apiPath) => {
 				const found = ownership.getOrigin(apiPath);
 				return found && { file: path.relative(FIXTURE, found.filePath).split(path.sep).join("/"), exportPath: found.exportPath };
@@ -230,7 +230,7 @@ describe("typegen types the composed api from each node's module origin (#484)",
 
 		const api = await slothlet({ base: path.join(root, "api"), mode: "eager", silent: true });
 		try {
-			const ownership = resolveWrapper(api.tuning).slothlet.handlers.ownership;
+			const ownership = resolveWrapper(api.tuning).____slothlet.handlers.ownership;
 			expect(api.tuning.TUNE_STEP).toBe(5);
 			expect(ownership.getOrigin("tuning.TUNE_STEP")?.exportPath).toEqual(["TUNE_STEP"]);
 
@@ -253,7 +253,7 @@ describe("typegen types the composed api from each node's module origin (#484)",
 	it("emits typeof-import references to the real exports, mapping extensions and CommonJS roots", async () => {
 		const tmp = await freshTempDir();
 		const output = path.join(tmp, "types", "api.d.mts");
-		const { content } = await generateTypes({ dir: FIXTURE, output, interfaceName: "MixedApi" });
+		const { content } = await generate({ base: FIXTURE, output, name: "MixedApi" });
 		const spec = (file) => JSON.stringify(path.relative(path.dirname(output), path.join(FIXTURE, file)).split(path.sep).join("/"));
 
 		expect(content).toContain(`add: typeof import(${spec("math.mjs")})["add"];`);
@@ -282,7 +282,7 @@ describe("typegen types the composed api from each node's module origin (#484)",
 		it(`types self and the slothlet() result under ${resolution} resolution`, async () => {
 			const tmp = await freshTempDir();
 			const output = path.join(tmp, "types", "api.d.mts");
-			await generateTypes({ dir: FIXTURE, output, interfaceName: "MixedApi" });
+			await generate({ base: FIXTURE, output, name: "MixedApi" });
 			const tsProbe = path.join(tmp, "probe.mts");
 			const jsProbe = path.join(tmp, "probe.mjs");
 			await writeFile(tsProbe, TS_PROBE, "utf8");
@@ -350,7 +350,7 @@ describe("typegen types the composed api from each node's module origin (#484)",
 	it("leaves SlothletAPI out when the runtime augmentation is off", async () => {
 		const tmp = await freshTempDir();
 		const output = path.join(tmp, "plain.d.mts");
-		await generateTypes({ dir: path.join(FIXTURE, "widgets"), output, interfaceName: "PlainApi", augmentRuntime: false });
+		await generate({ base: path.join(FIXTURE, "widgets"), output, name: "PlainApi", augment: false });
 		const content = await readFile(output, "utf8");
 		expect(content).toContain("export interface PlainApi {");
 		expect(content).not.toContain("SlothletAPI");

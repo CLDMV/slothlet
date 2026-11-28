@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-caller-identity-await.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-caller-identity-await.test.vitest.mjs
  *	@Date: 2026-07-28T12:00:00-07:00 (1785265200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:15-07:00 (1791090915)
+ *	@Last modified time: 2026-11-28T04:32:20-08:00 (1795869140)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,7 +45,7 @@ describe.each(getMatrixConfigs())("Permissions > Caller Identity Across Await > 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -58,7 +58,7 @@ describe.each(getMatrixConfigs())("Permissions > Caller Identity Across Await > 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs())("Permissions > Caller Identity Across Await > 
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "deny", rules: [] }
+			permissions: { policy: "deny", rules: [] }
 		});
 
 		await expect(async () => await api.callers.dataReader.insertAfterAwait()).rejects.toThrow(/PERMISSION_DENIED/);
@@ -81,7 +81,7 @@ describe.each(getMatrixConfigs())("Permissions > Caller Identity Across Await > 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "callers.dataReader.**", target: "db.write.**", effect: "allow" }]
 			}
 		});

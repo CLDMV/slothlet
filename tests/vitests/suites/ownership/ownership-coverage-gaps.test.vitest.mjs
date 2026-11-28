@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/ownership/ownership-coverage-gaps.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/ownership/ownership-coverage-gaps.test.vitest.mjs
  *	@Date: 2026-03-03T16:00:00-08:00 (1772582400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:13-07:00 (1791090913)
+ *	@Last modified time: 2026-11-28T04:32:10-08:00 (1795869130)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -109,8 +109,8 @@ describe("OwnershipManager.getPathHistory — returns [] for unregistered path (
 });
 // ─── register — collision "warn" with config.silent:true (line 78 false branch) ─
 
-describe("OwnershipManager.register — warn collision with silent:true suppresses warning (line 78 false)", () => {
-	it("returns null and emits no SlothletWarning when collision mode is warn and config.silent is true (line 78 false branch)", () => {
+describe("OwnershipManager.register — warn collision with silent:true", () => {
+	it("returns null when collision mode is warn and config.silent is true", () => {
 		const o = new OwnershipManager(makeMock());
 		const fn = () => {};
 

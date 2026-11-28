@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/fixtures/index.mjs
+ *	@Filename: tests/vitests/suites/helpers/fixtures/index.mjs
  *	@Date: 2026-03-17T00:00:00-07:00 (1773730800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-28T04:31:48-08:00 (1795869108)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Resolver } from "@cldmv/slothlet/helpers/resolve-from-caller";
+import { Resolver } from "#helpers/resolve-from-caller";
 
 const __filename = fileURLToPath(import.meta.url);
 

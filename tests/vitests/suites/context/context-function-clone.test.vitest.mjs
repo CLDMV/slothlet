@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/context-function-clone.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/context-function-clone.test.vitest.mjs
  *	@Date: 2026-09-20T15:33:32+00:00 (1789918412)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
+ *	@Last modified time: 2026-11-28T04:31:23-08:00 (1795869083)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,7 +51,7 @@ describe.each(getMatrixConfigs({}))("Context > function-tolerant clone (#408) > 
 		let dataCloned = false;
 		let dataIntact = false;
 		try {
-			await api.slothlet.run({}, async () => {
+			await api.slothlet.context.run({}, async () => {
 				const c = await api.slothlet.context.get();
 				onIsFn = typeof c.transport.on === "function"; // before fix: "object" ({}) — silently broken
 				onSameRef = c.transport.on === transport.on; // callable retained BY REFERENCE
@@ -77,7 +77,7 @@ describe.each(getMatrixConfigs({}))("Context > function-tolerant clone (#408) > 
 		let threw = null;
 		let onSameRef = false;
 		try {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: {},
 				fn: async () => {
 					const c = await api.slothlet.context.get();
@@ -99,7 +99,7 @@ describe.each(getMatrixConfigs({}))("Context > function-tolerant clone (#408) > 
 		let threw = null;
 		let sameRef = false;
 		try {
-			await api.slothlet.run({ hook }, async () => {
+			await api.slothlet.context.run({ hook }, async () => {
 				const c = await api.slothlet.context.get();
 				sameRef = c.hook === hook;
 			});
@@ -118,7 +118,7 @@ describe.each(getMatrixConfigs({}))("Context > function-tolerant clone (#408) > 
 
 		let insideRef;
 		let insideCount;
-		await api.slothlet.run({ extra: { v: 1 } }, async () => {
+		await api.slothlet.context.run({ extra: { v: 1 } }, async () => {
 			const c = await api.slothlet.context.get();
 			insideRef = c.data;
 			insideCount = c.data.nested.count;

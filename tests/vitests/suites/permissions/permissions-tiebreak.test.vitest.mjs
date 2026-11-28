@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-tiebreak.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-tiebreak.test.vitest.mjs
  *	@Date: 2026-04-14T17:13:27-07:00 (1776212007)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-28T04:32:43-08:00 (1795869163)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Tiebreak > $name", ({ config })
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "callers.**", target: "payments.**", effect: "deny" },
 					{ caller: "callers.**", target: "payments.**", effect: "allow" }
@@ -50,7 +50,7 @@ describe.each(getMatrixConfigs())("Permissions > Tiebreak > $name", ({ config })
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "callers.**", target: "payments.**", effect: "allow" },
 					{ caller: "callers.**", target: "payments.**", effect: "deny" }

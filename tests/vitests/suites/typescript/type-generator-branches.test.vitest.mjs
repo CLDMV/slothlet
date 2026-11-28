@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/type-generator-branches.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/type-generator-branches.test.vitest.mjs
  *	@Date: 2026-02-27T06:19:24-08:00 (1772201964)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:23-07:00 (1791090923)
+ *	@Last modified time: 2026-11-28T04:33:07-08:00 (1795869187)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "node:url";
-import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
+import { generateTypes } from "#processors/type-generator";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

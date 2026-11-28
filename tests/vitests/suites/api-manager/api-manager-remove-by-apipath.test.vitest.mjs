@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-remove-by-apipath.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-remove-by-apipath.test.vitest.mjs
  *	@Date: 2026-02-27T20:33:02-08:00 (1772253182)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-28T04:31:12-08:00 (1795869072)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -119,15 +119,19 @@ describe.each(EAGER_CONFIGS)("remove by api-path — restore action ($name)", ({
 
 		// Add module A first
 		await api.slothlet.api.add("layered", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "layer-a",
-			collisionMode: "replace"
+			id: "layer-a",
+			collision: {
+				mode: "replace"
+			}
 		});
 		expect(api.layered).toBeDefined();
 
 		// Add module B over same path — B becomes new owner (ownership now has A then B)
 		await api.slothlet.api.add("layered", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "layer-b",
-			collisionMode: "replace"
+			id: "layer-b",
+			collision: {
+				mode: "replace"
+			}
 		});
 		expect(api.layered).toBeDefined();
 
@@ -160,7 +164,7 @@ describe.each(EAGER_CONFIGS)("remove by api-path — none action ($name)", ({ co
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Add then remove by moduleID to clear ownership entirely
-		await api.slothlet.api.add("tempPath", TEST_DIRS.API_TEST_MIXED, { moduleID: "temp-mod" });
+		await api.slothlet.api.add("tempPath", TEST_DIRS.API_TEST_MIXED, { id: "temp-mod" });
 		await api.slothlet.api.remove("temp-mod"); // by moduleID → clears ownership
 
 		// Now try to remove by apiPath — no owner found → returns false (early exit)

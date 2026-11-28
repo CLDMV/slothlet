@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/event-rule-condition-context.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/event-rule-condition-context.test.vitest.mjs
  *	@Date: 2026-09-28T17:05:22-07:00 (1790640322)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:37-07:00 (1791091717)
+ *	@Last modified time: 2026-11-28T04:32:14-08:00 (1795869134)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,26 +27,24 @@ describe("event-rule conditions receive the user context (#511)", () => {
 		api = null;
 	});
 
-	it("an object condition deep-matches the context.run() context in event.resolveLevel", async () => {
+	it("an object condition deep-matches the context.run() context in event.level", async () => {
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [{ caller: "remote.renderer", event: "cond.*", effect: "allow", condition: { tenant: "tenant-a" } }]
 				}
 			}
 		});
-		const inScope = await api.slothlet.context.run({ tenant: "tenant-a" }, () =>
-			api.slothlet.event.resolveLevel("remote.renderer", "cond.data")
-		);
+		const inScope = await api.slothlet.context.run({ tenant: "tenant-a" }, () => api.slothlet.event.level("remote.renderer", "cond.data"));
 		expect(inScope).toBe("allow");
 		const otherTenant = await api.slothlet.context.run({ tenant: "tenant-b" }, () =>
-			api.slothlet.event.resolveLevel("remote.renderer", "cond.data")
+			api.slothlet.event.level("remote.renderer", "cond.data")
 		);
 		expect(otherTenant).toBe("notify");
-		expect(api.slothlet.event.resolveLevel("remote.renderer", "cond.data")).toBe("notify");
+		expect(api.slothlet.event.level("remote.renderer", "cond.data")).toBe("notify");
 	});
 
 	it("a function condition reads ctx.actor directly, exactly as the same condition on a call rule does", async () => {
@@ -54,22 +52,22 @@ describe("event-rule conditions receive the user context (#511)", () => {
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "remote.renderer", target: "probe.**", effect: "allow", condition }],
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [{ caller: "remote.renderer", event: "cond.*", effect: "allow", condition }]
 				}
 			}
 		});
 		const asU1 = await api.slothlet.context.run({ actor: { id: "u1" } }, () => ({
-			event: api.slothlet.event.resolveLevel("remote.renderer", "cond.data"),
-			call: api.slothlet.permissions.global.checkAccess("remote.renderer", "probe.anything")
+			event: api.slothlet.event.level("remote.renderer", "cond.data"),
+			call: api.slothlet.permissions.global.check.access("remote.renderer", "probe.anything")
 		}));
 		expect(asU1).toEqual({ event: "allow", call: true });
 		const asU2 = await api.slothlet.context.run({ actor: { id: "u2" } }, () => ({
-			event: api.slothlet.event.resolveLevel("remote.renderer", "cond.data"),
-			call: api.slothlet.permissions.global.checkAccess("remote.renderer", "probe.anything")
+			event: api.slothlet.event.level("remote.renderer", "cond.data"),
+			call: api.slothlet.permissions.global.check.access("remote.renderer", "probe.anything")
 		}));
 		expect(asU2).toEqual({ event: "notify", call: false });
 	});
@@ -78,9 +76,9 @@ describe("event-rule conditions receive the user context (#511)", () => {
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [{ caller: "subscriber.**", event: "cond.*", effect: "allow", condition: { tenant: "tenant-a" } }]
 				}
 			}

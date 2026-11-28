@@ -1,6 +1,5 @@
 /**
- * Normalize the `hook` config (V2-style support) into a canonical
- * `{ enabled, pattern, suppressErrors }` object.
+ * Normalize the `hook` config into a canonical `{ enabled, pattern, errors, pin }` object.
  *
  * Accepts the boolean form (enable/disable with the catch-all pattern), the string form
  * (enable, restricting hooks to a global path pattern — e.g. `"database.*"`), or the full
@@ -13,15 +12,112 @@
  * itself from the same source of truth.
  *
  * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
- * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean, pin: boolean}} Normalized hook config.
+ * `errors` is `"suppress"` (a hook error is reported to the error hooks and not thrown) or `false`; `true` is the
+ * boolean form of `"suppress"`.
+ *
+ * @returns {{enabled: boolean, pattern: (string|null), errors: ("suppress"|false), pin: boolean}} Normalized hook config.
+ * @throws {SlothletError} INVALID_CONFIG when `hook.errors` is not `"suppress"`, `true` or `false`.
  * @public
  */
 export function normalizeHookConfig(hook?: boolean | string | Object): {
     enabled: boolean;
     pattern: (string | null);
-    suppressErrors: boolean;
+    errors: ("suppress" | false);
     pin: boolean;
 };
+/**
+ * Build an instance's clock from the host's `clock` option.
+ * The option is read once, when the instance is created, and kept by the instance alone: it is never part of the
+ * normalised config an instance hands out, so only the host that creates the instance can supply it.
+ * @param {{now?: Function, set?: Function, clear?: Function}} [clock] - The option as given. Each member is optional and must be
+ *   a function; one left out is the copy slothlet took when it loaded. Absent means no `clock` option at all.
+ * @returns {object} The frozen clock `{ now, setTimeout, clearTimeout, hostTimers }` (`set` and `clear` as the timer functions).
+ * @throws {SlothletError} INVALID_CONFIG when it is not an object whose given members are functions.
+ * @public
+ * @example
+ * normalizeClockConfig({ now: () => 1000 }).now(); // => 1000
+ */
+export function normalizeClockConfig(clock?: {
+    now?: Function;
+    set?: Function;
+    clear?: Function;
+}): object;
+/**
+ * Expand the `permissions` shorthand forms to the object form.
+ *
+ * `"on"`, `"off"` and `"disabled"` mean `{ mode }`; `true` means `"on"`; `false` and any other falsy value mean no `permissions` config (off). An object, `null`
+ * and `undefined` come back as they are. Any other string, and any other value that is not an object, comes back as
+ * `undefined` with `valid: false`, so a bare value never quietly reads as a different mode than it names.
+ *
+ * Exported as a standalone function because the PermissionManager is constructed during `_initializeComponents`,
+ * before `transformConfig` runs, and must read the same shorthand from the raw config. It does not throw: the
+ * config normalizer reports the invalid value as `INVALID_CONFIG` right after.
+ *
+ * @param {*} permissions - Raw `permissions` option.
+ * @returns {{value: (object|null|undefined), valid: boolean}} The object form (or the absent value), and whether the input was a form `permissions` accepts.
+ * @public
+ *
+ * @example
+ * expandPermissionsShorthand("disabled"); // => { value: { mode: "disabled" }, valid: true }
+ * expandPermissionsShorthand("nope"); // => { value: undefined, valid: false }
+ */
+export function expandPermissionsShorthand(permissions: any): {
+    value: (object | null | undefined);
+    valid: boolean;
+};
+/**
+ * Normalize the `permissions` option to its full object form (or `null` for no permissions config).
+ *
+ * The normalized form has the same shape as the option, every member filled in, so feeding it back in (a reload)
+ * gives the same result.
+ *
+ * @param {object|string|boolean|null} [permissions] - Raw permissions config from user. A bare `"on"`, `"strict"`, `"off"` or `"disabled"` means `{ mode }`; `true` and `false` mean `"on"` and `"off"`.
+ * @param {"allow"|"deny"} [permissions.policy="allow"] - What a call no rule decides gets.
+ * @param {"on"|"strict"|"off"|"disabled"|boolean} [permissions.mode="on"] - `"on"` (the default for a `permissions` block): every rule
+ *   applies. `"strict"`: as `"on"`, chosen in the config only (it cannot be left at runtime), and the instance refuses to
+ *   start while a check of the permission baseline is not met (docs/PERMISSIONS.md). `"off"`: only the built-in rules that keep module code off the framework's own namespace, root
+ *   functions, and keys on api nodes apply (as with no `permissions` config at all). `"disabled"`: nothing applies.
+ *   `true` and `false` mean `"on"` and `"off"`.
+ * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
+ *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
+ * @param {object} [permissions.caller] - How the caller of a call or read is identified.
+ * @param {boolean} [permissions.caller.anonymous=false] - When `false` (the default), calls and reads occurring inside an
+ *   active context with no resolvable (or forged) caller identity fail closed (denied); only genuinely host-initiated
+ *   calls are exempt. `true` lets them through.
+ * @param {"precise"|"fast"} [permissions.caller.attribution="precise"] - How the definer of code a module hands out is
+ *   known (#726). `"precise"` (the default) wraps a returned value that is itself code to record its definer; `"fast"`
+ *   wraps nothing and tells every definer from the stack.
+ * @param {boolean} [permissions.caller.capture=true] - When `true` (the default), a function read out of the api carries
+ *   the identity of the module that read it, so it stays enforced as that module wherever it is later invoked.
+ * @param {"leaf"|"chain"} [permissions.caller.ceiling="leaf"] - Code a caller hands to a leaf runs as the caller with the
+ *   leaf as its ceiling (#597). With `"leaf"` (the default) that ceiling is the leaf the code is running inside;
+ *   with `"chain"` it accumulates across every leaf the code was handed through, and all of them are enforced.
+ * @param {boolean} [permissions.caller.provenance=true] - Code is told apart by where it was written: a module's function
+ *   running inside another module's call, reached by a route slothlet does not see, runs as that module with the
+ *   call as its ceiling (#597). `false` turns this off.
+ * @param {object} [permissions.gating] - What is gated besides calls.
+ * @param {boolean|number} [permissions.gating.buffers=false] - Whether a typed array or `Buffer` one module hands
+ *   another is checked for members of its own under string keys. `false` never lists its keys, `true` always does,
+ *   a whole number lists arrays of up to that many kilobytes.
+ * @param {boolean} [permissions.gating.read=true] - When `true` (the default), reading a terminal data value off a module
+ *   API path is permission-checked, the same way calls are.
+ * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf currently owned by
+ *   the same module, across directories, where the policy would otherwise deny. An explicit deny rule still wins (#509).
+ * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
+ * @param {object} [permissions.search] - How far a value handed into a call or returned out of one is searched for code.
+ *   Set by the host only.
+ * @param {number} [permissions.search.depth=4] - Levels of objects searched, the outermost counted: a whole number from
+ *   1 to 64.
+ * @param {number} [permissions.search.properties=512] - Own properties read, all values of one search counted together:
+ *   a whole number from 1 to 65536.
+ * @returns {object|null} Normalized permissions config, or null when permissions is absent or off by shorthand.
+ * @public
+ *
+ * @example
+ * normalizePermissionsConfig({ policy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
+ * // => { policy: "deny", mode: "on", audit: "default", caller: { anonymous: false, ... }, gating: { buffers: false, read: true }, ... }
+ */
+export function normalizePermissionsConfig(permissions?: object | string | boolean | null): object | null;
 /**
  * Configuration normalization utilities
  * @class Config
@@ -71,6 +167,18 @@ export class Config extends ComponentBase {
      * @public
      */
     public normalizeMode(mode: string): string;
+    /**
+     * Validate the `helpers` option: how often a helper file (a file an api file imports that is no api file itself)
+     * is loaded.
+     * @param {*} helpers - The option as given.
+     * @returns {"instance"|"module"} `"instance"` (the default: one copy per instance, shared by every api file
+     *   importing it) or `"module"` (one copy per importing api file).
+     * @throws {SlothletError} INVALID_CONFIG for any other value.
+     * @public
+     * @example
+     * config.normalizeHelpers(undefined); // "instance"
+     */
+    public normalizeHelpers(helpers: any): "instance" | "module";
     /**
      * Normalize mutations configuration for API modification control
      * @param {Object} mutations - Mutations config object with add/remove/reload properties
@@ -125,8 +233,7 @@ export class Config extends ComponentBase {
      */
     public normalizeEnvTarget(platform: any, hasManifest?: boolean): "browser" | "node";
     /**
-     * Normalize the `hook` config (V2-style support) into a canonical
-     * `{ enabled, pattern, suppressErrors }` object.
+     * Normalize the `hook` config into a canonical `{ enabled, pattern, errors, pin }` object.
      *
      * Accepts the boolean form (enable/disable with the catch-all pattern), the string form
      * (enable, restricting hooks to a global path pattern — e.g. `"database.*"`), or the full
@@ -136,36 +243,107 @@ export class Config extends ComponentBase {
      * transformConfig runs, so it cannot rely on the normalized config being in place yet).
      *
      * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
-     * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean, pin: boolean}} Normalized hook config.
+     * @returns {{enabled: boolean, pattern: (string|null), errors: ("suppress"|false), pin: boolean}} Normalized hook config.
      * @public
      */
     public normalizeHook(hook?: boolean | string | Object): {
         enabled: boolean;
         pattern: (string | null);
-        suppressErrors: boolean;
+        errors: ("suppress" | false);
         pin: boolean;
     };
     /**
-     * Transform and validate configuration
+     * Normalize the `api.collision` group: `{ mode, override }`, or a bare mode string as the shorthand for `{ mode }`.
+     * @param {string|{mode?: (string|{initial?: string, api?: string}), override?: boolean}} [collision] - The group as given.
+     * @returns {{mode: {initial: string, api: string}, override: boolean}} The normalized group.
+     * @throws {SlothletError} INVALID_CONFIG when it is neither a string nor an object, or `override` is not a boolean.
+     * @public
+     * @example
+     * config.normalizeApiCollision("warn"); // => { mode: { initial: "warn", api: "warn" }, override: false }
+     */
+    public normalizeApiCollision(collision?: string | {
+        mode?: (string | {
+            initial?: string;
+            api?: string;
+        });
+        override?: boolean;
+    }): {
+        mode: {
+            initial: string;
+            api: string;
+        };
+        override: boolean;
+    };
+    /**
+     * Normalize the `loader` group: how leaf files are found and loaded.
+     * @param {object} [loader] - The group as given.
+     * @param {Function} [loader.import] - Every leaf load goes through it: `(specifier) => Promise<module>`.
+     * @param {{files: Array, directories: Array}} [loader.files] - The browser file list (`files.generate()`); giving one
+     *   selects browser mode.
+     * @param {boolean|Function} [loader.materialize=false] - Lazy mode: materialize every path in the background after init.
+     *   A function turns it on and is called once everything has materialized (at once in eager mode, or when
+     *   materialization finished before the instance did).
+     * @param {"node"|"browser"} [loader.platform] - Where slothlet runs; auto-detected when omitted.
+     * @param {Function} [loader.resolve] - Browser: a file list entry to an importable URL.
+     * @returns {{import: (Function|null), files: (object|null), materialize: (boolean|Function), platform: ("node"|"browser"), resolve: (Function|null)}}
+     *   The normalized group.
+     * @throws {SlothletError} INVALID_CONFIG_IMPORTER_INVALID when `import` is given and is not a function.
+     * @throws {SlothletError} INVALID_CONFIG when `materialize` is not a boolean or a function.
+     * @public
+     * @example
+     * config.normalizeLoader({}); // => { import: null, files: null, materialize: false, platform: "node", resolve: null }
+     * config.normalizeLoader({ materialize: () => {} }).materialize; // => the function (materialization is on)
+     */
+    public normalizeLoader(loader?: {
+        import?: Function | undefined;
+        files?: {
+            files: any[];
+            directories: any[];
+        } | undefined;
+        materialize?: boolean | Function | undefined;
+        platform?: "browser" | "node" | undefined;
+        resolve?: Function | undefined;
+    }): {
+        import: (Function | null);
+        files: (object | null);
+        materialize: (boolean | Function);
+        platform: ("node" | "browser");
+        resolve: (Function | null);
+    };
+    /**
+     * Normalize the `routines` group (object form only).
+     * @param {object} [routines] - The group as given.
+     * @param {boolean} [routines.auto=true] - Startup/shutdown/destroy routines fire by themselves; `false` leaves them to explicit calls.
+     * @param {Array} [routines.entries] - The routines; see {@link Config#normalizeRoutines}. Omitted keeps the defaults.
+     * @param {boolean} [routines.stack=true] - Every module contributing the same routine name at one api path runs, in
+     *   mount order; `false` runs only the collision winner.
+     * @returns {{auto: boolean, entries: Array<object>, stack: boolean}} The normalized group.
+     * @throws {SlothletError} INVALID_CONFIG when it is not an object, or a member is invalid.
+     * @public
+     * @example
+     * config.normalizeRoutinesGroup({}).auto; // true
+     * config.normalizeRoutinesGroup({ auto: false }).auto; // false
+     */
+    public normalizeRoutinesGroup(routines?: {
+        auto?: boolean | undefined;
+        entries?: any[] | undefined;
+        stack?: boolean | undefined;
+    }): {
+        auto: boolean;
+        entries: Array<object>;
+        stack: boolean;
+    };
+    /**
+     * Transform and validate configuration.
+     *
+     * The result has the shape of the option object (`slothlet({...})`) with every group filled in, so feeding it back in
+     * (a reload) gives the same result.
      * @param {Object} config - Raw configuration options
      * @returns {Object} Normalized configuration
      * @throws {SlothletError} If configuration is invalid
      * @public
      */
     public transformConfig(config?: Object): Object;
-    /**
-     * Normalize and validate the suppressFixes option. Emits a deprecation warning for each
-     * rule ID present. Invalid entries (non-strings, unknown rule IDs) are silently dropped.
-     *
-     * @param {string[]|undefined} suppressFixes - Raw suppressFixes value from user config.
-     * @param {boolean} silent - If true, suppress warnings.
-     * @returns {Set<string>} Normalized set of suppressed rule IDs.
-     * @example
-     * // Rule IDs use the <rule>_<PR> form. The C03 fix landed in PR #116.
-     * normalizeSuppressFixes(["C03_116"], false); // emits WARN_SUPPRESS_FIX_ACTIVE for C03_116
-     * @public
-     */
-    public normalizeSuppressFixes(suppressFixes: string[] | undefined, silent: boolean): Set<string>;
     /**
      * Normalize TypeScript configuration
      * @param {boolean|string|Object} typescript - TypeScript config (true, "fast", or { mode: "fast"|"strict", ... })
@@ -293,46 +471,14 @@ export class Config extends ComponentBase {
         cascade: boolean;
     }>;
     /**
-     * Normalize permissions configuration.
+     * Normalize permissions configuration: see {@link normalizePermissionsConfig}.
      *
-     * @param {object|null} [permissions] - Raw permissions config from user.
-     * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
-     * @param {"on"|"off"|"disabled"} [permissions.mode] - `"on"` (the default for a `permissions` block): every rule
-     *   applies. `"off"`: only the built-in rules that keep module code off the framework's own namespace, root
-     *   functions, and keys on api nodes apply (as with no `permissions` config at all). `"disabled"`: nothing applies.
-     *   Takes precedence over `enabled`.
-     * @param {boolean} [permissions.enabled=true] - `true` for `mode: "on"`, `false` for `mode: "off"`.
-     * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
-     *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
-     * @param {object} [permissions.references] - Options governing api functions held as references.
-     * @param {boolean} [permissions.references.capture=true] - When `true` (the default), a function read
-     *   out of the api carries the identity of the module that read it, so it stays enforced as that module
-     *   wherever it is later invoked. Set `false` to restore the older host-initiated treatment.
-     * @param {boolean} [permissions.failOpenOnAbsentCaller=false] - When `false` (the default), calls
-     *   and reads occurring inside an active context with no resolvable (or forged) caller identity
-     *   fail closed (denied); only genuinely host-initiated calls are exempt via the trusted-root
-     *   marker. Set `true` to restore the legacy fail-open behaviour.
-     * @param {boolean} [permissions.readGating=true] - When `true` (the default), reading a terminal
-     *   data value (primitive, Buffer, TypedArray, Date, Map, etc.) off a module API path is
-     *   permission-checked, the same way calls are. Set `false` to opt out and gate calls only.
-     * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf
-     *   currently owned by the same module (the moduleID of the initial load or of an `api.add()`), across
-     *   directories, where the default policy would otherwise deny. An explicit deny rule still wins (#509).
-     * @param {"leaf"|"chain"} [permissions.ceiling="leaf"] - Code a caller hands to a leaf runs as the caller with the
-     *   leaf as its ceiling (#597). With `"leaf"` (the default) that ceiling is the leaf the code is running inside;
-     *   with `"chain"` it accumulates across every leaf the code was handed through, and all of them are enforced.
-     * @param {boolean} [permissions.provenance=true] - Code is told apart by where it was written: a module's function
-     *   running inside another module's call, reached by a route slothlet does not see, runs as that module with the
-     *   call as its ceiling (#597). `false` turns this off, and such a function runs with the permissions of whichever
-     *   call runs it.
-     * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
+     * @param {object|string|boolean|null} [permissions] - Raw permissions config from user.
      * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
-     *
      * @example
-     * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
-     * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, rules: [...] }
+     * config.normalizePermissions("disabled"); // => { mode: "disabled", enabled: false, ... }
      */
-    normalizePermissions(permissions?: object | null): object | null;
+    normalizePermissions(permissions?: object | string | boolean | null): object | null;
     #private;
 }
 import { ComponentBase } from "#factories/component-base";

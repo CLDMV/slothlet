@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/handlers/context-live.mjs
+ *	@Filename: src/lib/handlers/context-live.mjs
  *	@Date: 2026-01-20T20:25:54-08:00 (1768969554)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:44-07:00 (1793426624)
+ *	@Last modified time: 2026-11-28T04:30:37-08:00 (1795869037)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,31 +18,99 @@
  * @module @cldmv/slothlet/handlers/context-live
  * @internal
  */
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
-import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
-import { TRUSTED_ROOT, buildCapturedFlowStore } from "#handlers/trusted-root";
-import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
-import { util } from "@cldmv/slothlet/helpers/platform";
-import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
+import { SlothletError } from "#errors";
+import { DEFAULT_CLOCK } from "#helpers/clock";
+import { internals as eventemitterContextInternals } from "#helpers/eventemitter-context";
+import { pinToCurrentCaller, internals as callerPinningInternals } from "#helpers/caller-pinning";
+import { internals as schedulerContextInternals } from "#helpers/scheduler-context";
+import { combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
+import {
+	holdRunWorkOnce,
+	releaseWhenCollected,
+	RUN_COPY,
+	runCopyCounts,
+	stopReleaseWhenCollected,
+	trackFlowStore,
+	watchRuns
+} from "#helpers/flow-stores";
+import { nativeThen } from "#helpers/promise-context";
+import { util, inheritsFrom } from "#helpers/platform";
+import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
 import {
 	FRAMEWORK_DIR,
-	attributeResult,
+	callerHeldCode,
 	carriesCallerCode,
+	handsOutAsModule,
+	attributesResults,
+	isForeignScript,
+	isUnverifiedCode,
+	isHandedOut,
+	isHostPrototype,
+	isRunnerFrame,
+	parseStackFrame,
+	resolvesSupplier,
+	runtime_namedAmong,
+	bareList,
+	toComparablePath,
+	internals as framePlacementInternals
+} from "#handlers/frame-placement";
+import {
+	appendList,
+	ArrayMethods,
+	Arrays,
+	Boolean,
+	concatLists,
+	copyList,
+	filterList,
+	FinalizationRegistry,
+	FinalizationRegistryMethods,
+	FunctionMethods,
+	listPush,
+	listSteps,
+	Map,
+	mapKeysToArray,
+	mapList,
+	MapMethods,
+	mapValuesToArray,
+	Math,
+	Objects,
+	Processes,
+	queueMicrotask,
+	Reflect,
+	RegExpMethods,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	StringMethods,
+	Symbol,
+	WeakMap,
+	WeakMapMethods,
+	WeakRef,
+	WeakRefMethods,
+	WeakSetMethods
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
+const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-live");
+const { setApiCallerPinner } = callerPinningInternals("lib/handlers/context-live");
+const { reinstateSchedulerPatching } = schedulerContextInternals("lib/handlers/context-live");
+const trustedRootOwn = trustedRootInternals("lib/handlers/context-live");
+const { buildCapturedFlowStore, INSTANCE_FLOW, REOPENED_FLOW } = trustedRootOwn;
+const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-live");
+const {
+	attributeResult,
 	enterCall,
 	createFramePlacer,
 	describeCall,
-	isForeignScript,
-	isHandedOut,
-	isRunnerFrame,
-	parseStackFrame,
 	resolveSupplier,
-	resolvesSupplier,
+	loadOnStack,
+	ownReceiver,
+	runningOutsideFlow,
 	runtime_captureFrames,
-	runtime_namesEntry,
 	stackHoldsInstanceCode,
-	toComparablePath
-} from "#handlers/frame-placement";
+	supplierChainCeiling
+} = framePlacementInternals("lib/handlers/context-live");
 
 // Re-exported for the callers that reach them through this module.
 export { parseStackFrame, toComparablePath };
@@ -57,6 +125,21 @@ export { parseStackFrame, toComparablePath };
 const AMBIGUOUS = Symbol("slothlet.callerIdentity.ambiguous");
 
 /**
+ * What a walk of the stack answers when none of the frames it read could be placed and the stack went on past them:
+ * the code making the access was not reached.
+ * @type {symbol}
+ * @private
+ */
+const CUT_OFF = Symbol("slothlet.callerIdentity.cutOff");
+
+/**
+ * The frames read when fifty place nothing and the stack goes on.
+ * @type {number}
+ * @private
+ */
+const FAR_FRAMES = 1024;
+
+/**
  * Stack resolution found the running code placed in an instance's files while no suspended call accounts for any
  * of it — a module's callback from a boundary slothlet does not patch, run while another call is suspended. Refused
  * like {@link AMBIGUOUS}; reported apart from it so a node a module kept can still answer for its own reader (#661).
@@ -66,7 +149,70 @@ const AMBIGUOUS = Symbol("slothlet.callerIdentity.ambiguous");
 const UNACCOUNTED = Symbol("slothlet.callerIdentity.unaccounted");
 
 /**
- * Marks a call pinned to the host (`runInContext(..., asHost)`, from `lockCaller.caller()` when the
+ * What has to agree for enforcement: the api path within one instance. Across instances the same api path is a
+ * different call, so the instance is part of it.
+ * @param {{family?: string|null, apiPath: string}} entry - A suspended call.
+ * @returns {string} Its key.
+ * @private
+ */
+const callKey = (entry) => `${entry.family ?? ""}\u0000${entry.apiPath}`;
+
+/**
+ * Lists of suspended calls already found to be one call or several, by the list.
+ * @type {WeakMap<Array<object>, boolean>}
+ * @private
+ */
+const ONE_CALL = new WeakMap();
+
+/**
+ * Whether every call of a list is the same call for enforcement (see {@link callKey}). A list read again (a placement's
+ * matches, shared between reads of the same suspended calls) answers by a lookup.
+ * @param {ArrayLike<object>} list - Suspended calls, at least one. The list is not changed afterwards.
+ * @returns {boolean} True when they all share one key.
+ * @private
+ */
+function oneCall(list) {
+	let one = WeakMapMethods.get(ONE_CALL, list);
+	if (one === undefined) {
+		const first = list[0];
+		let key = null;
+		one = true;
+		for (let i = 1; i < list.length && one; i++) {
+			const entry = list[i];
+			// The calls of one function carry the same family and api path: only others are keyed.
+			if (entry.family === first.family && entry.apiPath === first.apiPath) continue;
+			key ??= callKey(first);
+			one = callKey(entry) === key;
+		}
+		WeakMapMethods.set(ONE_CALL, list, one);
+	}
+	return one;
+}
+
+/**
+ * Sets of the entries of a list, by the list.
+ * @type {WeakMap<Array<object>, Set<object>>}
+ * @private
+ */
+const LIST_SETS = new WeakMap();
+
+/**
+ * The entries of a list kept in another as well, in the first list's order. Lists compared again (shared between reads
+ * of the same suspended calls) are looked up in a set made once.
+ * @param {Array<object>} list - The entries to keep from.
+ * @param {Array<object>} among - The entries to keep. The list is not changed afterwards.
+ * @returns {Array<object>} The entries of `list` that are in `among`.
+ * @private
+ */
+function keptAmong(list, among) {
+	if (list === among) return list;
+	let members = WeakMapMethods.get(LIST_SETS, among);
+	if (!members) WeakMapMethods.set(LIST_SETS, among, (members = setFrom(among)));
+	return filterList(list, (entry) => SetMethods.has(members, entry));
+}
+
+/**
+ * Marks a call pinned to the host (`runInContext(..., asHost)`, from `pin.caller()` when the
  * pinned caller is the host) on the running-call stack. Unlike a context-only entry, which is looked
  * through, it answers "no module caller": the pinned callback runs as the host even when a module
  * invoked it synchronously.
@@ -80,25 +226,154 @@ const HOST_ENTRY = Symbol("slothlet.callerIdentity.host");
 const UNATTRIBUTED_ENTRY = Symbol("slothlet.callerIdentity.unattributed");
 
 /**
+ * Marks the base store a full reload left behind while calls made before the swap still wait in it (see
+ * {@link LiveContextManager#retire}): cleaned up once the last of them settles.
+ */
+const RETIRE_WHEN_IDLE = Symbol("slothlet.context.retireWhenIdle");
+
+/**
+ * A class whose constructor hands back the object it is given, so a subclass can put a private field on an object it did
+ * not make (see {@link promiseFlowStamp}).
+ * @private
+ */
+class Adopt {
+	/**
+	 * @param {object} target - The object.
+	 */
+	constructor(target) {
+		return target;
+	}
+}
+
+/**
+ * A promise's record of the flow it was made in: the store id the active-instance field named, and with permissions on
+ * the call it was created in, while it ran synchronously or in a flow such a promise's reaction ran: the flow's starter.
+ * A promise made in a `run()` / `scope()` flow also holds that flow's store, so its jobs run in the flow after the
+ * `run()` has returned, for as long as the promise lives (see {@link LiveContextManager#reopenFlowStore}).
+ * @typedef {string|null|{flow: string|null, starter: object|null, store?: object}} PromiseFlowRecord
+ * @private
+ */
+
+/**
+ * The stamp one manager puts on the promises the engine makes while its hooks are installed (see
+ * {@link LiveContextManager#holdFlowHooks}). The record is kept in a private field slothlet puts on the promise as the
+ * engine makes it: no code but this class's can read or change it, and putting it there costs a promise far less than
+ * an entry in a weak map would.
+ *
+ * Each manager makes its own class, so each has its own private field. Every manager with a live instance installs its
+ * own promise hooks, and the engine runs each of them for every promise: with one field shared by all managers, the
+ * second manager's stamp on a promise the first had already stamped threw ("Cannot initialize #record twice on the same
+ * object") out of the engine's init hook, and a manager would have read flow ids another manager recorded.
+ * @returns {Readonly<{stamp: function(Promise<*>, PromiseFlowRecord): void, of: function(Promise<*>): (PromiseFlowRecord|undefined)}>}
+ *   Puts a record on a promise, and reads it back (undefined when the promise has none).
+ * @private
+ */
+function promiseFlowStamp() {
+	class PromiseFlow extends Adopt {
+		/** @type {PromiseFlowRecord} */
+		#record;
+
+		/**
+		 * Record a promise's flow.
+		 * @param {Promise<*>} promise - The promise, as the engine makes it.
+		 * @param {PromiseFlowRecord} record - Its flow, or its flow with its starter and, for a `run()` / `scope()`
+		 *   flow, its store.
+		 */
+		constructor(promise, record) {
+			super(promise);
+			this.#record = record;
+		}
+
+		/**
+		 * A promise's recorded flow. The record is a private field of the promise object itself (see {@link Adopt}), so
+		 * this checks the object for the field: it reads nothing of what the promise settles with and never waits for it.
+		 * @param {object} target - The promise object the engine made, as an object carrying the field or not.
+		 * @returns {PromiseFlowRecord|undefined} The record; undefined when it has none.
+		 */
+		static of(target) {
+			return #record in target ? target.#record : undefined;
+		}
+	}
+	return Objects.freeze({
+		stamp: (promise, record) => {
+			new PromiseFlow(promise, record);
+		},
+		of: (promise) => PromiseFlow.of(promise)
+	});
+}
+
+/**
  * The identity of code running as no module: none, and not the host's either, so enforcement fails closed (#597).
  * @type {Readonly<{currentWrapper: null, callerWrapper: null, unresolved: true}>}
  * @private
  */
-const UNATTRIBUTED_IDENTITY = Object.freeze({ currentWrapper: null, callerWrapper: null, unresolved: true });
+const UNATTRIBUTED_IDENTITY = Objects.freeze({ currentWrapper: null, callerWrapper: null, unresolved: true });
+
+/**
+ * How many settle hooks slothlet has installed on the engine (see {@link PROMISE_HOOKS}) and not yet stopped.
+ * @type {number}
+ * @private
+ */
+let settleHooks = 0;
+
+/**
+ * How many settle hooks slothlet has installed on the engine to follow promises and not yet stopped, for a test that
+ * checks a followed promise is let go.
+ * @returns {number} The count.
+ * @internal
+ * @example
+ * settleHookCount(); // 0 while no promise is followed
+ */
+export function settleHookCount() {
+	return settleHooks;
+}
+
+/**
+ * The functions of the engine's promise hooks slothlet calls, as they were when slothlet loaded.
+ * @typedef {object} CapturedPromiseHooks
+ * @property {function(function(Promise): void): function(): void} onSettled - Installs a hook run when any promise settles; returns what stops it.
+ * @property {function(object): function(): void} [createHook] - Installs a set of promise hooks; returns what stops them. Absent where the engine has none.
+ * @private
+ */
 
 /**
  * The engine's promise hooks, where the platform has them (Node), for following a promise without reacting to it.
- * @type {{onSettled: function(function(Promise): void): function(): void}|null}
+ * @type {CapturedPromiseHooks|null}
  * @private
  */
 const PROMISE_HOOKS = (() => {
 	try {
-		return globalThis.process?.getBuiltinModule?.("node:v8")?.promiseHooks ?? null;
+		const hooks = Processes.getBuiltinModule?.("node:v8")?.promiseHooks;
+		if (!hooks) return null;
+		// Its functions taken now: `promiseHooks` is an object of Node's that code can change later.
+		const onSettled = hooks.onSettled;
+		const createHook = hooks.createHook;
+		return Objects.freeze({
+			createHook: typeof createHook === "function" ? (callbacks) => createHook(callbacks) : undefined,
+			onSettled: (hook) => {
+				const stop = onSettled(hook);
+				settleHooks++;
+				let stopped = false;
+				return () => {
+					if (!stopped) settleHooks--;
+					stopped = true;
+					stop();
+				};
+			}
+		});
 	} catch {
 		// A platform without the builtin follows promises by reacting to them instead.
 		return null;
 	}
 })();
+
+/**
+ * The `createHook` of {@link PROMISE_HOOKS}, read once at load: what records which call a flow was started in once that
+ * call has returned (see {@link LiveContextManager#runningFlowStarter}). Null where there is none (a browser).
+ * @type {Function|null}
+ * @private
+ */
+const CREATE_PROMISE_HOOK = typeof PROMISE_HOOKS?.createHook === "function" ? PROMISE_HOOKS.createHook : null;
 
 /**
  * The promises being followed (see {@link runtime_followSettled}), with what to run once each settles and the instance
@@ -136,7 +411,11 @@ const FOLLOWED_COLLECTED =
 		? new FinalizationRegistry(({ families, ref, follows }) => {
 				runtime_forgetRef(families, ref);
 				runtime_unfollowed();
-				for (const { onSettled } of follows) queueMicrotask(onSettled);
+				// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+				for (let ofIndex = 0, ofList = follows; ofIndex < ofList.length; ofIndex++) {
+					const { onSettled } = ofList[ofIndex];
+					queueMicrotask(pinToCurrentCaller(onSettled));
+				}
 			})
 		: null;
 
@@ -169,22 +448,22 @@ function runtime_unfollowed() {
  * @private
  */
 function runtime_unfollowInstance(family) {
-	const refs = FOLLOWED_BY_FAMILY.get(family);
+	const refs = MapMethods.get(FOLLOWED_BY_FAMILY, family);
 	if (!refs) return;
-	FOLLOWED_BY_FAMILY.delete(family);
-	for (const ref of refs) {
-		const promise = ref.deref();
-		const follows = promise && FOLLOWED.get(promise);
+	MapMethods.delete(FOLLOWED_BY_FAMILY, family);
+	for (const ref of setValues(refs)) {
+		const promise = WeakRefMethods.deref(ref);
+		const follows = promise && WeakMapMethods.get(FOLLOWED, promise);
 		if (!follows) continue;
-		follows.families.delete(family);
-		const kept = follows.filter((follow) => follow.family !== family);
+		SetMethods.delete(follows.families, family);
+		const kept = filterList(follows, (follow) => follow.family !== family);
 		if (kept.length) {
-			follows.splice(0, follows.length, ...kept);
+			Reflect.apply(ArrayMethods.splice, undefined, concatLists([follows], concatLists([0, follows.length], kept)));
 			continue;
 		}
-		FOLLOWED.delete(promise);
+		WeakMapMethods.delete(FOLLOWED, promise);
 		runtime_forgetRef(follows.families, follows.ref);
-		FOLLOWED_COLLECTED?.unregister(follows);
+		FOLLOWED_COLLECTED == null ? undefined : FinalizationRegistryMethods.unregister(FOLLOWED_COLLECTED, follows);
 		runtime_unfollowed();
 	}
 }
@@ -199,17 +478,17 @@ function runtime_unfollowInstance(family) {
  * @private
  */
 function runtime_inertConstructor(fn, realmFunctionPrototype) {
-	const prototype = Object.getOwnPropertyDescriptor(fn, "prototype");
+	const prototype = Objects.getOwnPropertyDescriptor(fn, "prototype");
 	if (!prototype || !("value" in prototype)) return false;
 	let nameSeen = false;
-	for (let link = fn; link !== null; link = Object.getPrototypeOf(link)) {
+	for (let link = fn; link !== null; link = Objects.getPrototypeOf(link)) {
 		if (util.types.isProxy(link)) return false;
-		const name = nameSeen ? undefined : Object.getOwnPropertyDescriptor(link, "name");
+		const name = nameSeen ? undefined : Objects.getOwnPropertyDescriptor(link, "name");
 		if (name) {
-			if (!("value" in name) || (typeof name.value === "string" && /[{<]/.test(name.value))) return false;
+			if (!("value" in name) || (typeof name.value === "string" && RegExpMethods.exec(/[{<]/, name.value) !== null)) return false;
 			nameSeen = true;
 		}
-		const hasInstance = Object.getOwnPropertyDescriptor(link, Symbol.hasInstance);
+		const hasInstance = Objects.getOwnPropertyDescriptor(link, Symbol.hasInstance);
 		if (hasInstance) return link === realmFunctionPrototype && "value" in hasInstance;
 	}
 	return true;
@@ -225,24 +504,26 @@ function runtime_inertConstructor(fn, realmFunctionPrototype) {
  * @private
  */
 function runtime_inspectablePromise(promise) {
-	for (const key of Reflect.ownKeys(promise)) {
-		const own = Object.getOwnPropertyDescriptor(promise, key);
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(promise); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		const own = Objects.getOwnPropertyDescriptor(promise, key);
 		if (!("value" in own)) return false;
 		if ((typeof own.value === "object" && own.value !== null) || typeof own.value === "function") return false;
 	}
 	const chain = [];
-	for (let link = promise; link !== null; link = Object.getPrototypeOf(link)) {
+	for (let link = promise; link !== null; link = Objects.getPrototypeOf(link)) {
 		if (util.types.isProxy(link)) return false;
-		chain.push(link);
+		listPush(chain, link);
 	}
 	// The realm's `Object.prototype` ends the chain; its constructor's prototype is the realm's `Function.prototype`.
-	const realmObject = Object.getOwnPropertyDescriptor(chain[chain.length - 1], "constructor");
+	const realmObject = Objects.getOwnPropertyDescriptor(chain[chain.length - 1], "constructor");
 	if (!realmObject || typeof realmObject.value !== "function" || util.types.isProxy(realmObject.value)) return false;
-	const realmFunctionPrototype = Object.getPrototypeOf(realmObject.value);
-	for (const link of chain) {
-		const tag = Object.getOwnPropertyDescriptor(link, Symbol.toStringTag);
-		if (tag && (!("value" in tag) || (typeof tag.value === "string" && /[{<]/.test(tag.value)))) return false;
-		const constructor = Object.getOwnPropertyDescriptor(link, "constructor");
+	const realmFunctionPrototype = Objects.getPrototypeOf(realmObject.value);
+	for (let ofIndex = 0, ofList = chain; ofIndex < ofList.length; ofIndex++) {
+		const link = ofList[ofIndex];
+		const tag = Objects.getOwnPropertyDescriptor(link, Symbol.toStringTag);
+		if (tag && (!("value" in tag) || (typeof tag.value === "string" && RegExpMethods.exec(/[{<]/, tag.value) !== null))) return false;
+		const constructor = Objects.getOwnPropertyDescriptor(link, "constructor");
 		if (!constructor) continue;
 		if (!("value" in constructor)) return false;
 		if (typeof constructor.value === "function" && !runtime_inertConstructor(constructor.value, realmFunctionPrototype)) return false;
@@ -262,9 +543,14 @@ function runtime_promiseState(promise) {
 	try {
 		if (!runtime_inspectablePromise(promise)) return "unknown";
 		const text = util.inspect(promise, { depth: 0, customInspect: false, showProxy: false, getters: false });
-		const brace = text.indexOf("{");
+		const brace = typeof text === "string" ? StringMethods.indexOf(text, "{") : ArrayMethods.indexOf(text, "{");
 		if (brace === -1) return "unknown";
-		return /^\{\s*<pending>\s*(?:,|\})/.test(text.slice(brace)) ? "pending" : "settled";
+		return RegExpMethods.exec(
+			/^\{\s*<pending>\s*(?:,|\})/,
+			typeof text === "string" ? StringMethods.slice(text, brace) : copyList(text, brace)
+		) !== null
+			? "pending"
+			: "settled";
 	} catch {
 		// An inspector that cannot read it says nothing of its state.
 		return "unknown";
@@ -287,32 +573,36 @@ function runtime_promiseState(promise) {
 function runtime_followSettled(promise, onSettled, family = null) {
 	if (typeof PROMISE_HOOKS?.onSettled !== "function") return false;
 	if (runtime_promiseState(promise) === "settled") {
-		queueMicrotask(onSettled);
+		// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+		queueMicrotask(pinToCurrentCaller(onSettled));
 		return true;
 	}
-	let follows = FOLLOWED.get(promise);
+	let follows = WeakMapMethods.get(FOLLOWED, promise);
 	if (!follows) {
 		const ref = typeof WeakRef === "function" ? new WeakRef(promise) : null;
-		follows = Object.assign([], { ref, families: new Set() });
-		FOLLOWED.set(promise, follows);
+		follows = Objects.assign([], { ref, families: new Set() });
+		WeakMapMethods.set(FOLLOWED, promise, follows);
 		followedCount++;
-		FOLLOWED_COLLECTED?.register(promise, { families: follows.families, ref, follows }, follows);
+		FOLLOWED_COLLECTED == null
+			? undefined
+			: FinalizationRegistryMethods.register(FOLLOWED_COLLECTED, promise, { families: follows.families, ref, follows }, follows);
 	}
-	follows.push({ family, onSettled });
-	if (follows.ref && family !== null && !follows.families.has(family)) {
-		follows.families.add(family);
-		let refs = FOLLOWED_BY_FAMILY.get(family);
-		if (!refs) FOLLOWED_BY_FAMILY.set(family, (refs = new Set()));
-		refs.add(follows.ref);
+	listPush(follows, { family, onSettled });
+	if (follows.ref && family !== null && !SetMethods.has(follows.families, family)) {
+		SetMethods.add(follows.families, family);
+		let refs = MapMethods.get(FOLLOWED_BY_FAMILY, family);
+		if (!refs) MapMethods.set(FOLLOWED_BY_FAMILY, family, (refs = new Set()));
+		SetMethods.add(refs, follows.ref);
 	}
 	stopFollowing ??= PROMISE_HOOKS.onSettled((settled) => {
-		const done = FOLLOWED.get(settled);
+		const done = WeakMapMethods.get(FOLLOWED, settled);
 		if (!done) return;
-		FOLLOWED.delete(settled);
-		FOLLOWED_COLLECTED?.unregister(done);
+		WeakMapMethods.delete(FOLLOWED, settled);
+		FOLLOWED_COLLECTED == null ? undefined : FinalizationRegistryMethods.unregister(FOLLOWED_COLLECTED, done);
 		runtime_forgetRef(done.families, done.ref);
 		runtime_unfollowed();
-		for (const { onSettled: callback } of done) queueMicrotask(callback);
+		// Pinned as the scheduler patch pins it: this runs on the host's queueMicrotask as it was when slothlet loaded.
+		for (let i = 0; i < done.length; i++) queueMicrotask(pinToCurrentCaller(done[i].onSettled));
 	});
 	return true;
 }
@@ -326,11 +616,11 @@ function runtime_followSettled(promise, onSettled, family = null) {
  */
 function runtime_forgetRef(families, ref) {
 	if (!ref) return;
-	for (const family of families) {
-		const refs = FOLLOWED_BY_FAMILY.get(family);
+	for (const family of setValues(families)) {
+		const refs = MapMethods.get(FOLLOWED_BY_FAMILY, family);
 		if (!refs) continue;
-		refs.delete(ref);
-		if (!refs.size) FOLLOWED_BY_FAMILY.delete(family);
+		SetMethods.delete(refs, ref);
+		if (!SetMethods.size(refs)) MapMethods.delete(FOLLOWED_BY_FAMILY, family);
 	}
 }
 
@@ -340,7 +630,7 @@ function runtime_forgetRef(families, ref) {
  * @type {Readonly<object>}
  * @private
  */
-const NO_CALL = Object.freeze({
+const NO_CALL = Objects.freeze({
 	filePath: null,
 	comparablePath: "",
 	realComparablePath: null,
@@ -366,17 +656,106 @@ let liveContextManagerRef = null;
  * Live bindings context manager (direct global state)
  * Uses direct instance tracking without AsyncLocalStorage overhead.
  *
- * Concurrency boundary: the active instance is tracked in a single global field
- * ({@link LiveContextManager#currentInstanceID}), so this manager isolates *sequential*
- * `run()`/`scope()` calls (each restores the prior instance on exit) but NOT *interleaved*
- * concurrent calls on the same instance — across an `await`, a sibling `run()` overwrites the
- * global and a resumed callback reads the wrong context. True per-async-flow isolation requires
- * AsyncLocalStorage (see {@link module:@cldmv/slothlet/handlers/context-async}); the live manager
- * is the deliberate trade-off for environments without `node:async_hooks` (browser/worker, see
- * #123) and for the lowest-overhead single-flow case. See docs/CONTEXT-PROPAGATION.md.
+ * Concurrency: the active instance is tracked in a single field ({@link LiveContextManager#currentInstanceID}),
+ * carried into every callback registered through a boundary slothlet patches (see `carryFlow` in
+ * {@link LiveContextManager#registerEventEmitterContextChecker}) and, in Node, across every promise job by V8's
+ * promise hooks (see {@link LiveContextManager#holdFlowHooks}), so interleaved `run()` / `scope()` flows each see their
+ * own store. No `node:async_hooks` is used. Without promise hooks (a browser) the code after a bare `await` is not
+ * carried while flows interleave. See docs/CONTEXT-PROPAGATION.md.
  * @public
  */
+
+/**
+ * A walk of frames, lean where the capture offers it, that reads nothing module code can replace: an array's elements by
+ * the array iterator's `next` taken at load, and a capture's through the walk it hands out (frame placement's captures
+ * step their generator with the functions taken at load).
+ * @param {Iterable<object>} frames - An array of frames, or a capture.
+ * @returns {Iterable<object>} The frames.
+ * @private
+ */
+function framesOf(frames) {
+	if (Arrays.isArray(frames)) return listSteps(frames);
+	return typeof frames.lean === "function" ? frames.lean() : frames[Symbol.iterator]();
+}
+
+/**
+ * Run a `run()` / `scope()` callback, waiting for what it returns (see {@link LiveContextManager#runFlowBody}). Its frame,
+ * synchronous or an `await` further out, marks code that runs as part of a `run()` / `scope()` callback.
+ * @param {Function} fn - The callback.
+ * @param {Array<*>} args - Its arguments.
+ * @returns {Promise<*>} What it returned.
+ * @private
+ */
+async function slothlet_liveRunBody(fn, args) {
+	return await Reflect.apply(fn, undefined, args);
+}
+
+/**
+ * The fields of a store that name the call running on it and its caller, which a flow apart from every call has none of
+ * (see {@link LiveContextManager#runLoadApart}).
+ * @type {ReadonlyArray<string>}
+ */
+const IDENTITY_FIELDS = Objects.freeze(["currentWrapper", "callerWrapper", "currentCeiling", "callerCeiling", "record"]);
+
+/**
+ * What a resource scope's callback hands the pin it runs in instead of a promise the pin is not to hold its state for
+ * (see {@link LiveContextManager#runScope}): the scope's entry takes the callback's result from the manager.
+ * @type {symbol}
+ */
+const SCOPE_RESULT = Symbol("slothlet.resourceScope.result");
+
+/**
+ * How many frames are read to find a `run()` / `scope()` callback the code running now is part of.
+ * @type {number}
+ */
+const RUN_BODY_FRAMES = 200;
+
+/**
+ * What releases each counted promise as its run's work, until it settles (see {@link countPromise}).
+ * @type {WeakMap<Promise<unknown>, Function>}
+ * @private
+ */
+const COUNTED_PROMISES = new WeakMap();
+
+/**
+ * Count a promise made in a `run()` / `scope()` flow as the run's work until it settles, or until it is collected
+ * unsettled: nothing can settle it then, so nothing it would run can run.
+ * @param {Promise<unknown>} promise - The promise.
+ * @param {object|null|undefined} record - The run's record.
+ * @returns {void}
+ * @private
+ */
+function countPromise(promise, record) {
+	const release = holdRunWorkOnce(record);
+	if (release === null) return;
+	WeakMapMethods.set(COUNTED_PROMISES, promise, release);
+	// The release is the registration's token too, so settling unregisters it (see promiseSettled).
+	releaseWhenCollected(promise, release, release);
+}
+
+/**
+ * A promise settled: when it was counted, its run's count goes down.
+ * @param {Promise<unknown>} promise - The promise.
+ * @returns {void}
+ * @private
+ */
+function promiseSettled(promise) {
+	const release = WeakMapMethods.get(COUNTED_PROMISES, promise);
+	if (release === undefined) return;
+	WeakMapMethods.delete(COUNTED_PROMISES, promise);
+	// What waits for the promise to be collected goes now: it would stay until a macrotask, which code awaiting runs back
+	// to back never lets pass.
+	stopReleaseWhenCollected(release);
+	release();
+}
+
 export class LiveContextManager {
+	/**
+	 * Runtime identity, checked instead of the class name (a minified bundle renames classes).
+	 * @type {"live"}
+	 */
+	kind = "live";
+
 	/**
 	 * The active-instance field as last written. Calls restore it in settle order, not entry order, so
 	 * once calls overlap it can name an instance none of whose calls is running; readers go through
@@ -399,8 +778,335 @@ export class LiveContextManager {
 	 */
 	#busyStores = new Set();
 
+	/**
+	 * Counts every change to any store's suspended calls, so the candidates read from a set of them are made again only
+	 * after it changed (see {@link LiveContextManager#candidatesOf}).
+	 * @type {number}
+	 */
+	#suspendedVersion = 0;
+
+	/**
+	 * The candidates last made from each set of suspended calls, with the version they were made at.
+	 * @type {WeakMap<Set<object>, {version: number, candidates: ArrayLike<object>, unattributed: boolean}>}
+	 */
+	#candidateLists = new WeakMap();
+
+	/**
+	 * The promises a leaf's call handed back (see runInContext's `attribute`), with the store it ran on and the caller
+	 * identity resolved when it was entered: reactions registered on one are pinned to that caller (see `forResult` in
+	 * registerEventEmitterContextChecker), and one no reaction needs is handed on as it is (see {@link LiveContextManager#ownsResult}).
+	 * @type {WeakMap<Promise<unknown>, {store: object, identity: object|null}>}
+	 */
+	#callResults = new WeakMap();
+
+	/**
+	 * The resource scopes running now, innermost last (see {@link LiveContextManager#pinScope}).
+	 * @type {Array<object>}
+	 */
+	#scopes = [];
+
+	/**
+	 * The state a resource scope was entered from, handed from the scope's entry to the code the pin runs inside it.
+	 * @type {object|null}
+	 */
+	#pendingScope = null;
+
+	/**
+	 * Whether a resource scope is being told right now, so the frame reading it does is not told again.
+	 * @type {boolean}
+	 */
+	#tellingScope = false;
+
+	/**
+	 * What a resource scope's callback returned, handed past the pin it ran in (see {@link SCOPE_RESULT}).
+	 * @type {*}
+	 */
+	#scopeResult = undefined;
+
+	/**
+	 * While {@link LiveContextManager#pinScope} pins a callback: what it was pinned to (false until a pin is made).
+	 * Null otherwise.
+	 * @type {object|false|null}
+	 */
+	#pinSource = null;
+
+	/**
+	 * The live instances with permissions on: while there are any, the promise hooks also record who started a flow.
+	 * @type {number}
+	 */
+	#flowStarterInstances = 0;
+
+	/**
+	 * The live instances: while there are any, the promise hooks that carry each flow across its promise jobs are
+	 * installed (see {@link LiveContextManager#holdFlowHooks}).
+	 * @type {number}
+	 */
+	#flowHookInstances = 0;
+
+	/**
+	 * Removes the promise hooks, while they are installed.
+	 * @type {Function|null}
+	 */
+	#stopFlowHooks = null;
+
+	/**
+	 * The stamp this manager's promise hooks put on promises, its own so another manager's hooks never meet it.
+	 * @type {ReturnType<typeof promiseFlowStamp>}
+	 */
+	#promiseFlow = promiseFlowStamp();
+
+	/**
+	 * The starter of the flow whose promise reaction is running.
+	 * @type {object|null}
+	 */
+	#runningStarter = null;
+
+	/**
+	 * The active-instance field as it was when each running promise job began, put back when the job ends.
+	 * @type {Array<string|null>}
+	 */
+	#jobOuter = [];
+
+	/**
+	 * How many promise jobs are running inside one another (at most one: the engine runs them from an empty stack).
+	 * @type {number}
+	 */
+	#jobDepth = 0;
+
+	/**
+	 * For each running promise job, the `run()` / `scope()` store it put back among the instances for its run (see
+	 * {@link LiveContextManager#reopenFlowStore}), or null.
+	 * @type {Array<object|null>}
+	 */
+	#jobReopened = [];
+
+	/**
+	 * Whether the promises a `run()` / `scope()` makes are counted as its work (see `watchRuns` in
+	 * `helpers/flow-stores`): while any run is live and the promise hooks are installed.
+	 * @type {boolean}
+	 */
+	#countingWork = false;
+
+	/**
+	 * What stops the promise hook that tells when a counted promise settles, while {@link LiveContextManager#countingWork}.
+	 * @type {Function|null}
+	 */
+	#stopSettledHook = null;
+
+	/**
+	 * Whether the manager watches runs (see `watchRuns` in `helpers/flow-stores`).
+	 * @type {boolean}
+	 */
+	#watchingRuns = false;
+
+	/**
+	 * The marks {@link LiveContextManager#runMarked} has carried, so a store's are found (see
+	 * {@link LiveContextManager#carryMarks}).
+	 * @type {Set<symbol>}
+	 * @private
+	 */
+	#markKeys = new Set();
+
+	/**
+	 * How many flows {@link LiveContextManager#runMarked} has opened, which names each one's store.
+	 * @type {number}
+	 * @private
+	 */
+	#markFlows = 0;
+
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
+	}
+
+	/**
+	 * Whether a flow a call starts carries that call however long it runs: not here. Once the call that started an
+	 * async function has returned, nothing says which call that was when the function picks up again (see
+	 * frameDefiner in frame-placement).
+	 * @type {boolean}
+	 * @internal
+	 */
+	get carriesFlowCaller() {
+		return false;
+	}
+
+	/**
+	 * Whether each flow is carried across its promise jobs (the code after an `await`, a reaction) by the engine's
+	 * promise hooks: in Node while a live instance exists. Then the active-instance field names the flow the code running
+	 * now is part of, and slothlet puts it back as soon as the synchronous code that set it returns. Without promise hooks
+	 * (a browser) the field keeps naming the last `run()` / `scope()` entered until it returns, so that its own code after
+	 * a bare `await` can find it.
+	 * @type {boolean}
+	 * @private
+	 */
+	get #carriesAwaits() {
+		return this.#stopFlowHooks !== null;
+	}
+
+	/**
+	 * The call that started the flow running now, once that call has returned: the module call the promise whose
+	 * reaction is running was created in, directly or in a flow it started. Null for a flow the host started, and where
+	 * Node's promise hooks are not available (a browser), or no live instance has permissions on.
+	 * @returns {{wrapper: object, ceiling?: object|ReadonlyArray<object>|null}|null} The starting call's record.
+	 * @internal
+	 */
+	runningFlowStarter() {
+		return this.#runningStarter;
+	}
+
+	/**
+	 * Count a live instance, installing the engine's promise hooks for the first (Node; a browser has none). Each promise
+	 * records the flow it was made in, the store the active-instance field names then, and each of its jobs runs in that
+	 * flow: a `run()` / `scope()` waiting at an `await` picks up in its own store whichever flow was entered last, and
+	 * code outside every flow never sees one. With permissions on (see {@link LiveContextManager#holdFlowStarters}) the
+	 * record also names the call that started the flow.
+	 * @returns {void}
+	 * @private
+	 */
+	#holdFlowHooks() {
+		this.#flowHookInstances++;
+		if (this.#stopFlowHooks || !CREATE_PROMISE_HOOK) return;
+		if (!this.#watchingRuns) {
+			this.#watchingRuns = true;
+			watchRuns((live) => this.#countRunWork(live));
+		}
+		const manager = this;
+		const promiseFlow = this.#promiseFlow;
+		this.#stopFlowHooks = Reflect.apply(CREATE_PROMISE_HOOK, PROMISE_HOOKS, [
+			{
+				// The flow the promise is made in. With permissions on, a promise made while a module's call runs
+				// synchronously is also that call's; one made in a reaction of a flow a call started is that flow's.
+				// Anything else (the host's own, with no call running) records no starter.
+				init(promise) {
+					// Inside a resource scope whose code has read nothing yet, the scope is told now, as a read would tell it
+					// (see settleScope): the maker's own code keeps the pin, so its promise carries the maker's flow past an
+					// `await`; anyone else's code takes the pin back out, and its promise carries the flow the resource was
+					// used in. A scope that cannot be told from here holds no pin across the `await`.
+					const scopes = manager.#scopes;
+					const scope = scopes.length === 0 ? null : scopes[scopes.length - 1];
+					let flow = manager.#activeID;
+					if (scope !== null && !scope.own && !scope.swapped) {
+						if (!manager.#tellingScope) manager.#settleScope();
+						if (!scope.own && !scope.swapped && manager.#tellingScope) flow = scope.before;
+						else flow = manager.#activeID;
+					}
+					// A run() / scope() flow's promise holds the flow's store, so a job of it can still run there once the
+					// run() has returned and its store has left the instances (see reopenFlowStore).
+					const flowStore = flow === null ? undefined : MapMethods.get(manager.instances, flow);
+					const held = flowStore !== undefined && flowStore.parentInstanceID ? flowStore : undefined;
+					// Until it settles, the promise is work of the run it was made in (see holdRunWork).
+					if (held !== undefined && manager.#countingWork) countPromise(promise, held[RUN_COPY]);
+					if (manager.#flowStarterInstances === 0) {
+						// One record per store, shared by its promises: it never changes.
+						promiseFlow.stamp(promise, held === undefined ? flow : (held.__promiseRecord ??= { flow, starter: null, store: held }));
+						return;
+					}
+					let starter = manager.#runningStarter;
+					if (manager.#syncDepth > 0) {
+						const entered = MapMethods.get(manager.instances, flow)?.__enteredCalls;
+						const top = entered?.[entered.length - 1];
+						if (top === HOST_ENTRY || top === UNATTRIBUTED_ENTRY) starter = null;
+						else if (top?.wrapper) starter = top;
+					}
+					if (starter) promiseFlow.stamp(promise, { flow, starter, store: held });
+					else promiseFlow.stamp(promise, held === undefined ? flow : (held.__promiseRecord ??= { flow, starter: null, store: held }));
+				},
+				// Reactions run one at a time from the microtask queue, never inside one another.
+				before(promise) {
+					manager.#jobReopened[manager.#jobDepth] = null;
+					manager.#jobOuter[manager.#jobDepth++] = manager.#activeID;
+					const record = promiseFlow.of(promise);
+					// A promise made before the hooks were installed carries no flow: the field is left as it is.
+					if (record === undefined) {
+						manager.#runningStarter = null;
+						return;
+					}
+					if (record !== null && typeof record === "object") {
+						// The run() / scope() the promise was made in has returned: its store is back for this job.
+						if (record.store !== undefined && manager.#reopenFlowStore(record.store))
+							manager.#jobReopened[manager.#jobDepth - 1] = record.store;
+						manager.#activeID = manager.#flowIfOpen(record.flow);
+						manager.#runningStarter = record.starter;
+					} else {
+						manager.#activeID = manager.#flowIfOpen(record);
+						manager.#runningStarter = null;
+					}
+				},
+				after() {
+					manager.#runningStarter = null;
+					if (manager.#jobDepth > 0) {
+						// The flow the job ran inside may have been an instance that shut down while the job ran: what the job
+						// returns to then has no store, as on the async runtime.
+						manager.#activeID = manager.#flowIfOpen(manager.#jobOuter[--manager.#jobDepth]);
+						const reopened = manager.#jobReopened[manager.#jobDepth];
+						if (reopened !== null && reopened !== undefined) {
+							manager.#jobReopened[manager.#jobDepth] = null;
+							manager.#closeFlowStore(reopened);
+						}
+					}
+				}
+			}
+		]);
+		if (runCopyCounts().runs !== 0) this.#countRunWork(true);
+	}
+
+	/**
+	 * Uncount a live instance, removing the promise hooks after the last.
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseFlowHooks() {
+		if (--this.#flowHookInstances > 0 || !this.#stopFlowHooks) return;
+		const stop = this.#stopFlowHooks;
+		this.#stopFlowHooks = null;
+		this.#countRunWork(false);
+		this.#runningStarter = null;
+		// Released from inside a promise job: that job's `after` no longer runs, so nothing is left counted for it.
+		this.#jobDepth = 0;
+		this.#jobOuter.length = 0;
+		this.#jobReopened.length = 0;
+		stop();
+	}
+
+	/**
+	 * Start counting the promises runs make as their work while any run is live, and stop once none is (see
+	 * `watchRuns` in `helpers/flow-stores`): a promise made in a run's flow counts until it settles. Only
+	 * while the promise hooks are installed (Node).
+	 * @param {boolean} live - Whether a run is live.
+	 * @returns {void}
+	 * @private
+	 */
+	#countRunWork(live) {
+		if (!live || this.#stopFlowHooks === null) {
+			if (!this.#countingWork) return;
+			this.#countingWork = false;
+			const stop = this.#stopSettledHook;
+			this.#stopSettledHook = null;
+			stop();
+			return;
+		}
+		if (this.#countingWork) return;
+		this.#countingWork = true;
+		this.#stopSettledHook = Reflect.apply(CREATE_PROMISE_HOOK, PROMISE_HOOKS, [{ settled: promiseSettled }]);
+	}
+
+	/**
+	 * Count a live instance with permissions on: while there are any, the promise hooks record who started each flow
+	 * (see {@link LiveContextManager#runningFlowStarter}).
+	 * @returns {void}
+	 * @private
+	 */
+	#holdFlowStarters() {
+		this.#flowStarterInstances++;
+	}
+
+	/**
+	 * Uncount a live instance with permissions on.
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseFlowStarters() {
+		this.#flowStarterInstances = Math.max(0, this.#flowStarterInstances - 1);
+		if (this.#flowStarterInstances === 0) this.#runningStarter = null;
 	}
 
 	/**
@@ -409,7 +1115,7 @@ export class LiveContextManager {
 	 * @internal
 	 */
 	get suspendedStoreCount() {
-		return this.#busyStores.size;
+		return SetMethods.size(this.#busyStores);
 	}
 
 	/**
@@ -419,7 +1125,7 @@ export class LiveContextManager {
 	 */
 	get suspendedCallCount() {
 		let count = 0;
-		for (const store of this.#busyStores) count += this.#suspendedFor(store).size;
+		for (const store of setValues(this.#busyStores)) count += SetMethods.size(this.#suspendedFor(store));
 		return count;
 	}
 
@@ -455,7 +1161,86 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#familyOf(instanceID) {
-		return this.instances.get(instanceID)?.parentInstanceID ?? instanceID;
+		return MapMethods.get(this.instances, instanceID)?.parentInstanceID ?? instanceID;
+	}
+
+	/**
+	 * The store a value of the active-instance field stands for. Flows restore the field in the order they settle, so
+	 * once `run()` / `scope()` flows interleave it can be left naming the store of a flow that has already returned and
+	 * been removed (#763): no flow of it runs any more, so the field stands for the instance's own store, as nothing
+	 * opened over it is active. A `run()` / `scope()` store's id is its instance's id followed by `__run_`.
+	 * @param {string|null} id - The field's value.
+	 * @returns {string|null} The id, or its instance's when it names a removed `run()` / `scope()` store of a live instance.
+	 * @private
+	 */
+	#removedRunBase(id) {
+		if (id === null || MapMethods.has(this.instances, id)) return id;
+		const cut = StringMethods.lastIndexOf(id, "__run_");
+		if (cut <= 0) return id;
+		const base = StringMethods.slice(id, 0, cut);
+		return MapMethods.has(this.instances, base) ? base : id;
+	}
+
+	/**
+	 * The flow a promise job or a carried callback runs in, when the store it was made in is still open: its own, or for a
+	 * removed `run()` / `scope()` store, its live instance's (see removedRunBase). Work that outlives its instance runs with
+	 * no store, as any callback that outlives its instance; naming the removed store would leave the active-instance field
+	 * pointing at a store that is gone.
+	 * @param {string|null} id - The flow the work was made in.
+	 * @returns {string|null} The id, or null when its instance has shut down.
+	 * @private
+	 */
+	#flowIfOpen(id) {
+		if (id === null || MapMethods.has(this.instances, id)) return id;
+		return this.#removedRunBase(id) === id ? null : id;
+	}
+
+	/**
+	 * Put a `run()` / `scope()` store back among the instances while work tied to it runs after the `run()` has returned.
+	 *
+	 * A `run()` removes its store when its callback settles, but what the callback scheduled can run later: a timer, an
+	 * interval, a listener, a promise's jobs. That work keeps the store itself (a carried callback's closure, a promise's
+	 * record), so it runs in the run's context as on the async runtime, and the store lives exactly as long as that work
+	 * can still run: once the timers have fired, the listeners are removed and the promises are gone, nothing holds it.
+	 * The store is in the instances only while such work runs synchronously, so no other flow and no host code outside
+	 * every flow ever sees it; the caller removes it again with {@link LiveContextManager#closeFlowStore}.
+	 *
+	 * The work keeps the run's context, not the run's standing. While the store is back it carries the
+	 * `REOPENED_FLOW` marker: who runs the work is decided on the instance's own store and from the stack, as it is for
+	 * any code running there (see {@link LiveContextManager#identityFor}), and a store the host opened gives the work none
+	 * of the host's trust.
+	 * @param {object} store - The `run()` / `scope()` store.
+	 * @returns {boolean} True when the store was put back (and must be closed after); false when it is still open, or
+	 *   the instance it was opened on has shut down.
+	 * @private
+	 */
+	#reopenFlowStore(store) {
+		const id = store.instanceID;
+		if (MapMethods.has(this.instances, id)) return false;
+		if (!MapMethods.has(this.instances, store.parentInstanceID)) {
+			// A reload or restart since gave the instance a new ID. The stores it moves are the ones whose run's copy is still
+			// kept (see trackFlowStore): a store of a run torn down before it still names the old ID, and belongs to the
+			// instance it holds as `slothlet`, under the ID that instance has now, as on the async runtime.
+			const owner = store.slothlet;
+			const current = owner !== null && typeof owner === "object" ? owner.instanceID : undefined;
+			// The instance has shut down: the work runs with no store, as any callback that outlives its instance.
+			if (typeof current !== "string" || !MapMethods.has(this.instances, current)) return false;
+			store.parentInstanceID = current;
+		}
+		Objects.defineProperty(store, REOPENED_FLOW, { __proto__: null, value: true, configurable: true });
+		MapMethods.set(this.instances, id, store);
+		return true;
+	}
+
+	/**
+	 * Remove a store {@link LiveContextManager#reopenFlowStore} put back, once the work it was put back for returns.
+	 * @param {object} store - The store.
+	 * @returns {void}
+	 * @private
+	 */
+	#closeFlowStore(store) {
+		MapMethods.delete(this.instances, store.instanceID);
+		delete store[REOPENED_FLOW];
 	}
 
 	/**
@@ -464,25 +1249,31 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#resolveActiveID() {
-		const raw = this.#activeID;
-		if (this.#syncDepth > 0 || this.#busyStores.size === 0) return raw;
+		if (this.#scopes.length !== 0) this.#settleScope();
+		const raw = this.#removedRunBase(this.#activeID);
+		if (this.#syncDepth > 0 || SetMethods.size(this.#busyStores) === 0) return raw;
 		const rawFamily = raw === null ? null : this.#familyOf(raw);
 		const families = new Set();
-		for (const store of this.#busyStores) families.add(store.parentInstanceID ?? store.instanceID);
-		if (families.size === 1 && families.has(rawFamily)) return raw;
+		for (const store of setValues(this.#busyStores)) SetMethods.add(families, store.parentInstanceID ?? store.instanceID);
+		if (SetMethods.size(families) === 1 && SetMethods.has(families, rawFamily)) return raw;
 
 		const candidates = new Set();
-		for (const store of this.#busyStores) for (const entry of this.#suspendedFor(store)) candidates.add(entry);
-		const resolved = this.#resolveSuspendedFromStack(candidates);
+		for (const store of setValues(this.#busyStores))
+			for (const entry of setValues(this.#suspendedFor(store))) SetMethods.add(candidates, entry);
+		let resolved = this.#resolveSuspendedFromStack(candidates);
+		// One of several calls, the stack not saying which: calls waiting on one store name it; calls of several are
+		// as code several instances account for.
+		if (resolved?.tied)
+			resolved = SetMethods.size(setFrom(mapList(resolved.tied, (entry) => entry.store))) === 1 ? resolved.tied[0] : AMBIGUOUS;
 		// Code several instances' calls account for could be any of them: the field would pick one of them at
 		// random, so no instance is active and the access is refused.
-		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return families.size > 1 ? null : raw;
+		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return SetMethods.size(families) > 1 ? null : raw;
 		if (!resolved) return raw;
 		// The field names a run()/scope() store of the resolved instance: that flow's own store wins.
 		if (resolved.family === rawFamily && raw !== rawFamily) return raw;
 		const id = resolved.store.instanceID;
 		// The store can be gone already — a scope that exited while its call was still suspended.
-		return this.instances.has(id) ? id : raw;
+		return MapMethods.has(this.instances, id) ? id : raw;
 	}
 
 	/**
@@ -517,7 +1308,7 @@ export class LiveContextManager {
 	 * stack its code (or code it called synchronously) is what is running: an `await` continuation
 	 * only ever resumes on an empty JavaScript stack, so no other flow can be executing underneath
 	 * it. The top entry is therefore the caller, with no ambiguity to resolve — which is what makes a
-	 * synchronously entered module (a nested leaf, or a `lockCaller`-pinned callback) attributable
+	 * synchronously entered module (a nested leaf, or a `pin`-pinned callback) attributable
 	 * even while other calls are suspended and their async frames sit further down the stack (#512).
 	 *
 	 * @param {object} store - Instance context store.
@@ -542,7 +1333,7 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#baselineFor(store) {
-		if (!Object.prototype.hasOwnProperty.call(store, "__baselineWrapper")) {
+		if (!Objects.hasOwn(store, "__baselineWrapper")) {
 			store.__baselineWrapper = store.currentWrapper ?? null;
 			// A replayed or scoped flow whose identity was code supplied from higher up keeps its ceiling (#597).
 			store.__baselineCeiling = store.currentCeiling ?? null;
@@ -589,7 +1380,7 @@ export class LiveContextManager {
 	 */
 	getCallerIdentity(instanceID) {
 		const store = this.tryGetContext(instanceID);
-		/* v8 ignore next — callers reach this only with an active instance. */
+		/* v8 ignore if -- callers reach this only with an active instance. */
 		if (!store) return undefined;
 		return this.#identityFor(store);
 	}
@@ -603,19 +1394,27 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#identityFor(store) {
+		// Work a finished run() / scope() left behind runs in the run's store, put back for it, with the run's context but
+		// not the run's standing (see reopenFlowStore): while nothing of the work's own is entered or suspended there, who
+		// runs it is decided on the instance's own store, as for any code running there.
+		if (store[REOPENED_FLOW] === true) {
+			const base = MapMethods.get(this.instances, store.parentInstanceID);
+			if (
+				base !== undefined &&
+				!store.__authoritativeWrapper &&
+				this.#enteredFor(store).length === 0 &&
+				SetMethods.size(this.#suspendedFor(store)) === 0
+			)
+				return this.#identityFor(base);
+		}
 		// An identity captured at a moment when it was known to be reliable wins outright. The lazy
 		// waiting-proxy path resolves the caller synchronously, inside that caller's own frame, and
 		// then defers the actual invocation to a later turn — by which point the caller's frame has
 		// been released and the stack can no longer name it. Honouring the earlier capture keeps the
 		// answer from degrading just because enforcement runs late. Its ceiling travels with it (#597).
-		if (store.__authoritativeWrapper) {
-			return {
-				currentWrapper: store.__authoritativeWrapper,
-				callerWrapper: store.callerWrapper,
-				ceiling: store.__authoritativeCeiling ?? undefined,
-				callerCeiling: store.callerCeiling ?? undefined
-			};
-		}
+		// Code another module made, run by slothlet itself inside that window (a thenable's `then` it settles, #726), is
+		// that module's: the capture speaks only for the code its frames do not name.
+		if (store.__authoritativeWrapper) return this.#authoritativeIdentity(store, store.callerWrapper, store.callerCeiling);
 		// Innermost synchronous entry that names a module. An entry without a wrapper (a context-only
 		// `runInContext`) does not change who is calling, so it is looked through. A host pin does:
 		// the callback runs as the host, even when a module invoked it synchronously (#477).
@@ -627,7 +1426,7 @@ export class LiveContextManager {
 		}
 
 		const suspended = this.#suspendedFor(store);
-		if (suspended.size === 0) return this.#baselineIdentity(store);
+		if (SetMethods.size(suspended) === 0) return this.#baselineIdentity(store);
 		// A suspended call's own caller is the one recorded when it entered: the store's caller field is
 		// restored in settle order too, so once calls overlap it can name another call's caller.
 		//
@@ -636,12 +1435,18 @@ export class LiveContextManager {
 		// was in flight, which nothing pinned — so it is resolved from the stack like any other (#601).
 		// A host-pinned entry has no frame to match and keeps its own answer. Code running as no module is told from the
 		// host's by the stack below.
-		if (suspended.size === 1) {
-			const [only] = suspended;
+		if (SetMethods.size(suspended) === 1) {
+			const only = setToArray(suspended)[0];
 			if (!only.filePath && !only.unattributed) return this.#entryIdentity(only);
 		}
 
-		const resolved = this.#resolveSuspendedFromStack(suspended);
+		// The capture that placed the call is the stack at this same point: the call's own reading of whose code runs
+		// starts from it instead of capturing the stack again.
+		const read = { capture: null };
+		const resolved = this.#resolveSuspendedFromStack(suspended, read);
+		// The running code is one of several suspended calls and the stack does not say which: the access is held to
+		// all of them.
+		if (resolved?.tied) return this.#tiedIdentity(store, resolved.tied);
 		// The stack could not tell which of several suspended calls is executing: a frame named more
 		// than one of them (the same module suspended twice under different api paths, resuming in a
 		// file they share), and no frame further out pinned a single one. Deny rather than pick: report
@@ -655,7 +1460,7 @@ export class LiveContextManager {
 		if (resolved === UNACCOUNTED) {
 			return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true, unaccounted: true };
 		}
-		if (resolved) return this.#entryIdentity(resolved);
+		if (resolved) return this.#entryIdentity(resolved, read.capture);
 
 		// No suspended call is on the stack, so the caller is not one of them, and nothing entered
 		// synchronously. What is running is the store's own resting flow — the host, or the scope's
@@ -667,14 +1472,31 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * The identity an authoritative capture gives (see {@link LiveContextManager#identityFor}): the captured caller, read
+	 * as the call it stands for, so code of another module running inside it — a thenable's `then` slothlet settles while
+	 * the capture is published — is told by its frames and runs as its definer under the captured caller (#726).
+	 * @param {object} store - Instance context store.
+	 * @param {object|null} callerWrapper - Who called it.
+	 * @param {object|null|undefined} callerCeiling - Its caller's ceiling.
+	 * @returns {{currentWrapper: object|null, callerWrapper: object|null, ceiling?: object, callerCeiling?: object, unresolved?: boolean}} The identity.
+	 * @private
+	 */
+	#authoritativeIdentity(store, callerWrapper, callerCeiling) {
+		const record = { wrapper: store.__authoritativeWrapper, parent: null, flagged: false, ceiling: store.__authoritativeCeiling ?? null };
+		const identity = this.#recordIdentity(record, callerWrapper, callerCeiling);
+		// The capture is no call record of its own: it is reported as before.
+		delete identity.record;
+		return identity;
+	}
+
+	/**
 	 * Whether code that runs as no module is suspended on a store (see {@link LiveContextManager#runUnattributed}).
 	 * @param {Set<object>} suspended - The store's suspended calls.
 	 * @returns {boolean} True when one is.
 	 * @private
 	 */
 	#hasUnattributed(suspended) {
-		for (const entry of suspended) if (entry.unattributed) return true;
-		return false;
+		return this.#suspendedState(suspended).unattributed;
 	}
 
 	/**
@@ -688,14 +1510,14 @@ export class LiveContextManager {
 	#unattributedOnStack(suspended) {
 		if (!this.#hasUnattributed(suspended)) return false;
 		const sources = new Map();
-		for (const entry of suspended) {
+		for (const entry of setValues(suspended)) {
 			if (!entry.unattributed) continue;
-			const source = sources.get(entry.family) ?? { family: entry.family, slothlet: entry.slothlet ?? null, roots: [] };
+			const source = MapMethods.get(sources, entry.family) ?? { family: entry.family, slothlet: entry.slothlet ?? null, roots: [] };
 			source.slothlet ??= entry.slothlet ?? null;
-			source.roots.push(...(entry.roots ?? []));
-			sources.set(entry.family, source);
+			appendList(source.roots, entry.roots ?? []);
+			MapMethods.set(sources, entry.family, source);
 		}
-		return stackHoldsInstanceCode([...sources.values()]);
+		return stackHoldsInstanceCode(mapValuesToArray(sources));
 	}
 
 	/**
@@ -705,6 +1527,11 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#baselineIdentity(store) {
+		// A store put back for work its run left behind rests as the instance's own store does (see reopenFlowStore).
+		if (store[REOPENED_FLOW] === true) {
+			const base = MapMethods.get(this.instances, store.parentInstanceID);
+			if (base !== undefined) return this.#baselineIdentity(base);
+		}
 		// A `run()` / `scope()` opened inside a module call that was handed code keeps that call's record: code it was
 		// handed and runs inside the scope is told apart from the call's own (#597).
 		const record = store.record;
@@ -719,17 +1546,76 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * The identity of code that is one of several suspended calls, when the stack does not say which (#756): one that
+	 * every one of those calls has to allow. Each call is read as it would be were it the one running — its leaf, or the
+	 * code it was handed or another module's function it runs, told by the frames — and the answer is the first call's
+	 * with every other call's added to its ceiling, along with the calls that handed code down to any of them. An
+	 * access is then checked against all of them and refused when any one refuses, so it is never given more than the
+	 * call really running may do. A call among them that cannot answer for the code (one pinned to the host, code
+	 * running as no module, or code a call cannot account for) leaves the whole unanswered, and refused.
+	 *
+	 * The caller reported (`metadata.caller()`, `pin`) is the first call's, in the order the calls started
+	 * waiting; which call's it really is is not known.
+	 *
+	 * @param {object} store - Instance context store.
+	 * @param {Array<object>} entries - The suspended calls the running code is one of.
+	 * @returns {{currentWrapper: object|null, callerWrapper: object|null, ceiling?: object|ReadonlyArray<object>, callerCeiling?: object, unresolved?: boolean}} The identity.
+	 * @private
+	 */
+	#tiedIdentity(store, entries) {
+		let first = null;
+		const others = [];
+		for (let ofIndex = 0, ofList = entries; ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
+			const identity = this.#entryIdentity(entry);
+			if (identity.unresolved || !identity.currentWrapper)
+				return { currentWrapper: null, callerWrapper: store.callerWrapper, unresolved: true };
+			if (!first) first = identity;
+			else listPush(others, identity.currentWrapper, identity.ceiling ?? null);
+			listPush(others, supplierChainCeiling(identity.record));
+		}
+		return {
+			currentWrapper: first.currentWrapper,
+			callerWrapper: first.callerWrapper,
+			ceiling: Reflect.apply(combineCeilings, undefined, concatLists([first.ceiling ?? null], others)) ?? undefined,
+			callerCeiling: first.callerCeiling
+		};
+	}
+
+	/**
 	 * The identity of a suspended call that is executing again.
 	 * @param {object} entry - The suspended call.
+	 * @param {Iterable<object>|null} [capture=null] - The capture that placed it, taken at this same point (see resolveSupplier).
 	 * @returns {{currentWrapper: object|null, callerWrapper: object|null, ceiling?: object, callerCeiling?: object, record?: object}} The identity.
 	 * @private
 	 */
-	#entryIdentity(entry) {
+	#entryIdentity(entry, capture = null) {
 		// Code running as no module: who is calling cannot be told (#597).
 		if (entry.unattributed) return UNATTRIBUTED_IDENTITY;
 		// A host-pinned call carries no record: it runs as the host.
 		if (!entry.record) return { currentWrapper: entry.currentWrapper, callerWrapper: entry.callerWrapper };
-		return this.#recordIdentity(entry.record, entry.callerWrapper, entry.callerCeiling);
+		return this.#heldToStarter(this.#recordIdentity(entry.record, entry.callerWrapper, entry.callerCeiling, capture), entry.record);
+	}
+
+	/**
+	 * A suspended call's identity, held as well to the call that started the flow running now when that is another
+	 * call (see {@link LiveContextManager#runningFlowStarter}): a flow a module started and let go of, which another
+	 * module's waiting call awaits, stays the starting module's, as the async runtime's store has it.
+	 * @param {object} identity - The suspended call's identity.
+	 * @param {object} record - The suspended call's record.
+	 * @returns {object} The identity, with the starter among its ceiling when it is held to it.
+	 * @private
+	 */
+	#heldToStarter(identity, record) {
+		const starter = this.#runningStarter;
+		if (!starter || !identity.currentWrapper || identity.unresolved) return identity;
+		const wrapper = starter.wrapper;
+		if (wrapper === identity.currentWrapper || wrapper?.____slothlet !== identity.currentWrapper.____slothlet) return identity;
+		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, wrapper)) return identity;
+		// The starter is the call itself or a call it runs under: already held to.
+		for (let current = record, depth = 0; current && depth < 64; current = current.parent, depth++)
+			if (current === starter || current.wrapper === wrapper) return identity;
+		return { ...identity, ceiling: combineCeilings(identity.ceiling ?? null, wrapper, starter.ceiling ?? null) };
 	}
 
 	/**
@@ -740,12 +1626,18 @@ export class LiveContextManager {
 	 * @param {{wrapper: object, parent: object|null, flagged: boolean, ceiling?: object|null}} record - The call.
 	 * @param {object|null} callerWrapper - Who called it.
 	 * @param {object|null|undefined} callerCeiling - Its caller's ceiling.
+	 * @param {Iterable<object>|null} [capture=null] - A capture of the stack taken at this same point (see resolveSupplier).
 	 * @returns {{currentWrapper: object, callerWrapper: object|null, ceiling?: object, callerCeiling?: object, record: object}} The identity.
 	 * @private
 	 */
-	#recordIdentity(record, callerWrapper, callerCeiling) {
-		const supplier = resolveSupplier(record);
-		if (supplier?.unaccounted) return { currentWrapper: null, callerWrapper, unresolved: true, unaccounted: true };
+	#recordIdentity(record, callerWrapper, callerCeiling, capture = null) {
+		const supplier = resolveSupplier(record, capture);
+		// Code that is accounted for and refused (a leaf's own function entered by a caller that may not call it).
+		if (supplier?.refused) return { currentWrapper: null, callerWrapper, unresolved: true };
+		// Code no one is named for, run inside a module's call: the call's leaf comes with it, so code a gone module (one
+		// removed, or replaced by a restart) made is refused as that module's code is (see runtime_refuseUnknownCaller).
+		if (supplier?.unaccounted)
+			return { currentWrapper: null, callerWrapper, unresolved: true, unaccounted: true, inCallOf: record.wrapper };
 		return {
 			currentWrapper: supplier ? supplier.wrapper : record.wrapper,
 			callerWrapper,
@@ -777,9 +1669,12 @@ export class LiveContextManager {
 	#registrationIdentity(store) {
 		const suspended = this.#suspendedFor(store);
 		const entered = this.#enteredFor(store);
-		const inFlight = suspended.size > 0 || entered.length > 0;
-		if (store.__authoritativeWrapper)
-			return { wrapper: store.__authoritativeWrapper, ceiling: store.__authoritativeCeiling ?? null, inFlight };
+		const inFlight = SetMethods.size(suspended) > 0 || entered.length > 0;
+		if (store.__authoritativeWrapper) {
+			const identity = this.#authoritativeIdentity(store, null, null);
+			if (identity.unresolved) return { wrapper: null, inFlight, ambiguous: true };
+			return { wrapper: identity.currentWrapper, ceiling: identity.ceiling ?? null, inFlight };
+		}
 		for (let index = entered.length - 1; index >= 0; index--) {
 			if (entered[index] === HOST_ENTRY) return { wrapper: null, inFlight };
 			if (entered[index] === UNATTRIBUTED_ENTRY) return { wrapper: null, inFlight, ambiguous: true };
@@ -787,22 +1682,59 @@ export class LiveContextManager {
 				// Code a caller handed the entered call registers as that caller, under the call's ceiling (#597).
 				const identity = this.#recordIdentity(entered[index], null, null);
 				if (identity.unresolved) return { wrapper: null, inFlight, ambiguous: true };
-				return { wrapper: identity.currentWrapper, ceiling: identity.ceiling ?? null, inFlight };
+				// The file's own code in a flow its load started registers for that load again, as the async runtime's store
+				// for the load carries on (see runModuleLoad).
+				const loading = entered[index].topLevel && identity.currentWrapper === entered[index].wrapper ? entered[index].loading : null;
+				return { wrapper: identity.currentWrapper, ceiling: identity.ceiling ?? null, inFlight, loading };
 			}
 		}
-		if (suspended.size === 0) {
+		if (SetMethods.size(suspended) === 0) {
 			const identity = this.#baselineIdentity(store);
 			if (identity.unresolved) return { wrapper: null, inFlight, ambiguous: true };
 			return { wrapper: identity.currentWrapper ?? null, ceiling: identity.ceiling ?? null, inFlight };
 		}
 		const resolved = this.#resolveSuspendedFromStack(suspended);
-		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED) return { wrapper: null, inFlight, ambiguous: true };
+		// One of several calls, the stack not saying which, is no one call to pin to: left unpinned too.
+		if (resolved === AMBIGUOUS || resolved === UNACCOUNTED || resolved?.tied) return { wrapper: null, inFlight, ambiguous: true };
 		// Code running as no module registers as no one, never as the host (#597).
 		if (!resolved) return this.#unattributedOnStack(suspended) ? { wrapper: null, inFlight, ambiguous: true } : { wrapper: null, inFlight };
 		if (resolved.unattributed) return { wrapper: null, inFlight, ambiguous: true };
 		const identity = this.#entryIdentity(resolved);
 		if (identity.unresolved) return { wrapper: null, inFlight, ambiguous: true };
 		return { wrapper: identity.currentWrapper ?? null, ceiling: identity.ceiling ?? null, inFlight };
+	}
+
+	/**
+	 * The suspended calls of a set that can be placed on a stack — a host-pinned call (`pin.caller()` with no module
+	 * caller) is tracked with no file, and has no module frame to match. Made again only once the suspended calls changed,
+	 * so reads between changes hand the placer the same list (see createFramePlacer).
+	 * @param {Set<object>} suspended - Suspended calls.
+	 * @returns {ArrayLike<object>} Those with a file, in the set's order (a bare list, see bareList). The list is only read.
+	 * @private
+	 */
+	#candidatesOf(suspended) {
+		return this.#suspendedState(suspended).candidates;
+	}
+
+	/**
+	 * What reads of a set of suspended calls need from the calls alone, made again only once they changed: the calls that
+	 * can be placed (see {@link LiveContextManager#candidatesOf}), and whether code that runs as no module is among them.
+	 * @param {Set<object>} suspended - Suspended calls.
+	 * @returns {{version: number, candidates: ArrayLike<object>, unattributed: boolean}} The state.
+	 * @private
+	 */
+	#suspendedState(suspended) {
+		let state = WeakMapMethods.get(this.#candidateLists, suspended);
+		if (state && state.version === this.#suspendedVersion) return state;
+		const candidates = bareList();
+		let unattributed = false;
+		SetMethods.forEach(suspended, (entry) => {
+			if (entry.filePath) candidates[candidates.length] = entry;
+			if (entry.unattributed) unattributed = true;
+		});
+		state = { version: this.#suspendedVersion, candidates, unattributed };
+		WeakMapMethods.set(this.#candidateLists, suspended, state);
+		return state;
 	}
 
 	/**
@@ -833,24 +1765,23 @@ export class LiveContextManager {
 	 * re-exports from, or code a browser leaf imports, runs inside that function or code it awaits.
 	 *
 	 * @param {Set<{currentWrapper: object, filePath: string|null, comparablePath: string, locations: Set<string>|null, moduleID: string|null, apiPath: string, fnName: string}>} suspended - Candidate calls.
+	 * @param {{capture: Iterable<object>|null}|null} [read=null] - Receives, as `capture`, the last capture of the stack read.
 	 * @returns {object|symbol|null} The matching entry, {@link AMBIGUOUS} when the stack cannot tell
 	 *   several candidates apart or the running code is no suspended call's, or null when no frame names any
 	 *   candidate.
 	 * @private
 	 */
-	#resolveSuspendedFromStack(suspended) {
-		// Host-pinned calls (`lockCaller.caller()` with no module caller) are tracked with no filePath:
+	#resolveSuspendedFromStack(suspended, read = null) {
+		// Host-pinned calls (`pin.caller()` with no module caller) are tracked with no filePath:
 		// they have no module frame to match. When only those are suspended, no candidate can match.
-		const candidates = [...suspended].filter((entry) => entry.filePath);
+		const candidates = this.#candidatesOf(suspended);
 		if (!candidates.length) return null;
-		// Each frame is placed by the shared placer (see createFramePlacer).
+		// Each frame is placed by the shared placer (see createFramePlacer). The same candidates list is handed in for as
+		// long as the suspended calls stay the same, so what they alone decide is looked up rather than worked out again.
 		const { place } = createFramePlacer(candidates);
 
-		// Enforcement keys on the api path within one instance; across instances the same api path is a
-		// different call, so the instance is part of what has to agree.
-		const callKey = (entry) => `${entry.family ?? ""}\u0000${entry.apiPath}`;
-
-		const settle = (matches) => (new Set(matches.map(callKey)).size === 1 ? matches[0] : AMBIGUOUS);
+		// Enforcement keys on the api path within one instance (see callKey).
+		const settle = (matches) => (oneCall(matches) ? matches[0] : AMBIGUOUS);
 
 		// Returns the answer, or undefined when the frames read ran out before one could be given. The last read
 		// (`final`) answers from the frames it has.
@@ -863,35 +1794,45 @@ export class LiveContextManager {
 			let byName = null;
 			// The synchronous frames below the outermost placed one: what started the job.
 			let below = [];
-			for (const frame of frames) {
-				if (frame.path.startsWith(FRAMEWORK_DIR + "/")) continue;
+			// Slothlet's own frames are passed over by their path alone, so they are read no further than that.
+			for (const frame of framesOf(frames)) {
+				if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) continue;
 				// Code compiled under another module's location runs in a script of its own: it places on nothing (#597).
 				if (isForeignScript(frame)) continue;
 				if (frame.async) syncEnded = true;
 				const placement = place(frame);
-				if (!syncEnded && !(placement && !(placement.byModule && !placement.matches.length))) below.push(frame);
+				// So is code placed by its plain path that does not run the file's own source (#691).
+				if (isUnverifiedCode(frame, placement)) continue;
+				if (!syncEnded && !(placement && !(placement.byModule && !placement.matches.length))) listPush(below, frame);
 				if (!placement) {
 					if (!byName) {
-						const named = candidates.filter((entry) => runtime_namesEntry(frame.head, entry));
+						const named = runtime_namedAmong(candidates, frame.head);
 						if (named.length) byName = named;
 					}
 					continue;
 				}
 				// A module's folder holding nothing suspended says nothing about which call is running.
 				if (placement.byModule && !placement.matches.length) continue;
-				if (syncEnded) awaiting.push({ frame, ...placement });
+				if (syncEnded) listPush(awaiting, { frame, ...placement });
 				else {
-					running.push({ frame, ...placement });
+					listPush(running, { frame, ...placement });
 					below = [];
 				}
 			}
 			if (!syncEnded && truncated) return undefined;
-			if (!running.length && !awaiting.length) return byName ? settle(byName) : truncated ? undefined : null;
+			if (!running.length && !awaiting.length) {
+				if (byName) return settle(byName);
+				if (truncated) return undefined;
+				// Cut off with the stack going on and nothing placed — inside slothlet's and Node's own frames, or inside
+				// a package's or the host's own recursion: nothing read says whose code is running, so it is not taken to
+				// be the host's.
+				return frames.truncated && !syncEnded ? CUT_OFF : null;
+			}
 
 			// With no placed frame of its own, the job is placed by the innermost flow awaiting it.
 			if (!running.length) {
 				if (!awaiting[0].matches.length) return AMBIGUOUS;
-				return this.#narrow(awaiting, null, callKey, truncated);
+				return this.#narrow(awaiting, null, truncated);
 			}
 			// A suspended call that resumed runs its own function: the outermost frame is that function, in the call's
 			// own file. Whatever it calls — another module's handler or a function another call returned — runs as
@@ -899,33 +1840,95 @@ export class LiveContextManager {
 			// Only a function with nothing but the microtask runner below it is resuming: one a boundary or another
 			// module calls has their frames below it.
 			const outermost = running[running.length - 1];
-			if (outermost.byFile && below.every(isRunnerFrame)) {
-				const resumed = outermost.matches.filter((entry) => runtime_namesEntry(outermost.frame.head, entry));
-				if (resumed.length && new Set(resumed.map(callKey)).size === 1) return resumed[0];
+			// Only a function with nothing but the microtask runner below it is picking up after an `await`.
+			const resuming = ArrayMethods.every(below, isRunnerFrame);
+			// The waiting calls of the file the job picked up in, when no name says which of them it is.
+			let fileCalls = null;
+			if (outermost.byFile && resuming) {
+				const resumed = runtime_namedAmong(outermost.matches, outermost.frame.head);
+				if (resumed.length && oneCall(resumed)) return resumed[0];
+				// The job started in the file of one waiting call alone, in a function nested in its export or a promise
+				// callback it made: that call is what picked up again. Code it has called since (another module's function
+				// it was handed) runs inside it, and whose code that is is told when the access is checked, by its frames,
+				// as it is in the async runtime.
+				if (outermost.matches.length && oneCall(outermost.matches)) return outermost.matches[0];
+				// Several calls of that file are waiting: the job is one of them. When nothing below settles which, the
+				// access is held to every one of them (see tiedIdentity).
+				if (outermost.matches.length) fileCalls = outermost.matches;
 			}
-			// Otherwise every placed frame of the synchronous part is code taking part in this access — the job's own, and
-			// the helpers it called or handed to a boundary — so all of them have to agree on the caller. Code no
-			// suspended call accounts for refuses.
-			let agreed = null;
-			for (const { matches } of running) {
-				agreed = agreed ? agreed.filter((entry) => matches.includes(entry)) : matches;
-				if (!agreed.length) return running.every((placed) => !placed.matches.length) ? UNACCOUNTED : AMBIGUOUS;
-			}
-			if (new Set(agreed.map(callKey)).size === 1) return agreed[0];
-			// Different functions of one file: a frame in a candidate's own file names the function as well.
-			for (const { frame, byFile } of running) {
-				if (!byFile) continue;
-				const pinned = agreed.filter((entry) => runtime_namesEntry(frame.head, entry));
-				if (pinned.length && new Set(pinned.map(callKey)).size === 1) return pinned[0];
-			}
-			return this.#narrow(awaiting, agreed, callKey, truncated);
+			const settled = this.#agree(running, awaiting, truncated, resuming ? suspended : null);
+			return fileCalls && (settled === AMBIGUOUS || settled === UNACCOUNTED) ? { tied: fileCalls } : settled;
 		};
 
 		// The capture is paid on every identity read while a call is suspended, so it starts small: the frames
 		// that decide sit near the top of the stack. Only a trace the budget cut short that settled nothing is
 		// read again, deeper. The capture is kept out of a leaf's reach; see runtime_captureFrames.
-		const answer = walk(runtime_captureFrames(25), false);
-		return answer !== undefined ? answer : walk(runtime_captureFrames(50), true);
+		const capture = (limit) => {
+			const frames = runtime_captureFrames(limit);
+			if (read) read.capture = frames;
+			return frames;
+		};
+		let answer = walk(capture(25), false);
+		if (answer === undefined) answer = walk(capture(50), true);
+		// Code recursing — Node's own (`util.inspect` deep in a value, say), a package's or the host's — can put more
+		// frames than that between an access and the code that started it. The stack is read further out, and when
+		// that still reaches the end of nothing the access is refused.
+		if (answer === CUT_OFF) answer = walk(capture(FAR_FRAMES), true);
+		return answer === CUT_OFF ? AMBIGUOUS : answer;
+	}
+
+	/**
+	 * Settle a job by the placed frames of its synchronous part: every one of them is code taking part in the access —
+	 * the job's own, and the helpers it called or handed to a boundary — so all of them have to agree on the caller.
+	 *
+	 * Code no suspended call accounts for is refused ({@link UNACCOUNTED}), with one exception: a function that picked
+	 * up after an `await` (`waiting` given) and that a suspended call is awaiting. That is another module's async
+	 * function a call ran, or a helper's a leaf handed out, resuming inside a call whose file does not import it. Which
+	 * call ran it the stack does not say (the call awaiting a promise need not be the call that started it), so it is
+	 * held to every suspended call there is (see {@link LiveContextManager#tiedIdentity}), and whose code it is is told
+	 * when the access is checked, by its frames, as in the async runtime. Such a function with no awaiting frame placed
+	 * (a call that returned its promise without awaiting it) is held the same way to the suspended calls that were handed
+	 * a function, when there are any (#917).
+	 *
+	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} running - Placed frames of the synchronous
+	 *   part, innermost first.
+	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} awaiting - Placed frames of the flows
+	 *   awaiting it, innermost first.
+	 * @param {boolean} truncated - Whether frames further out were cut off.
+	 * @param {Set<object>|null} waiting - Every suspended call, when the job is a function picking up after an `await`.
+	 * @returns {object|{tied: Array<object>}|symbol|undefined} The entry, the calls the access is held to, AMBIGUOUS,
+	 *   UNACCOUNTED, or undefined when more frames could still settle it.
+	 * @private
+	 */
+	#agree(running, awaiting, truncated, waiting) {
+		let agreed = null;
+		for (let ofIndex = 0, ofList = running; ofIndex < ofList.length; ofIndex++) {
+			const { matches } = ofList[ofIndex];
+			agreed = agreed ? keptAmong(agreed, matches) : matches;
+			if (agreed.length) continue;
+			if (!ArrayMethods.every(running, (placed) => !placed.matches.length)) return AMBIGUOUS;
+			if (!waiting) return UNACCOUNTED;
+			if (ArrayMethods.some(awaiting, (placed) => placed.matches.length))
+				return SetMethods.size(waiting) === 1 ? setToArray(waiting)[0] : { tied: setToArray(waiting) };
+			// The flows awaiting it may lie past the frames read.
+			if (truncated) return undefined;
+			// No frame of a waiting call is below it, but waiting calls were handed functions to run: a function passed into
+			// a call that returned its promise without awaiting it picks up there with nothing of the call on the stack
+			// (#917). It is held to every such call, and whose code it is is told by its frames when the access is checked,
+			// as the async runtime's store has it. With no waiting call handed a function, it is code no call accounts for.
+			const handed = filterList(setToArray(waiting), (entry) => entry.record?.handed === true);
+			if (handed.length) return handed.length === 1 ? handed[0] : { tied: handed };
+			return UNACCOUNTED;
+		}
+		if (oneCall(agreed)) return agreed[0];
+		// Different functions of one file: a frame in a candidate's own file names the function as well.
+		for (let ofIndex = 0, ofList = running; ofIndex < ofList.length; ofIndex++) {
+			const { frame, byFile } = ofList[ofIndex];
+			if (!byFile) continue;
+			const pinned = runtime_namedAmong(agreed, frame.head);
+			if (pinned.length && oneCall(pinned)) return pinned[0];
+		}
+		return this.#narrow(awaiting, agreed, truncated);
 	}
 
 	/**
@@ -933,24 +1936,24 @@ export class LiveContextManager {
 	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} placed - Placed frames to narrow by,
 	 *   innermost first.
 	 * @param {Array<object>|null} narrowed - The calls the job is already narrowed to, or null.
-	 * @param {function(object): string} callKey - What has to agree for enforcement.
 	 * @param {boolean} truncated - Whether frames further out were cut off.
 	 * @returns {object|symbol|undefined} The entry, AMBIGUOUS, or undefined when more frames could still settle it.
 	 * @private
 	 */
-	#narrow(placed, narrowed, callKey, truncated) {
-		for (const { frame, matches, byFile } of placed) {
+	#narrow(placed, narrowed, truncated) {
+		for (let ofIndex = 0, ofList = placed; ofIndex < ofList.length; ofIndex++) {
+			const { frame, matches, byFile } = ofList[ofIndex];
 			// Frames further out that are no suspended call's are flows awaiting this one: they cannot narrow.
 			if (!matches.length) continue;
-			let matched = narrowed ? matches.filter((entry) => narrowed.includes(entry)) : matches;
+			let matched = narrowed ? keptAmong(matches, narrowed) : matches;
 			if (!matched.length) return AMBIGUOUS;
-			if (new Set(matched.map(callKey)).size === 1) return matched[0];
+			if (oneCall(matched)) return matched[0];
 			// Different functions of one file: the frame names the function as well as the file. Only the text
 			// before the location is searched, so a name inside the path cannot match by accident. Not tried for
 			// a frame placed by module or import — the function there is the helper's, not the candidate's.
 			if (byFile) {
-				const pinned = matched.filter((entry) => runtime_namesEntry(frame.head, entry));
-				if (pinned.length && new Set(pinned.map(callKey)).size === 1) return pinned[0];
+				const pinned = runtime_namedAmong(matched, frame.head);
+				if (pinned.length && oneCall(pinned)) return pinned[0];
 			}
 			narrowed = matched;
 		}
@@ -975,8 +1978,18 @@ export class LiveContextManager {
 	#flowBelongsToInstance(currentID, instanceID) {
 		if (!currentID) return false;
 		if (currentID === instanceID) return true;
-		if (currentID.startsWith(instanceID + "__run_")) return true;
-		return this.instances.get(currentID)?.parentInstanceID === instanceID;
+		if (StringMethods.startsWith(currentID, instanceID + "__run_")) return true;
+		const store = MapMethods.get(this.instances, currentID);
+		const parent = store?.parentInstanceID;
+		if (!parent) return false;
+		if (parent === instanceID) return true;
+		// A flow of this instance under the ID a full reload is moving it from: the reload switches the instance to its new
+		// ID before its new copy loads, and moves the instance's run() / scope() stores over only once that copy is built.
+		// In between, a call a run makes is still the run's, not one on the instance's own new store.
+		const own = MapMethods.get(this.instances, instanceID);
+		if (own === undefined || own.parentInstanceID) return false;
+		const owner = own.slothlet;
+		return owner !== null && typeof owner === "object" && store.slothlet === owner;
 	}
 
 	/**
@@ -1002,16 +2015,74 @@ export class LiveContextManager {
 		 * @returns {Function[]} Each callback, pinned where there is a caller to pin it to.
 		 */
 		const pinMany = (listeners) => {
-			// The store of the instance actually executing (#592), and who on it registered the callbacks.
-			const store = this.tryGetContext();
-			if (!store) return listeners;
-			const { wrapper, ceiling, inFlight, ambiguous } = this.#registrationIdentity(store);
-			// Registered by the host with nothing in flight: nothing it could be mistaken for, so leave it
-			// alone. Unattributable module code: not handed the host's standing either.
-			if (ambiguous || (!wrapper && !inFlight)) return listeners;
-			return listeners.map((listener) =>
-				typeof listener === "function" ? pinListener(listener, store.instanceID, wrapper, ceiling ?? null) : listener
+			const pinned = pinManyFor(listeners);
+			// Registered while a function another module handed over runs for that module (see `ACTING_FOR` in
+			// `handlers/trusted-root`): each callback runs for that module too, whenever it is called back.
+			const acting = trustedRootOwn.actingForNow();
+			if (acting === null) return pinned;
+			return mapList(pinned, (listener) =>
+				typeof listener === "function"
+					? function slothlet_actingForListener(...args) {
+							return trustedRootOwn.runActingFor(acting, listener, this, args);
+						}
+					: listener
 			);
+		};
+		/**
+		 * {@link pinMany} for the identity alone.
+		 * @param {Function[]} listeners - Callbacks being registered.
+		 * @returns {Function[]} Each callback, pinned where there is a caller to pin it to.
+		 */
+		const pinManyFor = (listeners) => {
+			// The store of the instance actually executing (#592) — of the run() / scope() flow the registering code is part
+			// of, never one a sibling flow left in the active field — and who on it registered the callbacks.
+			const active = this.tryGetContext();
+			const store = active ? this.#flowStoreOf(active) : active;
+			const registration = store ? this.#registrationIdentity(store) : null;
+			// Registered by a file's own top level while slothlet loads it (#726): pinned to the load, so what the file
+			// starts runs as the file's module, as the async runtime's store for the load has it.
+			if (!registration?.wrapper && SetMethods.size(this.#loads)) {
+				const loading = loadOnStack(this.#loads);
+				if (loading !== null)
+					return mapList(listeners, (listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
+			}
+			if (!store) return listeners;
+			const { wrapper, ceiling, inFlight, ambiguous, loading } = registration;
+			if (loading) return mapList(listeners, (listener) => (typeof listener === "function" ? pinLoad(listener, loading) : listener));
+			// Registered by the host with nothing in flight: no identity to pin. Unattributable module code: not handed the
+			// host's standing either. Either way the callback still runs in the flow it was registered in, so it never
+			// sees the context of a run() / scope() flow open when it fires.
+			if (ambiguous || (!wrapper && !inFlight))
+				return mapList(listeners, (listener) => (typeof listener === "function" ? carryFlow(listener, store) : listener));
+			return mapList(listeners, (listener) =>
+				typeof listener === "function" ? carryFlow(pinListener(listener, store.instanceID, wrapper, ceiling ?? null), store) : listener
+			);
+		};
+		/**
+		 * The replacement for one callback that runs it in the flow it was registered in: the store's id is the active
+		 * one for its synchronous run, and what was active is put back after. The callback holds the store, so one a
+		 * `run()` / `scope()` registered still runs in that run's context after the run has returned (see
+		 * reopenFlowStore), for as long as the callback itself is kept.
+		 * @param {Function} listener - The callback, pinned or not.
+		 * @param {object} flowStore - The store it was registered in.
+		 * @returns {Function} The callback, run in that flow.
+		 */
+		const carryFlow = (listener, flowStore) => {
+			const flowID = flowStore.instanceID;
+			if (this.#pinSource === false) this.#pinSource = { instanceID: flowID, wrapper: null, ceiling: null, loading: null };
+			const ofRun = !!flowStore.parentInstanceID;
+			return function slothlet_flowCarriedListener(...args) {
+				const manager = liveContextManagerRef;
+				const previous = manager.#activeID;
+				const reopened = ofRun && manager.#reopenFlowStore(flowStore);
+				manager.#activeID = manager.#flowIfOpen(flowID);
+				try {
+					return FunctionMethods.apply(listener, this, args);
+				} finally {
+					manager.#activeID = previous;
+					if (reopened) manager.#closeFlowStore(flowStore);
+				}
+			};
 		};
 		/**
 		 * The pinned replacement for one callback.
@@ -1021,19 +2092,20 @@ export class LiveContextManager {
 		 * @param {object|null} ceiling - The call the registering code ran inside, when that call was not its own (#597).
 		 * @returns {Function} The pinned callback.
 		 */
-		const pinListener = (listener, instanceID, wrapper, ceiling) =>
-			function slothlet_pinnedEventListener(...args) {
+		const pinListener = (listener, instanceID, wrapper, ceiling) => {
+			if (this.#pinSource !== null) this.#pinSource = { instanceID, wrapper, ceiling, loading: null };
+			return function slothlet_pinnedEventListener(...args) {
 				// The instance can be gone by the time a deferred callback runs: a listener registered
 				// before shutdown, or a timer already scheduled, still fires afterwards. Re-entering a
 				// context that no longer exists throws CONTEXT_NOT_FOUND, and from a listener or timer
 				// there is nobody to catch it — it surfaces as an uncaught exception and takes the
 				// process down. Run the callback unpinned instead: with no context its `self` refuses,
 				// which is the same fail-closed answer any unattributed deferred work gets.
-				if (!liveContextManagerRef.instances.has(instanceID)) return listener.apply(this, args);
+				if (!MapMethods.has(liveContextManagerRef.instances, instanceID)) return FunctionMethods.apply(listener, this, args);
 				// rawErrors: a listener's own throw must reach its emitter unchanged. Without it
 				// runInContext would re-wrap anything that is not a SlothletError as
 				// CONTEXT_EXECUTION_FAILED, rewriting errors an `error` handler is meant to receive.
-				// Same reason the pinned-hook and lockCaller call sites pass it.
+				// Same reason the pinned-hook and pin call sites pass it.
 				// A host registration made while calls were in flight runs as the host (#595): left unpinned
 				// it would be attributed, when it runs, to whichever call is then the only one suspended.
 				if (!wrapper) return liveContextManagerRef.runRegisteredAsHost(instanceID, listener, this, args);
@@ -1054,10 +2126,370 @@ export class LiveContextManager {
 					false
 				);
 			};
+		};
+		/**
+		 * The pinned replacement for a callback a file registered while it loaded: run as the file's module, found when
+		 * the callback runs. With no module to run as (the file's node is gone, or which load registered it could not be
+		 * told) it runs as no one, and is refused.
+		 * @param {Function} listener - The callback.
+		 * @param {object|false} loading - The load (see createModuleLoad), or false when it could not be told.
+		 * @returns {Function} The pinned callback.
+		 */
+		const pinLoad = (listener, loading) => {
+			if (this.#pinSource !== null) this.#pinSource = { instanceID: null, wrapper: null, ceiling: null, loading };
+			return function slothlet_pinnedLoadListener(...args) {
+				const manager = liveContextManagerRef;
+				const instanceID = loading ? loading.instanceID() : null;
+				// The instance is gone: unpinned, as any callback that outlives its instance.
+				if (loading && (instanceID === null || !MapMethods.has(manager.instances, instanceID)))
+					return FunctionMethods.apply(listener, this, args);
+				const record = loading ? loading.record() : null;
+				if (!record) return manager.#runAsNoOne(instanceID, listener, this, args);
+				return manager.runInContext(
+					instanceID,
+					listener,
+					this,
+					args,
+					record.wrapper,
+					true,
+					false,
+					null,
+					null,
+					false,
+					false,
+					false,
+					record,
+					loading
+				);
+			};
+		};
+		/**
+		 * Pin the reactions registered on the promise a leaf's call returned to that call's caller, as resolved when it was
+		 * entered (see #callResults), instead of resolving who registered them from the stack: the code registering them
+		 * is the caller's, which the call's entry already resolved. Only where that answer is the one a registration would
+		 * give without reading the stack; anything else (null) is pinned as pinMany pins it.
+		 * @param {Promise<unknown>} result - The promise the call returned.
+		 * @param {Function[]} listeners - The reactions.
+		 * @returns {Function[]|null} Each reaction pinned, or null.
+		 */
+		const forResult = (result, listeners) => {
+			const call = WeakMapMethods.get(this.#callResults, result);
+			const identity = call?.identity;
+			// A caller that could not be told, a loading file, an authoritative entry: resolved as any registration is.
+			if (!identity || identity.unresolved || SetMethods.size(this.#loads) || call.store.__authoritativeWrapper) return null;
+			// A module caller is pinned with the record it ran under; one without (a caller several calls account for, or
+			// inherited from a scope) is resolved as any registration is.
+			if (identity.currentWrapper && !identity.record) return null;
+			// The registration's store is the flow the registering code is part of (see flowStoreOf): the call's own store
+			// when that is the active one and is no `run()` / `scope()` store, or the code is part of its flow without a
+			// look at the stack.
+			const store = call.store;
+			if (this.tryGetContext() !== store) return null;
+			const family = store.parentInstanceID;
+			if (
+				family &&
+				family !== store.instanceID &&
+				!this.#carriesAwaits &&
+				!ArrayMethods.some(this.#enteredFor(store), (entry) => entry !== null)
+			)
+				return null;
+			const wrapper = identity.currentWrapper ?? null;
+			const ceiling = wrapper ? (identity.ceiling ?? null) : null;
+			// The call is in flight, so a host caller is pinned as the host (#595).
+			return mapList(listeners, (listener) =>
+				typeof listener === "function" ? carryFlow(pinListener(listener, store.instanceID, wrapper, ceiling), store) : listener
+			);
+		};
 		const pinOne = (listener) => pinMany([listener])[0];
+		// A callback deferred in a run() / scope() is the run's work until it has run, been cleared or been removed (see
+		// holdForCurrentFlow in helpers/caller-pinning).
+		pinOne.hold = () => {
+			if (this.#nothingToPin()) return null;
+			const active = this.tryGetContext();
+			const store = active ? this.#flowStoreOf(active) : active;
+			return store ? holdRunWorkOnce(store[RUN_COPY]) : null;
+		};
+		// The run record of the run() / scope() running now, for work that starts later than it is registered (an
+		// observer counts from its first observe(), see holdForCurrentFlow in helpers/caller-pinning).
+		pinOne.record = () => {
+			if (this.#nothingToPin()) return null;
+			const active = this.tryGetContext();
+			const store = active ? this.#flowStoreOf(active) : active;
+			return store ? (store[RUN_COPY] ?? null) : null;
+		};
 		pinOne.many = pinMany;
+		pinOne.forResult = forResult;
+		pinOne.idle = () => this.#nothingToPin();
+		pinOne.scope = (listener) => this.#pinScope(pinOne, listener);
 		setApiCallerPinner(pinOne);
 		liveContextManagerRef = this;
+	}
+
+	/**
+	 * Whether a callback registered now would run exactly as it does unpinned: no `run()` / `scope()` flow is active, no
+	 * module call is executing, waiting or started the flow running now, no file is loading and no resource scope is
+	 * open. The active-instance field then names an instance's own store, as it will when a callback the event loop
+	 * calls from an empty stack runs. A few field reads, so a boundary that sees many calls outside every flow (see
+	 * `helpers/node-callback-context`) pays nothing more.
+	 * @returns {boolean} True when there is nothing to pin.
+	 * @private
+	 */
+	#nothingToPin() {
+		if (this.#syncDepth !== 0 || this.#runningStarter !== null || this.#scopes.length !== 0 || this.#pendingScope !== null) return false;
+		if (SetMethods.size(this.#busyStores) !== 0 || SetMethods.size(this.#loads) !== 0) return false;
+		const id = this.#activeID;
+		if (id === null) return true;
+		const store = MapMethods.get(this.instances, id);
+		// A removed run() / scope() store stands for its instance's own (see removedRunBase).
+		if (store === undefined) return this.#removedRunBase(id) !== id;
+		return !store.parentInstanceID && !store.__authoritativeWrapper && !(store.__enteredCalls?.length > 0);
+	}
+
+	/**
+	 * Pin a callback that runs code in a resource's scope: what an `AsyncResource`, a function
+	 * `AsyncLocalStorage.snapshot()` made or one `AsyncLocalStorage.bind()` bound runs later (see
+	 * `helpers/async-resource-context`). Whoever holds the resource chooses the code it runs, so the pin is entered as it
+	 * would be for any callback, and the frames tell whose code it is once the code reads anything: the code of the
+	 * module (or the load, or the host) that made the resource keeps it, as does code that code calls; anyone else's code
+	 * runs as whatever was running where the resource was used, as though nothing had been pinned (see
+	 * {@link LiveContextManager#settleScope}). This is the async runtime's rule for code that enters another flow by
+	 * itself (see `runningOutsideFlow` in `handlers/frame-placement`).
+	 * @param {Function} pinOne - The pinner (see {@link LiveContextManager#registerEventEmitterContextChecker}).
+	 * @param {Function} listener - The callback.
+	 * @returns {Function} The pinned callback; the callback itself when there is nothing to pin it to.
+	 * @private
+	 */
+	#pinScope(pinOne, listener) {
+		const manager = this;
+		/**
+		 * The callback, run inside the pin.
+		 * @param {...*} args - Its arguments.
+		 * @returns {*} What it returned.
+		 */
+		const entered = function slothlet_resourceScopeEntered(...args) {
+			return manager.#runScope(listener, this, args);
+		};
+		this.#pinSource = false;
+		let pinned;
+		let source;
+		try {
+			pinned = pinOne(entered);
+		} finally {
+			source = this.#pinSource;
+			this.#pinSource = null;
+		}
+		if (pinned === entered) return listener;
+		return function slothlet_resourceScope(...args) {
+			const outer = manager.#pendingScope;
+			manager.#pendingScope = { state: manager.#scopeState(), ...manager.#scopeSource(source) };
+			let result;
+			try {
+				result = FunctionMethods.apply(pinned, this, args);
+			} finally {
+				manager.#pendingScope = outer;
+			}
+			if (result !== SCOPE_RESULT) return result;
+			result = manager.#scopeResult;
+			manager.#scopeResult = undefined;
+			return result;
+		};
+	}
+
+	/**
+	 * Whose code a resource scope is about to run in, and whether the code using the resource is that code: the module
+	 * of the call or load the scope is pinned to (with the call that code ran inside, when it was handed it), or the
+	 * host's for a pin to the host. Code of the scope's own, or the host's, putting the scope in place keeps it, as in the
+	 * async runtime (see `runningOutsideFlow` in `handlers/frame-placement`): nothing in the scope is told then.
+	 * @param {object|false|null} source - What the scope was pinned to (see {@link LiveContextManager#pinSource}).
+	 * @returns {{owners: Array<object>, family: string|null, kept: boolean}} The scope's code.
+	 * @private
+	 */
+	#scopeSource(source) {
+		const owners = [];
+		let instanceID = null;
+		if (source) {
+			if (source.loading) {
+				const loading = source.loading;
+				instanceID = loading.instanceID();
+				const record = loading.record();
+				if (record?.wrapper) listPush(owners, record.wrapper);
+				// The loaded file itself, which a module's node need not name: its code is the load's.
+				if (typeof loading.filePath === "string")
+					listPush(
+						owners,
+						Objects.freeze({
+							__proto__: null,
+							slothlet: loading.slothlet,
+							____slothletInternal: Objects.freeze({ __proto__: null, filePath: loading.filePath, apiPath: "", moduleID: loading.moduleID })
+						})
+					);
+			} else {
+				instanceID = source.instanceID;
+				if (source.wrapper) listPush(owners, source.wrapper);
+				const ceiling = source.ceiling;
+				if (Arrays.isArray(ceiling)) appendList(owners, ceiling);
+				else if (ceiling) listPush(owners, ceiling);
+			}
+		}
+		const store = instanceID === null ? undefined : MapMethods.get(this.instances, instanceID);
+		const family = store ? (store.parentInstanceID ?? store.instanceID) : null;
+		if (family === null) return { owners, family, kept: true };
+		let answer;
+		this.#tellingScope = true;
+		try {
+			answer = runningOutsideFlow(family, owners);
+		} catch {
+			// The stack could not be read (the global `Error` was changed): the code is not taken for the scope's.
+			answer = { outside: true };
+		} finally {
+			this.#tellingScope = false;
+		}
+		return { owners, family, kept: answer === null || !answer.outside };
+	}
+
+	/**
+	 * Run a resource scope's callback inside the pin it was entered through, remembering what the pin changed so the scope
+	 * can be told (see {@link LiveContextManager#settleScope}).
+	 * @param {Function} listener - The callback.
+	 * @param {*} thisArg - Its receiver.
+	 * @param {Array<*>} args - Its arguments.
+	 * @returns {*} What it returned.
+	 * @private
+	 */
+	#runScope(listener, thisArg, args) {
+		const pending = this.#pendingScope;
+		this.#pendingScope = null;
+		// Put in place by the scope's own code, or not told at all: the pin stands, as for any callback.
+		if (pending === null || pending.kept) return FunctionMethods.apply(listener, thisArg, args);
+		const scope = this.#scopeOf(pending.state, this.#scopeState(), pending);
+		// Nothing was entered (the instance the pin was made for is gone): the callback runs as it is.
+		if (scope === null) return FunctionMethods.apply(listener, thisArg, args);
+		listPush(this.#scopes, scope);
+		let result;
+		try {
+			result = FunctionMethods.apply(listener, thisArg, args);
+		} finally {
+			ArrayMethods.pop(this.#scopes);
+			// Put the pin back in place for its own exit, which restores what it replaced.
+			if (scope.swapped) this.#applyScopeState(scope, "after");
+		}
+		// The pin holds its state until a promise the callback returns settles, for the code after the callback's
+		// `await`s. It is not held for code that was told to be someone else's, nor for an async callback that read
+		// nothing before its first `await`: nothing said whose code that is, and what runs after the `await` is told from
+		// the stack, as any code no pin holds. The pin's exit then restores its state at once.
+		if (scope.swapped || (!scope.own && util.types.isPromise(result))) {
+			this.#scopeResult = result;
+			return SCOPE_RESULT;
+		}
+		return result;
+	}
+
+	/**
+	 * What a pin changes: the active-instance field, and each store's entered calls and caller fields.
+	 * @returns {{activeID: string|null, stores: Array<{store: object, entered: Array<*>, fields: Array<*>}>}} The state.
+	 * @private
+	 */
+	#scopeState() {
+		const stores = [];
+		for (let ofIndex = 0, ofList = mapValuesToArray(this.instances); ofIndex < ofList.length; ofIndex++) {
+			const store = ofList[ofIndex];
+			listPush(stores, {
+				store,
+				entered: copyList(this.#enteredFor(store)),
+				fields: [store.currentWrapper, store.callerWrapper, store.callerCeiling, store.__authoritativeWrapper, store.__authoritativeCeiling]
+			});
+		}
+		return { activeID: this.#activeID, stores };
+	}
+
+	/**
+	 * A resource scope: what its pin changed, and the code that keeps it (see {@link LiveContextManager#scopeSource}).
+	 * Null when the pin entered nothing.
+	 * @param {object} before - The state before the pin (see {@link LiveContextManager#scopeState}).
+	 * @param {object} after - The state inside it.
+	 * @param {{owners: Array<object>, family: string}} source - The code that keeps it.
+	 * @returns {{before: string|null, after: string|null, touched: Array<object>, owners: Array<object>, family: string, swapped: boolean, own: boolean}|null} The scope.
+	 * @private
+	 */
+	#scopeOf(before, after, source) {
+		const store = MapMethods.get(this.instances, after.activeID);
+		if (!store) return null;
+		const touched = [];
+		for (let ofIndex = 0, ofList = after.stores; ofIndex < ofList.length; ofIndex++) {
+			const now = ofList[ofIndex];
+			const was = ArrayMethods.find(before.stores, (state) => state.store === now.store);
+			if (!was) continue;
+			let changed = was.entered.length !== now.entered.length;
+			for (let i = 0; !changed && i < now.fields.length; i++) changed = was.fields[i] !== now.fields[i];
+			if (changed) listPush(touched, { store: now.store, before: was, after: now });
+		}
+		if (!touched.length && before.activeID === after.activeID) return null;
+		return {
+			before: before.activeID,
+			after: after.activeID,
+			touched,
+			owners: source.owners,
+			family: source.family,
+			swapped: false,
+			own: false
+		};
+	}
+
+	/**
+	 * Put the stores a resource scope's pin changed back as they were before it, or as the pin left them.
+	 * @param {object} scope - The scope (see {@link LiveContextManager#scopeOf}).
+	 * @param {"before"|"after"} which - Which state.
+	 * @returns {void}
+	 * @private
+	 */
+	#applyScopeState(scope, which) {
+		this.#activeID = scope[which];
+		for (let ofIndex = 0, ofList = scope.touched; ofIndex < ofList.length; ofIndex++) {
+			const touched = ofList[ofIndex];
+			const { entered, fields } = touched[which];
+			const now = this.#enteredFor(touched.store);
+			now.length = 0;
+			appendList(now, entered);
+			touched.store.currentWrapper = fields[0];
+			touched.store.callerWrapper = fields[1];
+			touched.store.callerCeiling = fields[2];
+			touched.store.__authoritativeWrapper = fields[3];
+			touched.store.__authoritativeCeiling = fields[4];
+		}
+	}
+
+	/**
+	 * Tell the innermost resource scope by the code running in it, once that code reads anything (see
+	 * {@link LiveContextManager#pinScope}): code of anyone but the module the scope was pinned to takes the pin back
+	 * out, so it and the rest of the scope's synchronous code run as whatever was running where the resource was used.
+	 * Only code running directly in the scope is told: a call it entered since was entered as whatever the scope was
+	 * when that call began.
+	 * @returns {void}
+	 * @private
+	 */
+	#settleScope() {
+		const scope = this.#scopes[this.#scopes.length - 1];
+		if (scope.swapped || this.#tellingScope) return;
+		for (let ofIndex = 0, ofList = scope.touched; ofIndex < ofList.length; ofIndex++) {
+			const touched = ofList[ofIndex];
+			if (this.#enteredFor(touched.store).length !== touched.after.entered.length) return;
+		}
+		this.#tellingScope = true;
+		let answer;
+		try {
+			answer = runningOutsideFlow(scope.family, scope.owners);
+		} catch {
+			// The stack could not be read (the global `Error` was changed): the code is not taken for the scope's.
+			answer = { outside: true };
+		} finally {
+			this.#tellingScope = false;
+		}
+		if (answer === null || !answer.outside) {
+			if (answer !== null) scope.own = true;
+			return;
+		}
+		scope.swapped = true;
+		this.#applyScopeState(scope, "before");
 	}
 
 	/**
@@ -1068,8 +2500,11 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#enterHost() {
-		const stores = [...this.instances.values()];
-		for (const store of stores) this.#enteredFor(store).push(HOST_ENTRY);
+		const stores = mapValuesToArray(this.instances);
+		for (let ofIndex = 0, ofList = stores; ofIndex < ofList.length; ofIndex++) {
+			const store = ofList[ofIndex];
+			listPush(this.#enteredFor(store), HOST_ENTRY);
+		}
 		return stores;
 	}
 
@@ -1082,7 +2517,10 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#leaveHost(stores) {
-		for (const store of stores) this.#enteredFor(store).pop();
+		for (let ofIndex = 0, ofList = stores; ofIndex < ofList.length; ofIndex++) {
+			const store = ofList[ofIndex];
+			ArrayMethods.pop(this.#enteredFor(store));
+		}
 	}
 
 	/**
@@ -1106,20 +2544,401 @@ export class LiveContextManager {
 	 */
 	runRegisteredAsHost(instanceID, fn, thisArg, args) {
 		// The instance shut down after the registration: nothing left to attribute to.
-		if (!this.instances.has(instanceID)) return fn.apply(thisArg, args);
+		if (!MapMethods.has(this.instances, instanceID)) return FunctionMethods.apply(fn, thisArg, args);
 		const previousInstanceID = this.#activeID;
 		this.#activeID = instanceID;
 		const stores = this.#enterHost();
 		this.#syncDepth++;
 		let result;
 		try {
-			result = fn.apply(thisArg, args);
+			result = FunctionMethods.apply(fn, thisArg, args);
 		} finally {
 			this.#syncDepth--;
 			this.#leaveHost(stores);
 			this.#activeID = previousInstanceID;
 		}
 		return result;
+	}
+
+	/**
+	 * The loads of module files in progress (see {@link LiveContextManager#runModuleLoad}).
+	 * @type {Set<object>}
+	 * @private
+	 */
+	#loads = new Set();
+
+	/**
+	 * Run the load of a module file, remembered as in progress until it settles (#726): what the file's top level
+	 * registers meanwhile (a timer, a listener, a reaction) is pinned to the load, and runs later as the file's module.
+	 * The async manager carries the same identity in a store.
+	 *
+	 * @param {object} loading - The load (see createModuleLoad).
+	 * @param {function(): *} fn - What loads the file.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runModuleLoad(loading, fn) {
+		SetMethods.add(this.#loads, loading);
+		let result;
+		try {
+			result = fn();
+		} catch (error) {
+			SetMethods.delete(this.#loads, loading);
+			throw error;
+		}
+		if (!util.types.isPromise(result)) {
+			SetMethods.delete(this.#loads, loading);
+			return result;
+		}
+		const done = () => SetMethods.delete(this.#loads, loading);
+		nativeThen(result, done, done);
+		return result;
+	}
+
+	/**
+	 * Whether nothing slothlet entered is executing on an instance's store: no call, no pin to the host, no code run as
+	 * no module. Code running then was started by nothing slothlet entered, so only its frames can say whose it is.
+	 * @param {string} instanceID - The instance.
+	 * @returns {boolean} True when nothing is entered.
+	 * @internal
+	 */
+	isAmbient(instanceID) {
+		const store = this.tryGetContext(instanceID);
+		if (!store) return true;
+		if (store.__authoritativeWrapper) return false;
+		return ArrayMethods.every(this.#enteredFor(store), (entry) => entry === null);
+	}
+
+	/**
+	 * The instance whose flow is running: the one slothlet entered synchronously (a call, a pinned callback, a `run()`
+	 * or `scope()` callback) or whose waiting call the stack shows to have picked up, or null when nothing names one.
+	 * The active-instance field alone does not: it keeps naming the last instance used while no flow of any runs. Code
+	 * of a file that carries no instance tag (a CommonJS file two instances load) is that instance's while its flow
+	 * runs.
+	 * @returns {string|null} The instance's id.
+	 * @internal
+	 * @example
+	 * contextManager.runningInstanceID(); // "slothlet_abc" inside one of its calls, null in the host's own flow
+	 */
+	runningInstanceID() {
+		const id = this.currentInstanceID;
+		if (id === null || id === undefined) return null;
+		const family = this.#familyOf(id);
+		// Naming an instance's own store while nothing of any instance is entered or waiting, the field is only the
+		// last instance used. A `run()` / `scope()` store is active only while its callback runs.
+		if (id === family && this.#syncDepth === 0 && SetMethods.size(this.#busyStores) === 0) return null;
+		return family;
+	}
+
+	/**
+	 * Run a callback as no module and not as the host, for as long as its synchronous body runs: a permission check made
+	 * from it fails closed.
+	 * @param {string|null} instanceID - The instance, or null to hold every instance's store.
+	 * @param {Function} fn - The callback.
+	 * @param {*} thisArg - `this` for it.
+	 * @param {Array} args - Its arguments.
+	 * @returns {*} What it returned.
+	 * @private
+	 */
+	#runAsNoOne(instanceID, fn, thisArg, args) {
+		const stores =
+			instanceID !== null && MapMethods.has(this.instances, instanceID)
+				? [MapMethods.get(this.instances, instanceID)]
+				: mapValuesToArray(this.instances);
+		for (let ofIndex = 0, ofList = stores; ofIndex < ofList.length; ofIndex++) {
+			const store = ofList[ofIndex];
+			listPush(this.#enteredFor(store), UNATTRIBUTED_ENTRY);
+		}
+		this.#syncDepth++;
+		try {
+			return FunctionMethods.apply(fn, thisArg, args);
+		} finally {
+			this.#syncDepth--;
+			for (let ofIndex = 0, ofList = stores; ofIndex < ofList.length; ofIndex++) {
+				const store = ofList[ofIndex];
+				ArrayMethods.pop(this.#enteredFor(store));
+			}
+		}
+	}
+
+	/**
+	 * Run a `run()` / `scope()` callback in its store, marked on the stack as one (see {@link slothlet_liveRunBody}).
+	 * Where each flow is carried across its promise jobs (see {@link LiveContextManager#holdFlowHooks}) the store is the
+	 * active one only while the callback runs synchronously, and its own promise jobs pick up in it; code after the
+	 * `run()` call goes on in the flow it was in. Without promise hooks (a browser) the store stays active until the
+	 * callback's promise settles, so the callback's own code after a bare `await` finds it.
+	 * @param {string} flowID - The `run()` / `scope()` store's id.
+	 * @param {Function} fn - The callback.
+	 * @param {Array<*>} args - Its arguments.
+	 * @returns {Promise<*>} What it returned.
+	 * @internal
+	 */
+	runFlowBody(flowID, fn, args) {
+		// What the flow schedules is carried only through the patched schedulers (see runInContext).
+		reinstateSchedulerPatching();
+		if (this.#carriesAwaits) {
+			const previous = this.#activeID;
+			this.#activeID = flowID;
+			try {
+				return slothlet_liveRunBody(fn, args);
+			} finally {
+				this.#activeID = previous;
+			}
+		}
+		const previous = this.currentInstanceID;
+		this.#activeID = flowID;
+		const manager = this;
+		return (async function slothlet_liveRunFlow() {
+			try {
+				return await slothlet_liveRunBody(fn, args);
+			} finally {
+				manager.#activeID = previous;
+			}
+		})();
+	}
+
+	/**
+	 * Run `fn` in a flow of its own that carries `value` as the mark `key` (slothlet's marks of a reload's, a restart's
+	 * or a run's copy's build, and of the ID a lazy load runs under), as the async runtime carries them in an
+	 * `AsyncLocalStorage`. The flow is a store over the one the running code is part of (see
+	 * {@link LiveContextManager#runParent}): the same instance, context, `self`, caller and run, with the mark added,
+	 * carried as every flow of this manager is (its promise jobs, the patched schedulers, pinned listeners), so a mark
+	 * reaches exactly as far as a `run()`'s context does. The store leaves the instances once `fn` has settled; work it
+	 * left behind runs in it, as work a `run()` left behind runs in the run's (see reopenFlowStore).
+	 * @param {string} instanceID - The instance.
+	 * @param {symbol} key - The mark.
+	 * @param {*} value - Its value.
+	 * @param {function(): *} fn - What runs in the flow.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runMarked(instanceID, key, value, fn) {
+		const parent = this.runParent(instanceID);
+		// The instance has no store (it is not loaded): there is no flow of it to carry the mark in.
+		if (parent === undefined) return fn();
+		SetMethods.add(this.#markKeys, key);
+		const store = this.#markStoreOver(parent, parent);
+		store[key] = value;
+		return this.#runInMarkStore(store, fn, false);
+	}
+
+	/**
+	 * Run a lazy node's load apart from every flow (see `runtime_loadApart` in unified-wrapper), as
+	 * {@link LiveContextManager#runDetached} runs code, keeping the marks the flow asking for it carries (see
+	 * {@link LiveContextManager#runMarked}): a load into a run's tree runs as that tree's build, with no caller, in a flow
+	 * over the instance's own store, as an eager tree's build does. With no mark to keep, it runs detached.
+	 * @param {function(): *} fn - The load.
+	 * @returns {*} What it returned.
+	 * @internal
+	 */
+	runLoadApart(fn) {
+		const id = this.#activeID;
+		const from = id === null ? undefined : MapMethods.get(this.instances, id);
+		let marked = false;
+		if (from !== undefined) for (const key of setValues(this.#markKeys)) if (Objects.hasOwn(from, key)) marked = true;
+		const base = marked ? MapMethods.get(this.instances, from.parentInstanceID ?? from.instanceID) : undefined;
+		if (base === undefined) return this.runDetached(fn, undefined, []);
+		const store = this.#markStoreOver(base, from);
+		// No call's identity: the load is no call's.
+		for (let ofIndex = 0, ofList = IDENTITY_FIELDS; ofIndex < ofList.length; ofIndex++) delete store[ofList[ofIndex]];
+		return this.#runInMarkStore(store, fn, true);
+	}
+
+	/**
+	 * A store for a flow of its own over `parent` (see {@link LiveContextManager#runMarked}), with the marks `from`
+	 * carries, registered among the instances.
+	 * @param {object} parent - The store the flow is over: its instance, context, `self`, caller and run.
+	 * @param {object} from - The store whose marks the flow carries.
+	 * @returns {object} The store.
+	 * @private
+	 */
+	#markStoreOver(parent, from) {
+		const family = parent.parentInstanceID ?? parent.instanceID;
+		const store = {};
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(parent); ofIndex < ofList.length; ofIndex++) {
+			const field = ofList[ofIndex];
+			// What this manager keeps per store (calls entered and suspended on it, its resting caller, the hooks it holds) is
+			// the parent's own; the context-key records are the flow's.
+			if (typeof field === "string" && StringMethods.startsWith(field, "__") && field !== "__contextOwners" && field !== "__ownKeys")
+				continue;
+			Objects.defineProperty(store, field, Reflect.getOwnPropertyDescriptor(parent, field));
+		}
+		this.carryMarks(from, store);
+		// Over the instance's own store, the flow stands for that store: no flow the host opened (see INSTANCE_FLOW). A
+		// flow over one that does is copied with its marker above.
+		if (!parent.parentInstanceID) Objects.defineProperty(store, INSTANCE_FLOW, { __proto__: null, value: true, configurable: true });
+		this.#markFlows++;
+		store.instanceID = `${family}__run_mark_${this.#markFlows}`;
+		store.parentInstanceID = family;
+		MapMethods.set(this.instances, store.instanceID, store);
+		// Work the flow leaves behind can outlive it and a reload: the reload moves the store to the new ID.
+		trackFlowStore(store.slothlet, store);
+		return store;
+	}
+
+	/**
+	 * Run `fn` with a store {@link LiveContextManager#markStoreOver} made active, as a `run()`'s callback runs in its
+	 * store, and take the store out of the instances once `fn` has settled.
+	 * @param {object} store - The store.
+	 * @param {function(): *} fn - What runs.
+	 * @param {boolean} held - Whether the synchronous part is held synchronous (see {@link LiveContextManager#runDetached}).
+	 * @returns {*} What `fn` returned.
+	 * @private
+	 */
+	#runInMarkStore(store, fn, held) {
+		const id = store.instanceID;
+		const leave = () => {
+			if (MapMethods.get(this.instances, id) === store) MapMethods.delete(this.instances, id);
+		};
+		// What the flow schedules is carried only through the patched schedulers (see runInContext).
+		reinstateSchedulerPatching();
+		const previous = this.#activeID;
+		this.#activeID = id;
+		if (held) this.#syncDepth++;
+		let result;
+		try {
+			result = fn();
+		} catch (error) {
+			this.#activeID = previous;
+			leave();
+			throw error;
+		} finally {
+			if (held) this.#syncDepth--;
+		}
+		if (!util.types.isPromise(result)) {
+			this.#activeID = previous;
+			leave();
+			return result;
+		}
+		// With each flow carried across its promise jobs, the field is put back once the synchronous part returns; without
+		// (a browser) it names the flow until its promise settles, as a `run()`'s does (see runFlowBody).
+		const carried = this.#carriesAwaits;
+		if (carried) this.#activeID = previous;
+		const done = () => {
+			if (!carried && this.#activeID === id) this.#activeID = previous;
+			leave();
+		};
+		nativeThen(result, done, done);
+		return result;
+	}
+
+	/**
+	 * The mark `key` the flow of an instance's code running now carries (see {@link LiveContextManager#runMarked}).
+	 * @param {string} instanceID - The instance.
+	 * @param {symbol} key - The mark.
+	 * @returns {*} Its value, or undefined.
+	 * @internal
+	 */
+	markOf(instanceID, key) {
+		if (!SetMethods.has(this.#markKeys, key)) return undefined;
+		// The field as it stands, not as the stack tells it: telling it can read the instance's fields, which ask for the
+		// mark again. With each flow carried across its promise jobs it names the code's own flow; without, the last flow
+		// entered, as for a run()'s context (see runFlowBody).
+		const id = this.#activeID;
+		const store = id === null ? undefined : MapMethods.get(this.instances, id);
+		if (store === undefined || !Objects.hasOwn(store, key)) return undefined;
+		// A flow of this instance, also under an ID a reload has moved it from.
+		if (store.parentInstanceID !== instanceID) {
+			const own = MapMethods.get(this.instances, instanceID);
+			if (own === undefined || own.slothlet === undefined || own.slothlet !== store.slothlet) return undefined;
+		}
+		return store[key];
+	}
+
+	/**
+	 * Give a store opened in a flow (a `run()` / `scope()`) the marks that flow carries (see
+	 * {@link LiveContextManager#runMarked}), as an `AsyncLocalStorage` value reaches a run opened in its flow.
+	 * @param {object} from - The store of the flow.
+	 * @param {object} to - The new store.
+	 * @returns {void}
+	 * @internal
+	 */
+	carryMarks(from, to) {
+		for (const key of setValues(this.#markKeys)) if (Objects.hasOwn(from, key)) to[key] = from[key];
+	}
+
+	/**
+	 * The store a new `run()` / `scope()` of an instance takes its context and caller from. The active-instance field
+	 * names the store of the last `run()` / `scope()` entered until it returns, so a `run()` that is still waiting at an
+	 * `await` would hand its context to a sibling `run()` opened meanwhile from elsewhere. That store is the parent only
+	 * when the code opening the new one is part of its flow: a call of the instance is executing on it, a call waiting on
+	 * it is the code that picked up, or a `run()` / `scope()` callback is on the stack (synchronously or at an `await`
+	 * further out). Otherwise the instance's own store is the parent. Where each flow is carried across its promise jobs
+	 * (Node) the field names the code's own flow, and is taken as it is.
+	 * @param {string} instanceID - The instance.
+	 * @returns {object|undefined} The store; undefined when the instance has none.
+	 * @internal
+	 */
+	runParent(instanceID) {
+		const base = MapMethods.get(this.instances, instanceID);
+		const activeID = this.currentInstanceID;
+		const store = activeID && this.#flowBelongsToInstance(activeID, instanceID) ? MapMethods.get(this.instances, activeID) : undefined;
+		if (!store || store === base) return base;
+		// With each flow carried across its promise jobs, the field names the code's own flow.
+		if (this.#carriesAwaits) return store;
+		return this.#partOfFlow(store) ? store : base;
+	}
+
+	/**
+	 * The store of the flow the code running now is part of, given the store the active field resolves to: that store
+	 * when it is an instance's own or the code is part of its `run()` / `scope()` flow (see
+	 * {@link LiveContextManager#runParent}), otherwise its instance's own store.
+	 * @param {object} store - The active store.
+	 * @returns {object} The store of the code's flow.
+	 * @private
+	 */
+	#flowStoreOf(store) {
+		const family = store.parentInstanceID;
+		// With each flow carried across its promise jobs, the field names the code's own flow.
+		if (!family || family === store.instanceID || this.#carriesAwaits) return store;
+		const base = MapMethods.get(this.instances, family);
+		if (!base || this.#partOfFlow(store)) return store;
+		return base;
+	}
+
+	/**
+	 * Whether the code running now is part of a `run()` / `scope()` store's flow: a call of the instance is executing on
+	 * it, a call waiting on it is the code that picked up, a `run()` / `scope()` callback is on the stack, or the store is
+	 * back for work its finished run left behind (see {@link LiveContextManager#reopenFlowStore}).
+	 * @param {object} store - The store.
+	 * @returns {boolean} True when it is.
+	 * @private
+	 */
+	#partOfFlow(store) {
+		// A store put back for work its finished run left behind is among the instances only while that work runs (see
+		// reopenFlowStore): the code running now is that work, so what it schedules, and a run() it opens, are the run's.
+		if (store[REOPENED_FLOW] === true) return true;
+		if (store.__authoritativeWrapper || ArrayMethods.some(this.#enteredFor(store), (entry) => entry !== null)) return true;
+		const suspended = this.#suspendedFor(store);
+		if (SetMethods.size(suspended)) {
+			const resolved = this.#resolveSuspendedFromStack(suspended);
+			if (resolved && typeof resolved === "object" && !resolved.tied) return true;
+		}
+		return this.#runBodyOnStack();
+	}
+
+	/**
+	 * Whether the code running now is part of a `run()` / `scope()` callback: the callback's frame of slothlet's own (see
+	 * {@link slothlet_liveRunBody}) is on the stack, synchronously or at an `await` further out.
+	 * @returns {boolean} True when it is.
+	 * @private
+	 */
+	#runBodyOnStack() {
+		let frames;
+		try {
+			frames = runtime_captureFrames(RUN_BODY_FRAMES);
+		} catch {
+			// The stack could not be read (the global `Error` was changed): the code is not taken for a callback's.
+			return false;
+		}
+		// Every frame described in full (not the lean walk): the frame is found by its function's name.
+		const walk = Arrays.isArray(frames) ? listSteps(frames) : frames[Symbol.iterator]();
+		for (let step = walk.next(); !step.done; step = walk.next()) {
+			const frame = step.value;
+			if (!StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) continue;
+			if (StringMethods.includes(frame.head ?? "", "slothlet_liveRunBody")) return true;
+		}
+		return false;
 	}
 
 	/**
@@ -1163,7 +2982,7 @@ export class LiveContextManager {
 	runUnattributed(instanceID, fn, building = {}) {
 		const currentID = this.currentInstanceID;
 		const targetInstanceID = this.#flowBelongsToInstance(currentID, instanceID) ? currentID : instanceID;
-		const store = this.instances.get(targetInstanceID);
+		const store = MapMethods.get(this.instances, targetInstanceID);
 		if (!store) return fn();
 		const identity = this.#identityFor(store);
 		if (!identity.currentWrapper && !identity.unresolved) return fn();
@@ -1182,16 +3001,18 @@ export class LiveContextManager {
 		store.__authoritativeWrapper = null;
 		store.__authoritativeCeiling = null;
 		let restored = false;
+		// Put back once the synchronous part returns when the flow is carried across promise jobs (see runInContext).
+		const carriesAwaits = this.#carriesAwaits;
 		const restore = () => {
 			if (restored) return;
 			restored = true;
-			this.#activeID = previousInstanceID;
+			if (!carriesAwaits) this.#activeID = previousInstanceID;
 			store.currentWrapper = previousWrapper;
 			store.callerWrapper = previousCallerWrapper;
 			store.callerCeiling = previousCallerCeiling;
 		};
 		const entered = this.#enteredFor(store);
-		entered.push(UNATTRIBUTED_ENTRY);
+		listPush(entered, UNATTRIBUTED_ENTRY);
 		let result;
 		this.#syncDepth++;
 		try {
@@ -1201,7 +3022,8 @@ export class LiveContextManager {
 			throw error;
 		} finally {
 			this.#syncDepth--;
-			entered.pop();
+			if (carriesAwaits) this.#activeID = previousInstanceID;
+			ArrayMethods.pop(entered);
 			store.__authoritativeWrapper = previousAuthoritative;
 			store.__authoritativeCeiling = previousAuthoritativeCeiling;
 		}
@@ -1220,15 +3042,20 @@ export class LiveContextManager {
 			unattributed: true,
 			// What its code is told apart from the host's by.
 			slothlet: building.slothlet ?? null,
-			roots: (building.roots ?? []).filter((root) => typeof root === "string" && root).map(toComparablePath)
+			roots: mapList(
+				filterList(building.roots ?? [], (root) => typeof root === "string" && root),
+				toComparablePath
+			)
 		};
-		this.#suspendedFor(store).add(entry);
-		this.#busyStores.add(store);
+		SetMethods.add(this.#suspendedFor(store), entry);
+		this.#suspendedVersion++;
+		SetMethods.add(this.#busyStores, store);
 		const settle = () => {
 			const suspended = this.#suspendedFor(store);
-			suspended.delete(entry);
-			if (suspended.size === 0) this.#busyStores.delete(store);
+			if (SetMethods.delete(suspended, entry)) this.#suspendedVersion++;
+			if (SetMethods.size(suspended) === 0) SetMethods.delete(this.#busyStores, store);
 			restore();
+			this.#retireIfIdle(store);
 		};
 		return nativeThen(
 			result,
@@ -1247,12 +3074,13 @@ export class LiveContextManager {
 	 * Initialize context for a new instance
 	 * @param {string} instanceID - Unique instance identifier
 	 * @param {Object} config - Instance configuration
+	 * @param {import("#helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
 	 * @returns {Object} Created context store
 	 * @public
 	 */
-	initialize(instanceID, config = {}) {
-		if (this.instances.has(instanceID)) {
-			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
+	initialize(instanceID, config = {}, clock = DEFAULT_CLOCK) {
+		if (MapMethods.has(this.instances, instanceID)) {
+			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instance: instanceID });
 		}
 
 		const store = {
@@ -1260,10 +3088,22 @@ export class LiveContextManager {
 			self: {},
 			context: {},
 			config: { ...config },
-			createdAt: Date.now()
+			createdAt: clock.now()
 		};
 
-		this.instances.set(instanceID, store);
+		MapMethods.set(this.instances, instanceID, store);
+		// Every flow is carried across its promise jobs for as long as the instance lives (see holdFlowHooks).
+		store.__holdsFlowHooks = true;
+		this.#holdFlowHooks();
+		// With permissions on, who started a flow is recorded for as long as the instance lives (see runningFlowStarter).
+		const permissions = config?.permissions;
+		if (
+			permissions &&
+			(permissions.mode === undefined || permissions.mode === true || permissions.mode === "on" || permissions.mode === "strict")
+		) {
+			store.__recordsFlowStarters = true;
+			this.#holdFlowStarters();
+		}
 
 		// In live mode, automatically set as current if it's the first/only instance
 		if (!this.#activeID) {
@@ -1271,6 +3111,18 @@ export class LiveContextManager {
 		}
 
 		return store;
+	}
+
+	/**
+	 * Whether a promise is one a leaf's call handed back through {@link LiveContextManager#runInContext}: slothlet made it,
+	 * with the `Promise` taken at load, and settles it with the leaf's own result, so a caller with no reaction to add
+	 * can be handed it as it is.
+	 * @param {*} value - The value a call returned.
+	 * @returns {boolean} True for such a promise.
+	 * @public
+	 */
+	ownsResult(value) {
+		return WeakMapMethods.has(this.#callResults, value);
 	}
 
 	/**
@@ -1282,12 +3134,12 @@ export class LiveContextManager {
 	 * @param {Object} [currentWrapper] - Current wrapper being executed (for metadata.self())
 	 * @param {boolean} [rawErrors=false] - When `true`, let a non-SlothletError thrown by
 	 *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
-	 *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
+	 *   for framework callbacks (`pin`, pinned hooks) where the caller expects the
 	 *   original error type/code/status.
 	 * @param {boolean} [asHost=false] - When `true`, run `fn` with **no module caller**: both
 	 *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
 	 *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
-	 *   `lockCaller.caller()` when the pinned caller is the host.
+	 *   `pin.caller()` when the pinned caller is the host.
 	 * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
 	 *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
 	 * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
@@ -1299,6 +3151,10 @@ export class LiveContextManager {
 	 *   (#597): the call is always checked for code another module made running inside it.
 	 * @param {boolean} [follow=true] - When `false`, a promise `fn` returns is handed back as it is and followed without
 	 *   a reaction (a pinned callback's, whose rejections are reported as the callback leaves them, #597).
+	 * @param {object|null} [load=null] - The record of a file's load (see createModuleLoad), when `fn` is a callback the
+	 *   file registered while it loaded (#726).
+	 * @param {object|null} [loading=null] - The load itself, with `load`: what the file's own code registers in the
+	 *   callback is pinned to it again.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
@@ -1314,8 +3170,12 @@ export class LiveContextManager {
 		resolved = null,
 		attribute = false,
 		madeCode = false,
-		follow = true
+		follow = true,
+		load = null,
+		loading = null
 	) {
+		// A host that wrote back a scheduler it read before the patch (vitest's `process.nextTick`) took the patch out.
+		reinstateSchedulerPatching();
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
 		const isAlreadyInContext = this.#flowBelongsToInstance(currentID, instanceID);
@@ -1323,11 +3183,11 @@ export class LiveContextManager {
 		// If already in correct context (base or child), just use current
 		const targetInstanceID = isAlreadyInContext ? currentID : instanceID;
 
-		const store = this.instances.get(targetInstanceID);
+		const store = MapMethods.get(this.instances, targetInstanceID);
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
-				instanceID: targetInstanceID,
-				availableInstances: Array.from(this.instances.keys())
+				instance: targetInstanceID,
+				instances: mapKeysToArray(this.instances)
 			});
 		}
 
@@ -1356,7 +3216,9 @@ export class LiveContextManager {
 					parent:
 						entryIdentity.record ??
 						(entryCaller ? { wrapper: entryCaller, parent: null, flagged: false, ceiling: entryIdentity.ceiling ?? null } : null),
-					flagged: madeCode || carriesCallerCode(thisArg, args),
+					flagged: madeCode || carriesCallerCode(thisArg, args, currentWrapper.____slothlet),
+					// Handed a function to run, which may pick up after an `await` with nothing of the call on the stack (#917).
+					handed: Arrays.isArray(args) && ArrayMethods.some(args, (arg) => typeof arg === "function"),
 					ceiling,
 					// Entered by code no call accounts for (a node a module kept, used from a timer): code it runs that
 					// cannot be placed is that code's, and refused (#661).
@@ -1364,6 +3226,15 @@ export class LiveContextManager {
 					made: madeCode
 				}
 			: null;
+		// A callback a file registered while it loaded (#726): the load's own record, so its code is read as the file's
+		// module with the code doing the access told by its frames.
+		if (record && load?.topLevel && load.wrapper === currentWrapper) {
+			record.topLevel = true;
+			record.file = load.file;
+			record.moduleID = load.moduleID;
+			record.parent = null;
+			record.loading = loading;
+		}
 
 		this.#activeID = targetInstanceID;
 		if (asHost) {
@@ -1371,9 +3242,7 @@ export class LiveContextManager {
 			store.callerWrapper = null;
 			store.currentWrapper = null;
 		}
-		// currentWrapper is optional; false branch is covered directly in context-live-branches tests
-		// but v8 hit-counter overflows to -255 in the parallel matrix, appearing uncovered.
-		/* v8 ignore next */
+		// currentWrapper is optional; context-live-branches drives both arms.
 		if (currentWrapper) {
 			store.callerWrapper = entryCaller;
 			store.callerCeiling = entryIdentity?.ceiling ?? null;
@@ -1383,14 +3252,18 @@ export class LiveContextManager {
 		// Restore previous state. Idempotent: the sync and settle paths must never both apply it,
 		// or a nested call's saved state would be restored twice.
 		let restored = false;
+		// With the flow carried across promise jobs, the field is put back as soon as the synchronous part returns: the
+		// call's own code after an `await` picks up in the flow its promises were made in, and the caller's code goes on
+		// in its own (see holdFlowHooks).
+		const carriesAwaits = this.#carriesAwaits;
 		const restore = () => {
 			// Idempotence guard. The sync and settle paths are mutually exclusive by construction, so the
 			// second call this protects against does not occur — but restoring twice would roll a nested
 			// call's saved state back over the live one, which is worth guarding regardless.
-			/* v8 ignore next */
+			/* v8 ignore if */
 			if (restored) return;
 			restored = true;
-			this.#activeID = previousInstanceID;
+			if (!carriesAwaits) this.#activeID = previousInstanceID;
 			store.currentWrapper = previousWrapper;
 			store.callerWrapper = previousCallerWrapper;
 			store.callerCeiling = previousCallerCeiling;
@@ -1404,7 +3277,7 @@ export class LiveContextManager {
 		// (#601), the same as a host-registered callback (see runRegisteredAsHost).
 		const entered = this.#enteredFor(store);
 		const hostStores = asHost ? this.#enterHost() : null;
-		if (!hostStores) entered.push(record);
+		if (!hostStores) listPush(entered, record);
 		// An identity published as authoritative (the lazy waiting-proxy path) speaks for the target's
 		// apply trap, up to the moment the target is entered here. Once a call that names a module (or
 		// the host) is on the stack, that call is what is executing — so it is withdrawn for the body and
@@ -1420,20 +3293,36 @@ export class LiveContextManager {
 		// A leaf's own call hands back what its module made as that module's (#597), and a class instance runs its
 		// methods in this instance's context, as the async manager does.
 		const creator = asHost ? null : (currentWrapper ?? null);
+		// Who receives what the call returns: the host when the call was entered with no module executing (#667).
+		const callerIsHost = Boolean(entryIdentity) && !entryIdentity.unresolved && !entryCaller;
+		// The call whose own code receives what this call returns, when that call was handed code (ID-D6).
+		const receiver = ownReceiver(entryIdentity?.record, entryIdentity);
+		// The code a module caller handed this call, as it holds it: what of it comes back is its own value (#1026).
+		const held =
+			record?.flagged && entryCaller && !callerIsHost && attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
+				? callerHeldCode(args, currentWrapper.____slothlet)
+				: null;
 		const attributed =
-			attribute && currentWrapper && !asHost
-				? (value) => this.#wrapClassInstanceResult(attributeResult(currentWrapper, value), targetInstanceID, creator)
-				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator);
+			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
+				? (value) =>
+						this.#wrapClassInstanceResult(
+							attributeResult(currentWrapper, value, callerIsHost, entryCaller, receiver, held),
+							targetInstanceID,
+							creator,
+							callerIsHost
+						)
+				: (value) => this.#wrapClassInstanceResult(value, targetInstanceID, creator, callerIsHost);
 
 		try {
 			let result;
 			this.#syncDepth++;
 			try {
-				result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : fn.apply(thisArg, args);
+				result = currentWrapper && !asHost ? enterCall(currentWrapper, fn, thisArg, args) : FunctionMethods.apply(fn, thisArg, args);
 			} finally {
 				this.#syncDepth--;
+				if (carriesAwaits) this.#activeID = previousInstanceID;
 				if (hostStores) this.#leaveHost(hostStores);
-				else entered.pop();
+				else ArrayMethods.pop(entered);
 				if (withdrawAuthoritative) {
 					store.__authoritativeWrapper = previousAuthoritative;
 					store.__authoritativeCeiling = previousAuthoritativeCeiling;
@@ -1463,6 +3352,9 @@ export class LiveContextManager {
 					// instance can be told apart when resolving which one is executing.
 					store,
 					family: store.parentInstanceID ?? store.instanceID,
+					// The ID the node was built under, which the frames of its file carry: a node a full reload is replacing
+					// was built under the ID the instance had before (see frameFamilyOf in frame-placement).
+					builtUnder: currentWrapper?.____slothletInternal?.builtUnder ?? null,
 					currentWrapper,
 					// The call's record, so code it was handed can be told from its own while it is suspended (#597).
 					record,
@@ -1479,22 +3371,24 @@ export class LiveContextManager {
 				// field at null for its whole async lifetime. Were it untracked, a single suspended module
 				// call resuming meanwhile would trust that null field and be treated as the host — failing
 				// open. Tracking it keeps the count honest, so that module is resolved from its stack instead.
-				/* v8 ignore next */
+				/* v8 ignore else */
 				if (currentWrapper || asHost) {
-					this.#suspendedFor(store).add(entry);
-					this.#busyStores.add(store);
+					SetMethods.add(this.#suspendedFor(store), entry);
+					this.#suspendedVersion++;
+					SetMethods.add(this.#busyStores, store);
 				}
 				const settle = () => {
 					const suspended = this.#suspendedFor(store);
-					suspended.delete(entry);
-					if (suspended.size === 0) this.#busyStores.delete(store);
+					if (SetMethods.delete(suspended, entry)) this.#suspendedVersion++;
+					if (SetMethods.size(suspended) === 0) SetMethods.delete(this.#busyStores, store);
 					restore();
+					this.#retireIfIdle(store);
 				};
 				// A pinned callback's promise is its own: followed to settle the call, never reacted to (#597).
 				if (!follow && runtime_followSettled(result, settle, store.parentInstanceID ?? store.instanceID)) return result;
 				// Unpinned: settling restores the shared fields, which a pinned reaction would put back.
 				try {
-					return nativeThen(
+					const settled = nativeThen(
 						result,
 						(value) => {
 							settle();
@@ -1505,6 +3399,9 @@ export class LiveContextManager {
 							throw error;
 						}
 					);
+					// A leaf's call: the promise is slothlet's own, and who made the call is known (see #callResults).
+					if (attribute) WeakMapMethods.set(this.#callResults, settled, { store, identity: entryIdentity });
+					return settled;
 					// Not a promise after all: an object only tagged "Promise", which the browser's tag check
 					// cannot tell apart. It is returned as the value it is, as before (see platform.mjs). Node's
 					// util.types.isPromise is a brand check, so only the browser host can reach this.
@@ -1522,13 +3419,13 @@ export class LiveContextManager {
 			// Rethrow framework errors directly so they propagate with their original code.
 			// rawErrors also opts out non-SlothletError throws so framework callbacks keep
 			// their original error type/code/status.
-			if (rawErrors || error instanceof SlothletError) throw error;
+			if (rawErrors || inheritsFrom(error, SlothletError)) throw error;
 			throw new SlothletError(
 				"CONTEXT_EXECUTION_FAILED",
 				{
-					instanceID
+					instance: instanceID
 				},
-				error
+				{ cause: error }
 			);
 		}
 	}
@@ -1540,11 +3437,19 @@ export class LiveContextManager {
 	 * @param {*} value - Resolved return value of the call.
 	 * @param {string} instanceID - Instance whose context the value belongs to.
 	 * @param {Object|null} currentWrapper - Wrapper of the creating module.
+	 * @param {boolean} [callerIsHost=false] - Whether the host made the call (see {@link attributeResult}).
 	 * @returns {*} The value as the caller gets it.
 	 */
-	#wrapClassInstanceResult(value, instanceID, currentWrapper) {
-		if (value === null || typeof value !== "object" || isHandedOut(value) || !runtime_isClassInstance(value)) return value;
-		if (currentWrapper) return attributeResult(currentWrapper, value);
+	#wrapClassInstanceResult(value, instanceID, currentWrapper, callerIsHost = false) {
+		if (value === null || typeof value !== "object") return value;
+		// A prototype of a module's class the host is handed is the object itself (#667): its handle included, which is
+		// otherwise handed on as it is.
+		if (currentWrapper && callerIsHost && isHostPrototype(currentWrapper, value))
+			return attributeResult(currentWrapper, value, callerIsHost);
+		if (isHandedOut(value) || !runtime_isClassInstance(value)) return value;
+		if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value, callerIsHost);
+		// Otherwise a module's instance comes back raw in the live runtime: its methods are told by their frames (#726).
+		if (currentWrapper) return value;
 		return runtime_wrapClassInstance(value, this, instanceID, new WeakMap(), undefined);
 	}
 
@@ -1562,7 +3467,7 @@ export class LiveContextManager {
 	 */
 	captureFlow(instanceID) {
 		const store = this.tryGetContext(instanceID);
-		/* v8 ignore next — a live instance always has a store while its api is callable; guards a torn-down instance. */
+		/* v8 ignore if -- a live instance always has a store while its api is callable; guards a torn-down instance. */
 		if (!store) return null;
 		// The identity resolved for the executing call, not the store's shared fields: those are restored
 		// in settle order, so once calls overlap they can name a call that has already finished (#591).
@@ -1591,6 +3496,8 @@ export class LiveContextManager {
 	 */
 	runInFlow(flow, fn) {
 		const { store } = flow;
+		// A flow captured in a run() / scope() that has returned since runs in that run's store (see reopenFlowStore).
+		const reopened = store.parentInstanceID && store.instanceID === flow.instanceID ? this.#reopenFlowStore(store) : false;
 		const previousInstanceID = this.#activeID;
 		const previousWrapper = store.currentWrapper;
 		const previousCallerWrapper = store.callerWrapper;
@@ -1605,7 +3512,8 @@ export class LiveContextManager {
 		// identity that was unresolved at capture stays a looked-through entry, never the host's.
 		const entered = this.#enteredFor(store);
 		// A captured module is entered as a record already resolved: it was handed nothing here.
-		entered.push(
+		listPush(
+			entered,
 			flow.unresolved
 				? null
 				: flow.currentWrapper
@@ -1617,11 +3525,12 @@ export class LiveContextManager {
 			return fn();
 		} finally {
 			this.#syncDepth--;
-			entered.pop();
+			ArrayMethods.pop(entered);
 			this.#activeID = previousInstanceID;
 			store.currentWrapper = previousWrapper;
 			store.callerWrapper = previousCallerWrapper;
 			store.callerCeiling = previousCallerCeiling;
+			if (reopened) this.#closeFlowStore(store);
 		}
 	}
 
@@ -1640,9 +3549,9 @@ export class LiveContextManager {
 	runAsIdentity(instanceID, identity, fn) {
 		const currentID = this.currentInstanceID;
 		const targetID = this.#flowBelongsToInstance(currentID, instanceID) ? currentID : instanceID;
-		const store = this.instances.get(targetID);
+		const store = MapMethods.get(this.instances, targetID);
 		if (!store) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID: targetID, availableInstances: Array.from(this.instances.keys()) });
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instance: targetID, instances: mapKeysToArray(this.instances) });
 		}
 		return this.runInFlow(
 			{
@@ -1667,20 +3576,15 @@ export class LiveContextManager {
 	getContext() {
 		const activeID = this.currentInstanceID;
 		if (!activeID) {
-			throw new SlothletError("NO_ACTIVE_CONTEXT_LIVE", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_LIVE", {});
 		}
 
-		const store = this.instances.get(activeID);
+		const store = MapMethods.get(this.instances, activeID);
 		if (!store) {
-			throw new SlothletError(
-				"CONTEXT_NOT_FOUND",
-				{
-					instanceID: activeID,
-					availableInstances: Array.from(this.instances.keys()).join(", ") || "none"
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("CONTEXT_NOT_FOUND", {
+				instance: activeID,
+				instances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none"
+			});
 		}
 
 		return store;
@@ -1704,12 +3608,21 @@ export class LiveContextManager {
 			if (!activeID) {
 				return undefined;
 			}
-			return this.instances.get(activeID);
+			return MapMethods.get(this.instances, activeID);
 		}
 		if (this.#flowBelongsToInstance(activeID, instanceID)) {
-			return this.instances.get(activeID);
+			return MapMethods.get(this.instances, activeID);
 		}
-		return this.instances.get(instanceID);
+		const own = MapMethods.get(this.instances, instanceID);
+		// A full reload moves the instance to a new ID while its new copy builds, and the store of the ID it leaves stays
+		// until the swap: code of the copy being replaced (a call made before the reload, a timer or listener it set) runs
+		// in that store, and is answered there, as the module it is, not as the new store's resting host.
+		if (activeID && own?.slothlet) {
+			const active = MapMethods.get(this.instances, activeID);
+			const base = active ? MapMethods.get(this.instances, active.parentInstanceID ?? activeID) : undefined;
+			if (base !== undefined && base !== own && base.slothlet === own.slothlet) return active;
+		}
+		return own;
 	}
 
 	/**
@@ -1735,7 +3648,8 @@ export class LiveContextManager {
 			ceiling: identity.ceiling ?? null,
 			callerCeiling: identity.callerCeiling ?? null,
 			contextOwners: store.__contextOwners ?? null,
-			trusted: store[TRUSTED_ROOT] === true
+			copy: store[RUN_COPY] ?? null,
+			trusted: store[trustedRootOwn.TRUSTED_ROOT] === true
 		};
 	}
 
@@ -1755,31 +3669,112 @@ export class LiveContextManager {
 	 */
 	async runInSnapshotFlow(instanceID, captured, fn) {
 		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
-		this.instances.set(childStore.instanceID, childStore);
+		MapMethods.set(this.instances, childStore.instanceID, childStore);
 		const previousInstanceID = this.#activeID;
+		if (this.#carriesAwaits) {
+			// The flow is carried across `fn`'s promise jobs: the field names it only while `fn` runs synchronously.
+			try {
+				let pending;
+				this.#activeID = childStore.instanceID;
+				try {
+					pending = fn();
+				} finally {
+					this.#activeID = previousInstanceID;
+				}
+				return await pending;
+			} finally {
+				MapMethods.delete(this.instances, childStore.instanceID);
+			}
+		}
 		try {
 			this.#activeID = childStore.instanceID;
 			return await fn();
 		} finally {
 			this.#activeID = previousInstanceID;
-			this.instances.delete(childStore.instanceID);
+			MapMethods.delete(this.instances, childStore.instanceID);
 		}
+	}
+
+	/**
+	 * Run `fn` synchronously inside a flow rebuilt from a {@link snapshotFlow} snapshot (#653), as
+	 * {@link runInSnapshotFlow} does for a delivery that may be async: a change made through a lazy stand-in and
+	 * replayed when its node loads runs in the context it was made in, and only for as long as `fn` runs.
+	 *
+	 * @param {string} instanceID - Instance to run against.
+	 * @param {object} captured - Snapshot from {@link snapshotFlow}.
+	 * @param {function(): *} fn - Synchronous function to run.
+	 * @returns {*} What `fn` returned.
+	 * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
+	 * @internal
+	 */
+	runInSnapshotFlowSync(instanceID, captured, fn) {
+		const childStore = buildCapturedFlowStore(this.instances, instanceID, captured);
+		MapMethods.set(this.instances, childStore.instanceID, childStore);
+		const previousInstanceID = this.#activeID;
+		try {
+			this.#activeID = childStore.instanceID;
+			return fn();
+		} finally {
+			this.#activeID = previousInstanceID;
+			MapMethods.delete(this.instances, childStore.instanceID);
+		}
+	}
+
+	/**
+	 * Retire the base store a full reload leaves behind when it moves the instance to a new ID. A call made before the
+	 * swap that is still waiting (a module's function awaiting the instance's own `reload()`) goes on in this store once
+	 * its `await` resumes, as the module it is, with `self` the instance's api: the store stays until the last such call
+	 * has settled, and is cleaned up then. With no module's call waiting it is cleaned up at once.
+	 * @param {string} instanceID - The ID the instance left.
+	 * @returns {void}
+	 * @public
+	 */
+	retire(instanceID) {
+		const store = MapMethods.get(this.instances, instanceID);
+		if (store !== undefined && this.#moduleCallWaits(store)) {
+			Objects.defineProperty(store, RETIRE_WHEN_IDLE, { __proto__: null, value: true, configurable: true });
+			return;
+		}
+		this.cleanup(instanceID);
+	}
+
+	/**
+	 * Clean up a store {@link LiveContextManager#retire} kept for the calls waiting in it, once none is left.
+	 * @param {object} store - The store a call settled on.
+	 * @returns {void}
+	 * @private
+	 */
+	#retireIfIdle(store) {
+		if (store[RETIRE_WHEN_IDLE] !== true || this.#moduleCallWaits(store)) return;
+		if (MapMethods.get(this.instances, store.instanceID) === store) this.cleanup(store.instanceID);
+	}
+
+	/**
+	 * Whether a call of a module waits on a store: a call pinned to the host (the reload itself) or code running as no
+	 * module is no such call.
+	 * @param {object} store - The store.
+	 * @returns {boolean} True when one does.
+	 * @private
+	 */
+	#moduleCallWaits(store) {
+		for (const entry of setValues(this.#suspendedFor(store))) if (entry.currentWrapper) return true;
+		return false;
 	}
 
 	/**
 	 * Cleanup instance context
 	 * @param {string} instanceID - Instance to cleanup
+	 * @param {{keepFlows?: boolean}} [options] - `keepFlows`: leave the instance's run() / scope() stores in place (a
+	 *   reload that keeps the instance's ID makes a new base store under the same ID).
 	 * @public
 	 */
-	cleanup(instanceID) {
-		const store = this.instances.get(instanceID);
+	cleanup(instanceID, { keepFlows = false } = {}) {
+		const store = MapMethods.get(this.instances, instanceID);
 		if (!store) {
-			throw new SlothletError(
-				"CONTEXT_NOT_FOUND",
-				{ instanceID, availableInstances: Array.from(this.instances.keys()).join(", ") || "none" },
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("CONTEXT_NOT_FOUND", {
+				instance: instanceID,
+				instances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none"
+			});
 		}
 
 		// Clear the store data
@@ -1787,37 +3782,80 @@ export class LiveContextManager {
 		store.context = {};
 
 		// Remove from instances map
-		this.instances.delete(instanceID);
+		MapMethods.delete(this.instances, instanceID);
+		// A store an earlier full reload of the instance left for calls still waiting in it (see retire) goes with it.
+		const owner = store.slothlet;
+		if (!keepFlows && owner !== null && typeof owner === "object") {
+			for (let ofIndex = 0, ofList = mapValuesToArray(this.instances); ofIndex < ofList.length; ofIndex++) {
+				const retired = ofList[ofIndex];
+				if (
+					retired[RETIRE_WHEN_IDLE] === true &&
+					retired.slothlet === owner &&
+					MapMethods.get(this.instances, retired.instanceID) === retired
+				)
+					this.cleanup(retired.instanceID);
+			}
+		}
+		// Its run() / scope() stores go too, including one put back for work a finished run left behind that is running
+		// now (see reopenFlowStore): the shutdown can come from that work, and when it releases the last instance the
+		// promise hooks are gone before the job's `after` would have taken the store out again.
+		let activeRemoved = this.#activeID === instanceID;
+		for (let ofIndex = 0, ofList = keepFlows ? [] : mapValuesToArray(this.instances); ofIndex < ofList.length; ofIndex++) {
+			const child = ofList[ofIndex];
+			if (child.parentInstanceID !== instanceID) continue;
+			MapMethods.delete(this.instances, child.instanceID);
+			if (this.#activeID === child.instanceID) activeRemoved = true;
+		}
+		for (let index = 0; index < this.#jobReopened.length; index++) {
+			const reopened = this.#jobReopened[index];
+			if (reopened && (reopened === store || (!keepFlows && reopened.parentInstanceID === instanceID))) this.#jobReopened[index] = null;
+		}
+		if (store.__recordsFlowStarters) {
+			store.__recordsFlowStarters = false;
+			this.#releaseFlowStarters();
+		}
+		if (store.__holdsFlowHooks) {
+			store.__holdsFlowHooks = false;
+			this.#releaseFlowHooks();
+		}
 		// A promise followed for one of its callbacks that never settles would keep the settle hook installed (#597).
 		runtime_unfollowInstance(store.parentInstanceID ?? instanceID);
 		// A call still suspended when its instance shut down never settles here: its store would otherwise
 		// stay among the busy ones for the life of the process, and every later identity read would pay a
 		// stack read for it (#601 review). Its run()/scope() stores go with it.
-		for (const busy of this.#busyStores) {
-			if (busy === store || busy.parentInstanceID === instanceID) this.#busyStores.delete(busy);
+		for (const busy of setValues(this.#busyStores)) {
+			if (busy === store || busy.parentInstanceID === instanceID) SetMethods.delete(this.#busyStores, busy);
 		}
 
-		// Clear current instance if it was this one
-		if (this.#activeID === instanceID) {
+		// Clear current instance if it was this one or one of its run() / scope() stores
+		if (activeRemoved) {
 			this.#activeID = null;
 		}
 	}
 
 	/**
-	 * Get diagnostic information
-	 * @returns {Object} Diagnostic data
+	 * Diagnostics for one instance (#837): what this manager holds for that instance only, never the other instances
+	 * the process-wide manager also serves.
+	 * @param {string} instanceID - The instance.
+	 * @returns {{ type: "live", running: boolean, at: number|null, context: object|null, self: string[], current: { context: object, nested: boolean }|null }}
+	 *   The runtime word, whether code of the instance (a call, a `run()` / `scope()` callback, a load) is running now,
+	 *   when its record was made, its context data, the top-level names its `self` shows, and the running flow's context
+	 *   (and whether it is a nested run/scope).
 	 * @public
 	 */
-	getDiagnostics() {
+	getInstanceDiagnostics(instanceID) {
+		const store = MapMethods.get(this.instances, instanceID) ?? null;
+		// The active-instance field keeps naming the last instance used after its flow ends; runningInstanceID() answers
+		// only while one of the instance's flows (a call, a run()/scope() callback, a load) is executing.
+		const running = this.runningInstanceID() === instanceID;
+		const active = running ? this.tryGetContext(instanceID) : null;
 		return {
 			type: "live",
-			currentInstanceID: this.currentInstanceID,
-			instances: Array.from(this.instances.entries()).map(([id, store]) => ({
-				id,
-				createdAt: store.createdAt,
-				contextKeys: Object.keys(store.context),
-				selfKeys: Object.keys(store.self)
-			}))
+			running,
+			at: store?.createdAt ?? null,
+			context: store?.context ?? null,
+			self: store ? Objects.keys(store.self) : [],
+			current: active ? { context: active.context, nested: !!active.parentContext } : null
 		};
 	}
 }
@@ -1826,4 +3864,53 @@ export class LiveContextManager {
  * Singleton live context manager
  * @public
  */
-export const liveContextManager = new LiveContextManager();
+const liveContextManager = new LiveContextManager();
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["lib/factories/context"])) throw ownBindingsRefusal("lib/handlers/context-live", import.meta.url);
+	return {
+		get liveContextManager() {
+			return liveContextManager;
+		}
+	};
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof liveContextManager} */
+const guarded_liveContextManager = guardInternal(liveContextManager, "liveContextManager", import.meta.url);
+export { guarded_liveContextManager as liveContextManager };

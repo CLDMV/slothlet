@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/context-live-kept-after-async.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/context-live-kept-after-async.test.vitest.mjs
  *	@Date: 2026-10-24T21:58:58-07:00 (1792904338)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T10:31:49-07:00 (1792949509)
+ *	@Last modified time: 2026-11-28T04:31:24-08:00 (1795869084)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,8 +58,8 @@ describe.each([
 	});
 
 	it.each([
-		["allows everything", { defaultPolicy: "allow" }],
-		["allows probe to read and call store", { defaultPolicy: "deny", rules: [{ caller: "probe.**", target: "store.**", effect: "allow" }] }]
+		["allows everything", { policy: "allow" }],
+		["allows probe to read and call store", { policy: "deny", rules: [{ caller: "probe.**", target: "store.**", effect: "allow" }] }]
 	])("still reads and calls them when the rules %s", async (_label, permissions) => {
 		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions });
 		await api.probe.keep();
@@ -74,7 +74,7 @@ describe.each([
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "rogue.**", target: "store.box.secret", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "rogue.**", target: "store.box.secret", effect: "deny" }] }
 		});
 		await api.probe.keepBox();
 		await api.rogue.plant();
@@ -98,7 +98,7 @@ describe.each([
 				runtime,
 				silent: true,
 				permissions: {
-					defaultPolicy: "allow",
+					policy: "allow",
 					rules: [
 						{ caller: "rogue.**", target: "store.box.secret", effect: "deny" },
 						{ caller: "rogue.**", target: "store.secretFn", effect: "deny" }
@@ -127,7 +127,7 @@ describe.each([
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "probe.**", target: "store.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "probe.**", target: "store.**", effect: "deny" }] }
 		});
 		await api.probe.keep();
 		await api.probe.useLater();
@@ -154,7 +154,7 @@ describe("a module's node kept before its module loads, read from a timer (#661)
 			mode: "lazy",
 			runtime: "live",
 			silent: true,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "sneak.**", target: "store.sub.secret", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "sneak.**", target: "store.sub.secret", effect: "deny" }] }
 		});
 		await api.store.work();
 		expect(await api.probe.keep()).toBe("function");
@@ -187,7 +187,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 				mode,
 				runtime: "live",
 				silent: true,
-				permissions: { defaultPolicy: "allow", rules: [{ caller: "rogue.**", target: "trapmod.tbox.secret", effect: "deny" }] }
+				permissions: { policy: "allow", rules: [{ caller: "rogue.**", target: "trapmod.tbox.secret", effect: "deny" }] }
 			});
 			await api.probe.keep();
 			await api.rogue.plant();

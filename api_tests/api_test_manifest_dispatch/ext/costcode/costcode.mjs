@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_manifest_dispatch/ext/costcode/costcode.mjs
+ *	@Filename: api_tests/api_test_manifest_dispatch/ext/costcode/costcode.mjs
  *	@Date: 2026-08-18T00:00:00-07:00 (1787036400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:38-07:00 (1791090878)
+ *	@Last modified time: 2026-11-28T04:28:52-08:00 (1795868932)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,7 +16,7 @@
 /**
  * An extension lifecycle leaf that also exports a `manifest` OBJECT whose `activationEvents`
  * is an ARRAY — the shape that reproduced #287: the framework's dispatcher-detection walk read
- * `manifest.activationEvents.__isVersionDispatcher` as the host and was denied by `private.host`.
+ * `manifest.activationEvents.____isVersionDispatcher` as the host and was denied by `private.host`.
  */
 export const name = "costcode";
 export const manifest = {

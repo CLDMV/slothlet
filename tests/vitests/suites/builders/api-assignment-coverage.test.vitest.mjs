@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/builders/api-assignment-coverage.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/builders/api-assignment-coverage.test.vitest.mjs
  *	@Date: 2026-09-14T15:15:27-07:00 (1789424127)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:23-07:00 (1791091703)
+ *	@Last modified time: 2026-11-28T04:31:17-08:00 (1795869077)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,13 +35,13 @@ afterEach(async () => {
 describe("ApiAssignment collision-mode arm coverage", () => {
 	it("uses config.collision[collisionContext] when no collisionModeOverride is given (api-assignment.mjs:253 arm 2)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		const assignment = resolveWrapper(api.math).slothlet.builders.apiAssignment;
+		const assignment = resolveWrapper(api.math).____slothlet.builders.apiAssignment;
 		// Case 2 (collision detection): existing !== undefined, no collisionModeOverride, so the
-		// resolved mode comes from config.collision[collisionContext] ("skip") — the middle arm.
+		// resolved mode comes from config.api.collision.mode[collisionContext] ("skip") — the middle arm.
 		const target = { foo: "old" };
 		const result = await assignment.assignToApiPath(target, "foo", "new", {
 			useCollisionDetection: true,
-			config: { collision: { initial: "skip" } },
+			config: { api: { collision: { mode: { initial: "skip" } } } },
 			collisionContext: "initial"
 		});
 		// "skip" keeps the existing value and reports false.
@@ -51,14 +51,14 @@ describe("ApiAssignment collision-mode arm coverage", () => {
 
 	it('falls back to "merge" when neither collisionModeOverride nor config.collision[collisionContext] is set (api-assignment.mjs:253 arm 3)', async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		const assignment = resolveWrapper(api.math).slothlet.builders.apiAssignment;
+		const assignment = resolveWrapper(api.math).____slothlet.builders.apiAssignment;
 		// Case 2 (collision detection): existing !== undefined, no collisionModeOverride, and
 		// config.collision has no entry for "initial" at all — both operands of the `||` chain are
 		// falsy, so the resolved mode falls through to the final "merge" default (the third arm).
 		const target = { foo: "old" };
 		const result = await assignment.assignToApiPath(target, "foo", "new", {
 			useCollisionDetection: true,
-			config: { collision: {} },
+			config: { api: { collision: { mode: {} } } },
 			collisionContext: "initial"
 		});
 		// "merge" between two plain, non-object primitives can't actually merge, so it falls through

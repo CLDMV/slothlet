@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-captured-namespace.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-captured-namespace.test.vitest.mjs
  *	@Date: 2026-07-31T12:00:00-07:00 (1785524400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:15-07:00 (1791090915)
+ *	@Last modified time: 2026-11-28T04:32:22-08:00 (1795869142)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -66,7 +66,7 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.config.**", effect: "deny" }]
 			}
 		});
@@ -84,7 +84,7 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.dataReader.**", target: "db.secrets.**", effect: "allow" },
 					{ caller: "**", target: "callers.**", effect: "allow" }
@@ -106,7 +106,7 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 			// Instance context data, so the read path resolves a real request context rather than null.
 			context: { userId: 7 },
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -130,7 +130,7 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 		// Permissions on, so the class read off `self` comes back as a per-reader view and it is the
 		// VIEW's construct trap making the substitution decision — with permissions off there is no view
 		// and only the plain wrapper's own newTarget handling would be exercised.
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow", rules: [] } });
 
 		// `new self.x.Y()` makes the wrapper its own newTarget and it hands the child through instead.
 		// An explicit third argument to `Reflect.construct` is a different intent and has to be honoured,
@@ -148,7 +148,7 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 			// Real request context, so the read path resolves one rather than falling back to null, and
 			// nothing is denied, so the walk completes instead of throwing partway.
 			context: { userId: 7 },
-			permissions: { defaultPolicy: "allow", rules: [] }
+			permissions: { policy: "allow", rules: [] }
 		});
 
 		await api.callers.dataReader.captureDbRoot();
@@ -156,7 +156,7 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 
 		// Two hops down from the captured parent, each yielding a namespace rather than a value. Holds
 		// identically in lazy since #255: the waiting-proxy resolver hands back the wrapper's live proxy
-		// instead of the adoption-depleted `_impl`, so a namespace held across calls stays walkable.
+		// instead of the adoption-depleted `____impl`, so a namespace held across calls stays walkable.
 		expect(outcome.kind).toBe("object");
 		expect(outcome.keys).toBeGreaterThan(0);
 	});
@@ -166,7 +166,7 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny" }]
 			}
 		});
@@ -193,9 +193,11 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				references: { capture: false },
-				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny" }]
+				policy: "allow",
+				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny" }],
+				caller: {
+					capture: false
+				}
 			}
 		});
 
@@ -212,7 +214,7 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny" }]
 			}
 		});

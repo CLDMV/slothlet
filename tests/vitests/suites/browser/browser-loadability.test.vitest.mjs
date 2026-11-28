@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/browser/browser-loadability.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/browser/browser-loadability.test.vitest.mjs
  *	@Date: 2026-05-30T00:00:00-07:00 (1780124400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-28T04:31:16-08:00 (1795869076)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,11 +24,12 @@
  *
  *   1. No top-level static `node:*` imports anywhere in the statically-reachable
  *      graph rooted at the `.` entry (`index.mjs`) and the slothlet class
- *      (`@cldmv/slothlet/slothlet`, dynamically imported by the entry). Browsers
+ *      (`#slothlet`, dynamically imported by the entry). Browsers
  *      resolve every static import at module-graph-construction time, before any
  *      code runs, so a single top-level `import ... from "node:fs"` fails the whole
- *      graph regardless of `platform: "browser"`. Dynamic `await import("node:*")`
- *      is runtime-conditional and fine — it is intentionally NOT flagged here.
+ *      graph regardless of `platform: "browser"`. The graph is walked as a browser
+ *      resolves it: a package `imports` entry with a `browser` target
+ *      (`#helpers/platform`, #1034) is followed to that file, not the Node one.
  *
  *   2. `index.mjs` must not touch the `process` global at top-level module eval
  *      (`process` is undefined in a browser → ReferenceError). `typeof process`
@@ -44,6 +45,24 @@ import { dirname, resolve as presolve } from "node:path";
 import { parse } from "acorn";
 
 const REPO_ROOT = presolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+
+/** The package's own `imports` field, for the `browser` targets a browser resolves to. */
+const PACKAGE_IMPORTS = JSON.parse(readFileSync(presolve(REPO_ROOT, "package.json"), "utf8")).imports ?? {};
+
+/**
+ * The file a browser loads for a package-internal specifier Node resolved to `resolved`: the entry's `browser` target
+ * when it declares one (under `slothlet-dev` when Node resolved into `src/`), else the file Node resolved (#1034).
+ * @param {string} spec
+ * @param {string} resolved - Absolute path Node resolved the specifier to.
+ * @returns {string}
+ */
+function browserFile(spec, resolved) {
+	const entry = PACKAGE_IMPORTS[spec];
+	if (entry === null || typeof entry !== "object") return resolved;
+	const inSource = resolved.startsWith(presolve(REPO_ROOT, "src") + "/");
+	const branch = inSource && entry["slothlet-dev"] ? entry["slothlet-dev"] : entry;
+	return typeof branch.browser === "string" ? presolve(REPO_ROOT, branch.browser) : resolved;
+}
 
 /**
  * Parse a module file to an ESTree AST (with source locations).
@@ -99,7 +118,7 @@ function resolveSpec(spec, parentFile) {
 	try {
 		const url = import.meta.resolve(spec);
 		if (url.startsWith("node:")) return { node: true };
-		return { file: fileURLToPath(url) };
+		return { file: browserFile(spec, fileURLToPath(url)) };
 	} catch {
 		return { unresolved: spec };
 	}
@@ -151,7 +170,7 @@ function collectNodeImports(rootFiles) {
 describe("Browser loadability (#123)", () => {
 	// The `.` entry dynamically imports the class; the class's *static* graph is what
 	// the browser must parse once that dynamic import fires.
-	const classFile = fileURLToPath(import.meta.resolve("@cldmv/slothlet/slothlet"));
+	const classFile = fileURLToPath(import.meta.resolve("#slothlet"));
 	const indexFile = presolve(REPO_ROOT, "index.mjs");
 
 	it("statically-reachable graph from the entry + class has no top-level node:* imports", () => {

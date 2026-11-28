@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/versioning/versioning-force-symbol.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/versioning/versioning-force-symbol.test.vitest.mjs
  *	@Date: 2026-04-01T22:44:08-07:00 (1775108648)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-28T04:33:16-08:00 (1795869196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,11 +40,14 @@ describe.each(getMatrixConfigs())("Versioning > Force Symbol > $name", ({ config
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: () => "v2" // would normally route to v2
+			versioning: {
+				dispatcher: () => "v2"
+			}
+			// would normally route to v2
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Without force — discriminator returns v2
 		const withoutForce = api.unversionedCaller.callLogin("testUser");
@@ -62,11 +65,13 @@ describe.each(getMatrixConfigs())("Versioning > Force Symbol > $name", ({ config
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: () => null
+			versioning: {
+				dispatcher: () => null
+			}
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Force to a non-existent version — should fall back to default
 		let result;

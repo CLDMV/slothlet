@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/hooks/hook-disabled-pattern.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/hooks/hook-disabled-pattern.test.vitest.mjs
  *	@Date: 2026-03-01T12:34:06-08:00 (1772397246)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-28T04:31:52-08:00 (1795869112)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,7 +54,11 @@ beforeEach(async () => {
 		base: TEST_DIRS.API_TEST,
 		mode: "eager",
 		hook: { enabled: true },
-		collision: { initial: "replace", api: "replace" },
+		api: {
+			collision: {
+				mode: { initial: "replace", api: "replace" }
+			}
+		},
 		silent: true
 	});
 });

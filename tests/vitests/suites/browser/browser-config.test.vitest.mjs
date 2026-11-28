@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/browser/browser-config.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/browser/browser-config.test.vitest.mjs
  *	@Date: 2026-05-28T00:00:00-07:00 (1779951600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-11-28T04:31:15-08:00 (1795869075)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,6 @@
  * the `transformConfig` validation paths active in browser mode:
  * - `manifest` presence auto-triggers browser mode (no `platform: "browser"` needed)
  * - `base` is the primary config option (replaces `dir`)
- * - `dir` is a deprecated alias for `base` — emits `V3_CONFIG_DEPRECATED`
  * - `resolveModuleSpecifier` is optional — defaults to `new URL(path, base)`
  * - Invalid (non-function) `resolveModuleSpecifier` still throws
  *
@@ -29,7 +28,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { Config } from "@cldmv/slothlet/helpers/config";
+import { Config } from "#helpers/config";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -136,96 +135,96 @@ describe("Config.normalizeEnvTarget — manifest as browser-mode signal", () => 
 describe("Config.transformConfig — browser mode validation (platform: 'browser' forced)", () => {
 	it("no base with an empty manifest is a no-base browser instance (#471)", () => {
 		const cfg = new Config(makeMock());
-		const result = cfg.transformConfig({ platform: "browser", manifest: VALID_MANIFEST });
-		expect(result.envTarget).toBe("browser");
+		const result = cfg.transformConfig({ loader: { platform: "browser", files: VALID_MANIFEST } });
+		expect(result.loader.platform).toBe("browser");
 		expect(result.base).toBeNull();
-		expect(result.dir).toBeNull();
 	});
 
-	it("no base with a manifest that lists files throws INVALID_CONFIG_DIR_MISSING (the files need a base)", () => {
+	it("no base with a manifest that lists files throws INVALID_CONFIG_BASE_MISSING (the files need a base)", () => {
 		const cfg = new Config(makeMock());
 		expect(() =>
-			cfg.transformConfig({ platform: "browser", manifest: { files: [{ path: "a.mjs", name: "a" }], directories: [] } })
-		).toThrow(expect.objectContaining({ code: "INVALID_CONFIG_DIR_MISSING" }));
+			cfg.transformConfig({ loader: { platform: "browser", files: { files: [{ path: "a.mjs", name: "a" }], directories: [] } } })
+		).toThrow(expect.objectContaining({ code: "INVALID_CONFIG_BASE_MISSING" }));
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST when manifest is absent", () => {
+	it("throws INVALID_CONFIG_FILES_REQUIRED when manifest is absent", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({ platform: "browser", base: "/url" })).toThrow(SlothletError);
+		expect(() => cfg.transformConfig({ loader: { platform: "browser" }, base: "/url" })).toThrow(SlothletError);
 		try {
-			cfg.transformConfig({ platform: "browser", base: "/url" });
+			cfg.transformConfig({ loader: { platform: "browser" }, base: "/url" });
 		} catch (err) {
-			expect(err.code).toBe("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST");
+			expect(err.code).toBe("INVALID_CONFIG_FILES_REQUIRED");
 		}
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST when manifest is null", () => {
+	it("throws INVALID_CONFIG_FILES_REQUIRED when manifest is null", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({ platform: "browser", base: "/url", manifest: null })).toThrow(SlothletError);
+		expect(() => cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: null } })).toThrow(SlothletError);
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_MANIFEST_INVALID when manifest lacks files array", () => {
+	it("throws INVALID_CONFIG_FILES_INVALID when manifest lacks files array", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({ platform: "browser", base: "/url", manifest: { directories: [] } })).toThrow(SlothletError);
+		expect(() => cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: { directories: [] } } })).toThrow(SlothletError);
 		try {
-			cfg.transformConfig({ platform: "browser", base: "/url", manifest: { directories: [] } });
+			cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: { directories: [] } } });
 		} catch (err) {
-			expect(err.code).toBe("INVALID_CONFIG_BROWSER_MANIFEST_INVALID");
+			expect(err.code).toBe("INVALID_CONFIG_FILES_INVALID");
 		}
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_MANIFEST_INVALID when manifest lacks directories array", () => {
+	it("throws INVALID_CONFIG_FILES_INVALID when manifest lacks directories array", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({ platform: "browser", base: "/url", manifest: { files: [] } })).toThrow(SlothletError);
+		expect(() => cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: { files: [] } } })).toThrow(SlothletError);
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_MANIFEST_INVALID when manifest is a plain string", () => {
+	it("throws INVALID_CONFIG_FILES_INVALID when manifest is a plain string", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({ platform: "browser", base: "/url", manifest: "not-an-object" })).toThrow(SlothletError);
+		expect(() => cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: "not-an-object" } })).toThrow(SlothletError);
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_MANIFEST_INVALID when manifest is an array", () => {
+	it("throws INVALID_CONFIG_FILES_INVALID when manifest is an array", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({ platform: "browser", base: "/url", manifest: [] })).toThrow(SlothletError);
+		expect(() => cfg.transformConfig({ base: "/url", loader: { platform: "browser", files: [] } })).toThrow(SlothletError);
 	});
 
 	it("resolveModuleSpecifier is optional — omitting it does NOT throw", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({ platform: "browser", base: "/url/", manifest: VALID_MANIFEST })).not.toThrow();
+		expect(() => cfg.transformConfig({ base: "/url/", loader: { platform: "browser", files: VALID_MANIFEST } })).not.toThrow();
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID when resolveModuleSpecifier is a string", () => {
+	it("throws INVALID_CONFIG_RESOLVER_INVALID when resolveModuleSpecifier is a string", () => {
 		const cfg = new Config(makeMock());
 		expect(() =>
-			cfg.transformConfig({ platform: "browser", base: "/url/", manifest: VALID_MANIFEST, resolveModuleSpecifier: "not-a-function" })
+			cfg.transformConfig({ base: "/url/", loader: { platform: "browser", files: VALID_MANIFEST, resolve: "not-a-function" } })
 		).toThrow(SlothletError);
 	});
 
-	it("throws INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID when resolveModuleSpecifier is a number", () => {
+	it("throws INVALID_CONFIG_RESOLVER_INVALID when resolveModuleSpecifier is a number", () => {
 		const cfg = new Config(makeMock());
-		expect(() => cfg.transformConfig({ platform: "browser", base: "/url/", manifest: VALID_MANIFEST, resolveModuleSpecifier: 42 })).toThrow(
+		expect(() => cfg.transformConfig({ base: "/url/", loader: { platform: "browser", files: VALID_MANIFEST, resolve: 42 } })).toThrow(
 			SlothletError
 		);
 	});
 
 	it("accepts base + valid manifest and sets envTarget to 'browser'", () => {
 		const cfg = new Config(makeMock());
-		const result = cfg.transformConfig({ platform: "browser", base: "/url/", manifest: VALID_MANIFEST });
-		expect(result.envTarget).toBe("browser");
-		expect(result.manifest).toBe(VALID_MANIFEST);
+		const result = cfg.transformConfig({ base: "/url/", loader: { platform: "browser", files: VALID_MANIFEST } });
+		expect(result.loader.platform).toBe("browser");
+		expect(result.loader.files).toBe(VALID_MANIFEST);
 		expect(result.base).toBe("/url/");
-		expect(result.dir).toBe("/url/");
 	});
 
 	it("accepts optional resolveModuleSpecifier when provided as a function", () => {
 		const cfg = new Config(makeMock());
 		const result = cfg.transformConfig({
-			platform: "browser",
 			base: "/url/",
-			manifest: VALID_MANIFEST,
-			resolveModuleSpecifier: VALID_RESOLVER
+			loader: {
+				platform: "browser",
+				files: VALID_MANIFEST,
+				resolve: VALID_RESOLVER
+			}
 		});
-		expect(result.resolveModuleSpecifier).toBe(VALID_RESOLVER);
+		expect(result.loader.resolve).toBe(VALID_RESOLVER);
 	});
 });
 
@@ -234,57 +233,30 @@ describe("Config.transformConfig — browser mode validation (platform: 'browser
 describe("Config.transformConfig — manifest presence auto-triggers browser mode", () => {
 	it("sets envTarget to 'browser' when manifest is provided without platform: 'browser'", () => {
 		const cfg = new Config(makeMock());
-		const result = cfg.transformConfig({ base: "/url/", manifest: VALID_MANIFEST });
-		expect(result.envTarget).toBe("browser");
+		const result = cfg.transformConfig({ base: "/url/", loader: { files: VALID_MANIFEST } });
+		expect(result.loader.platform).toBe("browser");
 	});
 
 	it("sets envTarget to 'node' when platform: 'node' is explicit even if manifest is present", () => {
 		const cfg = new Config(makeMock());
-		const result = cfg.transformConfig({ platform: "node", base: "/api", manifest: VALID_MANIFEST });
-		expect(result.envTarget).toBe("node");
+		const result = cfg.transformConfig({ base: "/api", loader: { platform: "node", files: VALID_MANIFEST } });
+		expect(result.loader.platform).toBe("node");
 	});
 });
 
-// ─── transformConfig — base / dir rename ─────────────────────────────────────
+// ─── transformConfig — base ─────────────────────────────────────────────────
 
-describe("Config.transformConfig — base option (primary) and dir deprecation", () => {
+describe("Config.transformConfig — base option", () => {
 	it("accepts base as the primary option in node mode", () => {
 		const cfg = new Config(makeMock());
 		const result = cfg.transformConfig({ base: "/api" });
-		expect(result.dir).toBe("/api");
 		expect(result.base).toBe("/api");
 	});
 
-	it("dir is accepted and emits V3_CONFIG_DEPRECATED warning", () => {
-		const mock = makeMock();
-		// Must be a regular function (not arrow) since it is called with `new`.
-		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
-		const cfg = new Config(mock);
-		cfg.transformConfig({ dir: "/api" });
-		// V3_CONFIG_DEPRECATED should be raised
-		expect(warnSpy).toHaveBeenCalled();
-	});
-
-	it("dir does NOT emit a warning when silent: true", () => {
-		const mock = makeMock();
-		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
-		const cfg = new Config(mock);
-		cfg.transformConfig({ dir: "/api", silent: true });
-		expect(warnSpy).not.toHaveBeenCalled();
-	});
-
-	it("base takes precedence over dir when both are provided", () => {
-		const cfg = new Config(makeMock());
-		const result = cfg.transformConfig({ base: "/from-base", dir: "/from-dir", silent: true });
-		expect(result.dir).toBe("/from-base");
-		expect(result.base).toBe("/from-base");
-	});
-
-	it("neither base nor dir is a no-base instance (#471): both normalize to null", () => {
+	it("no base is a no-base instance (#471): base normalizes to null", () => {
 		const cfg = new Config(makeMock());
 		const result = cfg.transformConfig({});
 		expect(result.base).toBeNull();
-		expect(result.dir).toBeNull();
 	});
 });
 
@@ -294,25 +266,26 @@ describe("Config.transformConfig — node mode unaffected by browser-mode additi
 	it("base is resolved and envTarget is 'node' in node mode", () => {
 		const cfg = new Config(makeMock());
 		const result = cfg.transformConfig({ base: "/api" });
-		expect(result.envTarget).toBe("node");
+		expect(result.loader.platform).toBe("node");
 	});
 
 	it("manifest and resolveModuleSpecifier are ignored for envTarget when platform: 'node' is explicit", () => {
 		const cfg = new Config(makeMock());
 		const result = cfg.transformConfig({
-			platform: "node",
 			base: "/api",
-			manifest: VALID_MANIFEST,
-			resolveModuleSpecifier: VALID_RESOLVER
+			loader: {
+				platform: "node",
+				files: VALID_MANIFEST,
+				resolve: VALID_RESOLVER
+			}
 		});
-		expect(result.envTarget).toBe("node");
+		expect(result.loader.platform).toBe("node");
 	});
 
 	it("an absent base in node mode is a no-base instance (#471)", () => {
 		const cfg = new Config(makeMock());
 		const result = cfg.transformConfig({});
-		expect(result.envTarget).toBe("node");
+		expect(result.loader.platform).toBe("node");
 		expect(result.base).toBeNull();
-		expect(result.dir).toBeNull();
 	});
 });

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/browser/promise-detection.browser.test.mjs
+ *	@Filename: tests/browser/promise-detection.browser.test.mjs
  *	@Date: 2026-08-04T12:00:00-07:00 (1785870000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T19:27:02-07:00 (1792204022)
+ *	@Last modified time: 2026-11-28T04:30:52-08:00 (1795869052)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { util } from "@cldmv/slothlet/helpers/platform";
+import { util } from "#helpers/platform";
 
 describe("browser platform shim > util.types.isPromise", () => {
 	it("detects a native promise of this realm and of an iframe's", () => {

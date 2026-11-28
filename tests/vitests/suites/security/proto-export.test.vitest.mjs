@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/security/proto-export.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/security/proto-export.test.vitest.mjs
  *	@Date: 2026-10-12T15:24:17-07:00 (1791843857)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T15:34:09-07:00 (1791844449)
+ *	@Last modified time: 2026-11-28T04:33:02-08:00 (1795869182)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,7 @@ describe.each(getMatrixConfigs({}))("__proto__ export > Config: $name", ({ confi
 			api = await slothlet({ ...config, base: BASE, silent: true });
 			// Lazy loads the file at first touch; eager refuses at boot.
 			await api.mod?.fine;
-		}).rejects.toMatchObject({ code: "INVALID_CONFIG_API_PATH_INVALID" });
+		}).rejects.toMatchObject({ code: "API_PATH_INVALID" });
 		expect(Object.prototype.role).toBeUndefined();
 	});
 });

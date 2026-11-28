@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/lifecycle/lifecycle-uncovered.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/lifecycle/lifecycle-uncovered.test.vitest.mjs
  *	@Date: 2026-02-26T17:01:34-08:00 (1772154094)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:10-07:00 (1791090910)
+ *	@Last modified time: 2026-11-28T04:32:03-08:00 (1795869123)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -183,17 +183,12 @@ function makeMockWithWarning(silent = false) {
 
 describe("Lifecycle.emit — async handler rejection caught at line 181", () => {
 	it("does not reject when an async handler rejects (lines 181-184)", async () => {
-		SlothletWarning.suppressConsole = true;
-		try {
-			const lc = new Lifecycle(makeMockWithWarning());
-			// This handler returns a rejected promise — triggers lines 178-184
-			lc.subscribe("impl:created", () => Promise.reject(new Error("async fail")));
+		const lc = new Lifecycle(makeMockWithWarning());
+		// This handler returns a rejected promise — triggers lines 178-184
+		lc.subscribe("impl:created", () => Promise.reject(new Error("async fail")));
 
-			// emit() should resolve without rethrowing the rejection
-			await expect(lc.emit("impl:created", { apiPath: "p", source: "t", moduleID: "m" })).resolves.not.toThrow();
-		} finally {
-			SlothletWarning.suppressConsole = false;
-		}
+		// emit() should resolve without rethrowing the rejection
+		await expect(lc.emit("impl:created", { apiPath: "p", source: "t", moduleID: "m" })).resolves.not.toThrow();
 	});
 
 	it("does not log when silent:true and async handler rejects (silent branch, line 181)", async () => {
@@ -209,18 +204,13 @@ describe("Lifecycle.emit — async handler rejection caught at line 181", () => 
 
 describe("Lifecycle.emit — sync handler throw caught at line 187", () => {
 	it("does not rethrow from a synchronously-throwing handler (lines 187-192)", async () => {
-		SlothletWarning.suppressConsole = true;
-		try {
-			const lc = new Lifecycle(makeMockWithWarning());
-			// Synchronous throw inside handler — triggers catch at line 187
-			lc.subscribe("impl:created", () => {
-				throw new Error("sync fail");
-			});
+		const lc = new Lifecycle(makeMockWithWarning());
+		// Synchronous throw inside handler — triggers catch at line 187
+		lc.subscribe("impl:created", () => {
+			throw new Error("sync fail");
+		});
 
-			await expect(lc.emit("impl:created", { apiPath: "p", source: "t", moduleID: "m" })).resolves.not.toThrow();
-		} finally {
-			SlothletWarning.suppressConsole = false;
-		}
+		await expect(lc.emit("impl:created", { apiPath: "p", source: "t", moduleID: "m" })).resolves.not.toThrow();
 	});
 
 	it("does not log when silent:true and sync handler throws (silent branch, line 189)", async () => {

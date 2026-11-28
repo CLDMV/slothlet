@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/hooks/hook-subsets.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/hooks/hook-subsets.test.vitest.mjs
  *	@Date: 2026-01-13T22:33:26-08:00 (1768372406)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-28T04:31:53-08:00 (1795869113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@ async function createApiInstance(baseConfig, overrides = {}) {
 // All configurations with hooks enabled
 const HOOK_SUBSET_MATRIX = getMatrixConfigs({ hook: { enabled: true } }).map(({ name, config }) => ({
 	name,
-	config: { ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } }
+	config: { ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } }
 }));
 
 describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
@@ -59,8 +59,8 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 		api = await createApiInstance(config);
 		// console.log("Config:", config);
 		// console.log("Hooks API available:", !!api.slothlet.hook);
-		// console.log("math.add has __slothletPath:", !!api.math.add.__slothletPath);
-		// console.log("math.add.__slothletPath:", api.math.add.__slothletPath);
+		// console.log("math.add has __slothletPath:", !!api.slothlet.node(api.math.add).path.join("."));
+		// console.log("api.slothlet.node(math.add).path.join("."):", api.slothlet.node(api.math.add).path.join("."));
 		expect(api.slothlet.hook).toBeDefined();
 	});
 
@@ -472,9 +472,13 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			const contexts = [];
 
-			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "before", hasError: ctx.hasError }), { subset: "before" });
-			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "primary", hasError: ctx.hasError }), { subset: "primary" });
-			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "after", hasError: ctx.hasError }), { subset: "after" });
+			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "before", hasError: ctx.errors.length > 0 }), {
+				subset: "before"
+			});
+			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "primary", hasError: ctx.errors.length > 0 }), {
+				subset: "primary"
+			});
+			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "after", hasError: ctx.errors.length > 0 }), { subset: "after" });
 
 			api.slothlet.hook.on("**:before", () => {
 				throw new Error("Test error");
@@ -546,8 +550,8 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				(ctx) =>
 					errorContexts.push({
 						subset: "before",
-						errorType: ctx.errorType,
-						sourceType: ctx.source.type
+						errorType: ctx.class,
+						sourceType: ctx.origin.type
 					}),
 				{ subset: "before" }
 			);
@@ -557,8 +561,8 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				(ctx) =>
 					errorContexts.push({
 						subset: "primary",
-						errorType: ctx.errorType,
-						sourceType: ctx.source.type
+						errorType: ctx.class,
+						sourceType: ctx.origin.type
 					}),
 				{ subset: "primary" }
 			);
@@ -568,8 +572,8 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				(ctx) =>
 					errorContexts.push({
 						subset: "after",
-						errorType: ctx.errorType,
-						sourceType: ctx.source.type
+						errorType: ctx.class,
+						sourceType: ctx.origin.type
 					}),
 				{ subset: "after" }
 			);

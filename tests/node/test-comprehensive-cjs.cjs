@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/node/test-comprehensive-cjs.cjs
+ *	@Filename: tests/node/test-comprehensive-cjs.cjs
  *	@Date: 2026-01-21T00:12:02-08:00 (1768983122)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-28T04:30:54-08:00 (1795869054)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -116,7 +116,7 @@ function listApiMethods(api) {
  * const api = await createApiInstance(CJS_API_DIR, { user: "alice" });
  */
 async function createApiInstance(dir, context) {
-	const api = await slothlet({ dir, context });
+	const api = await slothlet({ base: dir, context });
 	await assertContextFields(api, context);
 	return api;
 }

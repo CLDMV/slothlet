@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/modules/lifecycle-events.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/modules/lifecycle-events.test.vitest.mjs
  *	@Date: 2026-05-27T11:22:33-07:00 (1779906153)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:12-07:00 (1791090912)
+ *	@Last modified time: 2026-11-28T04:32:08-08:00 (1795869128)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,7 +50,7 @@ beforeEach(async () => {
 		runtime: "async",
 		silent: true,
 		diagnostics: true,
-		api: { collision: { initial: "merge", api: "merge" } }
+		api: { collision: { mode: { initial: "merge", api: "merge" } } }
 	});
 	// Subscribe to all five module events.
 	for (const ev of [
@@ -80,22 +80,22 @@ function eventsOfType(name) {
 
 describe("modules:discover-* events", () => {
 	it("emits discover-start before discover-complete on a discover() call", async () => {
-		await api.slothlet.api.modules.discover({ scanRoot: FIX_NPM });
+		await api.slothlet.api.modules.discover({ root: FIX_NPM });
 		const startIdx = events.findIndex((e) => e.event === "modules:discover-start");
 		const completeIdx = events.findIndex((e) => e.event === "modules:discover-complete");
 		expect(startIdx).toBeGreaterThanOrEqual(0);
 		expect(completeIdx).toBeGreaterThan(startIdx);
 	});
 
-	it("discover-start payload includes scanRoot and options", async () => {
-		await api.slothlet.api.modules.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
+	it("discover-start payload includes root and options", async () => {
+		await api.slothlet.api.modules.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
 		const [{ payload }] = eventsOfType("modules:discover-start");
-		expect(payload.scanRoot).toBe(FIX_NPM);
+		expect(payload.root).toBe(FIX_NPM);
 		expect(payload.options.prefix).toBe("packrat-extension-");
 	});
 
 	it("discover-complete payload includes found[] and stale[]", async () => {
-		await api.slothlet.api.modules.discover({ scanRoot: FIX_NPM });
+		await api.slothlet.api.modules.discover({ root: FIX_NPM });
 		const [{ payload }] = eventsOfType("modules:discover-complete");
 		expect(Array.isArray(payload.found)).toBe(true);
 		expect(payload.found.length).toBe(3);
@@ -104,14 +104,14 @@ describe("modules:discover-* events", () => {
 	});
 });
 
-// ─── addModule() event sequence ─────────────────────────────────────────────
+// ─── modules.add() event sequence ─────────────────────────────────────────────
 
-describe("modules:mount-* and modules:loaded events — addModule()", () => {
-	it("emits mount-start → mount-complete → loaded for a single addModule call", async () => {
+describe("modules:mount-* and modules:loaded events — modules.add()", () => {
+	it("emits mount-start → mount-complete → loaded for a single modules.add call", async () => {
 		const mm = api.slothlet.api.modules;
-		await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
+		await mm.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
 		events.length = 0; // clear discover events
-		await mm.addModule("packrat-extension-baz");
+		await mm.add("packrat-extension-baz");
 
 		const sequence = events.map((e) => e.event);
 		expect(sequence).toEqual(["modules:mount-start", "modules:mount-complete", "modules:loaded"]);
@@ -119,35 +119,35 @@ describe("modules:mount-* and modules:loaded events — addModule()", () => {
 
 	it("mount-complete payload identifies the mounted module", async () => {
 		const mm = api.slothlet.api.modules;
-		await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
-		await mm.addModule("packrat-extension-baz");
+		await mm.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
+		await mm.add("packrat-extension-baz");
 
 		const [{ payload }] = eventsOfType("modules:mount-complete");
-		expect(payload.name).toBe("packrat-extension-baz");
+		expect(payload.package).toBe("packrat-extension-baz");
 		expect(payload.version).toBe("0.5.0");
-		expect(payload.mountPath).toBe("extensions.baz");
-		expect(typeof payload.moduleID).toBe("string");
+		expect(payload.mount).toEqual(["extensions", "baz"]);
+		expect(typeof payload.module).toBe("string");
 	});
 
 	it("loaded payload contains a mounted[] array of length 1", async () => {
 		const mm = api.slothlet.api.modules;
-		await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
-		await mm.addModule("packrat-extension-baz");
+		await mm.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
+		await mm.add("packrat-extension-baz");
 
 		const [{ payload }] = eventsOfType("modules:loaded");
 		expect(payload.mounted.length).toBe(1);
-		expect(payload.mounted[0].packageName).toBe("packrat-extension-baz");
+		expect(payload.mounted[0].package).toBe("packrat-extension-baz");
 	});
 });
 
-// ─── addModules() per-item events ───────────────────────────────────────────
+// ─── modules.add() per-item events ───────────────────────────────────────────
 
-describe("modules:mount-* and modules:loaded events — addModules()", () => {
+describe("modules:mount-* and modules:loaded events — modules.add()", () => {
 	it("emits one mount-complete per mounted item plus one loaded at the end", async () => {
 		const mm = api.slothlet.api.modules;
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		events.length = 0;
-		await mm.addModules(["@org/packrat-driver-foo", "@org/packrat-driver-bar"]);
+		await mm.add(["@org/packrat-driver-foo", "@org/packrat-driver-bar"]);
 
 		expect(eventsOfType("modules:mount-start").length).toBe(1);
 		expect(eventsOfType("modules:mount-complete").length).toBe(2);
@@ -156,9 +156,9 @@ describe("modules:mount-* and modules:loaded events — addModules()", () => {
 
 	it("mount-start payload includes the items array and options", async () => {
 		const mm = api.slothlet.api.modules;
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		events.length = 0;
-		await mm.addModules(["@org/packrat-driver-foo"], { concurrency: 1 });
+		await mm.add(["@org/packrat-driver-foo"], { concurrency: 1 });
 
 		const [{ payload }] = eventsOfType("modules:mount-start");
 		expect(Array.isArray(payload.items)).toBe(true);
@@ -168,19 +168,19 @@ describe("modules:mount-* and modules:loaded events — addModules()", () => {
 
 	it("loaded payload mounted[] reflects all successfully-mounted modules", async () => {
 		const mm = api.slothlet.api.modules;
-		await mm.discover({ scanRoot: FIX_NPM });
-		await mm.addModules(["@org/packrat-driver-foo", "@org/packrat-driver-bar", "packrat-extension-baz"]);
+		await mm.discover({ root: FIX_NPM });
+		await mm.add(["@org/packrat-driver-foo", "@org/packrat-driver-bar", "packrat-extension-baz"]);
 
 		const [{ payload }] = eventsOfType("modules:loaded");
 		expect(payload.mounted.length).toBe(3);
 	});
 });
 
-// ─── addDiscovered() chains all events ──────────────────────────────────────
+// ─── modules.add() chains all events ──────────────────────────────────────
 
-describe("modules:* events — addDiscovered() chain", () => {
-	it("emits the full discover + mount sequence in one addDiscovered call", async () => {
-		await api.slothlet.api.modules.addDiscovered({ scanRoot: FIX_NPM });
+describe("modules:* events — modules.add() chain", () => {
+	it("emits the full discover + mount sequence in one modules.add call", async () => {
+		await api.slothlet.api.modules.add({ discover: { root: FIX_NPM } });
 
 		// discover phase
 		expect(eventsOfType("modules:discover-start").length).toBe(1);
@@ -192,7 +192,7 @@ describe("modules:* events — addDiscovered() chain", () => {
 	});
 
 	it("ordering: discover-start < discover-complete < mount-start < mount-complete < loaded", async () => {
-		await api.slothlet.api.modules.addDiscovered({ scanRoot: FIX_NPM });
+		await api.slothlet.api.modules.add({ discover: { root: FIX_NPM } });
 
 		const order = events.map((e) => e.event);
 		const idxDiscoverStart = order.indexOf("modules:discover-start");

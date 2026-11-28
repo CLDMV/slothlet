@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/setup/vitest.setup.mjs
+ *	@Filename: tests/vitests/setup/vitest.setup.mjs
  *	@Date: 2026-01-29T22:04:09-08:00 (1769753049)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T09:24:38-08:00 (1793553878)
+ *	@Last modified time: 2026-11-28T04:31:05-08:00 (1795869065)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,7 +55,7 @@ function ensureDevEnvFlags() {
 }
 // ensureDevEnvFlags();
 /**
- * Set the slothlet dev flags and quiet SlothletWarning output before the tests run.
+ * Set the slothlet dev flags and keep SlothletWarning output out of the test log before the tests run.
  * @returns {Promise<void>} Resolves when setup completes.
  */
 // export async function globalSetup() {
@@ -66,12 +66,20 @@ export async function setup() {
 
 	ensureDevEnvFlags();
 
-	// Suppress SlothletWarning console output during tests (still captured for assertions).
-	// Import via the package export (resolves to src under the slothlet-dev condition, dist otherwise),
-	// NOT a relative `../../../src/...` path: this setup file is loaded by @cldmv/vitest-runner, which
-	// resolves the relative specifier from the wrong base and fails with "Cannot find module /src/...".
-	const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-	SlothletWarning.suppressConsole = true;
+	// Keep SlothletWarning console output out of the test log. Every warning is recorded on the class it was raised
+	// through whatever is printed (#838), so tests assert on `captured`; a test that spies on console.warn installs its
+	// spy over this filter and still sees every call.
+	const original = globalThis.console.warn;
+	let dropDetails = false;
+	globalThis.console.warn = function slothletTestWarnFilter(first, ...rest) {
+		if (typeof first === "string" && first.startsWith("\n⚠️  [")) {
+			dropDetails = true;
+			return;
+		}
+		if (dropDetails && (first === "Context:" || first === "Cause:")) return;
+		dropDetails = false;
+		return Reflect.apply(original, this, [first, ...rest]);
+	};
 }
 
 await setup();

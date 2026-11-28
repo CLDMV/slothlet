@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/typescript-fallback-root-cleanup.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/typescript-fallback-root-cleanup.test.vitest.mjs
  *	@Date: 2026-09-27T02:49:06-07:00 (1790502546)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:47-07:00 (1791091727)
+ *	@Last modified time: 2026-11-28T04:33:08-08:00 (1795869188)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,7 +28,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { releaseSecureFallbackRoot, sweepStaleFallbackRoots } from "@cldmv/slothlet/processors/typescript";
+import { releaseSecureFallbackRoot, sweepStaleFallbackRoots } from "#processors/typescript";
 
 /** A PID no process holds (beyond Linux's pid_max), so it always reads as dead. */
 const DEAD_PID = 999999999;

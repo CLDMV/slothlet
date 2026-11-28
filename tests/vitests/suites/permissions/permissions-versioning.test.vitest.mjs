@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-versioning.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-versioning.test.vitest.mjs
  *	@Date: 2026-04-14T17:16:46-07:00 (1776212206)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-28T04:32:44-08:00 (1795869164)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,14 +32,14 @@ describe.each(getMatrixConfigs())("Permissions > Dynamic api.add > $name", ({ co
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
 		await api.slothlet.api.add("payments", `${BASE}/payments`);
 
 		// Verify checkAccess correctly evaluates a dynamically-added module path under default allow policy
-		const allowed = api.slothlet.permissions.global.checkAccess("callers.paymentsCaller", "payments.charge");
+		const allowed = api.slothlet.permissions.global.check.access("callers.paymentsCaller", "payments.charge");
 		expect(allowed).toBe(true);
 	});
 });

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/versioning/versioning-dispatcher-set.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/versioning/versioning-dispatcher-set.test.vitest.mjs
  *	@Date: 2026-04-12T00:00:00-07:00 (1775977200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:21:22-07:00 (1791764482)
+ *	@Last modified time: 2026-11-28T04:33:16-08:00 (1795869196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ const BASE = TEST_DIRS.API_TEST_VERSIONED;
 /** Helper: one versioned path "auth" registered as v1 (default). */
 async function makeApi(config) {
 	const api = await slothlet({ ...config, base: `${BASE}/callers` });
-	await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
+	await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
 	return api;
 }
 
@@ -94,8 +94,8 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 
 	it("assignment routes to the active default version when two versions exist", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		api.auth.sharedClient = "shared";
 
@@ -116,9 +116,7 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// These would return fixed dispatcher values from get; writes must not throw
 		// and must not alter what get returns.
 		expect(() => {
-			api.auth.__isVersionDispatcher = false;
-			api.auth.__apiPath = "overridden";
-			api.auth.__moduleID = "hacked";
+			api.auth.____isVersionDispatcher = false;
 			api.auth.toString = "not-a-function";
 			api.auth.valueOf = null;
 			api.auth.toJSON = null;
@@ -128,8 +126,8 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		}).not.toThrow();
 
 		// Reads must return the original fixed values, not the written values
-		expect(api.auth.__isVersionDispatcher).toBe(true);
-		expect(api.auth.__apiPath).toBe("auth");
+		expect(api.auth.____isVersionDispatcher).toBe(true);
+		expect(api.slothlet.node(api.auth).logical).toEqual(["auth"]);
 		expect(api.auth.toString()).toBe("[VersionDispatcher: auth]");
 		expect(api.auth.then).toBeUndefined();
 		expect(api.auth.length).toBe(0);
@@ -153,13 +151,10 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 
 	it("absorbed writes do not pollute the versioned wrapper", async () => {
 		api = await makeApi(config);
-		const sentinel = {};
-		// Write special-case keys that the dispatcher absorbs
-		api.auth.__isCallable = sentinel;
+		// Write a special-case key that the dispatcher absorbs
 		api.auth.toString = "corrupted";
-		// The versioned wrapper (v1.auth) must be unaffected — __isCallable is always false
-		// from UnifiedWrapper's own get trap regardless of what we write to the dispatcher
-		expect(api.v1.auth.__isCallable).toBe(false);
+		// The versioned wrapper (v1.auth) must be unaffected
+		expect(api.slothlet.node(api.v1.auth).callable).toBe(false);
 		expect(typeof api.v1.auth.toString).not.toBe("string");
 	});
 
@@ -168,23 +163,22 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// These keys return undefined from the get trap (case 1); writes must be absorbed silently.
 		expect(() => {
 			api.auth.____slothletInternal = "corrupted";
-			api.auth._impl = "corrupted";
-			api.auth.__impl = "corrupted";
-			api.auth.__state = "corrupted";
-			api.auth.__invalid = "corrupted";
+			api.auth.____impl = "corrupted";
+			api.auth.____state = "corrupted";
+			api.auth.____invalid = "corrupted";
 		}).not.toThrow();
 		// Internal keys are never visible through the dispatcher
 		expect(api.auth.____slothletInternal).toBeUndefined();
-		expect(api.auth._impl).toBeUndefined();
+		expect(api.auth.____impl).toBeUndefined();
 	});
 
 	it("util.inspect shows the resolved versioned namespace (inspection transparency)", async () => {
 		api = await makeApi(config);
 		const result = inspect(api.auth, { depth: 3, colors: false });
 		// Must show default-version namespace content, not the raw dispatcher target.
-		// The raw target only has __isVersionDispatcher and __logicalPath.
+		// The raw target only has ____isVersionDispatcher and ____logicalPath.
 		expect(result).toContain("login");
-		expect(result).not.toContain("__isVersionDispatcher");
+		expect(result).not.toContain("____isVersionDispatcher");
 	});
 
 	it("[util.inspect.custom] is accessible via explicit property access (get trap case 6)", async () => {
@@ -229,11 +223,11 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// Node's util.inspect reads the symbol installed directly on the dispatcher target.
 		// Use toContain rather than exact string equality — inspect formatting varies across Node versions.
 		const inspected1 = inspect(dispatcher);
-		expect(inspected1).toContain("__versionDispatcher");
+		expect(inspected1).toContain("path");
 		expect(inspected1).toContain("'auth'");
 		expect(inspected1).toContain("versions");
 		// Explicit property access hits get-trap case 6 and must return the same fallback payload.
-		expect(dispatcher[customSym]()).toEqual({ __versionDispatcher: "auth", versions: [] });
+		expect(dispatcher[customSym]()).toEqual({ path: ["auth"], versions: [] });
 	});
 
 	it("direct dispatcher fallback lists registered versions when registry exists but no wrapper is mounted", () => {
@@ -254,10 +248,10 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// so resolveVersionedWrapper() returns undefined and the fallback exposes versions.
 		// Use toContain rather than exact string equality — inspect formatting varies across Node versions.
 		const inspected2 = inspect(dispatcher);
-		expect(inspected2).toContain("__versionDispatcher");
+		expect(inspected2).toContain("path");
 		expect(inspected2).toContain("'auth'");
 		expect(inspected2).toContain("v1");
-		expect(dispatcher[customSym]()).toEqual({ __versionDispatcher: "auth", versions: ["v1"] });
+		expect(dispatcher[customSym]()).toEqual({ path: ["auth"], versions: ["v1"] });
 	});
 
 	describe("a dispatcher mount still in flight", () => {
@@ -405,7 +399,7 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 			const mounted = held.get(api);
 			expect(mounted).toBeDefined();
 			expect(held.get(boundApi)).toBe(mounted);
-			expect(mounted[Symbol.for("nodejs.util.inspect.custom")]()).toEqual({ __versionDispatcher: "auth", versions: ["v2"] });
+			expect(mounted[Symbol.for("nodejs.util.inspect.custom")]()).toEqual({ path: ["auth"], versions: ["v2"] });
 		});
 
 		it("mounts the dispatcher of a path registered again while its earlier mount was in flight", async () => {
@@ -418,7 +412,7 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 			const mounted = held.get(api);
 			expect(mounted).toBeDefined();
 			expect(held.get(boundApi)).toBe(mounted);
-			expect(mounted[Symbol.for("nodejs.util.inspect.custom")]()).toEqual({ __versionDispatcher: "auth", versions: ["v2"] });
+			expect(mounted[Symbol.for("nodejs.util.inspect.custom")]()).toEqual({ path: ["auth"], versions: ["v2"] });
 		});
 	});
 });

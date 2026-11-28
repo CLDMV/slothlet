@@ -1,0 +1,7 @@
+{
+	"schemaVersion": 1,
+	"mountPath": ["plugins", "consumer-target"],
+	"apiDir": "./api",
+	"kind": "extension",
+	"permissions": [{ "caller": "**", "target": "nowhere.at.all", "effect": "deny" }]
+}

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/sanitization/sanitize.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/sanitization/sanitize.test.vitest.mjs
  *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-28T04:33:01-08:00 (1795869181)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
+import { sanitizePropertyName } from "#helpers/sanitize";
 
 describe("Sanitization Tests", () => {
 	describe("Basic camelCase conversion", () => {
@@ -84,67 +84,67 @@ describe("Sanitization Tests", () => {
 
 	describe("Option: lowerFirst", () => {
 		it('"MyModule" with lowerFirst:true → "myModule"', () => {
-			expect(sanitizePropertyName("MyModule", { lowerFirst: true })).toBe("myModule");
+			expect(sanitizePropertyName("MyModule", { first: true })).toBe("myModule");
 		});
 
 		it('"parse-json" with lowerFirst:true → "parseJson"', () => {
-			expect(sanitizePropertyName("parse-json", { lowerFirst: true })).toBe("parseJson");
+			expect(sanitizePropertyName("parse-json", { first: true })).toBe("parseJson");
 		});
 
 		it('"MyModule" with lowerFirst:false → "MyModule"', () => {
-			expect(sanitizePropertyName("MyModule", { lowerFirst: false })).toBe("MyModule");
+			expect(sanitizePropertyName("MyModule", { first: false })).toBe("MyModule");
 		});
 
 		it('"parse-json" with lowerFirst:false → "parseJson" (already lowercase)', () => {
-			expect(sanitizePropertyName("parse-json", { lowerFirst: false })).toBe("parseJson");
+			expect(sanitizePropertyName("parse-json", { first: false })).toBe("parseJson");
 		});
 	});
 
 	describe("Option: preserveAllUpper", () => {
 		it('"COMMON_APPS" with preserveAllUpper:true → "COMMON_APPS"', () => {
-			expect(sanitizePropertyName("COMMON_APPS", { preserveAllUpper: true })).toBe("COMMON_APPS");
+			expect(sanitizePropertyName("COMMON_APPS", { preserve: { upper: true } })).toBe("COMMON_APPS");
 		});
 
 		it('"HTTP_STATUS" with preserveAllUpper:true → "HTTP_STATUS"', () => {
-			expect(sanitizePropertyName("HTTP_STATUS", { preserveAllUpper: true })).toBe("HTTP_STATUS");
+			expect(sanitizePropertyName("HTTP_STATUS", { preserve: { upper: true } })).toBe("HTTP_STATUS");
 		});
 
 		it('"Mixed_APPS" with preserveAllUpper:true → "mixed_APPS"', () => {
-			expect(sanitizePropertyName("Mixed_APPS", { preserveAllUpper: true })).toBe("mixed_APPS");
+			expect(sanitizePropertyName("Mixed_APPS", { preserve: { upper: true } })).toBe("mixed_APPS");
 		});
 
 		it('"MIXED_Apps" with preserveAllUpper:true → "mIXED_Apps" (whole string not uppercase)', () => {
-			expect(sanitizePropertyName("MIXED_Apps", { preserveAllUpper: true })).toBe("mIXED_Apps");
+			expect(sanitizePropertyName("MIXED_Apps", { preserve: { upper: true } })).toBe("mIXED_Apps");
 		});
 
 		it('"cOMMON_APPS" with preserveAllUpper:true → "cOMMON_APPS"', () => {
-			expect(sanitizePropertyName("cOMMON_APPS", { preserveAllUpper: true })).toBe("cOMMON_APPS");
+			expect(sanitizePropertyName("cOMMON_APPS", { preserve: { upper: true } })).toBe("cOMMON_APPS");
 		});
 
 		it("should work in multi-segment context", () => {
-			expect(sanitizePropertyName("parse-XML-data", { preserveAllUpper: true })).toBe("parseXMLData");
+			expect(sanitizePropertyName("parse-XML-data", { preserve: { upper: true } })).toBe("parseXMLData");
 		});
 	});
 
 	describe("Option: preserveAllLower", () => {
 		it('"common_apps" with preserveAllLower:true → "common_apps"', () => {
-			expect(sanitizePropertyName("common_apps", { preserveAllLower: true })).toBe("common_apps");
+			expect(sanitizePropertyName("common_apps", { preserve: { lower: true } })).toBe("common_apps");
 		});
 
 		it('"http_status" with preserveAllLower:true → "http_status"', () => {
-			expect(sanitizePropertyName("http_status", { preserveAllLower: true })).toBe("http_status");
+			expect(sanitizePropertyName("http_status", { preserve: { lower: true } })).toBe("http_status");
 		});
 
 		it('"Mixed_apps" with preserveAllLower:true → "mixed_apps"', () => {
-			expect(sanitizePropertyName("Mixed_apps", { preserveAllLower: true })).toBe("mixed_apps");
+			expect(sanitizePropertyName("Mixed_apps", { preserve: { lower: true } })).toBe("mixed_apps");
 		});
 
 		it('"Common_apps" with preserveAllLower:true → "common_apps"', () => {
-			expect(sanitizePropertyName("Common_apps", { preserveAllLower: true })).toBe("common_apps");
+			expect(sanitizePropertyName("Common_apps", { preserve: { lower: true } })).toBe("common_apps");
 		});
 
 		it('"parse-xml-data" with preserveAllLower:true → "parsexmldata"', () => {
-			expect(sanitizePropertyName("parse-xml-data", { preserveAllLower: true })).toBe("parsexmldata");
+			expect(sanitizePropertyName("parse-xml-data", { preserve: { lower: true } })).toBe("parsexmldata");
 		});
 	});
 
@@ -180,23 +180,23 @@ describe("Sanitization Tests", () => {
 
 	describe("Rule: leaveInsensitive (case-insensitive)", () => {
 		it('"autoIP" with leaveInsensitive:["autoip"] → "autoIP"', () => {
-			expect(sanitizePropertyName("autoIP", { rules: { leaveInsensitive: ["autoip"] } })).toBe("autoIP");
+			expect(sanitizePropertyName("autoIP", { rules: { nocase: ["autoip"] } })).toBe("autoIP");
 		});
 
 		it('"AutoIP" with leaveInsensitive:["autoip"] → "AutoIP"', () => {
-			expect(sanitizePropertyName("AutoIP", { rules: { leaveInsensitive: ["autoip"] } })).toBe("AutoIP");
+			expect(sanitizePropertyName("AutoIP", { rules: { nocase: ["autoip"] } })).toBe("AutoIP");
 		});
 
 		it('"AUTOIP" with leaveInsensitive:["autoip"] → "AUTOIP"', () => {
-			expect(sanitizePropertyName("AUTOIP", { rules: { leaveInsensitive: ["autoip"] } })).toBe("AUTOIP");
+			expect(sanitizePropertyName("AUTOIP", { rules: { nocase: ["autoip"] } })).toBe("AUTOIP");
 		});
 
 		it('"get-xml-parser" with leaveInsensitive:["XML"] → "getxmlParser"', () => {
-			expect(sanitizePropertyName("get-xml-parser", { rules: { leaveInsensitive: ["XML"] } })).toBe("getxmlParser");
+			expect(sanitizePropertyName("get-xml-parser", { rules: { nocase: ["XML"] } })).toBe("getxmlParser");
 		});
 
 		it('"auto-iot-device" with leaveInsensitive:["*IoT*"] → "autoiotDevice" (glob pattern)', () => {
-			expect(sanitizePropertyName("auto-iot-device", { rules: { leaveInsensitive: ["*IoT*"] } })).toBe("autoiotDevice");
+			expect(sanitizePropertyName("auto-iot-device", { rules: { nocase: ["*IoT*"] } })).toBe("autoiotDevice");
 		});
 	});
 
@@ -346,7 +346,7 @@ describe("Sanitization Tests", () => {
 				sanitizePropertyName("get-API-data", {
 					rules: {
 						leave: ["API"],
-						leaveInsensitive: ["api"],
+						nocase: ["api"],
 						upper: ["API"],
 						lower: ["API"]
 					}
@@ -358,7 +358,7 @@ describe("Sanitization Tests", () => {
 			expect(
 				sanitizePropertyName("get-api-data", {
 					rules: {
-						leaveInsensitive: ["API"],
+						nocase: ["API"],
 						upper: ["api"],
 						lower: ["api"]
 					}
@@ -369,7 +369,9 @@ describe("Sanitization Tests", () => {
 		it("preserveAllUpper should win over upper rules", () => {
 			expect(
 				sanitizePropertyName("XML_DATA", {
-					preserveAllUpper: true,
+					preserve: {
+						upper: true
+					},
 					rules: { upper: ["xml"] }
 				})
 			).toBe("XML_DATA");
@@ -378,7 +380,9 @@ describe("Sanitization Tests", () => {
 		it("leave should win over preserveAllUpper", () => {
 			expect(
 				sanitizePropertyName("XML_DATA", {
-					preserveAllUpper: true,
+					preserve: {
+						upper: true
+					},
 					rules: { leave: ["XML_DATA"] }
 				})
 			).toBe("XML_DATA");
@@ -409,7 +413,9 @@ describe("Sanitization Tests", () => {
 		it('"COMMON_APPS" with preserveAllUpper:true + upper:["apps"] → "COMMON_APPS"', () => {
 			expect(
 				sanitizePropertyName("COMMON_APPS", {
-					preserveAllUpper: true,
+					preserve: {
+						upper: true
+					},
 					rules: { upper: ["apps"] }
 				})
 			).toBe("COMMON_APPS");
@@ -428,8 +434,10 @@ describe("Sanitization Tests", () => {
 		it('"COMMON_APPS" with preserveAllUpper:true + lowerFirst:false → "COMMON_APPS"', () => {
 			expect(
 				sanitizePropertyName("COMMON_APPS", {
-					preserveAllUpper: true,
-					lowerFirst: false
+					preserve: {
+						upper: true
+					},
+					first: false
 				})
 			).toBe("COMMON_APPS");
 		});
@@ -437,7 +445,9 @@ describe("Sanitization Tests", () => {
 		it('"Mixed_APPS_some-thing" with preserveAllUpper:true + upper:["thing"] → "mixed_APPS_someTHING"', () => {
 			expect(
 				sanitizePropertyName("Mixed_APPS_some-thing", {
-					preserveAllUpper: true,
+					preserve: {
+						upper: true
+					},
 					rules: { upper: ["thing"] }
 				})
 			).toBe("mixed_APPS_someTHING");
@@ -466,15 +476,15 @@ describe("Sanitization Tests", () => {
 		});
 
 		it("should handle numeric identifiers with preserveAllUpper", () => {
-			expect(sanitizePropertyName("123_456", { preserveAllUpper: true })).toBe("_456");
+			expect(sanitizePropertyName("123_456", { preserve: { upper: true } })).toBe("_456");
 		});
 
 		it("should handle single uppercase letter with preserveAllUpper", () => {
-			expect(sanitizePropertyName("A", { preserveAllUpper: true })).toBe("A");
+			expect(sanitizePropertyName("A", { preserve: { upper: true } })).toBe("A");
 		});
 
 		it("should handle single lowercase letter with preserveAllLower", () => {
-			expect(sanitizePropertyName("a", { preserveAllLower: true })).toBe("a");
+			expect(sanitizePropertyName("a", { preserve: { lower: true } })).toBe("a");
 		});
 	});
 
@@ -482,8 +492,10 @@ describe("Sanitization Tests", () => {
 		it('"COMMON_apps" with preserveAllUpper:true + preserveAllLower:true → "cOMMON_apps"', () => {
 			expect(
 				sanitizePropertyName("COMMON_apps", {
-					preserveAllUpper: true,
-					preserveAllLower: true
+					preserve: {
+						upper: true,
+						lower: true
+					}
 				})
 			).toBe("cOMMON_apps");
 		});
@@ -493,7 +505,7 @@ describe("Sanitization Tests", () => {
 				sanitizePropertyName("auto-ip", {
 					rules: {
 						leave: ["autoIP"],
-						leaveInsensitive: ["autoip"]
+						nocase: ["autoip"]
 					}
 				})
 			).toBe("autoIp");
@@ -513,7 +525,9 @@ describe("Sanitization Tests", () => {
 		it('"COMMON_APPS" with preserveAllUpper:true + lower:["apps"] → "COMMON_APPS" (preserve overrides lower)', () => {
 			expect(
 				sanitizePropertyName("COMMON_APPS", {
-					preserveAllUpper: true,
+					preserve: {
+						upper: true
+					},
 					rules: { lower: ["apps"] }
 				})
 			).toBe("COMMON_APPS");
@@ -522,7 +536,9 @@ describe("Sanitization Tests", () => {
 		it('"common_apps" with preserveAllLower:true + upper:["apps"] → "common_apps" (preserve overrides upper)', () => {
 			expect(
 				sanitizePropertyName("common_apps", {
-					preserveAllLower: true,
+					preserve: {
+						lower: true
+					},
 					rules: { upper: ["apps"] }
 				})
 			).toBe("common_apps");
@@ -533,7 +549,7 @@ describe("Sanitization Tests", () => {
 		it('"ParseJSON" with lowerFirst:false + leave:["ParseJSON"] → "ParseJSON" (leave wins)', () => {
 			expect(
 				sanitizePropertyName("ParseJSON", {
-					lowerFirst: false,
+					first: false,
 					rules: { leave: ["ParseJSON"] }
 				})
 			).toBe("ParseJSON");
@@ -542,7 +558,7 @@ describe("Sanitization Tests", () => {
 		it('"AUTO-IP" with lowerFirst:false + upper:["ip"] → "AUTOIP"', () => {
 			expect(
 				sanitizePropertyName("AUTO-IP", {
-					lowerFirst: false,
+					first: false,
 					rules: { upper: ["ip"] }
 				})
 			).toBe("AUTOIP");
@@ -551,7 +567,7 @@ describe("Sanitization Tests", () => {
 		it('"parse-json" with lowerFirst:true + upper:["json"] → "parseJSON"', () => {
 			expect(
 				sanitizePropertyName("parse-json", {
-					lowerFirst: true,
+					first: true,
 					rules: { upper: ["json"] }
 				})
 			).toBe("parseJSON");
@@ -588,9 +604,11 @@ describe("Sanitization Tests", () => {
 		it('"Mixed_API_some-json-DATA" with all options → "mixed_API_someJSONDATA" (preserveAllUpper overrides lower)', () => {
 			expect(
 				sanitizePropertyName("Mixed_API_some-json-DATA", {
-					lowerFirst: true,
-					preserveAllUpper: true,
-					preserveAllLower: false,
+					first: true,
+					preserve: {
+						upper: true,
+						lower: false
+					},
 					rules: {
 						upper: ["json"],
 						lower: ["data"],
@@ -603,11 +621,11 @@ describe("Sanitization Tests", () => {
 		it('"GET-http-api-STATUS" with complex rules → "GEThttpAPIstatus"', () => {
 			expect(
 				sanitizePropertyName("GET-http-api-STATUS", {
-					lowerFirst: false,
+					first: false,
 					rules: {
 						upper: ["*-api-*"],
 						lower: ["http", "status"],
-						leaveInsensitive: ["get"]
+						nocase: ["get"]
 					}
 				})
 			).toBe("GEThttpAPIstatus");
@@ -616,19 +634,19 @@ describe("Sanitization Tests", () => {
 
 	describe("preserveAllUpper with hyphens (#422)", () => {
 		it('"FOO-BAR" preserveAllUpper → "FOOBAR" (valid identifier, caps kept, hyphen dropped)', () => {
-			const out = sanitizePropertyName("FOO-BAR", { preserveAllUpper: true });
+			const out = sanitizePropertyName("FOO-BAR", { preserve: { upper: true } });
 			expect(out).toMatch(/^[A-Za-z_$][A-Za-z0-9_$]*$/);
 			expect(out).toBe("FOOBAR");
 		});
 
 		it('"GET-USER-BY-ID" preserveAllUpper → "GETUSERBYID" (valid identifier)', () => {
-			const out = sanitizePropertyName("GET-USER-BY-ID", { preserveAllUpper: true });
+			const out = sanitizePropertyName("GET-USER-BY-ID", { preserve: { upper: true } });
 			expect(out).toMatch(/^[A-Za-z_$][A-Za-z0-9_$]*$/);
 			expect(out).toBe("GETUSERBYID");
 		});
 
 		it('"HTTP" preserveAllUpper → "HTTP" (non-hyphenated still preserved verbatim)', () => {
-			expect(sanitizePropertyName("HTTP", { preserveAllUpper: true })).toBe("HTTP");
+			expect(sanitizePropertyName("HTTP", { preserve: { upper: true } })).toBe("HTTP");
 		});
 	});
 });

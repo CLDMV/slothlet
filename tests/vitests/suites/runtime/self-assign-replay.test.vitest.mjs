@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/runtime/self-assign-replay.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/runtime/self-assign-replay.test.vitest.mjs
  *	@Date: 2026-05-12T22:29:05-07:00 (1778650145)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-28T04:33:00-08:00 (1795869180)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,9 +37,9 @@ describe("self.X = ... does not survive a reload", () => {
 	});
 
 	it("a runtime self.X = … primitive write is gone after api.slothlet.reload()", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", scope: { isolation: "partial" } });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.runtimeKey = "written-at-runtime";
 		});
 		// Visible immediately (partial-isolation `.run()` shares `self`).
@@ -52,9 +52,9 @@ describe("self.X = ... does not survive a reload", () => {
 	});
 
 	it("a runtime self.X = … object write is gone after api.slothlet.reload()", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", scope: { isolation: "partial" } });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.runtimeObj = { count: 42 };
 		});
 		expect(api.runtimeObj?.count).toBe(42);
@@ -65,9 +65,9 @@ describe("self.X = ... does not survive a reload", () => {
 	});
 
 	it("multiple runtime self.X = … writes are all gone after a full reload", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", scope: { isolation: "partial" } });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.first = 1;
 			self.second = 2;
 			self.third = 3;

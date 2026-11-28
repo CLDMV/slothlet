@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-default-policy-deny.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-default-policy-deny.test.vitest.mjs
  *	@Date: 2026-04-14T17:12:34-07:00 (1776211954)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-28T04:32:24-08:00 (1795869144)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Default Policy Deny > $name", (
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: []
 			}
 		});
@@ -50,7 +50,7 @@ describe.each(getMatrixConfigs())("Permissions > Default Policy Deny > $name", (
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}
 		});

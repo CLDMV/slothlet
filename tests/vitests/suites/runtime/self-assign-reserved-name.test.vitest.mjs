@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/runtime/self-assign-reserved-name.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/runtime/self-assign-reserved-name.test.vitest.mjs
  *	@Date: 2026-05-14T00:00:00-07:00 (1778742000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-28T04:33:00-08:00 (1795869180)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,11 +40,11 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 	it("rejects self.slothlet = … (would overwrite the built-in namespace)", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self.slothlet = "evil";
-				}).toThrow(/INVALID_CONFIG_API_PATH_INVALID|RESERVED_NAME/);
+				}).toThrow(/API_PATH_INVALID|RESERVED_NAME/);
 			});
 		});
 
@@ -55,11 +55,11 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 	it("rejects self.shutdown = …", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self.shutdown = "evil";
-				}).toThrow(/INVALID_CONFIG_API_PATH_INVALID|RESERVED_NAME/);
+				}).toThrow(/API_PATH_INVALID|RESERVED_NAME/);
 			});
 		});
 	});
@@ -67,11 +67,11 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 	it("rejects self.destroy = …", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self.destroy = "evil";
-				}).toThrow(/INVALID_CONFIG_API_PATH_INVALID|RESERVED_NAME/);
+				}).toThrow(/API_PATH_INVALID|RESERVED_NAME/);
 			});
 		});
 	});
@@ -79,11 +79,11 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 	it("rejects bracket-form keys with empty segments (e.g. self['a..b'])", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self["a..b"] = "v";
-				}).toThrow(/INVALID_CONFIG_API_PATH_INVALID|EMPTY_SEGMENTS/);
+				}).toThrow(/API_PATH_INVALID|EMPTY_SEGMENTS/);
 			});
 		});
 	});

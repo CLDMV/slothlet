@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-module-multi-mount.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-module-multi-mount.test.vitest.mjs
  *	@Date: 2026-10-19T07:44:45-07:00 (1792421085)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:53-07:00 (1793008373)
+ *	@Last modified time: 2026-11-28T04:32:34-08:00 (1795869154)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,13 +26,17 @@
  * `guest/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
-const GUEST = path.join(FIXTURE, "guest");
-const VICTIM = path.join(FIXTURE, "victim");
+const GUEST = apiPart(FIXTURE, "guest");
+const VICTIM = apiPart(FIXTURE, "victim");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -65,14 +69,14 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 	 */
 	async function boot(options = {}) {
 		api = await slothlet({
-			base: path.join(FIXTURE, "base"),
+			base: apiPart(FIXTURE),
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow" },
+			permissions: { policy: "allow" },
 			...options
 		});
-		await api.slothlet.api.add("guest", GUEST, { moduleID: "gmod" });
+		await api.slothlet.api.add("guest", GUEST, { id: "gmod" });
 		return api;
 	}
 
@@ -85,8 +89,8 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 				]
 			}
 		});
-		await api.slothlet.api.add("elsewhere", VICTIM, { moduleID: "vic" });
-		await api.slothlet.api.add("guest.vic", VICTIM, { moduleID: "vic" });
+		await api.slothlet.api.add("elsewhere", VICTIM, { id: "vic" });
+		await api.slothlet.api.add("guest.vic", VICTIM, { id: "vic" });
 		expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("vic"))).toBe("LOOSE_SET_NOT_OWNED");
 		expect(await api.elsewhere.v.secret()).toBe("SECRET");
 		expect(await api.guest.vic.v.secret()).toBe("SECRET");
@@ -97,15 +101,15 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 
 	it("removes every mount of a module the host removes by moduleID, and a reload keeps it removed", async () => {
 		await boot();
-		await api.slothlet.api.add("other", GUEST, { moduleID: "other" });
-		await api.slothlet.api.add("a", VICTIM, { moduleID: "vic" });
-		await api.slothlet.api.add("b", VICTIM, { moduleID: "vic" });
+		await api.slothlet.api.add("other", GUEST, { id: "other" });
+		await api.slothlet.api.add("a", VICTIM, { id: "vic" });
+		await api.slothlet.api.add("b", VICTIM, { id: "vic" });
 		expect(await api.a.v.grant({ caller: "other.**", target: "a.**:write", effect: "allow" })).toMatch(/^perm-/);
 		expect(await api.slothlet.api.remove("vic")).toBe(true);
-		const live = { a: api.a === undefined, b: api.b === undefined, rules: api.slothlet.permissions.global.rulesByModule("vic").length };
+		const live = { a: api.a === undefined, b: api.b === undefined, rules: api.slothlet.permissions.global.rules.module("vic").length };
 		expect(live).toEqual({ a: true, b: true, rules: 0 });
 		await api.slothlet.reload();
-		expect({ a: api.a === undefined, b: api.b === undefined, rules: api.slothlet.permissions.global.rulesByModule("vic").length }).toEqual(
+		expect({ a: api.a === undefined, b: api.b === undefined, rules: api.slothlet.permissions.global.rules.module("vic").length }).toEqual(
 			live
 		);
 	});
@@ -126,10 +130,10 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 					}
 				: {}
 		);
-		await api.slothlet.api.add("a", VICTIM, { moduleID: "vic" });
-		await api.slothlet.api.add("shared", VICTIM, { moduleID: "vic" });
-		if (byModule) expect(await api.guest.x.addAt("shared", GUEST, { moduleID: "gmod", collisionMode: "merge" })).toBe("done");
-		else await api.slothlet.api.add("shared", GUEST, { moduleID: "gmod", collisionMode: "merge" });
+		await api.slothlet.api.add("a", VICTIM, { id: "vic" });
+		await api.slothlet.api.add("shared", VICTIM, { id: "vic" });
+		if (byModule) expect(await api.guest.x.addAt("shared", GUEST, { id: "gmod", collision: { mode: "merge" } })).toBe("done");
+		else await api.slothlet.api.add("shared", GUEST, { id: "gmod", collision: { mode: "merge" } });
 		const sharedWrites = await api.guest.x.writeAt("shared.v");
 		expect(sharedWrites).toEqual(every(sharedWrites, "done"));
 		const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("a.v"));
@@ -143,15 +147,15 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 		 */
 		async function nested() {
 			await boot();
-			expect(await api.guest.x.addAt("guest.k", GUEST, { moduleID: "kid" })).toBe("done");
-			await api.slothlet.api.add("guest.k.zone", VICTIM, { moduleID: "kid" });
+			expect(await api.guest.x.addAt("guest.k", GUEST, { id: "kid" })).toBe("done");
+			await api.slothlet.api.add("guest.k.zone", VICTIM, { id: "kid" });
 			return api;
 		}
 
 		it.each([
 			["by moduleID", (a) => a.guest.x.removeAt("kid")],
 			["by path", (a) => a.guest.x.removeAt("guest.k")],
-			["scoped", (a) => a.guest.x.removeAt("kid", "guest.k.zone")]
+			["scoped", (a) => a.guest.x.removeAt("guest.k.zone", "kid")]
 		])("refuses the caller removing it %s, and changes nothing", async (_label, remove) => {
 			await nested();
 			expect(await withSuppressedSlothletErrorOutput(() => remove(api))).toBe("LOOSE_SET_NOT_OWNED");
@@ -161,8 +165,8 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 
 		it("lets the caller remove what it mounted when no host mount is inside it", async () => {
 			await boot();
-			expect(await api.guest.x.addAt("guest.k", GUEST, { moduleID: "kid" })).toBe("done");
-			expect(await api.guest.x.removeAt("kid", "guest.k.x")).toBe(true);
+			expect(await api.guest.x.addAt("guest.k", GUEST, { id: "kid" })).toBe("done");
+			expect(await api.guest.x.removeAt("guest.k.x", "kid")).toBe(true);
 			expect(await api.guest.x.removeAt("kid")).toBe(true);
 			expect(api.guest.k).toBeUndefined();
 		});
@@ -171,8 +175,8 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 	describe("removing a module by its moduleID", () => {
 		it("removes the module with that exact id, not one whose id starts with it, for the host", async () => {
 			await boot();
-			await api.slothlet.api.add("vicpath", VICTIM, { moduleID: "vic" });
-			await api.slothlet.api.add("other", GUEST, { moduleID: "vic_x" });
+			await api.slothlet.api.add("vicpath", VICTIM, { id: "vic" });
+			await api.slothlet.api.add("other", GUEST, { id: "vic_x" });
 			expect(await api.slothlet.api.remove("vic")).toBe(true);
 			expect(api.vicpath).toBeUndefined();
 			expect(typeof api.other.x.listSelf).toBe("function");
@@ -180,15 +184,15 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 
 		it("lets module code mount a module that exports a frozen array, which the mounted node keeps frozen", async () => {
 			await boot();
-			expect(await api.guest.x.addAt("guest.vic", VICTIM, { moduleID: "vic" })).toBe("done");
+			expect(await api.guest.x.addAt("guest.vic", VICTIM, { id: "vic" })).toBe("done");
 			expect(Object.isFrozen(api.guest.vic.v.shelf)).toBe(true);
 			expect(api.guest.vic.v.shelf[1]).toBe("S");
 		});
 
 		it("removes the module with that exact id, not one whose id starts with it, for module code", async () => {
 			await boot();
-			expect(await api.guest.x.addAt("guest.vic", VICTIM, { moduleID: "vic" })).toBe("done");
-			await api.slothlet.api.add("other", GUEST, { moduleID: "vic_x" });
+			expect(await api.guest.x.addAt("guest.vic", VICTIM, { id: "vic" })).toBe("done");
+			await api.slothlet.api.add("other", GUEST, { id: "vic_x" });
 			expect(await api.guest.x.removeAt("vic")).toBe(true);
 			expect(api.guest.vic).toBeUndefined();
 			expect(typeof api.other.x.listSelf).toBe("function");
@@ -197,7 +201,7 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 
 	it("refuses module code removing its own path while a module the host mounted below it sits there, and changes nothing", async () => {
 		await boot();
-		await api.slothlet.api.add("guest.hostkid", GUEST, { moduleID: "hostkid" });
+		await api.slothlet.api.add("guest.hostkid", GUEST, { id: "hostkid" });
 		expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest"))).toBe("LOOSE_SET_NOT_OWNED");
 		expect(typeof api.guest.x.listSelf).toBe("function");
 		expect(typeof api.guest.hostkid.x.listSelf).toBe("function");
@@ -205,7 +209,7 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 
 	it("lets module code remove its own path with a module it mounted below it", async () => {
 		await boot();
-		expect(await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" })).toBe("done");
+		expect(await api.guest.x.addAt("guest.kid", GUEST, { id: "kid" })).toBe("done");
 		expect(await api.guest.x.removeAt("guest")).toBe(true);
 		expect(api.guest).toBeUndefined();
 	});

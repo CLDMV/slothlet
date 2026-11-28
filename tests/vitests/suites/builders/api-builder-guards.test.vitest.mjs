@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/builders/api-builder-guards.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/builders/api-builder-guards.test.vitest.mjs
  *	@Date: 2026-03-02T15:20:00-08:00 (1772493600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:00-07:00 (1791090900)
+ *	@Last modified time: 2026-11-28T04:31:18-08:00 (1795869078)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,21 +18,21 @@
  *
  * @description
  * Covers:
- *   lines 589,609,636,658,678,699  – hook.on/remove/off/enable/disable/list throw HOOKS_NOT_INITIALIZED
- *   lines 727,761,828              – metadata.setGlobal/set/setFor throw METADATA_NOT_AVAILABLE
- *   line  865                      – metadata.removeFor early-returns when handler absent
+ *   lines 589,609,636,658,678,699  – hook.on/remove/off/enable/disable/list throw HOOK_MANAGER_NOT_AVAILABLE
+ *   lines 727,761,828              – metadata.global/set/setFor throw METADATA_NOT_AVAILABLE
+ *   line  865                      – metadata.remove early-returns when handler absent
  *   line  920                      – owner.get returns null when ownership handler absent
  *   lines 947,949                  – materialize namespace stub (null handler IIFE)
  *   line  976                      – lifecycle namespace noop stub (null handler IIFE)
  *   line  1051                     – diag.owner.get returns null when ownership absent
  *   lines 1077,1088,1100           – diag.caches.get/getAllModuleIDs/has fallbacks when apiCacheManager absent
- *   line  1135                     – diag.hook.compilePattern executes
+ *   line  1135                     – diag.hook.compile executes
  *   line  1165                     – userHooks.shutdown callback called on api.shutdown()
  *   lines 1427,1447-1450           – userHooks.destroy callback + destroy clear loop via api.destroy()
  *   line  487                      – context.get falls back to slothlet.context for unknown manager type
- *   line  1257                     – scope() throws NO_CONTEXT_MANAGER when contextManager is null
+ *   line  1257                     – scope() throws CONTEXT_RUNTIME_NOT_AVAILABLE when contextManager is null
  *   lines 1287,1358                – scope() throws CONTEXT_NOT_FOUND for Live/Async missing store
- *   line  1406                     – scope() throws UNSUPPORTED_CONTEXT_MANAGER for unknown type
+ *   line  1406                     – scope() throws CONTEXT_RUNTIME_UNSUPPORTED for unknown type
  *
  * @module tests/vitests/suites/builders/api-builder-guards
  */
@@ -83,13 +83,13 @@ async function makeApiWithDiag() {
  * @returns {object} Internal slothlet instance.
  */
 function getSlothlet(api) {
-	return resolveWrapper(api.math).slothlet;
+	return resolveWrapper(api.math).____slothlet;
 }
 
 // ---------------------------------------------------------------------------
-// Group A: HOOKS_NOT_INITIALIZED throws (lines 589, 609, 636, 658, 678, 699)
+// Group A: HOOK_MANAGER_NOT_AVAILABLE throws (lines 589, 609, 636, 658, 678, 699)
 // ---------------------------------------------------------------------------
-describe("api_builder – hook methods throw HOOKS_NOT_INITIALIZED when hookManager is null", () => {
+describe("api_builder – hook methods throw HOOK_MANAGER_NOT_AVAILABLE when hookManager is null", () => {
 	let api;
 
 	afterEach(async () => {
@@ -99,101 +99,101 @@ describe("api_builder – hook methods throw HOOKS_NOT_INITIALIZED when hookMana
 		}
 	});
 
-	it("hook.on throws HOOKS_NOT_INITIALIZED (line 589)", async () => {
+	it("hook.on throws HOOK_MANAGER_NOT_AVAILABLE (line 589)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.on("*:before", () => {})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.on("*:before", () => {})).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.remove throws HOOKS_NOT_INITIALIZED (line 609)", async () => {
+	it("hook.remove throws HOOK_MANAGER_NOT_AVAILABLE (line 609)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.remove({})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.remove({})).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.off throws HOOKS_NOT_INITIALIZED (line 636)", async () => {
+	it("hook.off throws HOOK_MANAGER_NOT_AVAILABLE (line 636)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.off("some-id")).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.off("some-id")).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.enable throws HOOKS_NOT_INITIALIZED (line 658)", async () => {
+	it("hook.enable throws HOOK_MANAGER_NOT_AVAILABLE (line 658)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.enable({})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.enable({})).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.disable throws HOOKS_NOT_INITIALIZED (line 678)", async () => {
+	it("hook.disable throws HOOK_MANAGER_NOT_AVAILABLE (line 678)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.disable({})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.disable({})).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.list throws HOOKS_NOT_INITIALIZED (line 699)", async () => {
+	it("hook.list throws HOOK_MANAGER_NOT_AVAILABLE (line 699)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.list({})).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.list({})).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.pin.{enabled,enable,disable} throw HOOKS_NOT_INITIALIZED when hookManager is null", async () => {
+	it("hook.pin.{enabled,enable,disable} throw HOOK_MANAGER_NOT_AVAILABLE when hookManager is null", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.pin.enabled).toThrow(/HOOKS_NOT_INITIALIZED/);
-			expect(() => api.slothlet.hook.pin.enable()).toThrow(/HOOKS_NOT_INITIALIZED/);
-			expect(() => api.slothlet.hook.pin.disable()).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.pin.enabled).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
+			expect(() => api.slothlet.hook.pin.enable()).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
+			expect(() => api.slothlet.hook.pin.disable()).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
 	});
 
-	it("hook.{enablePattern,disablePattern,resetPatternFilter} throw HOOKS_NOT_INITIALIZED when hookManager is null", async () => {
+	it("hook.{pattern.enable,pattern.disable,pattern.reset} throw HOOK_MANAGER_NOT_AVAILABLE when hookManager is null", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.enablePattern("math.*")).toThrow(/HOOKS_NOT_INITIALIZED/);
-			expect(() => api.slothlet.hook.disablePattern("math.*")).toThrow(/HOOKS_NOT_INITIALIZED/);
-			expect(() => api.slothlet.hook.resetPatternFilter()).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.pattern.enable("math.*")).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
+			expect(() => api.slothlet.hook.pattern.disable("math.*")).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
+			expect(() => api.slothlet.hook.pattern.reset()).toThrow(/HOOK_MANAGER_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
@@ -202,7 +202,7 @@ describe("api_builder – hook methods throw HOOKS_NOT_INITIALIZED when hookMana
 
 // ---------------------------------------------------------------------------
 // Group B: METADATA_NOT_AVAILABLE throws (lines 727, 761, 828)
-// Group C: metadata.removeFor early return (line 865)
+// Group C: metadata.remove early return (line 865)
 // ---------------------------------------------------------------------------
 describe("api_builder – metadata methods guard against absent metadata handler", () => {
 	let api;
@@ -214,13 +214,13 @@ describe("api_builder – metadata methods guard against absent metadata handler
 		}
 	});
 
-	it("metadata.setGlobal throws METADATA_NOT_AVAILABLE when handler is null (line 727)", async () => {
+	it("metadata.global throws METADATA_NOT_AVAILABLE when handler is null (line 727)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
-			expect(() => api.slothlet.metadata.setGlobal("version", "1.0")).toThrow(/METADATA_NOT_AVAILABLE/);
+			expect(() => api.slothlet.metadata.global("version", "1.0")).toThrow(/METADATA_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.metadata = orig;
 		}
@@ -238,52 +238,52 @@ describe("api_builder – metadata methods guard against absent metadata handler
 		}
 	});
 
-	it("metadata.setFor throws METADATA_NOT_AVAILABLE when handler is null (line 828)", async () => {
+	it("metadata.set throws METADATA_NOT_AVAILABLE when handler is null (line 828)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
-			expect(() => api.slothlet.metadata.setFor("math", "category", "math")).toThrow(/METADATA_NOT_AVAILABLE/);
+			expect(() => api.slothlet.metadata.set("math", "category", "math")).toThrow(/METADATA_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.metadata = orig;
 		}
 	});
 
-	it("metadata.setForVersion throws METADATA_NOT_AVAILABLE when handler is null — handlersKeys lists keys (line 1006)", async () => {
+	it("metadata.set on a versioned path throws METADATA_NOT_AVAILABLE when handler is null — handlersKeys lists keys (line 1006)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
 			// handlers object is alive → truthy arm fires: Object.keys(slothlet.handlers).join(", ")
-			expect(() => api.slothlet.metadata.setForVersion("auth", "v1", "stable", true)).toThrow(/METADATA_NOT_AVAILABLE/);
+			expect(() => api.slothlet.metadata.set("v1.auth", "stable", true)).toThrow(/METADATA_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.metadata = orig;
 		}
 	});
 
-	it("metadata.setForVersion throws METADATA_NOT_AVAILABLE when handlers is null — handlersKeys is 'undefined' (line 1006)", async () => {
+	it("metadata.set on a versioned path throws METADATA_NOT_AVAILABLE when handlers is null — handlersKeys is 'undefined' (line 1006)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const origHandlers = sl.handlers;
 		sl.handlers = null;
 		try {
 			// handlers itself is null → falsy arm fires: "undefined"
-			expect(() => api.slothlet.metadata.setForVersion("auth", "v1", "stable", true)).toThrow(/METADATA_NOT_AVAILABLE/);
+			expect(() => api.slothlet.metadata.set("v1.auth", "stable", true)).toThrow(/METADATA_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers = origHandlers;
 		}
 	});
 
-	it("metadata.removeFor returns early without throwing when handler is null (line 865)", async () => {
+	it("metadata.remove returns early without throwing when handler is null (line 865)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
 			// Must NOT throw — guarded by `if (!slothlet.handlers?.metadata) return;`
-			expect(() => api.slothlet.metadata.removeFor("math")).not.toThrow();
+			expect(() => api.slothlet.metadata.remove("math")).not.toThrow();
 		} finally {
 			sl.handlers.metadata = orig;
 		}
@@ -343,7 +343,7 @@ describe("api_builder – materialize and lifecycle fallback stubs when handlers
 		try {
 			const ns = await builder.createSlothletNamespace({});
 			// Stub has materialized: false and a get() returning zeros
-			expect(ns.materialize.materialized).toBe(false);
+			expect(ns.materialize.complete).toBe(false);
 			const stats = ns.materialize.get();
 			expect(stats).toMatchObject({ total: 0, materialized: 0, remaining: 0, percentage: 100 });
 		} finally {
@@ -403,19 +403,19 @@ describe("api_builder – diagnostics namespace fallbacks when handlers absent",
 		sl.handlers.apiCacheManager = null;
 		try {
 			const result = api.slothlet.diag.caches.get();
-			expect(result).toEqual({ totalCaches: 0, caches: [] });
+			expect(result).toEqual({ caches: [] });
 		} finally {
 			sl.handlers.apiCacheManager = origCache;
 		}
 	});
 
-	it("diag.caches.getAllModuleIDs returns empty array when apiCacheManager is null (line 1088)", async () => {
+	it("diag.caches.ids returns empty array when apiCacheManager is null (line 1088)", async () => {
 		api = await makeApiWithDiag();
 		const sl = getSlothlet(api);
 		const origCache = sl.handlers.apiCacheManager;
 		sl.handlers.apiCacheManager = null;
 		try {
-			const result = api.slothlet.diag.caches.getAllModuleIDs();
+			const result = api.slothlet.diag.caches.ids();
 			expect(result).toEqual([]);
 		} finally {
 			sl.handlers.apiCacheManager = origCache;
@@ -435,13 +435,13 @@ describe("api_builder – diagnostics namespace fallbacks when handlers absent",
 		}
 	});
 
-	it("diag.hook.compilePattern executes via hookManager diagnostic method (line 1135)", async () => {
+	it("diag.hook.compile executes via hookManager diagnostic method (line 1135)", async () => {
 		api = await makeApiWithDiag();
 		// With hooks enabled, diag.hook is present and compilePattern calls
 		// slothlet.handlers.hookManager.getCompilePatternForDiagnostics()(pattern)
 		expect(api.slothlet.diag.hook).toBeDefined();
-		expect(typeof api.slothlet.diag.hook.compilePattern).toBe("function");
-		const result = api.slothlet.diag.hook.compilePattern("before:*");
+		expect(typeof api.slothlet.diag.hook.compile).toBe("function");
+		const result = api.slothlet.diag.hook.compile("before:*");
 		// Returns a compiled RegExp or pattern — just verify it did not throw
 		expect(result).toBeDefined();
 	});
@@ -512,13 +512,13 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 		}
 	});
 
-	it("scope() throws NO_CONTEXT_MANAGER when contextManager is null (line 1257)", async () => {
+	it("scope() throws CONTEXT_RUNTIME_NOT_AVAILABLE when contextManager is null (line 1257)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.contextManager;
 		sl.contextManager = null;
 		try {
-			await expect(api.slothlet.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/NO_CONTEXT_MANAGER/);
+			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_RUNTIME_NOT_AVAILABLE/);
 		} finally {
 			sl.contextManager = orig;
 		}
@@ -531,11 +531,15 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 		// Fake LiveContextManager with empty instances map
 		sl.contextManager = {
 			constructor: { name: "LiveContextManager" },
+			kind: "live",
 			currentInstanceID: null,
-			instances: new Map()
+			instances: new Map(),
+			runParent(id) {
+				return this.instances.get(id);
+			}
 		};
 		try {
-			await expect(api.slothlet.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_NOT_FOUND/);
+			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_NOT_FOUND/);
 		} finally {
 			sl.contextManager = orig;
 		}
@@ -548,17 +552,18 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 		// Fake AsyncContextManager with no active ALS context and empty instances map
 		sl.contextManager = {
 			constructor: { name: "AsyncContextManager" },
+			kind: "async",
 			tryGetContext: () => null,
 			instances: new Map()
 		};
 		try {
-			await expect(api.slothlet.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_NOT_FOUND/);
+			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_NOT_FOUND/);
 		} finally {
 			sl.contextManager = orig;
 		}
 	});
 
-	it("scope() throws UNSUPPORTED_CONTEXT_MANAGER for unrecognized manager type (line 1406)", async () => {
+	it("scope() throws CONTEXT_RUNTIME_UNSUPPORTED for unrecognized manager type (line 1406)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.contextManager;
@@ -568,7 +573,7 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 			instances: new Map()
 		};
 		try {
-			await expect(api.slothlet.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/UNSUPPORTED_CONTEXT_MANAGER/);
+			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_RUNTIME_UNSUPPORTED/);
 		} finally {
 			sl.contextManager = orig;
 		}

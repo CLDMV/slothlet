@@ -29,12 +29,12 @@ Context propagation ensures that the `context` object and full `self` API access
 
 Access live-bound references in your API modules via the runtime module.
 
-The runtime exports `self`, `context`, and `instanceID`. Note that `reference` is **not** a runtime export - reference data is merged directly into the API at initialization and is accessible via `self` alongside your API modules.
+The runtime exports `self`, `context`, and `instance` (`instance.id` is the running instance's id: a string inside a call, undefined outside one). Note that `reference` is **not** a runtime export - reference data is merged directly into the API at initialization and is accessible via `self` alongside your API modules.
 
 ```javascript
 // Reference data is merged directly into the API - accessible via self
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	reference: {
 		md5: (str) => crypto.createHash("md5").update(str).digest("hex"),
 		version: "3.0.0",
@@ -89,11 +89,11 @@ module.exports = { cjsFunction };
 
 ### TypeScript Module Example
 
-`.ts` and `.mts` modules use the same import — `self`, `context`, and `instanceID` are all reachable from TypeScript exactly as they are from `.mjs`. (Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor the bare specifier; details in [TYPESCRIPT.md](TYPESCRIPT.md). This was fixed in v3.5.0 — earlier versions could not import bare specifiers from `.ts` files.)
+`.ts` and `.mts` modules use the same import — `self`, `context`, and `instance` are all reachable from TypeScript exactly as they are from `.mjs`. (Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor the bare specifier; details in [TYPESCRIPT.md](TYPESCRIPT.md). This was fixed in v3.5.0 — earlier versions could not import bare specifiers from `.ts` files.)
 
 ```typescript
 // In your TypeScript modules
-import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+import { self, context, instance } from "@cldmv/slothlet/runtime";
 
 interface RequestContext {
 	requestId?: string;
@@ -102,11 +102,78 @@ interface RequestContext {
 
 export function tsFunction(data: string): string {
 	const ctx = context as RequestContext;
-	const tag = `${instanceID}/${ctx.requestId ?? "anon"}`;
+	const tag = `${instance.id}/${ctx.requestId ?? "anon"}`;
 	const hash = self.md5(data);
 	return `[${tag}] ${self.esmModule.transform(hash)}`;
 }
 ```
+
+### Timers and queues a file starts while it loads
+
+A file's top level runs under the file's own module: the async runtime loads each file inside a store that names it, and the live runtime pins what the file registers while it loads. So a timer, a job queue or a listener started at the top of a file has `self` and `context` when it runs later, and the permission system sees the file's module as the caller of whatever it runs (see [PERMISSIONS.md](PERMISSIONS.md#file-level-code-has-its-own-permission-path)). `self` is not usable at the top level itself while the file is still loading: the api is not built yet. A file that builds another slothlet instance while it loads can use that instance as usual: the inner instance's code, run from something the loading file started, reads its own `self` and `context`.
+
+One case is held to the wrong file: when two api files import a module with its own top-level `await` and the other file started loading it, a timer this file starts at its top level while it waits is held to the other file's module (async runtime). It only refuses more, never allows more; see [PERMISSIONS.md](PERMISSIONS.md#file-level-code-has-its-own-permission-path) and [#762](https://github.com/CLDMV/slothlet/issues/762).
+
+### `AsyncLocalStorage.snapshot()`, `bind()` and `AsyncResource` in the live runtime
+
+These three capture Node's async context when they are made and restore it when they run code. In the async runtime slothlet's store is part of that context, so code they run later is the module that made them. The live runtime keeps identity outside Node's async context, so it patches them: `AsyncLocalStorage.snapshot()`, `AsyncLocalStorage.bind()`, and `AsyncResource` (its constructor, `runInAsyncScope()`, which a resource's `bind()` runs through, and the static `AsyncResource.bind()`). What a snapshot, a bound function or a resource runs is pinned to the load or call of the module that made it (or to the host's `run()` / `scope()` it was made in), so the code of the module that made it carries that module and that call's context, with the call that runs it as a caller too, as in the async runtime.
+
+Whoever holds a resource chooses the code it runs, so the pin is kept only for the code it was made for. The rule is the async runtime's for code that enters another flow by itself (see [below](#code-that-enters-another-flow-by-itself-async-runtime)), told from the stack:
+
+- **The maker's own code keeps the pin**: a function of the module (or the file's load, or the host) that made the resource, run through it by anyone (as a pool runs a requester's callback), and code that function calls. So does any code the maker's own code, or the host's, runs through the resource. Only the module whose load or call made the resource counts as its maker (the host, for one made in its own `run()` / `scope()`): this is narrower than the async runtime, where the code of every call of the flow, the calls above it included, keeps the flow.
+- **Anyone else's code runs as the code that used the resource**: a module running its own function through another request's resource, snapshot or bound function, or through one another module's file made while it loaded, runs as its own call, with its own request's context, as if nothing had been pinned. This holds whatever `permissions.caller.provenance` says, and with the permission system off: such code never reads the other request's context, never acts as the module that made the resource, and never writes as it.
+- **Told when the code first reads anything** (`context`, `self`, a call into the api, a callback it registers), and again on each read until the code is found to be someone else's; from then on the rest of that stretch of synchronous code runs as the code that used the resource. In Node the code is also told when it makes its first promise (its first `await`, say), so an async function of the maker's that awaits before reading anything keeps the maker's context and caller after its `await`s, as on the async runtime, while anyone else's async function run through the resource picks up after its `await` as the code that used the resource. In a browser (no promise hooks) an async function that reads nothing before its first `await` is not told in time, so the pin is not held for what runs after that `await`: that code is told from the stack like any code no pin holds, and a function of the maker's that awaits first then sees the context of whichever flow runs it, not the maker's.
+- **The runner slothlet hands Node is not a way in.** The patched `runInAsyncScope()` calls Node's own method through a reference taken when slothlet loads, and the runner it passes runs only the function slothlet's code put there: code that replaces `runInAsyncScope` on the class's prototype and calls the runner it receives with a function of its own runs that function unpinned.
+
+- **No store of slothlet's own.** The live runtime creates and runs no `AsyncLocalStorage`; slothlet makes its store when the first instance on the async runtime is created. Where Node runs with `--no-async-context-frame` a store that has run switches async hooks on for the whole process, so a process whose instances all use the live runtime leaves them off (`AsyncResource` and the patches here do not switch them on).
+- **Live runtime only.** An instance on the async runtime patches nothing. The patches are installed when the first live instance in the process is created and removed when the last live instance shuts down; while any live instance is running they stay in place.
+- **Code outside slothlet is unchanged.** A snapshot, binding or resource made while no module's load or call is running pins nothing, and Node's own functions run as they are. Arguments, receivers and results pass through.
+- **`AsyncResource` is a different class object while patched.** `require("node:async_hooks").AsyncResource` (and the ES module export, which Node refreshes) is a subclass of Node's class while the patches are installed. `instanceof` answers as before against either class, but comparing the class with `===` against a reference saved before the first live instance (or after the last one shut down) is `false`.
+- **A subclass made earlier keeps Node's class.** A library that subclassed `AsyncResource` before the first live instance was created extends Node's class, not the patched one, so its resources are not pinned. The same holds for the class kept in a variable before then (`const { AsyncResource } = require("node:async_hooks")` at the top of a file loaded earlier); an ES module's named import follows the refreshed export.
+- **Node's `AsyncContextFrame`.** Where it is off (Node run with `--no-async-context-frame`), Node keeps what every `AsyncLocalStorage` holds on async resources module code can reach. With permissions on, the permission baseline's `async-context-frame` check reports it ([PERMISSIONS.md](./PERMISSIONS.md#the-baseline)), and strict does not start.
+- **Not tested against third-party users of these APIs.** The patches are covered by slothlet's own tests; libraries that build on `AsyncResource` or `AsyncLocalStorage.snapshot()` / `bind()` have not been tested against them.
+
+### Code that enters another flow by itself (async runtime)
+
+Node gives a flow's async context to any code that holds an async resource of that flow: an `AsyncResource` made there (its `runInAsyncScope()` and `bind()`), a function `AsyncLocalStorage.snapshot()` or `AsyncLocalStorage.bind()` made there, or the context Node keeps on a timer or a resource, copied onto a timer of the code's own. The same holds for what a module's file makes while it loads, which carries that module's load. A module's code that runs itself in another request's flow, in a `run()` / `scope()` the host opened, or in another module's load this way does not get that flow. It acts outside it, as the leaf it is written in, with the instance's own context: `context` holds the instance's keys and none of the flow's, `metadata.self()` names the module's own leaf, `metadata.caller()` returns `null`, permission rules (and their `condition`s) are checked for the module against the instance's context, and it has none of the host's standing. Code no single leaf stands for (evaluated code, a file several instances hold untold apart) is refused.
+
+The flow is told by the code running, read from the stack: the frames from the access out to where slothlet entered a call, or where the job began. These keep the flow:
+
+- **The flow's own code**: the host's code, and the code of the calls of the flow (the call and the calls above it), including after an `await` and in a timer or listener of their own.
+- **Code the flow's own code calls**: a module's function the host or a call of the flow calls, synchronously, keeps the flow it is called in, after an `await` too.
+- **A call's own function run through its resource**: a module holding a call's `AsyncResource` that runs the call's own callback with it (as a pool runs a requester's callback) gives that callback the call's flow.
+- **A resource's scope put in place by the flow's own code**: the host or a call of the flow running another module's function with a resource of the flow.
+
+Once a module's code that entered a flow by itself is told apart, the rest of that stretch of synchronous code runs outside the flow, and so does everything it hands Node from there: a promise's `then()`, a timer, the code after its own `await`. A function or an api node it hands Node (`Promise.resolve(x).then(self.other.read)`) runs outside the flow when Node calls it, with the instance's own context, as a call the module made itself would. The flow's own code running there keeps the flow: the host's code the module's code calls, and the owner of the resource running it again. With `AsyncContextFrame` off (Node run with `--no-async-context-frame`) Node keeps the store on the async resource itself; slothlet takes it back off once that stretch of synchronous code ends, so a job the resource's owner hands Node through the same resource within that same stretch also runs outside the flow.
+
+A module's function the flow's own code hands Node to call later keeps the flow too: passed straight to `promise.then()`, `setTimeout()`, `setInterval()`, `setImmediate()`, `queueMicrotask()` or `process.nextTick()`, or added as a listener of an event Node emits. Nothing of the flow's is on the stack when Node calls it, which is the shape of code that entered the flow by itself, so such a job is told by where it was made instead of by its frames (below). The function itself is what a call hands back, inside a `run()` or `scope()` or outside every run, so `===` holds between the two and `emitter.off(fn)`, a `Set` or a `Map` key, or a memoised lookup find it again; with the permission system on and `permissions.caller.attribution` at its default (`"precise"`), it comes back as its module's stand-in instead, the same one every time. What a module's async function runs after an `await` is part of the job that ran it, and keeps the flow the same way.
+
+A `run()` / `scope()` is isolated in every permission mode (no `permissions` config, `"off"`, `"disabled"`, `"on"`, `"strict"`): code that entered another run by itself never gets that run's context or the identity `metadata.self()` / `metadata.caller()` report there, whether the permission system is on or not. The permission mode decides only what such code is allowed to do. A job such code hands Node is told apart too, even when the code never touches slothlet inside the flow (it reads `self.other.read` outside, then only passes it to `promise.then()`, `setTimeout()`, `setImmediate()`, `queueMicrotask()` or a nested `AsyncResource` inside): slothlet installs an `async_hooks.createHook()` hook (two, see below) while any instance on the async runtime exists, whatever its permission mode, and removes it after the last one shuts down. The live runtime installs no `async_hooks` hook: in Node it uses V8's promise hooks instead (see the [runtime note](#concurrent-run-and-scope-flows-in-the-live-runtime)), and in a browser it has no hook at all. The hook returns at once for a resource made outside every flow, but Node runs it for every promise and callback in the process: measured on Node 26 per `await` of a `then()` (three promises), it adds about 0.9 µs outside every flow and about 1.3 µs inside a `run()` or a call, and per `await` of a `setImmediate()` about 0.9 µs outside and 3.2 µs inside (Node 26 with `--no-async-context-frame`: about 0.9 µs and 1.2 µs per promise `await`, 0.9 µs and 3.5 to 4 µs per immediate). A timer's callback costs the same as an immediate's, which next to a timer's own millisecond is lost in the noise.
+
+The same hook records the jobs the flow's own code hands Node, and these are told by where they were made instead of by their frames. A promise's job the flow's code made runs in the flow when Node runs it: the code after an `await` in a module's function the flow called (a closure a call was handed, say), and a function passed to `then()`. So does a timer, an interval, an immediate, a microtask or a `process.nextTick()` callback the flow's code made, as long as it still runs the function it was made with: a timer whose callback was replaced after it was made, or a microtask's resource entered again by code that got hold of it, does not count. A promise and a tick object carry the async id `AsyncResource.prototype.runInAsyncScope()` reads, so code holding one (a promise the host handed it inside a `run()`, the object `executionAsyncResource()` returns inside a tick callback) can run its own function in that job's scope later, with `AsyncContextFrame` on after copying the context frame of a resource of the flow onto it. Only a job Node itself began counts: Node begins a promise's or a tick's job with no other callback running below it, a tick's only once, and a promise's without running async hooks that leave promises out, so slothlet installs a second hook created with `trackPromises: false` alongside the first. A scope put in place by code is told by its frames instead: a module's own code acts outside the flow, as above, and the host's code keeps it. The second hook runs for every callback that is not a promise's (timers, immediates, ticks, I/O) and is lost in the noise of the costs above. Until Node has run the job of a promise slothlet makes as it installs the hook (which tells it that promises are left out), the stack is read instead, once per stretch of synchronous code that reads the context or calls the api inside a promise's job of the flow. A function bound to an async resource of the flow (`resource.bind(fn)`, `AsyncResource.bind(fn)`) that the flow's code hands Node through a promise's `then()`, a timer, an immediate or a microtask runs in the flow when Node calls it, as the bind means; a timer whose callback was replaced after it was made does not count. A bound function a module hands Node from its own flow, or from inside a flow it entered by itself, still runs outside. A listener the flow's own code adds to an `EventEmitter` (`server.on("connection", fn)`, `once()`, `prependListener()`, the host's code or a call of the flow adding it) runs in the flow whenever Node emits the event, whoever wrote the listener; one a module adds from inside a flow it entered by itself runs outside that flow, whoever emits.
+
+Telling the code apart reads the stack once per stretch of synchronous code that runs in a flow without slothlet having entered it there (the code after an `await`, a timer's callback, a resource's scope), and again for each access inside an async resource's scope. Code slothlet runs inside a call it entered, and everything that code calls, is not read. The live runtime keeps identity outside Node's async context: for its resources, snapshots and bound functions see [above](#asynclocalstoragesnapshot-bind-and-asyncresource-in-the-live-runtime); for how it keeps concurrent `run()` / `scope()` flows apart see the [runtime note](#concurrent-run-and-scope-flows-in-the-live-runtime) under per-request context.
+
+### `self` takes the api root's form
+
+`self` answers what the host's `api` answers for the same instance. When the base folder's root file exports a function as its default, the api root is that function, and so is `self`: `typeof self` is `"function"`, `self(…)`, `Reflect.apply(self, …)` and `new self(…)` call the root under the root's call rule (see [PERMISSIONS.md](PERMISSIONS.md#read-level-gating)), and `Object.prototype.toString`, `instanceof Function` and `Object.getPrototypeOf(self)` report the root function. For an object root `self` is an object, as `api` is. The form is the one `api` took when the instance was first built: a reload that changes the root's kind changes neither.
+
+```javascript
+// api/root.mjs
+export default function root(n) {
+	return n * 2;
+}
+
+// api/tools/twice.mjs
+import { self } from "@cldmv/slothlet/runtime";
+export const twice = (n) => self(n); // same as api(n) from the host
+```
+
+Each instance's files get the form of their own instance, even with instances of both kinds running at once. The binding is live: `self` read when the code runs has the right form. Three cases see the other form:
+
+- **A copy taken while the instance is first built, before the root's kind is known.** The kind is known once the root file has loaded. When the source of exactly one file at the base folder's top level plainly makes its default export a function (`export default function …`, `export default async (…) => …`, `export default class …`, `export default name` with `name` declared as one of those, or `module.exports = function …`), slothlet evaluates that file first, so every other file, its siblings beside it included, gets the callable form from its first import. Three kinds of file evaluate before the kind is known and keep the object form in a copy they take while they load (`const s = self` at their top level, or `self` taken from an `import()` that settles during the load): a file the root file imports itself (it is evaluated before the root file), every top-level file when the root's default export is computed (`export default make()`, a re-export) and so cannot be told from the source, and every top-level file when more than one of them looks like a root. Their live binding takes the callable form once the root is known, so `self` read when the code runs is right. `self.call(…)` calls the root in either form. A full reload knows the form from the start.
+- **A browser page with instances of both kinds.** A browser resolves a leaf's import of the runtime through the page's import map, which slothlet cannot steer per instance: every leaf of the page shares one `self`, callable while every running instance has a function root and an object otherwise. Use `self.call(…)` to call the root from a page that mixes both kinds.
+- **A file loaded by neither of slothlet's import hooks.** Under Node the resolve hook gives each instance's files their own `self`; under vitest, the `@cldmv/slothlet/vite` plugin does. A file that neither reaches (host code importing the runtime, a leaf of a module graph slothlet's plugin is not in) gets the shared `self` the browser case describes.
 
 ### Writable `self.X = …`
 
@@ -127,8 +194,8 @@ export function init() {
 
 Four rules govern a module's writes into the api. What they refuse is refused only while the permission system is on; with it off (no permissions configured) nothing below refuses a write, and a module writes anywhere, as host code does, apart from the framework's own namespace, root functions, and keys on api nodes, which stay the framework's unless the system is disabled (see [Modes](PERMISSIONS.md#modes)). The views and wrap-on-set described below work the same either way, and ownership is recorded either way.
 
-- **Owner-scoped writes.** A module's writes are restricted to its own mount-point subtree. A module mounted at `api.lib.config` can write `self.lib.config.*` but not `self.lib.ssh.*` or any other top-level namespace. The rule holds at every depth, not only at the top level of `self`: assigning, `Object.defineProperty`, and `delete` on a member of another module's subtree (`self.lib.ssh.connect = …`, `delete self.lib.ssh.connect`) are refused the same way, and so are `Object.setPrototypeOf`, `Object.preventExtensions`, `Object.seal`, and `Object.freeze` on a node of another module's subtree. A refused seal or freeze leaves the node as it was. The same holds for what a module reaches through another module's node that is no node of its own, such as a class's `prototype` or a method of it (`self.lib.ssh.Client.prototype.connect = …` is refused), and for symbol-keyed members. Changing `self` itself follows the top-level rule: `Object.defineProperty(self, "x", …)` and `delete self.x` are `self.x = …`'s writes, a definition that would fix a member on `self` (`configurable: false`) is refused, and `self` keeps its prototype and stays extensible, since one `self` serves every module of every instance. Modules mounted at the same point (`api.slothlet.api.add()` twice at one `apiPath`) share it, so each may write under it. External code (no module-bound caller) and base-module code own the whole tree and can write anywhere. A `:write` permission rule changes that for the callers it names: an allow grants a write outside what a module owns, a deny refuses one inside it (see [Write Permissions](PERMISSIONS.md#write-permissions)). A module that calls `api.slothlet.api.add()` / `remove()` / `reload()` is subject to that call's own permission rules, not to this one: the writes the framework makes to mount, remove, or rebuild are the framework's, not the module's. That covers those writes only. The module's own code that runs while the call is in flight, before or after an `await`, and any other call of the same module, are still held to the rule. The error code on violation is `LOOSE_SET_NOT_OWNED`.
-- **A write through a node read from `self` belongs to the module that read it.** A node read through `self` is a view of the node, not the object `api` holds: it reads, calls, and enumerates as the node does, and `self.lib.ssh === self.lib.ssh`, but `self.lib.ssh !== api.lib.ssh`. What it hands back of the node is a view too: a member read off it, the `value` of `Object.getOwnPropertyDescriptor()` / `Object.getOwnPropertyDescriptors()`, and what a method called through it returns, also when the method returns a node it read itself, so `return self.lib.ssh` from another module's method hands the caller its own view, not the other module's. A method called through the view runs as its own module: called on the node it was read from (`self.lib.ssh.method()`), it gets its own module's view of that node as `this`, the one it reads through `self`, so inside it `this === self.lib.ssh` and a callback that keeps `this` can write the module's own node later. Anything else reaches it exactly as the caller passed it: every argument, and a receiver the caller steers onto some other node with `.call()` / `.apply()` (`self.lib.ssh.method.call(self.other.node)`, or `.call(self.lib.other)` onto another node of the same module). So a method that keeps or returns an argument hands back what it was given (`keep(x); all().includes(x)` and `box(x).x === x` hold for the caller), and a view the caller passed never gains the method's module's standing, however the method or a hook on it hands it on. The other side of this: inside the method, an argument is not `===` to the module's own read of the same node (`arg !== self.lib.ssh` when a caller passes its own view of it); compare with `this`, or by api path, instead. A class instance or `EventEmitter` exported as a node, or an object the host grafted into the tree, which its own methods get as `this` itself, comes back from `self` as a view of that node, never as the instance; a module that steers some method onto such a node (`self.my.mutate.call(self.svc.store)`) hands that method its own view, so the method's writes through `this` are held to the caller like any other write through it. A function another module handed over (a callback it returned) that a module stores in its own subtree is that module's node: called through it, it runs as the storing module, with the storing module's view as `this`. Storing it is the storing module's choice. A node a module returns inside a plain object or array (`return { ssh: self.lib.ssh }`) is handed over as it is: the module chose to share it, and its writes through it are the module's. While a module is executing, a write through the view is held to the executing module like any other write. Inside an `api.slothlet.context.run()` / `scope()` callback the host opened, it is the host's, as a write through `self` there is. A callback a module handed out runs as that module whoever calls it ([PERMISSIONS.md → Code a module hands out runs as that module](PERMISSIONS.md#code-a-module-hands-out-runs-as-that-module)), so its writes are held to that module like any write it makes: refused with `LOOSE_SET_NOT_OWNED` outside what the module owns. Anywhere else (code no call into a module is running and no module made, such as host code writing through a view a module returned) it is held to the module that read the node: it goes through when that module owns the node's path, and throws `RUNTIME_NO_ACTIVE_CONTEXT_SELF` when it does not. So `const state = self.lib.config.state; return () => state.n++` keeps working when the host calls it later, and the host can write through a node a module returned from its own subtree, but a module that keeps `const ops = self.lib.ssh` cannot write `ops.x = …` later from a callback it handed out. A module that is no longer mounted (removed, or gone with the instance a restart replaced) owns nothing: neither a call of it still in flight nor a function it handed out can write into the api any more. A full `reload()` rebuilds ownership from scratch: while it runs, between clearing the old records and registering the rebuilt tree, no module owns anything, so a write a still-mounted module's in-flight call (or a callback it handed out) makes in that window is refused, and goes through again once the reload has settled. This fails closed on purpose; retry the write after `await api.slothlet.reload()` resolves. Storing the view (`self.lib.config.ssh = self.lib.ssh`) stores the node. The framework's own `self.slothlet`, `self.shutdown`, and `self.destroy` are returned as the framework's own views of them, which run what the module later does with them as that module, inside an isolated `scope()` as outside one. The same holds for what the framework hands a module outside a call: a hook handler a module registers gets that module's view of every node in its payload (the `args`, the `result`, what `next()` returns) and, as `api`, a view of the whole tree whose top-level writes follow the `self.X = …` rule, while what it hands back reaches the call as the call's own values; and a `lifecycle` subscriber a module subscribes through `self.slothlet.lifecycle.on()` gets that module's view of the node an `impl:*` event is about as `impl`, or `null` when the node is not in the tree yet (`impl:created` fires while the node is being built). Hooks and lifecycle subscribers the host registers get the values themselves, as before.
+- **Owner-scoped writes.** A module's writes are restricted to its own mount-point subtree. A module mounted at `api.lib.config` can write `self.lib.config.*` but not `self.lib.ssh.*` or any other top-level namespace. The rule holds at every depth, not only at the top level of `self`: assigning, `Object.defineProperty`, and `delete` on a member of another module's subtree (`self.lib.ssh.connect = …`, `delete self.lib.ssh.connect`) are refused the same way, and so are `Object.setPrototypeOf`, `Object.preventExtensions`, `Object.seal`, and `Object.freeze` on a node of another module's subtree. A refused seal or freeze leaves the node as it was. The same holds for what a module reaches through another module's node that is no node of its own, such as a class's `prototype` or a method of it (`self.lib.ssh.Client.prototype.connect = …` is refused), and for symbol-keyed members. Changing `self` itself follows the top-level rule: `Object.defineProperty(self, "x", …)` and `delete self.x` are `self.x = …`'s writes, a definition that would fix a member on `self` (`configurable: false`) is refused, and `self` keeps its prototype and stays extensible, since one `self` serves every module of every instance. Modules mounted at the same point (`api.slothlet.api.add()` twice at one `apiPath`) share it, so each may write under it. There is no write without the read, though: while the permission system is on, a module replaces, redefines, or deletes a member (its own or another module's) only where it would be allowed to read that member, so a module refused the read of its neighbour's function (by a deny with no suffix, `:read`, `:access` or `:full`, or the default policy) is refused replacing it too (`PERMISSION_DENIED`); a member that does not exist yet is refused only by a rule that refuses the writer that path. External code (no module-bound caller) and base-module code own the whole tree and can write anywhere. A `:write` or `:full` permission rule changes that for the callers it names: an allow grants a write outside what a module owns, a deny refuses one inside it (see [Write Permissions](PERMISSIONS.md#write-permissions)). A module that calls `api.slothlet.api.add()` / `remove()` / `reload()` is subject to that call's own permission rules, not to this one: the writes the framework makes to mount, remove, or rebuild are the framework's, not the module's. That covers those writes only. The module's own code that runs while the call is in flight, before or after an `await`, and any other call of the same module, are still held to the rule. The error code on violation is `LOOSE_SET_NOT_OWNED`.
+- **A write through a node read from `self` belongs to the module that read it.** A node read through `self` is a view of the node, not the object `api` holds: it reads, calls, and enumerates as the node does, and `self.lib.ssh === self.lib.ssh`, but `self.lib.ssh !== api.lib.ssh`. What it hands back of the node is a view too: a member read off it, the `value` of `Object.getOwnPropertyDescriptor()` / `Object.getOwnPropertyDescriptors()`, and what a method called through it returns, also when the method returns a node it read itself, so `return self.lib.ssh` from another module's method hands the caller its own view, not the other module's. A method called through the view runs as its own module: called on the node it was read from (`self.lib.ssh.method()`), it gets its own module's view of that node as `this`, the one it reads through `self`, so inside it `this === self.lib.ssh` and a callback that keeps `this` can write the module's own node later. Anything else reaches it exactly as the caller passed it: every argument, and a receiver the caller steers onto some other node with `.call()` / `.apply()` (`self.lib.ssh.method.call(self.other.node)`, or `.call(self.lib.other)` onto another node of the same module). So a method that keeps or returns an argument hands back what it was given (`keep(x); all().includes(x)` and `box(x).x === x` hold for the caller), and a view the caller passed never gains the method's module's standing, however the method or a hook on it hands it on. The other side of this: inside the method, an argument is not `===` to the module's own read of the same node (`arg !== self.lib.ssh` when a caller passes its own view of it); compare with `this`, or by api path, instead. A class instance or `EventEmitter` exported as a node, or an object the host grafted into the tree, which its own methods get as `this` itself, comes back from `self` as a view of that node, never as the instance; a module that steers some method onto such a node (`self.my.mutate.call(self.svc.store)`) hands that method its own view, so the method's writes through `this` are held to the caller like any other write through it. A function another module handed over (a callback it returned) that a module stores in its own subtree is that module's node: called through it, it runs as the storing module, with the storing module's view as `this`. Storing it is the storing module's choice. A node a module returns inside a plain object or array (`return { ssh: self.lib.ssh }`) is handed over as it is: the module chose to share it, and its writes through it are the module's. While a module is executing, a write through the view is held to the executing module like any other write. Inside an `api.slothlet.context.run()` / `scope()` callback the host opened, it is the host's, as a write through `self` there is. A callback a module handed out runs as that module whoever calls it ([PERMISSIONS.md → Code a module hands out runs as that module](PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer)), so its writes are held to that module like any write it makes: refused with `LOOSE_SET_NOT_OWNED` outside what the module owns. Anywhere else (code no call into a module is running and no module made, such as host code writing through a view a module returned) it is held to the module that read the node: it goes through when that module owns the node's path, and throws `CONTEXT_NOT_ACTIVE_SELF` when it does not. So `const state = self.lib.config.state; return () => state.n++` keeps working when the host calls it later, and the host can write through a node a module returned from its own subtree, but a module that keeps `const ops = self.lib.ssh` cannot write `ops.x = …` later from a callback it handed out. A module that is no longer mounted (removed, or gone with the instance a restart replaced) owns nothing: neither a call of it still in flight nor a function it handed out can write into the api any more. A full `reload()` rebuilds ownership from scratch: while it runs, between clearing the old records and registering the rebuilt tree, no module owns anything, so a write a still-mounted module's in-flight call (or a callback it handed out) makes in that window is refused, and goes through again once the reload has settled. This fails closed on purpose; retry the write after `await api.slothlet.reload()` resolves. Storing the view (`self.lib.config.ssh = self.lib.ssh`) stores the node. The framework's own `self.slothlet`, `self.shutdown`, and `self.destroy` are returned as the framework's own views of them, which run what the module later does with them as that module, inside an isolated `scope()` as outside one. The same holds for what the framework hands a module outside a call: a hook handler a module registers gets that module's view of every node in its payload (the `args`, the `result`, what `next()` returns) and, as `api`, a view of the whole tree whose top-level writes follow the `self.X = …` rule, while what it hands back reaches the call as the call's own values; and a `lifecycle` subscriber a module subscribes through `self.slothlet.lifecycle.on()` gets that module's view of the node an `impl:*` event is about as `impl`, or `null` when the node is not in the tree yet (`impl:created` fires while the node is being built). Hooks and lifecycle subscribers the host registers get the values themselves, as before.
 - **Unattributable writes are refused.** Under the live runtime, code that resumes in a file several in-flight calls share can match more than one of them. A write such code makes into the api (through a node it read earlier, say) cannot be checked against one owner, so it throws `LOOSE_SET_UNATTRIBUTED` instead of being treated as the host's. This fails closed: it applies even when the write is into the module's own subtree, because which module is writing is exactly what cannot be told. Keeping code that writes after an `await` out of a file that several overlapping calls resume in avoids it.
 - **Wrap-on-set for callables and objects.** When the assigned value is a function or object, it gets a `UnifiedWrapper` (the same wrapper construction `api.slothlet.api.add()` uses). Primitives stay as-is. **Limitation:** hook / permission / lifecycle integration on synthetic wrappers from `self.X = …` is incomplete — for fully lifecycle-integrated mounts, use `api.slothlet.api.add()`.
 
@@ -169,21 +236,17 @@ Slothlet provides dedicated methods for executing functions with isolated contex
 
 `api.slothlet.context.run()` and `api.slothlet.context.scope()` execute a callback with temporary context data that:
 
-> **Aliases**: `api.slothlet.run()` and `api.slothlet.scope()` are direct aliases for `api.slothlet.context.run()` and `api.slothlet.context.scope()` respectively and are interchangeable.
-
 - Does **not** affect the global instance context after the callback returns
 - **Inherits** from and merges with the current context
 - Supports **shallow** and **deep** merge strategies
-- Supports **partial** and **full** isolation modes
+- Supports **full** (default) and **partial** isolation modes
 - **Automatically propagates** through all async boundaries inside the callback
 
 ### API Reference
 
 #### api.slothlet.context.run(contextData, callback, ...args)
 
-> **Alias**: `api.slothlet.run(contextData, callback, ...args)`
-
-Executes a callback function with isolated context data. `.run()` is shorthand for `.scope()` with shallow merge and partial isolation.
+Executes a callback function with isolated context data. `.run()` is shorthand for `.scope()` with the instance's `scope` defaults: shallow merge and full isolation unless the config says otherwise.
 
 **Parameters:**
 
@@ -191,13 +254,13 @@ Executes a callback function with isolated context data. `.run()` is shorthand f
 - `callback` (Function) - Function to execute with isolated context
 - `...args` (any) - Arguments forwarded to the callback
 
-**Returns:** Result of the callback function
+**Returns:** A promise of the callback's result. `run()` always returns a promise, even when the callback is synchronous, so `await` it (or call `.then()`) to read the value.
 
 ```javascript
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { app: "myApp", version: "1.0" }
 });
 
@@ -213,9 +276,56 @@ const result = await api.slothlet.context.run(
 // After callback: context reverts to { app: "myApp", version: "1.0" }
 ```
 
-#### api.slothlet.context.scope({ context, fn, args, merge, isolation, protect, owners })
+A run reads a snapshot of the instance as of the moment it starts: the api tree, every value reachable through it, the permission rules, hooks, metadata, control, principals, versioning and the context. A run opened after a value changed reads the new value; one opened before keeps reading what it read. What the run changes stays in the run, and nothing the instance changes after the start reaches it. Nothing is copied when a run opens: see [What a run's snapshot covers](#what-a-runs-snapshot-covers-and-what-it-doesnt).
 
-> **Alias**: `api.slothlet.scope({ context, fn, args, merge, isolation, protect, owners })`
+#### api.slothlet.context.run.self(contextData, callback, ...args)
+
+The same as `run()`, with the same defaults, return value, errors and isolation, except that the callback is called as `callback(view, ...args)`, where `view` is the run's own view: exactly what module code's `self` resolves to inside that run.
+
+Inside a run, `api` is the instance's api. A change the host makes through it (a write, `Object.defineProperty`, `delete`, `Object.freeze` and the other closings, `Object.setPrototypeOf`) reaches the instance, by the host's choice; once the run has a tree of its own, a member set on `api` lands in that tree. The view is how a host keeps its own changes in the run: under the default `"full"` isolation a change made through `view` stays in the run, before and after the run gets a tree of its own, exactly as one made through a module's `self` there does (see [Full Isolation](#full-isolation-default)). Under `"partial"` isolation the view is the shared `self`, and a write through it reaches the instance as a module's does.
+
+```javascript
+await api.slothlet.context.run.self(
+	{ requestId: "req-123" },
+	(view, label) => {
+		view.draft = label; // stays in the run
+		view.config.mode = "preview"; // stays in the run
+		api.saved = label; // reaches the instance
+	},
+	"note"
+);
+
+"draft" in api; // false
+api.saved; // "note"
+```
+
+- **Who the view belongs to.** Opened by the host, the view has the host's standing. Opened by module code (`self.slothlet.context.run.self(...)`), the view is that module's own `self`, so `view === self` inside the callback. A view gives nothing to code it is handed: a write through any view is judged by the code making it, so a module the host hands its view to writes only where that module may.
+- **Nested runs.** Each callback gets its own run's view. An inner run starts from what its parent's view shows, and a change made through the inner view stays in the inner run.
+- **After the run.** A view kept after the run follows the rule for a run's nodes held after its copy is torn down (see [RELOAD.md](RELOAD.md#calls-during-a-full-reload-and-after-one-fails)): once the copy is gone it answers from the instance's tree at its path.
+- **Permissions.** `run.self` is a path under `run`, so rules match as for any dotted target: a rule on `slothlet.context.run` covers `run()` and `run.self()`, a rule on `slothlet.context.run.self` applies to `run.self()` only, and the more specific rule wins for the call it names (a deny on `run` with an allow on `run.self` refuses `run()` and allows `run.self()`). A rule on `run.self` decides the call whatever level suffix it carries (`:call`, `:access`, `:full`, or none). [`scope({ self: true })`](#apislothletcontextscope-context-fn-args-merge-isolation-protect-owners-self-) hands over the same view, so the same rules decide it (see [PERMISSIONS.md](PERMISSIONS.md#runself-and-scope-self-true-)).
+- `run()` itself is unchanged: `api.slothlet.context.run({}, api.math.add, 2, 3)` still calls `add(2, 3)`.
+
+#### api.slothlet.context.set(key, value) / set(object)
+
+Changes the instance-level context every leaf reads. Pass one key and its value, or an object of keys and values.
+
+```javascript
+const api = await slothlet({ base: "./api", context: { tenant: "acme" } });
+
+api.slothlet.context.set("region", "eu");
+api.slothlet.context.set({ tenant: "globex", region: "us" });
+
+api.slothlet.context.get(); // { tenant: "globex", region: "us" }
+```
+
+- **The context passed to `slothlet()` is copied.** Its top-level keys are copied when the instance loads, so changing that object later changes nothing, and `set()` never writes to it. The values themselves are the ones given (an object in it is shared, not cloned).
+- **A `run()` / `scope()` keeps the context it started with.** A run takes the instance's context as it is when the run starts; `set()` made after that, inside the run through `api` included, does not reach it. The keys a run supplied itself (and those it `protect`s or `owners`) win inside it, as always. A run started after `set()` starts from the new values. Code in a run changes its own context through the runtime `context` export.
+- **Protected and owned keys are enforced.** Inside a `scope()` that protects a key, or where another owner owns it, `set()` on that key throws `CONTEXT_KEY_PROTECTED`, as a write through the runtime `context` does.
+- **Reload keeps it.** `api.slothlet.reload()` carries what `set()` made into the rebuilt instance; [`restart()`](RELOAD.md#apislothletrestart) starts again from the config's context.
+- **Host only by default.** A built-in rule denies `slothlet.context.set` to module code while the permission system is on; grant it with a rule on that exact target (see [PERMISSIONS.md](PERMISSIONS.md#contextset--host-only-by-default)).
+- A key named `__proto__`, `constructor` or `prototype`, or anything but a key with a value or one plain object, throws `INVALID_ARGUMENT`.
+
+#### api.slothlet.context.scope({ context, fn, args, merge, isolation, protect, owners, self })
 
 Executes a function with isolated context using structured options.
 
@@ -225,19 +335,20 @@ Executes a function with isolated context using structured options.
 - `fn` (Function) - Function to execute
 - `args` (Array, optional) - Arguments array for the function
 - `merge` (String, optional) - Merge strategy: `"shallow"` (default) or `"deep"`
-- `isolation` (String, optional) - Isolation mode: `"partial"` (default) or `"full"` - overrides instance default
+- `isolation` (String, optional) - Isolation mode: `"full"` (default) or `"partial"` - overrides instance default
 - `protect` (String[], optional) - Context keys locked write-once/unowned for this scope — see [Owner-Locked & Write-Protected Keys](#owner-locked--write-protected-keys)
 - `owners` (Object, optional) - Map of `{ key: ownerApiPath }` binding a context key to the module allowed to write it — see [Owner-Locked & Write-Protected Keys](#owner-locked--write-protected-keys)
+- `self` (Boolean, optional) - When `true`, `fn` is called as `fn(view, ...args)` with the run's own view, as [`run.self()`](#apislothletcontextrunselfcontextdata-callback-args) does, and the call is decided under the rules on `slothlet.context.run.self` (and through them the rules on `slothlet.context.run`) as well as under those on `slothlet.context.scope`: module code refused `run.self()` is refused `scope({ self: true })` too. `false` (the default) changes nothing, and the call is decided under the rules on `scope` alone. Any other value throws `INVALID_ARGUMENT`.
 
 > **Note:** `protect` / `owners` are only accepted as `scope()` / `run()` **options**. `run()`'s positional arguments after the callback are forwarded to the callback, not read as options.
 
-**Returns:** Result of the function
+**Returns:** A promise of `fn`'s result. Like `run()`, `scope()` always returns a promise, even when `fn` is synchronous.
 
 ```javascript
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { config: { timeout: 5000 } }
 });
 
@@ -270,28 +381,28 @@ By default, any module that receives the runtime `context` proxy can write any c
 
 ```javascript
 // Lock userId for the duration of the request — no downstream module can change it
-await api.slothlet.scope({
+await api.slothlet.context.scope({
 	context: { userId: "alice", scratch: {} },
 	protect: ["userId"],
 	fn: async () => api.handleRequest()
 });
 
 // Bind `budget` to the billing module — only billing.* may write it
-await api.slothlet.scope({
+await api.slothlet.context.scope({
 	context: { budget: 1000 },
 	owners: { budget: "billing" },
 	fn: async () => api.runPipeline()
 });
 ```
 
-Ownership inherits down nested scopes: a child scope sees the parent's owned keys and **cannot re-claim** a key another owner already holds (throws `CONTEXT_KEY_OWNED`). Naming the same key in both `protect` and `owners` in one call, or claiming a key the parent already owns, is likewise rejected with `CONTEXT_KEY_OWNED`. Invalid option shapes throw `SCOPE_INVALID_PROTECT` (a non-string-array `protect`) or `SCOPE_INVALID_OWNERS` (a non-plain-object `owners`, or an owner value that is not a non-empty string), each reporting the offending shape. The owner map is built with a null prototype and checked via `hasOwnProperty`, so a caller-supplied `__proto__` / `constructor` key is treated as ordinary data rather than reaching `Object.prototype`.
+Ownership inherits down nested scopes: a child scope sees the parent's owned keys and **cannot re-claim** a key another owner already holds (throws `CONTEXT_KEY_OWNED`). Naming the same key in both `protect` and `owners` in one call, or claiming a key the parent already owns, is likewise rejected with `CONTEXT_KEY_OWNED`. Invalid option shapes throw `SCOPE_PROTECTED_KEYS_INVALID` (a non-string-array `protect`) or `SCOPE_KEY_OWNERS_INVALID` (a non-plain-object `owners`, or an owner value that is not a non-empty string), each reporting the offending shape. The owner map is built with a null prototype and checked via `hasOwnProperty`, so a caller-supplied `__proto__` / `constructor` key is treated as ordinary data rather than reaching `Object.prototype`.
 
 #### Nested values
 
 The lock is not limited to the top layer. When a protected/owned key holds a **plain object or array**, that value is handed back through a recursive protected view, so a write to any nested field is enforced exactly like a top-level write:
 
 ```javascript
-await api.slothlet.scope({
+await api.slothlet.context.scope({
 	context: { auth: { userId: "alice", roles: ["reader"] } },
 	protect: ["auth"],
 	fn: async () => {
@@ -317,22 +428,45 @@ Owner-locked keys protect **who the caller is** (an authenticated `userId`, a ve
 
 `isolation` governs **`self`** only — context is isolated in both modes (the per-request context store is discarded on scope exit regardless).
 
-#### Partial Isolation (Default)
+In both modes everything else a run changes is the run's own: permission rules, hooks, metadata, event and lifecycle subscriptions, and the api tree. Changes to the tree made inside `.run()` / `.scope()` through `api.slothlet.api.add()`, `remove()` and `reload()` (and `reload()`, `restart()` and `shutdown()` themselves) give the run a copy of the tree on its first such change, and every later write into the tree from the run lands in that copy, never in the instance (see [RELOAD.md](RELOAD.md#calls-during-a-full-reload-and-after-one-fails)).
 
-Child `self` is the shared base `self`. Mutations to API state inside `.run()` / `.scope()` **persist** afterward — by design. The API surface is shared; context is isolated.
+#### Full Isolation (Default)
+
+Child `self` is the run's own api, taken when the run starts. A write through it (top-level or deep, an assignment, `Object.defineProperty` or `delete`) goes through the same checks a write outside a run meets: reserved keys and invalid paths are refused, a module writes only where it owns or a `:write` rule lets it, and the writer is the one the runtime attributes the write to (module code reached through a global included). A write that passes is kept by the run instead of being made on the instance, and is read back in the run: a synchronous write made before the run has a tree of its own included. A read goes through the ordinary read path every time, so each caller is answered as the read gate answers it, a value the run wrote included: a caller refused a member is refused it after another module wrote it. Nodes come back as the run's views of them, a lazy node's included, so a write made under one stays in the run; a built-in data object (a `Map`, a `Set`, a `Date`, a typed array) comes back as the run's own copy of it, and an emitter as the shared object (see below). Once the run has a tree of its own (its first `api.slothlet.api.add()` and the like), what it kept is written into that tree and `self` reads and writes the run's tree, so `api` and `self` agree in the run. Mutations made through `self` do **not** persist outside `.run()`. A change to a node itself, its prototype (`Object.setPrototypeOf`) or its extensibility (`Object.preventExtensions`, `Object.seal`, `Object.freeze`), is a write at the node's path, checked as an assignment is, and kept by the run: the run reads the prototype it set and inherits through it, and closing a node closes the run's view of it while the node stays open. A class's `prototype` read through a node comes back as the run's view of it: a write to it, or to an object or array below it, is checked as a write at its path and kept by the run, and an instance the run constructs through the class (a subclass's included) inherits through that view, so it sees what the run wrote and `instanceof` holds. Limit: a prototype set or a closing made before the run has a tree of its own is not carried into that tree.
 
 ```javascript
-const api = await slothlet({ dir: "./api" }); // default: partial isolation
+const api = await slothlet({ base: "./api" }); // default: full isolation
 ```
 
-#### Full Isolation
+#### What a run's snapshot covers, and what it doesn't
 
-Child `self` is a **copy-on-write view** over the base `self`: reads pass through to the live API, writes (top-level and deep-path) land on a per-scope overlay that is discarded on exit. Mutations to API state do **not** persist outside `.run()`. Both context AND the API surface are isolated. Two limits apply: a function member (a callable node, a class) is shared with the live API rather than copied, so a write to its own properties or its `prototype` persists ([#674](https://github.com/CLDMV/slothlet/issues/674)); and the scope's views cannot be closed, so `Object.preventExtensions`, `Object.seal`, and `Object.freeze` on `self` or a node read from it inside the scope throw a `TypeError`.
+A run starts on a snapshot of everything slothlet can see of the instance at that moment: the tree's shape, every value reachable through it (plain objects and arrays, an object a function returns, a `Map`, `Set`, `Date`, `RegExp`, typed array, `ArrayBuffer` or `DataView`, and the public state of class instances), the values set on the tree, the permission rules, hooks, metadata, control and seal, principals, versioning and the context. Plain JavaScript is the reference: a read in the run answers what the same code would have read on the instance at the moment the run started, plus what the run itself wrote.
+
+Nothing is copied when the run opens. While a run is open, the instance saves an object as it is just before it first changes it (once per window: a window starts when a run opens), and the run reads that saved version. Slothlet sees the change when it is made through the tree (`api`, `self`, or a value read from either, the api's root included, a prototype set on a node or on the root, and a node closed with `Object.freeze()` / `seal()` / `preventExtensions()`), when a value is handed out as itself (a `Map`, an object a leaf returned or an async leaf resolved with, to host code inside a run through `api` too: it is saved then), when a method runs on a class instance, when a lazy node loads (a change made through a stand-in for it is made once it has), and before a file's code runs outside every run (what the file exports is saved once per window first). A prototype of a module's own (a class's prototype, or an object others are made from with `Object.create()`) is saved with what inherits from it, and when it is handed out (`Object.getPrototypeOf(node)`, `Class.prototype`), so a member a node inherits reads in the run as it was at the start, and a prototype the instance gives a node or the root later doesn't reach the run. A node the instance closes after the start stays open in the run: the run can still write it, give it a prototype and close it, and keeps what it does. In the run, a `Map`, `Set`, `Date`, typed array and the like is the run's own real copy, made on its first read from the content as of the start, so `Map.prototype.get.call(map, key)`, `structuredClone(map)` and `instanceof` work as on the instance and what the run changes in it stays in the run. Reads in a run still go through the read gate for each caller, against the rules the run holds, and writes are checked before they land in the run's copy. A nested run reads its parent as of the nested run's start, including what the parent wrote to its own copies of a `Map`, array or returned object and the prototypes it set; the parent's copies of built-ins are saved when the nested run opens. Versions are kept only while a run that can read them is open; a run that never ends (a server's `listen()` inside a run) keeps one version per object it can read, however many other runs open and close.
+
+What the snapshot doesn't cover, because slothlet can't see it:
+
+- **A call already in flight when the run opened.** What module code started before the run (a call still running, a timer or promise chain it set up) changes through its own variables reaches the run if the run has not read it yet.
+- **A reference kept from before the run started.** An object the host or a module read from the tree and kept (`const cache = api.store.cache` at startup) is the object itself: a change made through it later reaches the runs open. Read it through the tree where the change is made.
+- **A module's own variables, from a run to the instance.** What a module holds in its own variables (top-level `let` / `const`, closures, a helper module it imports) is module state. A change the module's code makes through such a variable while it runs in a run reaches the instance, also when the variable holds an object the module exports, and so it reaches the runs that read it afterwards. To keep the change in the run, make it through `self` (`self.config.data.n++` rather than `data.n++`).
+- **`#private` methods.** An instance of a class that declares private names (`#count`) keeps its public members as of the start in a run, but its methods run on the instance itself, so its private fields are found: inside such a method, `this` reads and writes the instance, not the run's snapshot.
+- **Privates compiled to helpers.** Classes whose private fields are compiled to helper functions or a `WeakMap` (older TypeScript and Babel targets) can't be told apart from other classes: their methods run on the run's view, and throw a `TypeError` when they reach the private state. Compile with native private fields, or keep such state off the instance.
+- **Emitters' plain properties.** An `EventEmitter` or `EventTarget` is a live object the run shares with the instance: a listener a run adds is added to it (and counts as the run's pending work), what either side emits reaches the other, and a plain property a run sets on it reaches the instance.
+- **Live resources.** Sockets, connections, streams, timers and other handles, a `Promise`, and a `WeakMap`, `WeakSet` or `WeakRef` are the objects themselves in a run: data a run writes to a socket is sent.
+- **Keys of a `Map` and members of a `Set` that are objects.** A run's copy of a `Map` holds the same key objects, so lookups by key work as on the instance; the values are the run's own.
+- **The host's `api`.** `api` is the instance in a run too: what host code changes through it reaches the instance, and the run, which reads its snapshot, doesn't see it. Work on the run's view through `self`.
+- **Promises handed out while a run is open.** While a run of the instance is open, a promise returned from a call is a new promise object, not the one the module returned, and it settles one microtask later. It settles with the same value (saved for the open runs before the caller has it; a run's `self` gets the run's own snapshot of it), and it is the same new promise each time for the same original.
+
+A snapshot costs nothing when the run opens. A run's first read of a `Map`, `Set`, `Date` or typed array costs a copy of it (a 100,000-entry `Map` takes a few milliseconds). While a run is open, the instance's first change to an object after the run started costs a copy of that object, and the first call into a file costs a copy of what the file exports (its `Map`s and other built-ins, and the prototypes of its own its values inherit from, included), a nested run's opening costs a copy of the built-ins its parent copied, and a value handed out as itself costs a copy of it and what it reaches; later changes in the same window cost nothing more.
+
+#### Partial Isolation
+
+Opt-in. Child `self` is the base `self`, so a write through `self` from the run reaches the instance and persists after the run ends, by design. Only `self` is shared: the rest of what the run changes stays in the run as described above. A synchronous write through `self` from a run that has not changed its tree yet lands in the instance's tree; once the run has a tree of its own, its writes land there.
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
-	scope: { isolation: "full" }
+	base: "./api",
+	scope: { isolation: "partial" }
 });
 ```
 
@@ -341,15 +475,15 @@ const api = await slothlet({
 The isolation mode can be overridden on a per-call basis regardless of the instance default:
 
 ```javascript
-// Instance default: partial
-const api = await slothlet({ dir: "./api" });
+// Instance default: full
+const api = await slothlet({ base: "./api" });
 
-// Override to full isolation for this specific call
+// Override to partial isolation for this specific call
 await api.slothlet.context.scope({
 	context: { requestId: "123" },
-	isolation: "full",
+	isolation: "partial",
 	fn: async () => {
-		// Self is a copy-on-write view; mutations don't escape this scope
+		// Self is the instance's own; writes through it persist after this scope
 	}
 });
 ```
@@ -359,7 +493,7 @@ await api.slothlet.context.scope({
 Set `scope: false` to disable `.run()` and `.scope()` entirely. Any attempt to call them will throw at runtime.
 
 ```javascript
-const api = await slothlet({ dir: "./api", scope: false });
+const api = await slothlet({ base: "./api", scope: false });
 ```
 
 ### Context Isolation Guarantees
@@ -372,7 +506,7 @@ Per-request context is deep-cloned (via the function-tolerant `deepClone`) befor
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { config: { count: 0 } }
 });
 
@@ -391,8 +525,8 @@ console.log(base.config.count); // 0 - parent context unchanged
 When calling `api.slothlet.context.get()` from inside another instance's `.run()` block, the called instance returns its own **base context** - not the calling instance's child context. This provides clear instance isolation.
 
 ```javascript
-const api1 = await slothlet({ dir: "./api1", context: { app: "one" } });
-const api2 = await slothlet({ dir: "./api2", context: { app: "two" } });
+const api1 = await slothlet({ base: "./api1", context: { app: "one" } });
+const api2 = await slothlet({ base: "./api2", context: { app: "two" } });
 
 await api1.slothlet.context.run({ userId: 100 }, async () => {
 	// api1.slothlet.context.get() → { app: "one", userId: 100 } ✅
@@ -415,7 +549,7 @@ Nested `.run()` calls within the same instance inherit from their parent scope:
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { app: "MyApp", level: 0 }
 });
 
@@ -442,7 +576,7 @@ Top-level properties are merged; nested objects are replaced wholesale:
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { config: { timeout: 5000, retries: 3 }, user: "alice" }
 });
 
@@ -476,7 +610,7 @@ import http from "node:http";
 import { randomUUID } from "node:crypto";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { app: "MyApp", version: "1.0.0", environment: "production" }
 });
 
@@ -525,7 +659,7 @@ export function error(message) {
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { app: "SaaS Platform", sharedConfig: { apiVersion: "v1" } }
 });
 
@@ -559,7 +693,21 @@ const results = await Promise.all([
 
 > **Performance**: Per-request context uses `AsyncLocalStorage.run()` internally, which is highly optimized in Node.js. Context data is deep-cloned for isolation (via a function-tolerant `deepClone` that shares only callables — functions and callable proxies — by reference) - performance overhead is minimal.
 
-> **Runtime caveat — live bindings / browser mode**: The concurrent isolation shown above relies on `AsyncLocalStorage`. Under the live-bindings runtime (`runtime: "live"`, and automatically in **browser mode**, where `node:async_hooks` is unavailable), the active context is tracked in a single global field. This isolates **sequential** `run()` / `scope()` calls — each restores the prior context when it returns — but **not interleaved concurrent** calls on the _same_ instance: across an `await`, a sibling `run()` overwrites the global and the resumed callback reads the wrong context. For concurrent per-request isolation, use the default async (ALS) runtime in Node; in a browser, give each concurrent flow its own slothlet instance or serialize the `run()` calls.
+#### Concurrent `run()` and `scope()` flows in the live runtime
+
+`run()` and `scope()` flows are isolated from each other on both runtimes and in every permission mode: no code sees or takes another flow's context, and each flow's calls report their own caller. The async runtime keeps each flow in an `AsyncLocalStorage` store. The live runtime (`runtime: "live"`, and every instance in a browser) uses no `node:async_hooks`; it keeps the active flow in one field and carries it as follows:
+
+- **Callbacks a flow registers** through a boundary slothlet patches run in that flow whenever they fire, whichever flow is open then and also after the `run()` / `scope()` has returned: timers, `setImmediate()`, `process.nextTick()`, `queueMicrotask()`, `requestAnimationFrame()` and `requestIdleCallback()`, EventEmitter and DOM event listeners, observers, and reactions passed to `then()` / `catch()` / `finally()`. A callback the host registers outside every flow runs in the instance's own context. This holds in Node and in a browser.
+- **`node:timers`.** `setTimeout()`, `setInterval()` and `setImmediate()` are patched on the `node:timers` module as well as on the global, so `import { setTimeout } from "node:timers"`, the module's default export and `require("node:timers")` carry a flow as the global functions do (Node refreshes the ES module bindings when the patch goes in and when it comes out). `node:timers/promises` needs no patch: its promises carry the flow. **Not covered:** a reference to Node's own scheduler taken before the first instance was created (`const later = setTimeout` in a file loaded before slothlet, `setTimeout.bind(globalThis)`). That is the function itself, not a slot slothlet can replace, and nothing short of `async_hooks` sees a callback it schedules, which the live runtime does not use; its callback runs in the instance's own context. Take the scheduler from the global or from `node:timers` at the time you call it.
+- **A scheduler written back over the patch.** Code that read one of these functions before slothlet patched it, swapped in its own for a while and then wrote back what it had read takes the patch out. vitest does this with `process.nextTick` around the messages its worker sends to the main process, writing the old value back a tick later, so a wrapper installed in between is lost and two overlapping messages leave Node's own function in place. Where the function written back is exactly the one under slothlet's wrapper, the live runtime puts the wrapper back when the next `run()` / `scope()` or module call starts. A different function (fake timers, another library's wrapper) owns the slot and is left alone; a callback it schedules is carried only if it calls the wrapper it found.
+- **Callbacks of Node's callback-style APIs**, in Node: Node calls these from the event loop, past every boundary above, so slothlet replaces each function below while a live instance exists with one that pins its callback (its last argument, when that is a function) to the flow and caller that called it, as a timer's is. Covered: every callback form in `node:fs` (`access`, `appendFile`, `chmod`, `chown`, `close`, `copyFile`, `exists`, `fchmod`, `fchown`, `fdatasync`, `fstat`, `fsync`, `ftruncate`, `futimes`, `lchmod`, `lchown`, `link`, `lstat`, `lutimes`, `mkdir`, `mkdtemp`, `open`, `opendir`, `read`, `readdir`, `readFile`, `readlink`, `readv`, `realpath` and `realpath.native`, `rename`, `rm`, `rmdir`, `stat`, `statfs`, `symlink`, `truncate`, `unlink`, `utimes`, `write`, `writeFile`, `writev`, and `Dir`'s `read()` / `close()`); `node:dns` (`lookup`, `lookupService`, `reverse`, `resolve` and every `resolve*`, on the module and on `dns.Resolver` instances); and `node:crypto` (`argon2`, `checkPrime`, `decapsulate`, `diffieHellman`, `encapsulate`, `generateKey`, `generateKeyPair`, `generatePrime`, `hkdf`, `pbkdf2`, `randomBytes`, `randomFill`, `randomInt`, `scrypt`, `sign`, `verify`). Already carried without a patch, because Node delivers them through an emitter, `process.nextTick()` or a promise: zlib's callback forms (`gzip`, `deflate`, `brotliCompress`, …), `child_process.exec()` / `execFile()` and child-process events, `fs.cp()`, `fs.glob()`, `fs.watch()` / `fs.watchFile()`, streams and `stream.pipeline()` / `finished()`, `http` / `https` / `net` / `dgram` callbacks, and every promise API (`fs.promises`, `dns.promises`, `util.promisify()` of any of these). The replacement keeps the function's `name`, `length` and promisify support, and outside every flow and module call it hands the callback on untouched after one check. It costs about 1 µs per call inside a `run()` or a module call and about 0.4 µs per call outside (measured on Node 26 and 22: issuing `fs.stat(path, cb)` went from about 4 to 5 µs inside a `run()`), next to the call's own file-system round trip. `require("node:fs")`, a default import and `import { readFile } from "node:fs"` all see it (Node refreshes the ES module bindings when the patch goes in and when it comes out). **Not covered:** a reference taken before the first live instance was created, such as `const { readFile } = require("node:fs")` at the top of a file loaded earlier, or `fs.readFile.bind(fs)`, keeps Node's own function, so its callback is not carried (a function `util.promisify()` made earlier is fine: its promise carries the flow). Callback APIs of other builtins and of native addons that call back from the event loop are not covered either; read what such a callback needs before making the call, or use the API's promise form. `crypto.randomInt(…, cb)` needs one more step on the async runtime: Node serves overlapping calls from one shared fetch and calls every waiting callback from the async context of the call that started it, so a bare `AsyncLocalStorage` hands the second flow the first one's store. While an async-runtime instance exists, slothlet's `randomInt` takes the value from the synchronous form (which refills the cache in place when it is empty) and hands it to the callback through `process.nextTick()`, as Node does for every value the cache already holds, so each flow sees its own there too. No other function listed above mixes flows this way.
+- **The code after an `await`**, in Node: while a live instance exists, slothlet installs V8's promise hooks (`v8.promiseHooks`, not `async_hooks`), records on each promise the flow it was made in, and runs each of its jobs in that flow. Interleaved flows waiting at `await`s each pick up in their own store, code after the `run()` call goes on in the flow it was in, and a `run()` nested in another one's callback, synchronously, in a timer or after an `await`, inherits from it. The hooks are removed after the last live instance shuts down. They cost every promise job in the process about 0.15 µs (measured on Node 26: an `await` loop went from about 0.05 to about 0.2 µs per step), and a callback a flow registers through a patched boundary about 1 µs more (an immediate loop went from about 1.7 to 2.9 µs per step inside a `run()`).
+- **Work a flow leaves behind** keeps the flow after its `run()` / `scope()` has returned, as on the async runtime: a timer or an interval set in the callback, a listener it added, a promise chain or a module call it started without waiting for it, and what those start in turn all run in the run's context. This is what the middleware shape `run(ctx, next)` relies on when `next` returns before the request has finished. A `reload()` of the instance in between changes nothing: work a finished run left behind still runs in that run's context afterwards, on both runtimes. The run's store stays alive only through the work that holds it: each such callback and each promise made in the flow keeps it, and it is put back among the instance's stores only while that work runs synchronously, so no other flow and no host code outside every flow sees it. Once the timers have fired, the intervals are cleared, the listeners are removed and the promises are gone, nothing holds the store and it is collected; an interval or a long-lived listener keeps it for as long as it is registered. The run's copy of the instance (its api tree, rules, hooks and metadata, see `docs/RELOAD.md`) is not left to collection: slothlet counts that same work explicitly, on both runtimes, and tears the copy down once the run has returned and the count reaches zero. A promise collected before it settles, and a listener whose emitter or target is collected, leave the count then: nothing can run their code any more. A value the run hands out through the runtime `context` export is not counted and does not keep the copy.
+- **What a flow asks of the instance**: `api.slothlet.api.add()` / `remove()`, `reload()`, `restart()` and `shutdown()` asked for in a `run()` / `scope()` act on the run's own copy, and the build of a reload's or a restart's new copy is told apart from every other caller, through these same flows: the live runtime needs no `AsyncLocalStorage` for either, and reaches exactly as far as it carries a run's context (in a browser, the limit after a bare `await` below applies to them too).
+- **A native promise with a `then` of its own** (an own property set on the promise object) returned from a `run()` callback is settled differently on the two runtimes: the async runtime calls that `then` inside the run, as it adopts the result, while the live runtime and a plain `await` of the result do not call it inside the run. Neither carries the run's context out of the run.
+- **In a browser** there are no promise hooks, so the code after a bare `await` is not guaranteed its own flow while flows interleave: the field names the last `run()` / `scope()` entered until it returns, so a flow's code that picks up after a bare `await` can see the context of a flow opened after it (or the instance's own, once that flow has returned). This is a platform limit. Sequential `run()` calls are unaffected, a new `run()` opened beside a waiting one takes the instance's own context, and callbacks registered through the patched boundaries above are carried. For concurrent requests in a browser, read what a flow needs before its first `await`, register follow-up work through a callback, or give each concurrent flow its own instance.
+
+> **Overlapping calls in the live runtime**: while several module calls are waiting at an `await`, the live runtime tells which of them picked up again from the call stack. Where the stack names a set of calls rather than one (several waiting calls of one file with the job picking up in an unnamed function, or another module's async function picking up inside a waiting call whose file does not import it), permission checks are held to every call of the set (see [PERMISSIONS.md](PERMISSIONS.md#runtime-choice--the-permission-boundary), Overlapping calls), and `context` is not told per call: the code sees the context of the store those calls are waiting on. Calls made on the same store (outside any `run()`, or inside one `run()`) share that context, so it is the right one; calls of different `run()` flows are on different stores (see above). Once every `run()` has returned, the host's next call runs with the instance's own context, as on the async runtime. `metadata.caller()` reports the caller of the call of the set that started waiting first. The async runtime knows the call and has neither limit. Telling the call in the live runtime is tracked in [#756](https://github.com/CLDMV/slothlet/issues/756).
 
 ---
 
@@ -609,7 +757,7 @@ export function startServer(port = 3000) {
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { user: "alice", session: "tcp-session" }
 });
 
@@ -633,7 +781,11 @@ const server = api.startServer(8080);
 
 Slothlet automatically preserves AsyncLocalStorage context across all class instance method calls. When your API functions return class instances, slothlet wraps them transparently so all method calls maintain full context access.
 
-**Implementation**: `src/lib/helpers/class-instance-wrapper.mjs` wraps class instances returned from `runInContext()` using a Proxy. Methods are cached per instance. Wrapping is applied recursively - nested class instances are also wrapped. Standard built-in types (Array, Date, Map, EventEmitter, etc.) are excluded from wrapping.
+**Implementation**: `src/lib/helpers/class-instance-wrapper.mjs` wraps class instances returned from `runInContext()` using a Proxy. Methods are cached per instance. Wrapping is applied recursively - nested class instances are also wrapped. Only an instance of a class a module wrote is wrapped: the language's and Node's own classes (`Array`, `Date`, `Map`, `EventEmitter`, `URL`, `Response`, `AbortController`, `Intl.NumberFormat`, …) keep their context on their own and are returned as they are.
+
+The wrapper stands for the instance. Members are read and written on the instance itself, so a getter or setter over a `#private` field works. The same instance comes back as the same wrapper every time (`(await api.make()) === (await api.make())` for a leaf returning one instance, and a method returning `this` returns the wrapper). Handed back to the module that created it, the wrapper is the instance again, so the module's own `===` and `#field in value` checks hold. On the wrapper itself `#field in value` is false, as for any Proxy.
+
+Code a module hands out that is not a class instance (a closure, a function inside returned data, a thenable, a generator) is not wrapped. Run by the host outside any call, it reads `self` and `context` as the instance it was made in gives them, told by the file its code is in; see [Code a module hands out runs as its definer](PERMISSIONS.md#code-a-module-hands-out-runs-as-its-definer). Code of a helper file (a file a leaf imports that is no api file itself) reads them the same way, as the instance whose api files import the helper.
 
 ### Data Processor Example
 
@@ -671,7 +823,7 @@ export function createProcessor(config) {
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	context: { user: "alice", requestId: "req-123" }
 });
 

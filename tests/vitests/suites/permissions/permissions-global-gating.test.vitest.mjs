@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-global-gating.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-global-gating.test.vitest.mjs
  *	@Date: 2026-04-14T17:15:29-07:00 (1776212129)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-11-28T04:32:27-08:00 (1795869147)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Global Gating > $name", ({ conf
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "untrusted.**", target: "slothlet.permissions.global.**", effect: "deny" }]
 			}
 		});
@@ -40,7 +40,7 @@ describe.each(getMatrixConfigs())("Permissions > Global Gating > $name", ({ conf
 		await api.slothlet.api.add("untrusted", `${BASE}/untrusted`);
 
 		// Global methods are still accessible from the test context (no caller module)
-		const result = api.slothlet.permissions.global.checkAccess("payments", "db");
+		const result = api.slothlet.permissions.global.check.access("payments", "db");
 		expect(result).toBeTypeOf("boolean");
 	});
 
@@ -49,7 +49,7 @@ describe.each(getMatrixConfigs())("Permissions > Global Gating > $name", ({ conf
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "untrusted.**", target: "slothlet.permissions.global.**", effect: "deny" }]
 			}
 		});

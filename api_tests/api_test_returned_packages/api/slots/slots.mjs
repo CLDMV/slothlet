@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_returned_packages/api/slots/slots.mjs
+ *	@Filename: api_tests/api_test_returned_packages/api/slots/slots.mjs
  *	@Date: 2026-10-27T07:00:18-07:00 (1793109618)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T10:15:16-07:00 (1793466916)
+ *	@Last modified time: 2026-11-28T04:29:29-08:00 (1795868969)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -101,7 +101,7 @@ export async function node() {
 /**
  * This module's function, kept where only an engine method reaches it: in a `Map`, a `Set`, behind a promise (one
  * carrying a member of its own, or a symbol member as Node's async hooks put there), a `WeakRef`, an error's cause, or a
- * `Map` iterator.
+ * `Map` iterator, or one of the language's iterators given the prototype of plain data.
  * @param {string} kind - Which holder.
  * @returns {*} The holder.
  */
@@ -124,9 +124,89 @@ export function holding(kind) {
 			return new WeakRef(steal);
 		case "cause":
 			return new Error("held", { cause: new Map([["f", steal]]) });
+		case "plainArrayIterator":
+			// An array's iterator given the prototype of plain data, holding an object and a long string of its own.
+			return Object.assign(Object.setPrototypeOf([steal][Symbol.iterator](), Object.prototype), { box: {}, text: "x".repeat(5000) });
+		case "plainIteratorHelper":
+			// An iterator helper given the prototype of plain data, holding an object of its own.
+			return Object.assign(
+				Object.setPrototypeOf(
+					[0][Symbol.iterator]().map(() => steal),
+					Object.prototype
+				),
+				{ box: { inner: [1] } }
+			);
+		case "bareArrayIterator":
+			// An array's iterator with no prototype and no members of its own.
+			return Object.setPrototypeOf([steal][Symbol.iterator](), null);
 		default:
 			return new Map([["f", steal]]).values();
 	}
+}
+
+/**
+ * Plain data holding no code: nested objects, an array, a long string, a date, an object of no prototype.
+ * @returns {object} The data.
+ */
+export function plainData() {
+	return { nested: { list: [1, "x".repeat(5000)], when: new Date(0), bare: Object.assign(Object.create(null), { n: 1 }) } };
+}
+
+/** How many times the `stack` getter this module defines on an error ran. */
+let stackGetterRuns = 0;
+
+/**
+ * Data holding an error, by kind: errors of the language's own (with a cause, members of their own, a stack already
+ * read), and look-alikes that are not (a disguised array iterator holding an error or posing as one, an error whose
+ * prototype was replaced, an error with a `stack` getter of this module's).
+ * @param {string} kind - Which.
+ * @returns {object} The data.
+ */
+export function errorData(kind) {
+	switch (kind) {
+		case "error":
+			return { ok: false, error: new Error("x") };
+		case "typeError":
+			return { error: new TypeError("t") };
+		case "aggregate":
+			return { error: new AggregateError([new Error("a"), new RangeError("b")], "agg") };
+		case "causeAndMembers":
+			return { error: Object.assign(new Error("c", { cause: { code: 1 } }), { code: "E1", detail: { n: 1 } }) };
+		case "stackRead": {
+			const error = new Error("read");
+			void error.stack;
+			return { error };
+		}
+		case "iteratorHoldingError":
+			return { inner: Object.assign(Object.setPrototypeOf([steal][Symbol.iterator](), Object.prototype), { error: new Error("i") }) };
+		case "iteratorPosingAsError":
+			return {
+				error: Object.assign(Object.setPrototypeOf([steal][Symbol.iterator](), Error.prototype), { message: "p", stack: "Error: p" })
+			};
+		case "errorBesideIterator":
+			return { error: new Error("b"), inner: Object.setPrototypeOf([steal][Symbol.iterator](), Object.prototype) };
+		case "prototypeReplaced":
+			return { error: Object.setPrototypeOf(new Error("r"), Object.prototype) };
+		default: {
+			const error = new Error("g");
+			Object.defineProperty(error, "stack", {
+				get() {
+					stackGetterRuns++;
+					return "Error: g";
+				},
+				configurable: true
+			});
+			return { error };
+		}
+	}
+}
+
+/**
+ * How many times the `stack` getter {@link errorData} defines ran.
+ * @returns {number} The count.
+ */
+export function stackGetterCount() {
+	return stackGetterRuns;
 }
 
 /**

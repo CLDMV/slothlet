@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-module-removed-callbacks.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-module-removed-callbacks.test.vitest.mjs
  *	@Date: 2026-10-24T00:38:05-07:00 (1792827485)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:53-07:00 (1793008373)
+ *	@Last modified time: 2026-11-28T04:32:35-08:00 (1795869155)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,13 +25,17 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
-const GUEST = path.join(FIXTURE, "guest");
-const VICTIM = path.join(FIXTURE, "victim");
+const GUEST = apiPart(FIXTURE, "guest");
+const VICTIM = apiPart(FIXTURE, "victim");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -56,9 +60,9 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: { enabled: true }, ...options });
-		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
-		await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, hook: { enabled: true }, ...options });
+		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
+		await api.slothlet.api.add("g", GUEST, { id: "gA" });
 		api.g.x.takeLifecycleSeen();
 		return api;
 	}
@@ -80,10 +84,10 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 		await load(options);
 		expect(api.g.x.registerCallbacks("g.v.**:after", "g.news").hook).toBe("done");
 		await api.slothlet.api.remove("gA");
-		await api.slothlet.api.add("g", VICTIM, { moduleID: "other" });
+		await api.slothlet.api.add("g", VICTIM, { id: "other" });
 		expect(await api.g.v.secret()).toBe("SECRET");
 		await api.slothlet.api.remove("other");
-		await api.slothlet.api.add("g", VICTIM, { moduleID: "gA" });
+		await api.slothlet.api.add("g", VICTIM, { id: "gA" });
 		expect(await api.g.v.secret()).toBe("SECRET");
 	});
 
@@ -101,17 +105,17 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 
 	it("leaves a removed module's kept code without standing while another removal is held open", async () => {
 		api = await slothlet({
-			base: path.join(FIXTURE, "base"),
+			base: apiPart(FIXTURE),
 			mode,
 			runtime,
 			silent: true,
 			hook: { enabled: true },
 			permissions: {}
 		});
-		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
-		await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
-		await api.slothlet.api.add("holder", GUEST, { moduleID: "holder" });
-		await api.slothlet.api.add("bait", VICTIM, { moduleID: "bait" });
+		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
+		await api.slothlet.api.add("g", GUEST, { id: "gA" });
+		await api.slothlet.api.add("holder", GUEST, { id: "holder" });
+		await api.slothlet.api.add("bait", VICTIM, { id: "bait" });
 		const caller = api.g.x.keepCaller("victim.v.secret");
 		const registering = api.g.x.keepRegistering("victim.v.secret:after", "victim.news");
 		expect(await caller()).toBe("SECRET");
@@ -174,7 +178,7 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 		const [envelope] = held;
 		const [listenerId] = envelope.listeners;
 		await api.slothlet.api.remove("gA");
-		await api.slothlet.api.add("g2", GUEST, { moduleID: "gA" });
+		await api.slothlet.api.add("g2", GUEST, { id: "gA" });
 		expect(api.g2.x.registerCallbacks("g2.v.**:after", "victim.news").event).toBe("done");
 		globalThis[Symbol.for("slothlet.test.i625.lifecycleSeen")].splice(0);
 		expect(await api.slothlet.event.deliver(envelope, listenerId)).toEqual({ delivered: false, reason: "listener-gone" });
@@ -187,7 +191,7 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 	])("hands a module's lifecycle subscriber no token, and nothing once the module is removed (permissions %s)", async (_label, options) => {
 		await load(options);
 		expect(api.g.x.registerCallbacks("g.v.**:after", "g.news").lifecycle).toBe("done");
-		await api.slothlet.api.add("tmp1", VICTIM, { moduleID: "tmp1" });
+		await api.slothlet.api.add("tmp1", VICTIM, { id: "tmp1" });
 		await api.slothlet.api.remove("tmp1");
 		const seen = api.g.x.takeLifecycleSeen().filter((entry) => entry.event === "impl:removed");
 		expect(seen.length).toBeGreaterThan(0);

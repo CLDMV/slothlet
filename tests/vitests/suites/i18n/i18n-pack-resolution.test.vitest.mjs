@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/i18n/i18n-pack-resolution.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/i18n/i18n-pack-resolution.test.vitest.mjs
  *	@Date: 2026-06-09T22:15:50-07:00 (1781068550)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:08-07:00 (1791090908)
+ *	@Last modified time: 2026-11-28T04:31:56-08:00 (1795869116)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,6 +26,7 @@ import { describe, it, expect, beforeAll, vi } from "vitest";
 import { writeFileSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PACK_LOCALE, PACK_MESSAGE, PACK_KEY, packDir, assertI18nPackStaged } from "../../setup/i18n-pack-fixture.mjs";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 const PACK_DIR = packDir();
 
@@ -37,14 +38,14 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 
 	it("setLanguage loads a non-base locale from the installed pack", async () => {
 		const i18n = await import("@cldmv/slothlet/i18n");
-		i18n.setLanguage(PACK_LOCALE);
-		expect(i18n.getLanguage()).toBe(PACK_LOCALE);
+		i18n.language.set(PACK_LOCALE);
+		expect(i18n.language.get()).toBe(PACK_LOCALE);
 		expect(i18n.translate(PACK_KEY)).toBe(PACK_MESSAGE);
-		i18n.setLanguage("en-us"); // reset shared module state
+		i18n.language.set("en-us"); // reset shared module state
 	});
 
 	it("generateImportMap enumerates the pack's locales when it's installed", async () => {
-		const { generateImportMap } = await import("@cldmv/slothlet/helpers/generate-manifest");
+		const { generateImportMap } = await import("#helpers/generate-manifest");
 		const { imports } = await generateImportMap("/node_modules/@cldmv/slothlet/");
 		expect(imports).toHaveProperty(
 			`@cldmv/slothlet-i18n/language/${PACK_LOCALE}.json`,
@@ -53,7 +54,7 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 	});
 
 	it("generateImportMap derives the pack base from a versioned CDN base (preserves @version)", async () => {
-		const { generateImportMap } = await import("@cldmv/slothlet/helpers/generate-manifest");
+		const { generateImportMap } = await import("#helpers/generate-manifest");
 		const { imports } = await generateImportMap("https://cdn.example.com/@cldmv/slothlet@3/");
 		// The pack base must swap the final `@cldmv/slothlet` segment while keeping the `@3` version —
 		// not leave pack locales pointing into the (versioned) slothlet base.
@@ -64,7 +65,7 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 	});
 
 	it("omits pack locale entries when the base has no @cldmv/slothlet segment to swap", async () => {
-		const { generateImportMap } = await import("@cldmv/slothlet/helpers/generate-manifest");
+		const { generateImportMap } = await import("#helpers/generate-manifest");
 		// A custom base served at the site root has no `@cldmv/slothlet` segment, so the pack-base swap is
 		// a no-op; emitting `${base}languages/*` would point into the slothlet base, not the pack. Expect
 		// no pack entries rather than wrong ones.
@@ -74,28 +75,27 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 
 	it("setLanguage warns and keeps en-us when the pack locale file is corrupt", async () => {
 		writeFileSync(join(PACK_DIR, "languages", "qa-corrupt.json"), "{ not valid json !");
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		// A failed load is a coded SlothletWarning (#820); outside any instance it is printed, not kept.
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
-			i18n.setLanguage("qa-corrupt");
-			expect(i18n.getLanguage()).toBe("en-us");
-			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("qa-corrupt"));
+			const warnings = await captureWarnings(() => i18n.language.set("qa-corrupt"));
+			expect(i18n.language.get()).toBe("en-us");
+			expect(warnings.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt"))).toBe(true);
 		} finally {
-			warnSpy.mockRestore();
 			rmSync(join(PACK_DIR, "languages", "qa-corrupt.json"), { force: true });
 		}
 	});
 
 	it("setLanguageAsync warns and keeps en-us when the pack locale file is corrupt", async () => {
 		writeFileSync(join(PACK_DIR, "languages", "qa-corrupt-async.json"), "{ not valid json !");
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		// A failed load is a coded SlothletWarning (#820); outside any instance it is printed, not kept.
 		try {
-			const i18n = await import("@cldmv/slothlet/i18n");
-			await i18n.setLanguageAsync("qa-corrupt-async");
-			expect(i18n.getLanguage()).toBe("en-us");
-			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("qa-corrupt-async"));
+			// The asynchronous load (the browser path), run directly: language.set takes the synchronous one in Node.
+			const i18n = await import("#i18n");
+			const warnings = await captureWarnings(() => i18n.setLanguageAsync("qa-corrupt-async"));
+			expect(i18n.language.get()).toBe("en-us");
+			expect(warnings.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt-async"))).toBe(true);
 		} finally {
-			warnSpy.mockRestore();
 			rmSync(join(PACK_DIR, "languages", "qa-corrupt-async.json"), { force: true });
 		}
 	});
@@ -109,9 +109,9 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		writeFileSync(esMx, "{ not valid json !");
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
-			i18n.setLanguage("es-mx");
-			expect(i18n.getLanguage()).toBe("es-mx");
-			i18n.setLanguage("en-us"); // reset shared module state
+			i18n.language.set("es-mx");
+			expect(i18n.language.get()).toBe("es-mx");
+			i18n.language.set("en-us"); // reset shared module state
 		} finally {
 			writeFileSync(esMx, original);
 		}
@@ -125,8 +125,8 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		// URL) still works, so the module loads; only the pack-path resolution lands in the catch and the
 		// loader falls through to the internal copy.
 		vi.resetModules();
-		const platform = await vi.importActual("@cldmv/slothlet/helpers/platform");
-		vi.doMock("@cldmv/slothlet/helpers/platform", () => ({
+		const platform = await vi.importActual("#helpers/platform");
+		vi.doMock("#helpers/platform", () => ({
 			...platform,
 			url: {
 				...platform.url,
@@ -138,11 +138,11 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		}));
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
-			i18n.setLanguage("es-mx");
-			expect(i18n.getLanguage()).toBe("es-mx"); // pack path threw → catch → internal copy
-			i18n.setLanguage("en-us");
+			i18n.language.set("es-mx");
+			expect(i18n.language.get()).toBe("es-mx"); // pack path threw → catch → internal copy
+			i18n.language.set("en-us");
 		} finally {
-			vi.doUnmock("@cldmv/slothlet/helpers/platform");
+			vi.doUnmock("#helpers/platform");
 			vi.resetModules();
 		}
 	});

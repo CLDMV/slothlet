@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/handlers/shared-values.mjs
+ *	@Filename: src/lib/handlers/shared-values.mjs
  *	@Date: 2026-10-30T12:52:45-07:00 (1793389965)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:45-07:00 (1793426625)
+ *	@Last modified time: 2026-11-28T04:30:38-08:00 (1795869038)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,7 +29,22 @@
  * @type {function(*): boolean}
  * @private
  */
-const IS_PROXY = globalThis.process?.getBuiltinModule?.("node:util")?.types?.isProxy ?? (() => false);
+import {
+	ArrayMethods,
+	Arrays,
+	Functions,
+	listPush,
+	Objects,
+	Processes,
+	Reflect,
+	setFrom,
+	SetMethods,
+	WeakSet,
+	WeakSetMethods
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
+
+const IS_PROXY = Processes.getBuiltinModule?.("node:util")?.types?.isProxy ?? (() => false);
 
 /**
  * How many own properties, across everything a value reaches, are read when it is recorded; past that the rest is not
@@ -44,7 +59,7 @@ const RECORD_BUDGET = 20000;
  * @type {Set<object>}
  * @private
  */
-const LANGUAGE_PROTOTYPES = new Set([Object.prototype, Function.prototype, Array.prototype]);
+const LANGUAGE_PROTOTYPES = setFrom([Objects.prototype, Functions.prototype, Arrays.prototype]);
 
 /**
  * The values recorded.
@@ -63,24 +78,25 @@ const RECORDED = new WeakSet();
  * @example
  * recordSharedExports(globalThis.process.getBuiltinModule("node:events"));
  */
-export function recordSharedExports(value) {
+function recordSharedExports(value) {
 	let budget = RECORD_BUDGET;
 	const pending = [value];
 	while (pending.length && budget > 0) {
-		const member = pending.pop();
+		const member = ArrayMethods.pop(pending);
 		if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
-		if (RECORDED.has(member) || LANGUAGE_PROTOTYPES.has(member) || IS_PROXY(member)) continue;
-		RECORDED.add(member);
+		if (WeakSetMethods.has(RECORDED, member) || SetMethods.has(LANGUAGE_PROTOTYPES, member) || IS_PROXY(member)) continue;
+		WeakSetMethods.add(RECORDED, member);
 		try {
 			const keys = Reflect.ownKeys(member);
 			budget -= keys.length;
-			for (const key of keys) {
+			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
 				const descriptor = Reflect.getOwnPropertyDescriptor(member, key);
 				if (!descriptor) continue;
-				if ("value" in descriptor) pending.push(descriptor.value);
-				else pending.push(descriptor.get, descriptor.set);
+				if ("value" in descriptor) listPush(pending, descriptor.value);
+				else listPush(pending, descriptor.get, descriptor.set);
 			}
-			pending.push(Reflect.getPrototypeOf(member));
+			listPush(pending, Reflect.getPrototypeOf(member));
 		} catch {
 			// What refuses to be described records nothing of what it holds.
 		}
@@ -97,5 +113,58 @@ export function recordSharedExports(value) {
  */
 export function isSharedExport(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
-	return RECORDED.has(value);
+	return WeakSetMethods.has(RECORDED, value);
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (
+		!mayTakeInternals(consumer, [
+			"lib/handlers/unified-wrapper",
+			"lib/handlers/unified-wrapper/values",
+			"lib/helpers/eventemitter-context",
+			"lib/runtime/runtime"
+		])
+	)
+		throw ownBindingsRefusal("lib/handlers/shared-values", import.meta.url);
+	return { recordSharedExports };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof recordSharedExports} */
+const guarded_recordSharedExports = guardInternal(recordSharedExports, "recordSharedExports", import.meta.url);
+export { guarded_recordSharedExports as recordSharedExports };

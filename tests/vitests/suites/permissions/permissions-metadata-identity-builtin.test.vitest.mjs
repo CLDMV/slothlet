@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-metadata-identity-builtin.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-metadata-identity-builtin.test.vitest.mjs
  *	@Date: 2026-09-27T03:01:38-07:00 (1790503298)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:42-07:00 (1791091722)
+ *	@Last modified time: 2026-11-28T04:32:33-08:00 (1795869153)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,7 +15,7 @@
 
 /**
  * @fileoverview #468 — `slothlet.metadata.caller` and `slothlet.metadata.self` are allowed by
- * built-in rules, like `slothlet.lockCaller` / `slothlet.bind`: they reveal identity only (who is
+ * built-in rules, like `slothlet.pin` / `slothlet.bind`: they reveal identity only (who is
  * calling me / who am I), which a module needs to enforce its own policy. Under
  * `defaultPolicy: "deny"` with no user rules a module can call them; `metadata.get(path)` (reads
  * arbitrary metadata) stays gated; a user rule still overrides the built-ins.
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Permissions > metadata identity built-ins (#4
 	 * @param {object[]} [rules=[]] - User rules.
 	 * @returns {Promise<object>} Bound api.
 	 */
-	const build = (rules = []) => slothlet({ ...config, base: TEST_DIRS.API_TEST, permissions: { defaultPolicy: "deny", rules } });
+	const build = (rules = []) => slothlet({ ...config, base: TEST_DIRS.API_TEST, permissions: { policy: "deny", rules } });
 
 	it("a module may call metadata.caller() and metadata.self() with no user rules", async () => {
 		api = await build();

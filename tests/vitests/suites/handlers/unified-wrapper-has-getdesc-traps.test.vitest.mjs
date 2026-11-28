@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/handlers/unified-wrapper-has-getdesc-traps.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/handlers/unified-wrapper-has-getdesc-traps.test.vitest.mjs
  *	@Date: 2026-02-27T22:17:01-08:00 (1772259421)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-28T04:31:46-08:00 (1795869106)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,13 +20,13 @@
  * @description
  * Exercises:
  *   hasTrap lines 2734-2762:
- *     line 2736 – wrapper._materialize() triggered by `in` operator on unmaterialized lazy wrapper
+ *     line 2736 – wrapper.___materialize() triggered by `in` operator on unmaterialized lazy wrapper
  *     line 2744 – `return true` for own property found via hasOwn in eager mode
  *     line 2752-2757 – `prop in wrapper.impl` check
  *     line 2762 – Object.prototype.hasOwnProperty fallback
  *
  *   getOwnPropertyDescriptorTrap lines 2764-2815:
- *     line 2779 – wrapper._materialize() triggered by getOwnPropertyDescriptor on unmaterialized lazy wrapper
+ *     line 2779 – wrapper.___materialize() triggered by getOwnPropertyDescriptor on unmaterialized lazy wrapper
  *     line 2793 – target.hasOwnProperty path
  *     line 2798 – wrapper own prop path
  *     line 2808 – impl property path
@@ -96,10 +96,10 @@ describe("hasTrap – eager mode", () => {
 		expect("nonExistentProp12345" in api).toBe(false);
 	});
 
-	it("returns true for '_materialize' sentinel (special fast-path)", async () => {
+	it("returns true for '___materialize' sentinel (special fast-path)", async () => {
 		api = await makeEagerApi();
-		// '_materialize' is always true (first guard in hasTrap)
-		expect("_materialize" in api.math).toBe(true);
+		// '___materialize' is always true (first guard in hasTrap)
+		expect("___materialize" in api.math).toBe(true);
 	});
 
 	it("reports true for props found on impl even when not own wrapper prop", async () => {
@@ -127,12 +127,12 @@ describe("hasTrap – lazy mode, unmaterialized wrapper", () => {
 		}
 	});
 
-	it("triggers _materialize via `in` operator before first access (line 2736)", async () => {
+	it("triggers ___materialize via `in` operator before first access (line 2736)", async () => {
 		api = await makeLazyApi();
 		// api.math is the real proxy for the math wrapper (lazy, unmaterialized at this point)
-		// Using `in` triggers hasTrap which fires _materialize (line 2736)
+		// Using `in` triggers hasTrap which fires ___materialize (line 2736)
 		const hasAdd = "add" in api.math;
-		// After hasTrap fires _materialize, materialization is async – result may be false
+		// After hasTrap fires ___materialize, materialization is async – result may be false
 		// The important thing is hasTrap ran (coverage) and didn't throw
 		expect(typeof hasAdd).toBe("boolean");
 	});
@@ -140,7 +140,7 @@ describe("hasTrap – lazy mode, unmaterialized wrapper", () => {
 	it("returns true after awaiting materialization then using `in`", async () => {
 		api = await makeLazyApi();
 		// Materialize first, then check
-		await api.math._materialize();
+		await api.math.___materialize();
 		expect("add" in api.math).toBe(true);
 	});
 });
@@ -204,18 +204,18 @@ describe("getOwnPropertyDescriptorTrap – lazy mode, unmaterialized wrapper", (
 		}
 	});
 
-	it("triggers _materialize via getOwnPropertyDescriptor before first access (line 2779)", async () => {
+	it("triggers ___materialize via getOwnPropertyDescriptor before first access (line 2779)", async () => {
 		api = await makeLazyApi();
 		// api.math is the real proxy for the math wrapper (lazy, unmaterialized)
-		// getOwnPropertyDescriptor triggers getOwnPropertyDescriptorTrap which fires _materialize
+		// getOwnPropertyDescriptor triggers getOwnPropertyDescriptorTrap which fires ___materialize
 		const desc = Object.getOwnPropertyDescriptor(api.math, "add");
-		// desc may be undefined before materialization completes, but _materialize was triggered (coverage)
+		// desc may be undefined before materialization completes, but ___materialize was triggered (coverage)
 		expect(desc === undefined || typeof desc === "object").toBe(true);
 	});
 
 	it("returns valid descriptor after materialization completes", async () => {
 		api = await makeLazyApi();
-		await api.math._materialize();
+		await api.math.___materialize();
 		const desc = Object.getOwnPropertyDescriptor(api.math, "add");
 		expect(desc).toBeDefined();
 		expect(desc.enumerable).toBe(true);
@@ -243,7 +243,7 @@ describe("ownKeys trap (Object.keys) – coverage", () => {
 
 	it("returns enumerable keys for a lazy module after materialization", async () => {
 		api = await makeLazyApi();
-		await api.math._materialize();
+		await api.math.___materialize();
 		const keys = Object.keys(api.math);
 		expect(Array.isArray(keys)).toBe(true);
 		expect(keys.length).toBeGreaterThan(0);

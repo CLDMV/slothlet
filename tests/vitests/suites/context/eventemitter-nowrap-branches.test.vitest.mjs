@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/eventemitter-nowrap-branches.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/eventemitter-nowrap-branches.test.vitest.mjs
  *	@Date: 2026-02-27T06:19:24-08:00 (1772201964)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-11-28T04:31:28-08:00 (1795869088)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
  *     return original.call(this, event, listener);  ← lines 234/259/294/316
  *   }
  *
- * `runtime_shouldWrapListener` returns false when `listener._slothletOriginal` is
+ * `runtime_shouldWrapListener` returns false when `listener.____slothletOriginal` is
  * already set — meaning the listener was already wrapped.  Passing such a pre-marked
  * listener directly to each patched method exercises the "no double-wrap" branch.
  *
@@ -38,7 +38,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { EventEmitter } from "events";
-import { enableEventEmitterPatching, disableEventEmitterPatching } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { enableEventEmitterPatching, disableEventEmitterPatching } from "#helpers/eventemitter-context";
 
 // Enable patching once for this file; restore afterwards.
 beforeAll(() => {
@@ -50,7 +50,7 @@ afterAll(() => {
 });
 
 /**
- * Create a listener function that already has `_slothletOriginal` set,
+ * Create a listener function that already has `____slothletOriginal` set,
  * simulating a previously-wrapped listener.
  *
  * @returns {Function} Pre-marked listener.
@@ -63,7 +63,7 @@ function makePreWrapped() {
 	const originalHandler = () => {};
 	const fn = function listener() {};
 	// Mark as already wrapped — shouldWrapListener will return false
-	fn._slothletOriginal = originalHandler;
+	fn.____slothletOriginal = originalHandler;
 	return fn;
 }
 
@@ -102,7 +102,7 @@ describe("EventEmitter.once — no-wrap fast-path (line 259)", () => {
 		const fn2 = function onceHandler() {
 			fired = true;
 		};
-		fn2._slothletOriginal = () => {};
+		fn2.____slothletOriginal = () => {};
 		emitter.once("fire", fn2);
 		emitter.emit("fire");
 		expect(fired).toBe(true);

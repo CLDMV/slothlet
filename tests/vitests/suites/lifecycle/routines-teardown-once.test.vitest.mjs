@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/lifecycle/routines-teardown-once.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/lifecycle/routines-teardown-once.test.vitest.mjs
  *	@Date: 2026-10-02T10:19:37-07:00 (1790961577)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-28T04:32:04-08:00 (1795869124)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,8 +92,8 @@ describe.each(getMatrixConfigs())("each teardown contribution runs once (#542) >
 
 	describe.each([true, false])("autoRoutines: %s", (autoRoutines) => {
 		it.each(Object.keys(TEARDOWNS))("via %s", async (entry) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, autoRoutines, routines: ROUTINES });
-			await api.slothlet.api.add("plugin", PLUGIN, { moduleID: "plugin" });
+			api = await slothlet({ ...config, base: BASE, silent: true, routines: { auto: autoRoutines, entries: ROUTINES } });
+			await api.slothlet.api.add("plugin", PLUGIN, { id: "plugin" });
 			globalThis.__slothletTeardownCalls = [];
 
 			await TEARDOWNS[entry](api);
@@ -103,7 +103,7 @@ describe.each(getMatrixConfigs())("each teardown contribution runs once (#542) >
 	});
 
 	it("runs the root shutdown export once per restart(), across consecutive restarts (autoRoutines: true)", async () => {
-		api = await slothlet({ ...config, base: BASE, silent: true, autoRoutines: true, routines: ROUTINES });
+		api = await slothlet({ ...config, base: BASE, silent: true, routines: { auto: true, entries: ROUTINES } });
 		for (let restart = 1; restart <= 2; restart++) {
 			globalThis.__slothletTeardownCalls = [];
 			await api.slothlet.restart();

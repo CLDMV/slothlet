@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_lock_caller/consumer/probe.mjs
+ *	@Filename: api_tests/api_test_lock_caller/consumer/probe.mjs
  *	@Date: 2026-05-18T09:38:51-07:00 (1779122331)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:38-07:00 (1791090878)
+ *	@Last modified time: 2026-11-28T04:28:51-08:00 (1795868931)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  *
  * @description
  * Builds callbacks that probe slothlet's caller identity. The `make*` factories run
- * as consumer-module code, so `self.slothlet.lockCaller()` called inside them
+ * as consumer-module code, so `self.slothlet.pin()` called inside them
  * captures the consumer module's identity. The plain (un-pinned) variants exist for
  * comparison — they inherit whatever async context is ambient when invoked.
  *
@@ -77,7 +77,7 @@ export const guarded = () => "guarded-ok";
  * const probe = api.consumer.probe.makeLockedIdentityProbe();
  */
 export function makeLockedIdentityProbe() {
-	return self.slothlet.lockCaller(identityProbe);
+	return self.slothlet.pin(identityProbe);
 }
 
 /**
@@ -95,7 +95,7 @@ export function makePlainIdentityProbe() {
  * @public
  */
 export function makeLockedGuardedCall() {
-	return self.slothlet.lockCaller(guardedCall);
+	return self.slothlet.pin(guardedCall);
 }
 
 /**
@@ -113,7 +113,7 @@ export function makePlainGuardedCall() {
  * @public
  */
 export function makeLockedContextReader() {
-	return self.slothlet.lockCaller(readContext);
+	return self.slothlet.pin(readContext);
 }
 
 /**
@@ -122,7 +122,7 @@ export function makeLockedContextReader() {
  * @public
  */
 export function makeLockedThisProbe() {
-	return self.slothlet.lockCaller(function thisProbe() {
+	return self.slothlet.pin(function thisProbe() {
 		return this;
 	});
 }
@@ -135,7 +135,7 @@ export function makeLockedThisProbe() {
  * @public
  */
 export function makeLockedAsyncIdentityProbe() {
-	return self.slothlet.lockCaller(async () => {
+	return self.slothlet.pin(async () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		return identityProbe();
 	});
@@ -165,7 +165,7 @@ let hookProbedIdentity = null;
  * it and stashes the result for {@link getHookProbedIdentity} to read back.
  *
  * A pinned hook (the default) runs with a slothlet context, so `identityProbe()`
- * resolves. An opted-out (`lockCaller: false`) hook may run with no context — in
+ * resolves. An opted-out (`pin: false`) hook may run with no context — in
  * async runtime a `self.*` access then throws; the error code is stashed instead
  * so the call does not reject and the opt-out is still observable.
  * @returns {void}
@@ -182,27 +182,27 @@ function identityHook() {
 /**
  * Register {@link identityHook} as a `before` hook on `pattern`. Runs as consumer
  * module code, so the hook manager pins the consumer's caller identity onto the
- * handler unless `options` opts out with `{ lockCaller: false }`.
- * @param {string} pattern - API path pattern to hook (without the `before:` prefix).
+ * handler unless `options` opts out with `{ pin: false }`.
+ * @param {string} pattern - API path pattern to hook (without the `:before` suffix).
  * @param {object} [options] - Hook options forwarded to `hook.on`.
  * @returns {string} The registered hook ID.
  * @public
  */
 export function registerIdentityHook(pattern, options) {
 	hookProbedIdentity = null;
-	return self.slothlet.hook.on(`before:${pattern}`, identityHook, options);
+	return self.slothlet.hook.on(`${pattern}:before`, identityHook, options);
 }
 
 /**
  * Register an already `lockCaller`-wrapped {@link identityHook} as a `before` hook.
  * The hook manager must respect the existing lock and not double-wrap it.
- * @param {string} pattern - API path pattern to hook (without the `before:` prefix).
+ * @param {string} pattern - API path pattern to hook (without the `:before` suffix).
  * @returns {string} The registered hook ID.
  * @public
  */
 export function registerPreLockedHook(pattern) {
 	hookProbedIdentity = null;
-	return self.slothlet.hook.on(`before:${pattern}`, self.slothlet.lockCaller(identityHook));
+	return self.slothlet.hook.on(`${pattern}:before`, self.slothlet.pin(identityHook));
 }
 
 /**
@@ -223,12 +223,12 @@ function identityShortCircuitHook() {
 
 /**
  * Register {@link identityShortCircuitHook} as a `before` hook on `pattern`.
- * @param {string} pattern - API path pattern to hook (without the `before:` prefix).
+ * @param {string} pattern - API path pattern to hook (without the `:before` suffix).
  * @returns {string} The registered hook ID.
  * @public
  */
 export function registerShortCircuitIdentityHook(pattern) {
-	return self.slothlet.hook.on(`before:${pattern}`, identityShortCircuitHook);
+	return self.slothlet.hook.on(`${pattern}:before`, identityShortCircuitHook);
 }
 
 /**
@@ -242,21 +242,65 @@ export function getHookProbedIdentity() {
 }
 
 /**
- * Probe the caller identity from inside an `api.slothlet.run()` callback,
+ * Probe the caller identity from inside an `api.slothlet.context.run()` callback,
  * invoked as consumer module code.
  * @returns {Promise<string>} The identity observed inside the run callback.
  * @public
  */
 export async function probeIdentityViaRun() {
-	return self.slothlet.run({}, () => identityProbe());
+	return self.slothlet.context.run({}, () => identityProbe());
 }
 
 /**
- * Probe the caller identity from inside an `api.slothlet.scope()` callback,
+ * Probe the caller identity from inside an `api.slothlet.context.scope()` callback,
  * invoked as consumer module code.
  * @returns {Promise<string>} The identity observed inside the scope callback.
  * @public
  */
 export async function probeIdentityViaScope() {
-	return self.slothlet.scope({ context: {}, fn: () => identityProbe() });
+	return self.slothlet.context.scope({ context: {}, fn: () => identityProbe() });
+}
+
+/**
+ * What the most recent {@link accessHook} invocation was allowed: `id.consumer`, then `id.producer`.
+ * @type {Array<boolean|string>|null}
+ */
+let hookProbedAccess = null;
+
+/**
+ * A `before`-hook handler that records whether the identity it runs under may reach `id.consumer` and `id.producer`.
+ * The rules deny the first to the consumer and the second to the producer, so the pair tells the consumer alone
+ * (`[false, true]`) from the producer alone (`[true, false]`) and from the consumer's code held to the producer's
+ * call (`[false, false]`).
+ * @returns {void}
+ */
+function accessHook() {
+	try {
+		hookProbedAccess = [self.slothlet.permissions.self.access("id.consumer"), self.slothlet.permissions.self.access("id.producer")];
+	} catch (err) {
+		hookProbedAccess = [err?.code ?? "error"];
+	}
+}
+
+/**
+ * Register {@link accessHook} as a `before` hook.
+ * @param {string} pattern - The api path to hook.
+ * @param {object} [options] - Hook options (`{ pin: false }` opts out of the pin).
+ * @returns {*} The registration.
+ * @example
+ * await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { pin: false });
+ */
+export function registerAccessHook(pattern, options) {
+	hookProbedAccess = null;
+	return self.slothlet.hook.on(`${pattern}:before`, accessHook, options);
+}
+
+/**
+ * What the last {@link accessHook} run recorded.
+ * @returns {Array<boolean|string>|null} The pair, or null when the hook has not fired.
+ * @example
+ * await api.consumer.probe.getHookProbedAccess(); // [false, true]
+ */
+export function getHookProbedAccess() {
+	return hookProbedAccess;
 }

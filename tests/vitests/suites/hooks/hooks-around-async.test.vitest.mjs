@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/hooks/hooks-around-async.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/hooks/hooks-around-async.test.vitest.mjs
  *	@Date: 2026-09-28T12:00:00-07:00 (1790622000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T10:43:19-07:00 (1791740599)
+ *	@Last modified time: 2026-11-28T04:31:54-08:00 (1795869114)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -229,7 +229,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around syn
 	it("an undeclared thenable from a sync around fails loudly with HOOK_AROUND_RETURNED_PROMISE", async () => {
 		api = await boot(config);
 		const sources = [];
-		api.slothlet.hook.on("svc.mulSync:error", ({ error, source }) => sources.push({ code: error.code, type: source.type }), { id: "er" });
+		api.slothlet.hook.on("svc.mulSync:error", ({ error, origin: source }) => sources.push({ code: error.code, type: source.type }), {
+			id: "er"
+		});
 		// A plain function returning a Promise reads as synchronous — the brand check cannot see it.
 		api.slothlet.hook.on("svc.mulSync:around", ({ next }) => Promise.resolve(next()), { id: "undeclared" });
 
@@ -251,7 +253,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around syn
 	it("async pipeline error flow: a swallowed rejection is hidden from error hooks, a rethrown one is not", async () => {
 		api = await boot(config);
 		const errors = [];
-		api.slothlet.hook.on("svc.failAsync:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+		api.slothlet.hook.on("svc.failAsync:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+			id: "er"
+		});
 		const swallowId = api.slothlet.hook.on(
 			"svc.failAsync:around",
 			async ({ next }) => {
@@ -328,7 +332,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around syn
 		api = await boot(config);
 		const sources = [];
 		const caught = [];
-		api.slothlet.hook.on("svc.mulSync:error", ({ source }) => sources.push(source.type), { id: "er" });
+		api.slothlet.hook.on("svc.mulSync:error", ({ origin: source }) => sources.push(source.type), { id: "er" });
 		api.slothlet.hook.on(
 			"svc.mulSync:around",
 			async ({ next }) => {
@@ -368,8 +372,10 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around syn
 		api = await boot(config);
 		const errors = [];
 		const always = [];
-		api.slothlet.hook.on("svc.rejectThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
-		api.slothlet.hook.on("svc.rejectThenable:always", ({ hasError }) => always.push(hasError), { id: "al" });
+		api.slothlet.hook.on("svc.rejectThenable:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+			id: "er"
+		});
+		api.slothlet.hook.on("svc.rejectThenable:always", ({ errors, hasError = errors.length > 0 }) => always.push(hasError), { id: "al" });
 		api.slothlet.hook.on("svc.rejectThenable:around", ({ next }) => next(), { id: "pass-through" });
 
 		const result = await outcome(() => api.svc.rejectThenable("late"));
@@ -400,7 +406,7 @@ describe("Hooks > around dispatch strategy (#496)", () => {
 	it("reports around hooks in the cached per-path strategy and invalidates on change", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await boot({ mode: "eager" });
-		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+		const hookManager = resolveWrapper(api.svc).____slothlet.handlers.hookManager;
 
 		expect(hookManager.getDispatchStrategy("svc.mulSync")).toMatchObject({ hasAround: false, asyncAround: false });
 

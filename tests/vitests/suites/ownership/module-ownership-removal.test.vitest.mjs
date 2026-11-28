@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/ownership/module-ownership-removal.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/ownership/module-ownership-removal.test.vitest.mjs
  *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:13-07:00 (1791090913)
+ *	@Last modified time: 2026-11-28T04:32:10-08:00 (1795869130)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -202,7 +202,7 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 		});
 
 		// Add API with moduleID (ownership tracking is ALWAYS available in v3)
-		await api.slothlet.api.add("plugins.test", testDir + "/moduleA_v1", { moduleID: "testModule" });
+		await api.slothlet.api.add("plugins.test", testDir + "/moduleA_v1", { id: "testModule" });
 
 		expect(api.plugins?.test).toBeDefined();
 
@@ -237,8 +237,8 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 		});
 
 		// Add multiple APIs for the same module
-		await api.slothlet.api.add("plugins.feature1", testDir + "/moduleA_v1", { moduleID: "moduleA" });
-		await api.slothlet.api.add("plugins.feature2", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+		await api.slothlet.api.add("plugins.feature1", testDir + "/moduleA_v1", { id: "moduleA" });
+		await api.slothlet.api.add("plugins.feature2", testDir + "/moduleA_v1", { id: "moduleA" });
 
 		// Remove all APIs owned by moduleA
 		const removed = await api.slothlet.api.remove("moduleA");
@@ -253,7 +253,7 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 			base: TEST_DIRS.API_TEST
 		});
 
-		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { id: "moduleA" });
 		await api.slothlet.api.remove("moduleA");
 		expect(api.plugins?.moduleA).toBeUndefined();
 
@@ -261,7 +261,7 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 		// clearing OwnershipManager's async-race guard first, register() unconditionally rejects
 		// every registration for a moduleID once it's been removed, so the content lands on the live
 		// tree but is never recorded as owned by it (confirmed reachable via ordinary remove+re-add).
-		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { id: "moduleA" });
 		expect(api.plugins?.moduleA).toBeDefined();
 		const owners = api.slothlet.owner.get("plugins.moduleA");
 		expect(owners?.has("moduleA")).toBe(true);
@@ -280,10 +280,10 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 		});
 
 		// Load version 1 (has function1 and function2)
-		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { id: "moduleA" });
 
 		// Reload with version 2 (has function2 and function3, NO function1)
-		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v2", { moduleID: "moduleA" });
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v2", { id: "moduleA" });
 
 		// With auto-cleanup, function1 should be GONE (no errors should occur)
 		expect(api.plugins?.moduleA).toBeDefined();
@@ -296,13 +296,13 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 		});
 
 		// Load moduleA
-		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { id: "moduleA" });
 
 		// Load moduleB
-		await api.slothlet.api.add("plugins.moduleB", testDir + "/moduleB", { moduleID: "moduleB" });
+		await api.slothlet.api.add("plugins.moduleB", testDir + "/moduleB", { id: "moduleB" });
 
 		// Reload moduleA with version 2
-		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v2", { moduleID: "moduleA" });
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v2", { id: "moduleA" });
 
 		// moduleB should be untouched
 		expect(api.plugins?.moduleB).toBeDefined();
@@ -315,9 +315,9 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 		});
 
 		// Add APIs at different nesting levels
-		await api.slothlet.api.add("level1", testDir + "/moduleA_v1", { moduleID: "test" });
-		await api.slothlet.api.add("level1.level2", testDir + "/moduleB", { moduleID: "test" });
-		await api.slothlet.api.add("level1.level2.level3", testDir + "/moduleA_v1", { moduleID: "test" });
+		await api.slothlet.api.add("level1", testDir + "/moduleA_v1", { id: "test" });
+		await api.slothlet.api.add("level1.level2", testDir + "/moduleB", { id: "test" });
+		await api.slothlet.api.add("level1.level2.level3", testDir + "/moduleA_v1", { id: "test" });
 
 		// Remove all by moduleID
 		const removed = await api.slothlet.api.remove("test");
@@ -438,8 +438,8 @@ describe.each(getMatrixConfigs())("Shared-mount removal reverts to the co-owner 
 		// (a same-moduleID re-add / reload-shaped op) genuinely drops the exports it no longer defines —
 		// they must not be shadowed and later resurrected (#3, self-replace gate).
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: "replace" } });
-		await api.slothlet.api.add("shop", { exports: { leaf: () => "v1-leaf", gone: () => "v1-gone" } }, { moduleID: "selfmod" });
-		await api.slothlet.api.add("shop", { exports: { leaf: () => "v2-leaf" } }, { moduleID: "selfmod" });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "v1-leaf", gone: () => "v1-gone" } }, { id: "selfmod" });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "v2-leaf" } }, { id: "selfmod" });
 		expect(api.shop.leaf(), "the surviving export is updated").toBe("v2-leaf");
 		expect(api.shop.gone, "the dropped export is gone, not shadowed").toBeUndefined();
 	});
@@ -448,9 +448,9 @@ describe.each(getMatrixConfigs())("Shared-mount removal reverts to the co-owner 
 		// A's exclusive `x` is shadowed by B, then C re-provides `x`. Removing B must NOT clobber C's live
 		// `x` with A's stale shadow — the re-attach skips a member the current surface already carries (#3).
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: "replace" } });
-		await api.slothlet.api.add("shop", { exports: { leaf: () => "A-leaf", x: () => "A-x" } }, { moduleID: "A" });
-		const idB = await api.slothlet.api.add("shop", { exports: { leaf: () => "B-leaf" } }, { moduleID: "B" });
-		await api.slothlet.api.add("shop", { exports: { leaf: () => "C-leaf", x: () => "C-x" } }, { moduleID: "C" });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "A-leaf", x: () => "A-x" } }, { id: "A" });
+		const idB = await api.slothlet.api.add("shop", { exports: { leaf: () => "B-leaf" } }, { id: "B" });
+		await api.slothlet.api.add("shop", { exports: { leaf: () => "C-leaf", x: () => "C-x" } }, { id: "C" });
 		expect(api.shop.x(), "C provides x").toBe("C-x");
 
 		await api.slothlet.api.remove(idB);

@@ -1,7 +1,7 @@
 /**
  * The default `apiDepth` (directory-traversal depth) applied when a caller does not specify one.
  * Unbounded by default. The config normalizer ({@link module:@cldmv/slothlet/helpers/config}) is
- * what every real compose path reads — it resolves `config.apiDepth` once and the mode processors
+ * what every real compose path reads — it resolves `config.depth` once and the mode processors
  * receive that already-normalized value. The mode processors' and the loader's own parameter
  * defaults exist only for the case where they are invoked directly, bypassing normalization (a
  * standalone call, a future direct consumer); they read this same constant so that case can never
@@ -9,6 +9,19 @@
  * @type {number}
  */
 export const DEFAULT_API_DEPTH: number;
+/**
+ * How many levels of objects, the outermost counted, a value handed into a call or returned out of one is searched
+ * for code when `permissions.search.depth` is not set. Read by the config normalizer and, for an instance with no
+ * `permissions` config, by the searches themselves.
+ * @type {number}
+ */
+export const DEFAULT_SEARCH_DEPTH: number;
+/**
+ * How many own properties, all values of one search counted together, are read when `permissions.search.properties`
+ * is not set. Read where {@link DEFAULT_SEARCH_DEPTH} is.
+ * @type {number}
+ */
+export const DEFAULT_SEARCH_PROPERTIES: number;
 /**
  * The built-in `routines` list applied when a caller omits the `routines` config option entirely.
  * Each entry is `{ name, mode }` (bare mount-relative names, non-recursive, mode-defaulted `order`)

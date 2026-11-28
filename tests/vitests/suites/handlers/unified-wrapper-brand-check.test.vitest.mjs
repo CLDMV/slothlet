@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/handlers/unified-wrapper-brand-check.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/handlers/unified-wrapper-brand-check.test.vitest.mjs
  *	@Date: 2026-02-27T21:34:23-08:00 (1772256863)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-28T04:31:46-08:00 (1795869106)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,11 +100,11 @@ describe.each(getMatrixConfigs())(
 			}).not.toThrow();
 		});
 
-		test("Object.getPrototypeOf on a real proxy returns null without throwing", () => {
-			// The createProxy() getPrototypeOf trap returns null.
+		test("Object.getPrototypeOf on a real proxy returns a plain object's prototype without throwing", () => {
+			// The createProxy() getPrototypeOf trap reports the prototype a plain object has (#802).
 			// Confirms the trap fires correctly without hitting the brand-check crash.
 			const proto = Object.getPrototypeOf(api.math);
-			expect(proto).toBeNull();
+			expect(proto).toBe(Object.getPrototypeOf({}));
 		});
 	}
 );

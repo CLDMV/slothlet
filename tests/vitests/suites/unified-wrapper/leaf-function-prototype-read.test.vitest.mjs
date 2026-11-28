@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/unified-wrapper/leaf-function-prototype-read.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/unified-wrapper/leaf-function-prototype-read.test.vitest.mjs
  *	@Date: 2026-08-24T00:00:00-08:00 (1787558400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-28T04:33:10-08:00 (1795869190)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,7 +52,7 @@ const MODES = ["eager", "lazy"];
 // The leaf function's OWN built-in surface, not api children: inherited callable members and the
 // non-enumerable `prototype` slot. Reading any of them must not mutate the record.
 const CALLABLE_MEMBERS = ["apply", "call", "bind", "constructor"];
-const isPhantom = (p) => /\.(apply|call|bind|constructor|prototype)$/.test(p.path);
+const isPhantom = (p) => /\.(apply|call|bind|constructor|prototype)$/.test(p.path.join("."));
 
 describe.each(MODES)("Function.prototype reads on a callable leaf leave the record intact — %s", (mode) => {
 	let api;
@@ -65,8 +65,8 @@ describe.each(MODES)("Function.prototype reads on a callable leaf leave the reco
 	it("does not turn a function leaf into a namespace or grow phantom children", async () => {
 		api = await slothlet({ base: ROOT, silent: true, mode });
 
-		const before = await api.slothlet.api.leaves(".", { details: true, includePrivate: true });
-		expect(before.find((p) => p.path === "tool.ping")?.kind).toBe("function");
+		const before = await api.slothlet.api.leaves(".", { details: true, private: true });
+		expect(before.find((p) => p.path.join(".") === "tool.ping")?.kind).toBe("function");
 		expect(before.filter(isPhantom)).toHaveLength(0);
 
 		// Read every built-in member — this must not mutate the record.
@@ -76,11 +76,11 @@ describe.each(MODES)("Function.prototype reads on a callable leaf leave the reco
 		expect(typeof api.tool.ping.prototype).toBe("object");
 		expect(api.tool.ping()).toBe("pong");
 
-		const after = await api.slothlet.api.leaves(".", { details: true, includePrivate: true });
+		const after = await api.slothlet.api.leaves(".", { details: true, private: true });
 		// The leaf stays a function, and no phantom `tool.ping.apply` / `.call` / `.bind` / … appeared.
-		expect(after.find((p) => p.path === "tool.ping")?.kind).toBe("function");
+		expect(after.find((p) => p.path.join(".") === "tool.ping")?.kind).toBe("function");
 		expect(after.filter(isPhantom)).toHaveLength(0);
-		expect(after.some((p) => p.path.startsWith("tool.ping."))).toBe(false);
+		expect(after.some((p) => p.path.join(".").startsWith("tool.ping."))).toBe(false);
 	});
 
 	it("leaf.apply / leaf.call still invoke the leaf through slothlet", async () => {
@@ -99,8 +99,8 @@ describe.each(MODES)("Function.prototype reads on a callable leaf leave the reco
 		expect(api.greet.version()).toBe("v1");
 		expect(typeof api.greet.apply).toBe("function");
 
-		const details = await api.slothlet.api.leaves(".", { details: true, includePrivate: true });
-		expect(details.find((p) => p.path === "greet.version")?.kind).toBe("function");
-		expect(details.some((p) => isPhantom(p) && p.path.startsWith("greet."))).toBe(false);
+		const details = await api.slothlet.api.leaves(".", { details: true, private: true });
+		expect(details.find((p) => p.path.join(".") === "greet.version")?.kind).toBe("function");
+		expect(details.some((p) => isPhantom(p) && p.path[0] === "greet")).toBe(false);
 	});
 });

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/module-private-exports.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/module-private-exports.test.vitest.mjs
  *	@Date: 2026-08-04T12:00:00-07:00 (1785870000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-28T04:32:17-08:00 (1795869137)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,29 +48,29 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 	});
 
 	it("allows the same module's files to reach privates through self", async () => {
-		api = await slothlet({ mode, base: BASE, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode, base: BASE, permissions: { policy: "allow", rules: [] } });
 
 		// quote.mjs and internals.mjs share billing/ — the entire point of the marker: sibling
 		// files use each other through self without importing each other directly.
 		expect(await api.billing.quote.total(100)).toBe(125); // 100 * (1 + 0.2) + 5
 	});
 
-	it("denies another module the private members, audited like any denial", async () => {
-		api = await slothlet({ mode, base: BASE, permissions: { defaultPolicy: "allow", rules: [] } });
+	it("lets another folder of the same module read the private members, with no refusal audited", async () => {
+		api = await slothlet({ mode, base: BASE, permissions: { policy: "allow", rules: [] } });
 		const denials = [];
 		api.slothlet.lifecycle.on("permission:denied", (payload) => denials.push(payload));
 
 		const peek = await api.reporting.peek.rate();
-		expect(peek.rate).toBeUndefined();
-		expect(peek.error).toBe("PERMISSION_DENIED");
+		expect(peek.rate).toBe(0.2);
+		expect(peek.error).toBeNull();
 		expect(
 			denials.some((d) => d.target === "billing.internals.__rate"),
-			"the refusal is audited, not silent"
-		).toBe(true);
+			"no refusal is audited"
+		).toBe(false);
 	});
 
 	it("denies the host by default and redacts privates from its enumeration", async () => {
-		api = await slothlet({ mode, base: BASE, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode, base: BASE, permissions: { policy: "allow", rules: [] } });
 
 		let read;
 		try {
@@ -80,16 +80,16 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		}
 		expect(read, "direct host read refused").toBe("THREW:PERMISSION_DENIED");
 		const internals = mode === "lazy" ? await api.billing.internals : api.billing.internals;
-		expect(Object.keys(internals).sort(), "privates redacted, public member remains").toEqual(["_scale", "currency"]);
-		// A private FUNCTION is not a terminal data value, so its KEY stays listed (traversal is free);
-		// what the host cannot do is CALL it — asserted below.
+		expect(Object.keys(internals).sort(), "privates redacted, public member remains").toEqual(["currency"]);
+		// A private FUNCTION is hidden like any private member: its key is left out of the host's listing, as a private
+		// value's is.
 	});
 
 	it("opens the host through permissions.private.host allow", async () => {
 		api = await slothlet({
 			mode,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", rules: [], private: { host: "allow" } }
+			permissions: { policy: "allow", rules: [], private: { host: "allow" } }
 		});
 
 		expect(await api.billing.internals.__rate).toBe(0.2);
@@ -97,12 +97,12 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		expect(Object.keys(internals).sort()).toEqual(["__rate", "_fee", "_scale", "currency"]);
 	});
 
-	it("is absolute: an explicit allow rule for the private target grants nothing", async () => {
+	it("decides privacy before the rules: another folder of the same module reads the member under a deny default", async () => {
 		api = await slothlet({
 			mode,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					// The most specific grant a user can write — a literal target, universal caller.
 					{ caller: "**", target: "billing.internals.__rate", effect: "allow" },
@@ -114,7 +114,7 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		// Privacy resolves BEFORE rules: the module boundary is not negotiable by configuration,
 		// only by the owning module renaming its export public.
 		const peek = await api.reporting.peek.rate();
-		expect(peek.error).toBe("PERMISSION_DENIED");
+		expect(peek.error).toBeNull();
 	});
 
 	it("stays fully public when permissions are not configured", async () => {
@@ -127,7 +127,7 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 	});
 
 	it("enforces privacy on the CALL path: the host cannot invoke a private function", async () => {
-		api = await slothlet({ mode, base: BASE, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode, base: BASE, permissions: { policy: "allow", rules: [] } });
 
 		let out;
 		try {
@@ -142,14 +142,14 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		api = await slothlet({
 			mode,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", rules: [], private: { host: "allow" } }
+			permissions: { policy: "allow", rules: [], private: { host: "allow" } }
 		});
 
 		expect(await api.billing.internals._scale(100)).toBe(120);
 	});
 
 	it("leaves a root-level underscore MOUNT public", async () => {
-		api = await slothlet({ mode, base: BASE, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode, base: BASE, permissions: { policy: "allow", rules: [] } });
 
 		// Privacy attaches to a member OF a module. `_toplevel` has no parent segment — it is the
 		// mount itself, and calling it must stay as public as traversing it. Denying it would also
@@ -160,8 +160,8 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 
 	it("classifies private names exactly at the manager predicate", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
-		api = await slothlet({ mode, base: BASE, permissions: { defaultPolicy: "allow", rules: [] } });
-		const pm = resolveWrapper(api.billing).slothlet.handlers.permissionManager;
+		api = await slothlet({ mode, base: BASE, permissions: { policy: "allow", rules: [] } });
+		const pm = resolveWrapper(api.billing).____slothlet.handlers.permissionManager;
 
 		expect(pm.isPrivateTarget("billing.internals.__rate")).toBe(true);
 		expect(pm.isPrivateTarget("billing.internals.currency")).toBe(false);
@@ -181,14 +181,14 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 
 	it("refuses a module FILE named for a framework-reserved key", async () => {
 		if (mode === "eager") {
-			await expect(slothlet({ mode, base: REJECT_FILE })).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+			await expect(slothlet({ mode, base: REJECT_FILE })).rejects.toThrow(/MODULE_RESERVED_FILE/);
 		} else {
 			// Lazy defers the scan of subdirectory contents, but the root scan still walks the
 			// directory listing — the rejection fires wherever the listing is first read.
 			await expect(async () => {
 				api = await slothlet({ mode, base: REJECT_FILE });
 				await api.ok?.fine;
-			}).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+			}).rejects.toThrow(/MODULE_RESERVED_FILE/);
 		}
 	});
 
@@ -207,7 +207,7 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		// Same rule as the fileFilter case: a file the consumer hid never reaches the composed
 		// surface, so refusing the whole mount over it contradicts scoping the refusal to loaded
 		// files. Hiding it is the documented way to keep such a file in the tree.
-		await api.slothlet.api.add("hid", REJECT_FILE, { hidden: "_impl" });
+		await api.slothlet.api.add("hid", REJECT_FILE, { hidden: "-____impl" });
 		expect((mode === "lazy" ? await api.hid : api.hid).ok.fine).toBe("fine");
 	});
 
@@ -233,28 +233,32 @@ describe("Permissions > reserved-name refusal is platform-symmetric (#260)", () 
 
 	it("refuses a reserved-name file in a browser manifest too", async () => {
 		// The hazard is the composed wrapper shape, not the platform: a manifest carrying
-		// `_impl.mjs` would empty the lazy surface in a browser exactly as on disk, so the
+		// `-____impl.mjs` (which sanitizes to `____impl`) would empty the lazy surface in a browser exactly as on disk, so the
 		// filesystem scan's refusal has to have a manifest-side twin.
 		await expect(
 			slothlet({
 				base: TEST_DIRS.API_TEST_BROWSER,
 				mode: "eager",
-				manifest: {
-					files: [
-						{ path: "math.mjs", name: "math", fullName: "math.mjs" },
-						{ path: "_impl.mjs", name: "_impl", fullName: "_impl.mjs" }
-					],
-					directories: []
+				loader: {
+					files: {
+						files: [
+							{ path: "math.mjs", name: "math", full: "math.mjs" },
+							{ path: "-____impl.mjs", name: "-____impl", full: "-____impl.mjs" }
+						],
+						directories: []
+					}
 				}
 			})
-		).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+		).rejects.toThrow(/MODULE_RESERVED_FILE/);
 	});
 
 	it("still mounts a manifest with no reserved names", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_BROWSER,
 			mode: "eager",
-			manifest: { files: [{ path: "math.mjs", name: "math", fullName: "math.mjs" }], directories: [] }
+			loader: {
+				files: { files: [{ path: "math.mjs", name: "math", full: "math.mjs" }], directories: [] }
+			}
 		});
 		expect(api.math.add(2, 3)).toBe(5);
 	});

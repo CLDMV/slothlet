@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-hook-gating.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-hook-gating.test.vitest.mjs
  *	@Date: 2026-06-01T23:15:57-07:00 (1780380957)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-11-28T04:32:29-08:00 (1795869149)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,11 +28,10 @@
  * @module tests/vitests/suites/permissions/permissions-hook-gating
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 const DIR = join(process.cwd(), "tmp", "hook-gating-fixture");
@@ -58,18 +57,12 @@ afterAll(() => rmSync(DIR, { recursive: true, force: true }));
 describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({ config }) => {
 	let api;
 
-	beforeEach(() => {
-		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
-	});
-
 	afterEach(async () => {
 		if (api) await api.shutdown();
 		api = null;
-		SlothletWarning.clearCaptured();
 	});
 
-	const boot = (permissions) => slothlet({ ...config, base: DIR, hook: true, ...(permissions ? { permissions } : {}) });
+	const boot = (permissions) => slothlet({ ...config, base: DIR, hook: true, diagnostics: true, ...(permissions ? { permissions } : {}) });
 	// Takes a thunk so the call happens INSIDE try — a synchronous throw (lazy/live modes) is caught
 	// the same as a promise rejection (async modes).
 	const tryCall = async (fn) => {
@@ -81,14 +74,14 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	};
 
 	it("denies a module registering a concrete-target hook on a denied path", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [] });
+		api = await boot({ policy: "deny", rules: [] });
 		const r = await tryCall(() => api.auditor.arm("db.write:before"));
 		expect(r.ok).toBe(false);
 		expect(r.code).toBe("PERMISSION_DENIED");
 	});
 
 	it("allows + fires a concrete-target hook with a matching hook rule", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
 		const sink = [];
 		const r = await tryCall(() => api.auditor.arm("db.read:before", sink));
 		expect(r.ok).toBe(true);
@@ -97,7 +90,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("fire-time gating: a glob hook fires only on paths the owner may hook (layered fallback)", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
 		const sink = [];
 		await api.auditor.arm("db.*:before", sink); // glob → registers; gated per concrete path at fire time
 		await api.db.write(1);
@@ -106,14 +99,14 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("`:hook` grants every hook type on the path", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:hook", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:hook", effect: "allow" }] });
 		expect((await tryCall(() => api.auditor.arm("db.read:before"))).ok).toBe(true);
 		expect((await tryCall(() => api.auditor.arm("db.read:after"))).ok).toBe(true);
 		expect((await tryCall(() => api.auditor.arm("db.read:error"))).ok).toBe(true);
 	});
 
 	it("a hook-only deny blocks hooking a path that is still callable", async () => {
-		api = await boot({ defaultPolicy: "allow", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "deny" }] });
+		api = await boot({ policy: "allow", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "deny" }] });
 		const r = await tryCall(() => api.auditor.arm("db.read:before"));
 		expect(r.ok).toBe(false);
 		expect(r.code).toBe("PERMISSION_DENIED");
@@ -121,23 +114,23 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("management baseline: hook.disable is denied, hook.list is allowed", async () => {
-		api = await boot({ defaultPolicy: "allow", rules: [] });
+		api = await boot({ policy: "allow", rules: [] });
 		const dis = await tryCall(() => api.auditor.callDisable());
 		expect(dis.ok).toBe(false);
 		expect(dis.code).toBe("PERMISSION_DENIED");
 		expect((await tryCall(() => api.auditor.callList())).ok).toBe(true);
 	});
 
-	it("force-pins a module hook registered with lockCaller:false (pin enforced) and warns", async () => {
+	it("force-pins a module hook registered with pin: false (pin enforced) and warns", async () => {
 		api = await boot(null); // force-pin is independent of the permission system
-		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
+		const id = await api.auditor.armOpts("db.read:before", { pin: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(true); // forced back on
-		expect(SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(true);
 	});
 
 	it("the pin runtime switch is host-only when permissions are enabled", async () => {
-		api = await boot({ defaultPolicy: "allow", rules: [] });
+		api = await boot({ policy: "allow", rules: [] });
 		const mod = await tryCall(() => api.auditor.callPinDisable());
 		expect(mod.ok).toBe(false);
 		expect(mod.code).toBe("PERMISSION_DENIED");
@@ -151,39 +144,43 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	it("host pin.disable() lets a module register an unpinned hook (no force-pin, no warn)", async () => {
 		api = await boot(null);
 		api.slothlet.hook.pin.disable();
-		SlothletWarning.clearCaptured();
-		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
+		api.slothlet.warnings.clear();
+		const id = await api.auditor.armOpts("db.read:before", { pin: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(false); // honored, not forced
-		expect(SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false);
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(false);
 	});
 
 	it("host-registered hooks fire regardless of permissions (no owner identity to gate)", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [] });
+		api = await boot({ policy: "deny", rules: [] });
 		const sink = [];
 		api.slothlet.hook.on("db.read:before", (ctx) => sink.push(ctx.path)); // host caller → ownerPath null
 		await api.db.read();
 		expect(sink).toEqual(["db.read"]); // trusted host hook fires even under default-deny
 	});
 
-	it("colon-but-non-hook-type and empty-path targets are treated as plain call rules", async () => {
-		api = await boot({
-			defaultPolicy: "allow",
-			rules: [
-				{ caller: "**", target: "db.read:xyz", effect: "deny" }, // 'xyz' is not a hook type → call rule
-				{ caller: "**", target: ":before", effect: "deny" } // empty path before the type → call rule
-			]
-		});
-		// Both are inert call rules (no real path equals them), so hooking db.read still works.
-		const sink = [];
-		await api.auditor.arm("db.read:before", sink);
-		await api.db.read();
-		expect(sink).toEqual(["db.read"]);
+	it("refuses a target whose suffix names no level or hook type, and a target with an empty path before its suffix", async () => {
+		// 'xyz' is neither a level nor a hook type: the rule is refused rather than kept on the literal target.
+		let refused;
+		try {
+			await boot({ policy: "allow", rules: [{ caller: "**", target: "db.read:xyz", effect: "deny" }] });
+		} catch (error) {
+			refused = error.code;
+		}
+		expect(refused).toBe("PERMISSION_RULE_INVALID");
+		// An empty path before the type names no api path: refused too, not kept as a plain call rule.
+		refused = undefined;
+		try {
+			await boot({ policy: "allow", rules: [{ caller: "**", target: ":before", effect: "deny" }] });
+		} catch (error) {
+			refused = error.code;
+		}
+		expect(refused).toBe("PERMISSION_RULE_INVALID");
 	});
 
 	it("a more specific hook rule overrides a broader one", async () => {
 		api = await boot({
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [
 				{ caller: "auditor.**", target: "db.**:hook", effect: "allow" }, // broad: any hook on db.**
 				{ caller: "auditor.**", target: "db.write:before", effect: "deny" } // specific: deny before-hook on db.write
@@ -196,25 +193,26 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("hook: { pin: false } config permits unpinned module hooks", async () => {
-		api = await slothlet({ ...config, base: DIR, hook: { enabled: true, pin: false } });
-		SlothletWarning.clearCaptured();
-		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
+		api = await slothlet({ ...config, base: DIR, hook: { enabled: true, pin: false }, diagnostics: true });
+		api.slothlet.warnings.clear();
+		const id = await api.auditor.armOpts("db.read:before", { pin: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(false); // config disabled pin enforcement
-		expect(SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false);
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(false);
 	});
 
-	it("force-pin under silent ignores lockCaller:false without warning", async () => {
-		api = await slothlet({ ...config, base: DIR, hook: true, silent: true });
-		SlothletWarning.clearCaptured();
-		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
+	it("force-pin under silent ignores pin: false, recording the warning without printing it", async () => {
+		api = await slothlet({ ...config, base: DIR, hook: true, silent: true, diagnostics: true });
+		api.slothlet.warnings.clear();
+		const id = await api.auditor.armOpts("db.read:before", { pin: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(true); // still force-pinned
-		expect(SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false); // silent suppresses the warn
+		// silent only keeps the warning off the console; it is still raised and recorded on the instance (#838)
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(true);
 	});
 
 	it("a before-only hook rule denies an after-hook on the same path (per-type)", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
 		expect((await tryCall(() => api.auditor.arm("db.read:before"))).ok).toBe(true); // before allowed
 		const after = await tryCall(() => api.auditor.arm("db.read:after"));
 		expect(after.ok).toBe(false); // after not covered → falls back to the (denied) call decision
@@ -223,7 +221,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 
 	it("equal-specificity hook rules: the last-registered wins", async () => {
 		api = await boot({
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [
 				{ caller: "auditor.**", target: "db.read:before", effect: "allow" },
 				{ caller: "auditor.**", target: "db.read:before", effect: "deny" } // identical target/spec, later → wins

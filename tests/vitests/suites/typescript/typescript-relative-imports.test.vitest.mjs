@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/typescript-relative-imports.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/typescript-relative-imports.test.vitest.mjs
  *	@Date: 2026-05-17T20:30:00-07:00 (1779075000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:24-07:00 (1791090924)
+ *	@Last modified time: 2026-11-28T04:33:09-08:00 (1795869189)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,12 +35,7 @@ import { describe, it, expect, afterEach, afterAll } from "vitest";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { writeFile, rm, readFile } from "node:fs/promises";
-import {
-	rewriteRelativeSpecifiers,
-	resolveModuleFile,
-	writeTransformedToCache,
-	maskStringsAndComments
-} from "@cldmv/slothlet/processors/typescript";
+import { rewriteRelativeSpecifiers, resolveModuleFile, writeTransformedToCache, maskStringsAndComments } from "#processors/typescript";
 import slothlet from "../../../../index.mjs";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
@@ -364,7 +359,7 @@ describe("writeTransformedToCache — no transform callback", () => {
 
 // ─── integration: relative imports through the loader ────────────────────────
 
-// The fixture's helper modules live in `external/`, a sibling of the slothlet
+// The fixture's helper modules live in `lib/`, a sibling of the slothlet
 // API directory (`api/`), so slothlet never loads them as API modules — they
 // are reached ONLY through the relative specifiers under test.
 const RELATIVE_DIR = "./api_tests/api_test_typescript_relative/api";

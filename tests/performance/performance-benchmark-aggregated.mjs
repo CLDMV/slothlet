@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/performance/performance-benchmark-aggregated.mjs
+ *	@Filename: tests/performance/performance-benchmark-aggregated.mjs
  *	@Date: 2026-01-10T17:42:21-08:00 (1768095741)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-28T04:30:54-08:00 (1795869054)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -67,7 +67,7 @@ async function callMathAdd(api, a, b) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const mathMaterialize = api?.math?._materialize;
+	const mathMaterialize = api?.math?.___materialize;
 	if (typeof mathMaterialize === "function") {
 		await mathMaterialize();
 	}
@@ -81,7 +81,7 @@ async function callMathAdd(api, a, b) {
 	}
 	let rootFn = api?.rootMath?.add;
 	if (typeof rootFn !== "function") {
-		const rootMaterialize = api?.rootMath?._materialize;
+		const rootMaterialize = api?.rootMath?.___materialize;
 		if (typeof rootMaterialize === "function") {
 			await rootMaterialize();
 		}
@@ -117,11 +117,11 @@ async function callNestedDateToday(api) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const nestedMaterialize = api?.nested?._materialize;
+	const nestedMaterialize = api?.nested?.___materialize;
 	if (typeof nestedMaterialize === "function") {
 		await nestedMaterialize();
 	}
-	const dateMaterialize = api?.nested?.date?._materialize;
+	const dateMaterialize = api?.nested?.date?.___materialize;
 	if (typeof dateMaterialize === "function") {
 		await dateMaterialize();
 	}
@@ -153,7 +153,7 @@ async function callStringUpper(api, value) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const stringMaterialize = api?.string?._materialize;
+	const stringMaterialize = api?.string?.___materialize;
 	if (typeof stringMaterialize === "function") {
 		await stringMaterialize();
 	}
@@ -186,7 +186,7 @@ async function callFuncmod(api, a, b) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const funcmodMaterialize = api?.funcmod?._materialize;
+	const funcmodMaterialize = api?.funcmod?.___materialize;
 	if (typeof funcmodMaterialize === "function") {
 		await funcmodMaterialize();
 	}
@@ -603,7 +603,12 @@ async function executeApiCall(api, call) {
  */
 async function benchmarkRealisticApiUsage(lazy) {
 	const config = await loadApiConfig();
-	const api = await slothlet({ base: API_DIR, mode: lazy ? "lazy" : "eager" });
+	// The fixtures collide on purpose and the config's expected values are the `replace` outcome, as the test suites set it.
+	const api = await slothlet({
+		base: API_DIR,
+		mode: lazy ? "lazy" : "eager",
+		api: { collision: { mode: { initial: "replace", api: "replace" } } }
+	});
 
 	// Collect all calls from all sections
 	const allCalls = [];

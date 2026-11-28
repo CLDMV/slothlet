@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/processors/type-generator.mjs
+ *	@Filename: src/lib/processors/type-generator.mjs
  *	@Date: 2026-02-14T18:14:33-08:00 (1771121673)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:16:44-07:00 (1791821804)
+ *	@Last modified time: 2026-11-28T04:30:46-08:00 (1795869046)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,18 +19,47 @@
  * @internal
  */
 
-import fs from "fs";
-import path from "path";
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { resolveWrapper } from "#handlers/unified-wrapper";
-import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import * as nodeFs from "fs";
+import * as nodePath from "path";
+import { SlothletError } from "#errors";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { isFrameworkReservedKey } from "#helpers/reserved-keys";
+import { docLinesFor } from "#processors/type-docs";
+import {
+	ArrayMethods,
+	Arrays,
+	Boolean,
+	concatLists,
+	copyList,
+	Date,
+	DateMethods,
+	filterList,
+	JSON,
+	listPush,
+	Map,
+	mapList,
+	Objects,
+	RegExpMethods,
+	regExpReplace,
+	Set,
+	setFrom,
+	SetMethods,
+	splitText,
+	StringMethods
+} from "#helpers/intrinsics";
+
+// Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
+// on Node's module object later does not run here.
+const fs = Objects.freeze({ ...nodeFs });
+const path = Objects.freeze({ ...nodePath });
+const { resolveWrapper, rootFileOf } = unifiedWrapperInternals("lib/processors/type-generator");
 
 /**
  * Root keys the framework owns: typed by `SlothletAPI` (extended below), never by the generated interface.
  * @type {Set<string>}
  * @private
  */
-const FRAMEWORK_ROOT_KEYS = new Set(["slothlet", "shutdown", "destroy"]);
+const FRAMEWORK_ROOT_KEYS = setFrom(["slothlet", "shutdown", "destroy"]);
 
 /**
  * Identifier test for an unquoted interface member name.
@@ -45,9 +74,10 @@ const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
  * @param {object} options - Generation options
  * @param {string} options.output - Output file path for .d.ts
  * @param {string} options.interfaceName - Name of the interface to generate
- * @param {boolean} [options.includeDocumentation=true] - Include the per-member comments that explain an
- *   `unknown` member (a member with no module origin). Accepted for compatibility; the explanation is
- *   always emitted, since an unexplained `unknown` is a worse surprise than one extra comment line.
+ * @param {boolean} [options.includeDocumentation=true] - Copy each member's JSDoc from its originating export
+ *   (description, `@param`, `@returns`, `@deprecated`, `@example`) onto the generated member, so hovering
+ *   `api.x.y` or `self.x.y` shows the leaf's documentation. `false` leaves members without it. The comment that
+ *   explains an `unknown` member (one with no module origin) is emitted either way.
  * @param {boolean} [options.augmentRuntime=true] - Extend `SlothletSelf` from `@cldmv/slothlet/runtime`
  *   with the generated interface, so an imported `self` is typed as the api. Turn it off when several
  *   generated interfaces live in one TypeScript program and only one of them should type `self`.
@@ -66,9 +96,7 @@ export async function generateTypes(api, options) {
 		throw new SlothletError("INVALID_CONFIG", {
 			option: "types.output",
 			expected: "a string output path",
-			value: options.output,
-			hint: "Provide a string output path for the generated .d.ts file, e.g. './types/api.d.ts'.",
-			validationError: true
+			value: options.output
 		});
 	}
 
@@ -76,9 +104,7 @@ export async function generateTypes(api, options) {
 		throw new SlothletError("INVALID_CONFIG", {
 			option: "types.interfaceName",
 			expected: "a string interface name",
-			value: options.interfaceName,
-			hint: "Provide a string interface name for the generated TypeScript interface, e.g. 'SlothletAPI'.",
-			validationError: true
+			value: options.interfaceName
 		});
 	}
 
@@ -88,12 +114,13 @@ export async function generateTypes(api, options) {
 	const context = {
 		ownership: findOwnership(api),
 		routineNames: findRoutineNames(api),
-		outputDir
+		outputDir,
+		docs: options.includeDocumentation !== false ? new Map() : null
 	};
 
 	// Describe the api, then render it.
 	const members = describeMembers(api, "", context, new Set());
-	const declaration = generateDeclaration(members, options);
+	const declaration = generateDeclaration(members, options, rootCallType(api, context), rootCallDocs(api, context));
 
 	// Ensure the output directory exists. mkdir with recursive:true is idempotent
 	// and never throws when the directory already exists, so no existsSync pre-check
@@ -106,6 +133,46 @@ export async function generateTypes(api, options) {
 		output: declaration,
 		filePath: outputPath
 	};
+}
+
+/**
+ * The type of the api root's function when the root is one (#803): its root file's default export, as a member's type
+ * is its export's. `api()` and a module's `self()` call it.
+ * @param {*} api - The composed api.
+ * @param {object} context - Shared generation state (`ownership`, `outputDir`).
+ * @returns {string|null} The type expression, or `null` for an object root (or a root with no module file).
+ * @private
+ */
+function rootCallType(api, context) {
+	if (typeof api !== "function" || !context.ownership) return null;
+	const instance = findInstance(api);
+	const filePath = instance ? rootFileOf(instance) : null;
+	return filePath ? originType({ filePath, exportPath: ["default"] }, context) : null;
+}
+
+/**
+ * The JSDoc of the api root's function (its root file's default export), when documentation is on.
+ * @param {*} api - The composed api.
+ * @param {object} context - Shared generation state (`ownership`, `docs`).
+ * @returns {string[]|null} The comment lines, or `null`.
+ * @private
+ */
+function rootCallDocs(api, context) {
+	if (!context.docs || typeof api !== "function" || !context.ownership) return null;
+	const instance = findInstance(api);
+	const filePath = instance ? rootFileOf(instance) : null;
+	return filePath ? docLinesFor({ filePath, exportPath: ["default"] }, context.docs) : null;
+}
+
+/**
+ * The JSDoc lines for a node's origin, when documentation is on.
+ * @param {object|null} origin - The node's ownership origin.
+ * @param {object} context - Shared generation state (`docs` is the per-run file cache, or `null` when off).
+ * @returns {string[]|null} The comment lines, or `null`.
+ * @private
+ */
+function nodeDocs(origin, context) {
+	return context.docs ? docLinesFor(origin, context.docs) : null;
 }
 
 /**
@@ -127,10 +194,11 @@ function findOwnership(api) {
  */
 function findInstance(api) {
 	if (!api || (typeof api !== "object" && typeof api !== "function")) return null;
-	for (const key of Object.keys(api)) {
-		if (FRAMEWORK_ROOT_KEYS.has(key)) continue;
+	for (let ofIndex = 0, ofList = Objects.keys(api); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (SetMethods.has(FRAMEWORK_ROOT_KEYS, key)) continue;
 		const wrapper = resolveWrapper(api[key]);
-		if (wrapper?.slothlet) return wrapper.slothlet;
+		if (wrapper?.____slothlet) return wrapper.____slothlet;
 	}
 	return null;
 }
@@ -142,8 +210,15 @@ function findInstance(api) {
  * @private
  */
 function findRoutineNames(api) {
-	const routines = findInstance(api)?.config?.routines;
-	return new Set(Array.isArray(routines) ? routines.map((routine) => routine?.name).filter(Boolean) : []);
+	const routines = findInstance(api)?.config?.routines?.entries;
+	return setFrom(
+		Arrays.isArray(routines)
+			? filterList(
+					mapList(routines, (routine) => routine?.name),
+					Boolean
+				)
+			: []
+	);
 }
 
 /**
@@ -152,29 +227,30 @@ function findRoutineNames(api) {
  * @param {string} apiPath - Dotted path of `value` ("" at the root).
  * @param {object} context - Shared generation state (`ownership`, `routineNames`, `outputDir`).
  * @param {Set<*>} ancestors - Values on the current descent path (cycle guard).
- * @returns {Array<{key: string, type: string, comment: (string|null)}>} One entry per member.
+ * @returns {Array<{key: string, type: string, comment: (string|null), docs?: (string[]|null)}>} One entry per member.
  * @private
  */
 function describeMembers(value, apiPath, context, ancestors) {
 	if (!value || (typeof value !== "object" && typeof value !== "function")) {
 		return [];
 	}
-	if (ancestors.has(value)) return [];
-	ancestors.add(value);
+	if (SetMethods.has(ancestors, value)) return [];
+	SetMethods.add(ancestors, value);
 	try {
 		const members = [];
-		for (const key of Object.keys(value)) {
+		for (let ofIndex = 0, ofList = Objects.keys(value); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			// Skip the framework's reserved names and its own root surface (typed by SlothletAPI). A module's
 			// `_`/`__`-prefixed export is a member of the api like any other, so it is typed.
-			if (isFrameworkReservedKey(key) || (apiPath === "" && FRAMEWORK_ROOT_KEYS.has(key))) {
+			if (isFrameworkReservedKey(key) || (apiPath === "" && SetMethods.has(FRAMEWORK_ROOT_KEYS, key))) {
 				continue;
 			}
 			const childPath = apiPath ? `${apiPath}.${key}` : key;
-			members.push({ key, ...describeNode(value[key], childPath, context, ancestors) });
+			listPush(members, { key, ...describeNode(value[key], childPath, context, ancestors) });
 		}
 		return members;
 	} finally {
-		ancestors.delete(value);
+		SetMethods.delete(ancestors, value);
 	}
 }
 
@@ -184,7 +260,8 @@ function describeMembers(value, apiPath, context, ancestors) {
  * @param {string} apiPath - Dotted api path of the node.
  * @param {object} context - Shared generation state.
  * @param {Set<*>} ancestors - Cycle guard.
- * @returns {{type: string, comment: (string|null)}} The type, plus a comment when it needs one.
+ * @returns {{type: string, comment: (string|null), docs: (string[]|null)}} The type, plus a comment when it needs
+ *   one and the export's JSDoc lines when documentation is on.
  * @private
  */
 function describeNode(value, apiPath, context, ancestors) {
@@ -195,7 +272,7 @@ function describeNode(value, apiPath, context, ancestors) {
 	if (!base) {
 		// The root slot of a configured routine holds the framework's routine cascade: it forwards its
 		// arguments to every contribution and resolves to their result(s).
-		if (apiPath.indexOf(".") === -1 && typeof value === "function" && context.routineNames.has(apiPath)) {
+		if (StringMethods.indexOf(apiPath, ".") === -1 && typeof value === "function" && SetMethods.has(context.routineNames, apiPath)) {
 			return { type: "(...args: unknown[]) => Promise<unknown>", comment: `Routine cascade: runs every \`${apiPath}\` contribution.` };
 		}
 		const children = isComposite ? describeMembers(value, apiPath, context, ancestors) : [];
@@ -209,17 +286,21 @@ function describeNode(value, apiPath, context, ancestors) {
 	// A member the base type already describes (it is that export's own property) is not repeated;
 	// the rest — members merged onto an export from elsewhere — are added to it.
 	const children = isComposite ? describeMembers(value, apiPath, context, ancestors) : [];
-	const extra = children.filter((child) => !isCoveredBy(origin, context.ownership.getOrigin(`${apiPath}.${child.key}`)));
+	const extra = filterList(children, (child) => !isCoveredBy(origin, context.ownership.getOrigin(`${apiPath}.${child.key}`)));
+	const docs = nodeDocs(origin, context);
 	if (extra.length === 0) {
-		return { type: base, comment: null };
+		return { type: base, comment: null, docs };
 	}
 	if (typeof value === "function") {
-		return { type: `${base} & ${renderObject(extra, 1)}`, comment: null };
+		return { type: `${base} & ${renderObject(extra, 1)}`, comment: null, docs };
 	}
 	// A plain object export whose members were partly replaced or extended: drop the replaced keys from
 	// the export's type so the placed values win, rather than intersecting two conflicting types.
-	const omitted = extra.map((child) => JSON.stringify(child.key)).join(" | ");
-	return { type: `Omit<${base}, ${omitted}> & ${renderObject(extra, 1)}`, comment: null };
+	const omitted = ArrayMethods.join(
+		mapList(extra, (child) => JSON.stringify(child.key)),
+		" | "
+	);
+	return { type: `Omit<${base}, ${omitted}> & ${renderObject(extra, 1)}`, comment: null, docs };
 }
 
 /**
@@ -233,7 +314,7 @@ function isCoveredBy(parentOrigin, childOrigin) {
 	if (!childOrigin?.exportPath || childOrigin.filePath !== parentOrigin.filePath) return false;
 	const parentPath = parentOrigin.exportPath;
 	const childPath = childOrigin.exportPath;
-	return childPath.length === parentPath.length + 1 && parentPath.every((segment, index) => segment === childPath[index]);
+	return childPath.length === parentPath.length + 1 && ArrayMethods.every(parentPath, (segment, index) => segment === childPath[index]);
 }
 
 /**
@@ -263,9 +344,12 @@ function originType(origin, context) {
 	// TypeScript types `import("x.cjs")` itself as `module.exports` (its `["default"]` is not the same
 	// type under NodeNext or Bundler), so the leading `default` segment is dropped.
 	if (segments[0] === "default" && context.ownership.isCommonJSModule(origin.filePath)) {
-		segments = segments.slice(1);
+		segments = copyList(segments, 1);
 	}
-	const access = segments.map((segment) => `[${JSON.stringify(segment)}]`).join("");
+	const access = ArrayMethods.join(
+		mapList(segments, (segment) => `[${JSON.stringify(segment)}]`),
+		""
+	);
 	return `typeof import(${JSON.stringify(importSpecifier(origin.filePath, context.outputDir))})${access}`;
 }
 
@@ -279,14 +363,18 @@ function originType(origin, context) {
  * @private
  */
 function importSpecifier(filePath, outputDir) {
-	let relative = path.relative(outputDir, filePath).split(path.sep).join("/");
-	if (!relative.startsWith(".")) relative = `./${relative}`;
-	return relative.replace(/\.(m|c)?ts$/, (____match, kind) => `.${kind ?? ""}js`).replace(/\.tsx$/, ".jsx");
+	let relative = ArrayMethods.join(splitText(path.relative(outputDir, filePath), path.sep), "/");
+	if (!StringMethods.startsWith(relative, ".")) relative = `./${relative}`;
+	return regExpReplace(
+		/\.tsx$/,
+		regExpReplace(/\.(m|c)?ts$/, relative, (____match, kind) => `.${kind ?? ""}js`),
+		".jsx"
+	);
 }
 
 /**
  * Render members as an object type literal.
- * @param {Array<{key: string, type: string, comment: (string|null)}>} members - Members to render.
+ * @param {Array<{key: string, type: string, comment: (string|null), docs?: (string[]|null)}>} members - Members to render.
  * @param {number} indent - Indentation depth of the members.
  * @returns {string} The object type (`{ ... }`).
  * @private
@@ -294,56 +382,91 @@ function importSpecifier(filePath, outputDir) {
 function renderObject(members, indent) {
 	const lines = ["{"];
 	renderMembers(members, indent, lines);
-	lines.push(`${"\t".repeat(indent - 1)}}`);
-	return lines.join("\n");
+	listPush(lines, `${StringMethods.repeat("\t", indent - 1)}}`);
+	return ArrayMethods.join(lines, "\n");
 }
 
 /**
  * Append rendered members to `lines`, nesting object types one level deeper.
- * @param {Array<{key: string, type: string, comment: (string|null)}>} members - Members to render.
+ * @param {Array<{key: string, type: string, comment: (string|null), docs?: (string[]|null)}>} members - Members to render.
  * @param {number} indent - Indentation depth.
  * @param {string[]} lines - Output lines.
  * @returns {void}
  * @private
  */
 function renderMembers(members, indent, lines) {
-	const pad = "\t".repeat(indent);
-	for (const { key, type, comment } of members) {
-		if (comment) lines.push(`${pad}/** ${comment} */`);
-		const name = IDENTIFIER.test(key) ? key : JSON.stringify(key);
+	const pad = StringMethods.repeat("\t", indent);
+	for (let ofIndex = 0, ofList = members; ofIndex < ofList.length; ofIndex++) {
+		const { key, type, comment, docs } = ofList[ofIndex];
+		if (docs) renderDocBlock(docs, comment, pad, lines);
+		else if (comment) listPush(lines, `${pad}/** ${comment} */`);
+		const name = RegExpMethods.exec(IDENTIFIER, key) !== null ? key : JSON.stringify(key);
 		// Nested object literals were rendered at depth 1; re-indent them to this member's depth.
-		const reindented = type.split("\n").join(`\n${pad}`);
-		lines.push(`${pad}${name}: ${reindented};`);
+		const reindented = ArrayMethods.join(splitText(type, "\n"), `\n${pad}`);
+		listPush(lines, `${pad}${name}: ${reindented};`);
 	}
 }
 
 /**
+ * Append a JSDoc block: the copied documentation lines, then the generator's own note when the member has one.
+ * @param {string[]} docs - Comment content lines (already escaped).
+ * @param {string|null} note - The generator's comment for the member, if any.
+ * @param {string} pad - Indentation.
+ * @param {string[]} lines - Output lines.
+ * @returns {void}
+ * @private
+ */
+function renderDocBlock(docs, note, pad, lines) {
+	const content = note ? concatLists(docs, ["", note]) : docs;
+	if (content.length === 1) {
+		listPush(lines, `${pad}/** ${content[0]} */`);
+		return;
+	}
+	listPush(lines, `${pad}/**`);
+	for (let lineIndex = 0; lineIndex < content.length; lineIndex++) {
+		listPush(lines, content[lineIndex] ? `${pad} * ${content[lineIndex]}` : `${pad} *`);
+	}
+	listPush(lines, `${pad} */`);
+}
+
+/**
  * Generate TypeScript declaration file content
- * @param {Array<{key: string, type: string, comment: (string|null)}>} members - Root members.
+ * @param {Array<{key: string, type: string, comment: (string|null), docs?: (string[]|null)}>} members - Root members.
  * @param {object} options - Generation options
+ * @param {string|null} [rootCall=null] - The api root function's type, when the root is a function (#803).
+ * @param {string[]|null} [rootDocs=null] - The root function's JSDoc lines, when documentation is on.
  * @returns {string} Declaration file content
  * @private
  */
-function generateDeclaration(members, options) {
+function generateDeclaration(members, options, rootCall = null, rootDocs = null) {
 	const interfaceName = options.interfaceName;
 	const augment = options.augmentRuntime !== false;
 	const lines = [];
 
-	lines.push("/**");
-	lines.push(` * Generated TypeScript declarations for Slothlet API`);
-	lines.push(` * @generated ${new Date().toISOString()}`);
-	lines.push(" */");
-	lines.push("");
+	listPush(lines, "/**");
+	listPush(lines, ` * Generated TypeScript declarations for Slothlet API`);
+	listPush(lines, ` * @generated ${DateMethods.toISOString(new Date())}`);
+	listPush(lines, " */");
+	listPush(lines, "");
 
 	if (augment) {
-		lines.push(`import type { SlothletAPI } from "@cldmv/slothlet";`);
-		lines.push("");
+		listPush(lines, `import type { SlothletAPI } from "@cldmv/slothlet";`);
+		listPush(lines, "");
 	}
 
-	lines.push(`export interface ${interfaceName} {`);
+	listPush(lines, `export interface ${interfaceName} {`);
+	// A function root makes the api, and `self`, callable as that function (#803). Its arguments and result are taken
+	// from the function's own type; the call signature is inherited by `SlothletSelf` below.
+	if (rootCall) {
+		const fn = `Extract<${rootCall}, (...args: any[]) => any>`;
+		const note = "The api root's own function (`api()`, and `self()` in a leaf).";
+		if (rootDocs) renderDocBlock(rootDocs, note, "\t", lines);
+		else listPush(lines, `\t/** ${note} */`);
+		listPush(lines, `\t(...args: Parameters<${fn}>): ReturnType<${fn}>;`);
+	}
 	renderMembers(members, 1, lines);
-	lines.push("}");
-	lines.push("");
+	listPush(lines, "}");
+	listPush(lines, "");
 
 	// Type `self` for every leaf that imports it (#484). `self` is declared as the empty
 	// `SlothletSelf` class in `@cldmv/slothlet/runtime`; an interface of the same name merges into
@@ -354,12 +477,12 @@ function generateDeclaration(members, options) {
 	// (`self.slothlet.*`, `self.shutdown()`), which `SlothletAPI` describes. The two heritage clauses
 	// merge into one `SlothletSelf` that extends both.
 	if (augment) {
-		lines.push(`declare module "@cldmv/slothlet/runtime" {`);
-		lines.push(`\tinterface SlothletSelf extends ${interfaceName} {}`);
-		lines.push(`\tinterface SlothletSelf extends SlothletAPI {}`);
-		lines.push("}");
-		lines.push("");
+		listPush(lines, `declare module "@cldmv/slothlet/runtime" {`);
+		listPush(lines, `\tinterface SlothletSelf extends ${interfaceName} {}`);
+		listPush(lines, `\tinterface SlothletSelf extends SlothletAPI {}`);
+		listPush(lines, "}");
+		listPush(lines, "");
 	}
 
-	return lines.join("\n");
+	return ArrayMethods.join(lines, "\n");
 }

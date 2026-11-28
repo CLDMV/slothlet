@@ -95,17 +95,17 @@ Collision-resolution conditions — which value wins when two contributions land
 
 ---
 
-## O07: `forceOverwrite` → `replace`
+## O07: `collision.force` → `replace`
 
 **Related Rule**: [Rule 17](../API-RULES.md#rule-17-collision-resolution)
 **Status**: ✅ Active
 
-**Pattern**: A per-call `forceOverwrite: true` forces full replacement regardless of the configured collision mode (a `moduleID` is auto-generated if absent).
+**Pattern**: A per-call `collision: { force: true }` forces full replacement regardless of the configured collision mode (a module id is generated if absent).
 
 **Source(s)**: `src/lib/handlers/api-manager.mjs:1905` (flag → `collisionModeOverride`) · `src/lib/builders/api-assignment.mjs:253` (override precedence)
 
-**Trigger**: `forceOverwrite: true`
-**Result**: `collisionMode` treated as `replace` for that call.
+**Trigger**: `collision: { force: true }`
+**Result**: the collision mode is treated as `replace` for that call.
 
 ---
 
@@ -138,9 +138,9 @@ Collision-resolution conditions — which value wins when two contributions land
 **At runtime** (`api.slothlet.api.add()`, `reload()`, a `remove()` that reverts to a function owner, a lazy materialization that turns out callable): the same holds regardless of add order. When a later module supplies the function for a namespace an earlier module created as a plain namespace, the namespace becomes callable and keeps every child (`src/lib/handlers/unified-wrapper.mjs` `___adoptCallableImpl` / `___upgradeToCallableProxy`). The function slot resolves like any other merged member: a namespace with no function always takes the incoming one; one that already has a function keeps it under `merge` (first writer wins, as in O08) and takes the incoming one under `merge-replace` (incoming wins).
 
 ```javascript
-await api.slothlet.api.add("plugins", "./plugins-a", { moduleID: "a" }); // plain namespace
+await api.slothlet.api.add("plugins", "./plugins-a", { id: "a" }); // plain namespace
 const held = api.plugins; // typeof "object"
-await api.slothlet.api.add("plugins", "./plugins-b", { moduleID: "b" }); // b's default export flattens onto plugins
+await api.slothlet.api.add("plugins", "./plugins-b", { id: "b" }); // b's default export flattens onto plugins
 
 typeof api.plugins; // "function"
 api.plugins(); // runs b's function
@@ -156,13 +156,13 @@ On `remove()`, the namespace's function is resolved again from the modules that 
 
 ```javascript
 // collision.api: "merge-replace"
-await api.slothlet.api.add("plugins", "./plugins-a", { moduleID: "a" }); // plain namespace
-await api.slothlet.api.add("plugins", "./plugins-b", { moduleID: "b" }); // supplies a function
-await api.slothlet.api.add("plugins", "./plugins-c", { moduleID: "c" }); // supplies another: c's wins
+await api.slothlet.api.add("plugins", "./plugins-a", { id: "a" }); // plain namespace
+await api.slothlet.api.add("plugins", "./plugins-b", { id: "b" }); // supplies a function
+await api.slothlet.api.add("plugins", "./plugins-c", { id: "c" }); // supplies another: c's wins
 await api.slothlet.api.remove("c"); // api.plugins() runs b's function again
 ```
 
-The change to a callable proxy is one-way: when no function is left (`remove()` of the only module that supplied one, or a `reload()` after which no module exports one), the namespace's children revert as usual but it keeps the callable proxy — `typeof` stays "function" and a call throws `INVALID_CONFIG_NOT_A_FUNCTION`, exactly as for a namespace that was callable from the start.
+The change to a callable proxy is one-way: when no function is left (`remove()` of the only module that supplied one, or a `reload()` after which no module exports one), the namespace's children revert as usual but it keeps the callable proxy — `typeof` stays "function" and a call throws `API_PATH_NOT_CALLABLE`, exactly as for a namespace that was callable from the start.
 
 ---
 
@@ -171,7 +171,7 @@ The change to a callable proxy is one-way: when no function is left (`remove()` 
 **Related Rule**: [Rule 17](../API-RULES.md#rule-17-collision-resolution)
 **Status**: ✅ Active
 
-**Pattern**: Outside the wrapper-vs-wrapper path, three shape combinations resolve differently: wrapper-vs-plain merges the plain object's keys onto the wrapper (incoming keys win); plain-vs-wrapper replaces the plain with the wrapper; plain-vs-plain does `Object.assign` (incoming wins).
+**Pattern**: Outside the wrapper-vs-wrapper path, three shape combinations resolve differently: wrapper-vs-plain merges the plain object's keys onto the wrapper (incoming keys win); plain-vs-wrapper replaces the plain with the wrapper, except that under `merge` a primitive existing leaf is kept (O01); plain-vs-plain does `Object.assign` (incoming wins).
 
 **Source(s)**: `src/lib/builders/api-assignment.mjs:715-736`
 
@@ -199,7 +199,7 @@ The change to a callable proxy is one-way: when no function is left (`remove()` 
 **Related Rule**: [Rule 17](../API-RULES.md#rule-17-collision-resolution)
 **Status**: ✅ Active
 
-**Pattern**: The order modules are processed — default `priority` descending, then `packageName` ascending by raw codepoint — is the precedence "last wins"/"first wins" resolution iterates. A caller comparator overrides it.
+**Pattern**: The order modules are processed — default `priority` descending, then `package` ascending by raw codepoint — is the precedence "last wins"/"first wins" resolution iterates. A caller comparator overrides it.
 
 **Source(s)**: `src/lib/helpers/module-sort.mjs:80-89` (default) · `:60-63` (comparator override)
 
@@ -213,7 +213,7 @@ The change to a callable proxy is one-way: when no function is left (`remove()` 
 **Related Rule**: [Rule 17](../API-RULES.md#rule-17-collision-resolution)
 **Status**: ✅ Active
 
-**Pattern**: For an external-module mount under `collisionMode: "error"`, an exact-mountPath collision is thrown before the mount runs (the underlying build then uses `merge`).
+**Pattern**: For an external-module mount under `collision: { mode: "error" }`, an exact-mount collision is thrown before the mount runs (the underlying build then uses `merge`).
 
 **Source(s)**: `src/lib/handlers/module-manager.mjs:427-442` (tagged `S7`) · `:445` (`error` → `merge` for the underlying add)
 

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/eventemitter-multi-instance-shutdown.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/eventemitter-multi-instance-shutdown.test.vitest.mjs
  *	@Date: 2026-08-01T12:00:00-07:00 (1785610800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
+ *	@Last modified time: 2026-11-28T04:31:28-08:00 (1795869088)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,10 +36,12 @@ import { BASIC_MATRIX, TEST_DIRS } from "../../setup/vitest-helper.mjs";
  * @returns {number} Wrapped listeners still attached.
  */
 const stillWrapped = (emitter) =>
-	["connect", "query", "error", "disconnect"].reduce(
-		(sum, event) => sum + emitter.rawListeners(event).filter((fn) => fn._slothletOriginal !== undefined).length,
-		0
-	);
+	["connect", "query", "error", "disconnect"].reduce((sum, event) => {
+		// The emitter's own table: rawListeners() reports the registered function, not the wrapper standing in for it.
+		const entry = emitter._events?.[event];
+		const table = entry === undefined ? [] : typeof entry === "function" ? [entry] : entry;
+		return sum + table.filter((fn) => fn.____slothletOriginal !== undefined).length;
+	}, 0);
 
 describe.each(BASIC_MATRIX)("EventEmitter multi-instance shutdown > Config: '$name'", ({ config }) => {
 	let apiA;

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/manifest-helpers.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/manifest-helpers.test.vitest.mjs
  *	@Date: 2026-05-28T00:00:00-07:00 (1779951600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
+ *	@Last modified time: 2026-11-28T04:31:50-08:00 (1795869110)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,8 +27,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
-import { generateManifest, collectSlothletSpecifiers } from "@cldmv/slothlet/helpers/generate-manifest";
+import { createManifestResolver } from "#helpers/manifest-resolver";
+import { generateManifest, collectSlothletSpecifiers } from "#helpers/generate-manifest";
 import { mkdir, writeFile, rm, symlink, chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
@@ -58,13 +58,13 @@ describe("createManifestResolver — input validation", () => {
 describe("createManifestResolver — base URL normalisation", () => {
 	it("accepts a string base and resolves relative paths", () => {
 		const resolver = createManifestResolver("https://example.com/app/");
-		const out = resolver({ path: "math.mjs", name: "math", fullName: "math.mjs" });
+		const out = resolver({ path: "math.mjs", name: "math", full: "math.mjs" });
 		expect(out).toBe("https://example.com/app/math.mjs");
 	});
 
 	it("accepts a URL instance base and resolves relative paths", () => {
 		const resolver = createManifestResolver(new URL("https://example.com/app/"));
-		const out = resolver({ path: "math.mjs", name: "math", fullName: "math.mjs" });
+		const out = resolver({ path: "math.mjs", name: "math", full: "math.mjs" });
 		expect(out).toBe("https://example.com/app/math.mjs");
 	});
 
@@ -72,25 +72,25 @@ describe("createManifestResolver — base URL normalisation", () => {
 		// e.g. import.meta.url usually points at a file, not a directory — the
 		// helper should normalise it so relative resolution is directory-like.
 		const resolver = createManifestResolver("https://example.com/app/entry.mjs");
-		const out = resolver({ path: "math.mjs", name: "math", fullName: "math.mjs" });
+		const out = resolver({ path: "math.mjs", name: "math", full: "math.mjs" });
 		expect(out).toBe("https://example.com/app/math.mjs");
 	});
 
 	it("preserves base when it already ends with a slash", () => {
 		const resolver = createManifestResolver("https://example.com/app/api/");
-		const out = resolver({ path: "auth.mjs", name: "auth", fullName: "auth.mjs" });
+		const out = resolver({ path: "auth.mjs", name: "auth", full: "auth.mjs" });
 		expect(out).toBe("https://example.com/app/api/auth.mjs");
 	});
 
 	it("resolves nested relative paths", () => {
 		const resolver = createManifestResolver("https://example.com/app/");
-		const out = resolver({ path: "utils/format.mjs", name: "format", fullName: "format.mjs" });
+		const out = resolver({ path: "utils/format.mjs", name: "format", full: "format.mjs" });
 		expect(out).toBe("https://example.com/app/utils/format.mjs");
 	});
 
 	it("works with file:// URLs", () => {
 		const resolver = createManifestResolver("file:///tmp/api/");
-		const out = resolver({ path: "math.mjs", name: "math", fullName: "math.mjs" });
+		const out = resolver({ path: "math.mjs", name: "math", full: "math.mjs" });
 		expect(out).toBe("file:///tmp/api/math.mjs");
 	});
 });
@@ -186,13 +186,13 @@ describe("generateManifest — file filtering", () => {
 		expect(names).not.toContain(".hidden");
 	});
 
-	it("returns canonical file-entry shape { path, name, fullName }", async () => {
+	it("returns canonical file-entry shape { path, name, full }", async () => {
 		const m = await generateManifest(root);
 		for (const entry of m.files) {
 			expect(typeof entry.path).toBe("string");
 			expect(typeof entry.name).toBe("string");
-			expect(typeof entry.fullName).toBe("string");
-			expect(entry.fullName).toMatch(/\.(mjs|cjs|js|ts|mts|cts)$/);
+			expect(typeof entry.full).toBe("string");
+			expect(entry.full).toMatch(/\.(mjs|cjs|js|ts|mts|cts)$/);
 		}
 	});
 });

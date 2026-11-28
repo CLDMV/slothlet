@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/lifecycle/shutdown-destroy-routine-error.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/lifecycle/shutdown-destroy-routine-error.test.vitest.mjs
  *	@Date: 2026-09-14T15:15:27-07:00 (1789424127)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:35-07:00 (1791091715)
+ *	@Last modified time: 2026-11-28T04:32:04-08:00 (1795869124)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,8 +39,8 @@ afterEach(async () => {
 
 describe("shutdown/destroy routine-error capture (api_builder)", () => {
 	it("api.slothlet.shutdown() rethrows a throwing shutdown-mode routine after teardown (2350, 2353)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, silent: true });
-		const rm = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+		api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, silent: true });
+		const rm = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 		const boom = new Error("shutdown routine boom");
 		rm.runShutdownModeRoutines = async () => {
 			throw boom;
@@ -49,8 +49,8 @@ describe("shutdown/destroy routine-error capture (api_builder)", () => {
 	});
 
 	it("api.destroy() rethrows a throwing destroy-mode routine after teardown (3599)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, silent: true });
-		const rm = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+		api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, silent: true });
+		const rm = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 		const boom = new Error("destroy routine boom");
 		rm.runDestroyModeRoutines = async () => {
 			throw boom;
@@ -59,8 +59,8 @@ describe("shutdown/destroy routine-error capture (api_builder)", () => {
 	});
 
 	it("api.destroy() keeps the destroy-routine error when the internal shutdown also throws (3620 false branch)", async () => {
-		api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, silent: true });
-		const rm = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+		api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, silent: true });
+		const rm = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 		const destroyBoom = new Error("destroy routine boom");
 		// destroy-mode routine throws → routineError is set BEFORE the internal shutdown runs.
 		rm.runDestroyModeRoutines = async () => {

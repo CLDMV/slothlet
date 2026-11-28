@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/builders/modes-processor-no-wrap.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/builders/modes-processor-no-wrap.test.vitest.mjs
  *	@Date: 2026-03-02T19:00:00-08:00 (1772506800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:00-07:00 (1791090900)
+ *	@Last modified time: 2026-11-28T04:31:18-08:00 (1795869078)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,7 +69,7 @@
  *     so Case 2's `key in callableModule` guard fires the early continue for those keys.
  *     This assignment can never fire.
  *
- *   Line 958 — `await modes_existingWrapper._materialize()` inside the eager recursive
+ *   Line 958 — `await modes_existingWrapper.___materialize()` inside the eager recursive
  *     collision block.  Requires an existing lazy wrapper (with materializeFunc) at the
  *     slot during eager recursive directory processing.  All root files are eagerly
  *     wrapped even in lazy mode, so this condition never holds.
@@ -112,7 +112,7 @@ const DIRS = {
  * const sl = getSlFromApi(lazyApi, "someKey");
  */
 function getSlFromApi(api, key) {
-	return resolveWrapper(api[key]).slothlet;
+	return resolveWrapper(api[key]).____slothlet;
 }
 
 let _api = null;
@@ -199,7 +199,7 @@ describe("modes-processor: Case 2 shouldAttachNamedExport guard (lines 343, 344)
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.FOLDER_WITH_NAMED
 		});
 
@@ -220,7 +220,7 @@ describe("modes-processor: Case 2 shouldAttachNamedExport guard (lines 343, 344)
 		expect(_api).toBeDefined();
 		expect(_api.logger).toBeDefined();
 		// Trigger materialization to exercise the lazy flatten path as well
-		await _api.logger._materialize?.();
+		await _api.logger.___materialize?.();
 		expect(_api.logger).toBeDefined();
 	});
 });
@@ -252,7 +252,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 
@@ -275,7 +275,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { modes: true },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 
@@ -289,7 +289,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge-replace", api: "merge-replace" } },
+			api: { collision: { mode: { initial: "merge-replace", api: "merge-replace" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 
@@ -302,7 +302,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "warn", api: "warn" } },
+			api: { collision: { mode: { initial: "warn", api: "warn" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 
@@ -331,7 +331,7 @@ describe("modes-processor: modes_existingChildKeys function-copy (line 991)", ()
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 
@@ -384,7 +384,7 @@ describe("modes-processor: addapi-metadata-default in lazy subfolder materializa
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.ADDAPI_SUBFOLDER
 		});
 
@@ -403,7 +403,7 @@ describe("modes-processor: addapi-metadata-default in lazy subfolder materializa
 //
 // Line 1139 — `if (!modes_fileFolderImpl) modes_fileFolderImpl = {}` in processSubdirectories:
 //   In lazy mode, targetApi["calc"] is the eager wrapper for root calc.mjs.
-//   existImpl = wrapper.__impl = function calc  (typeof function, not object)
+//   existImpl = wrapper.____impl = function calc  (typeof function, not object)
 //   → modes_fileFolderImpl stays null (object check at 1133 fails)
 //   existChildKeys = ["add"]  (add was adopted as a child wrapper from calc's own property)
 //   → for (ck of existChildKeys): if (!modes_fileFolderImpl) modes_fileFolderImpl = {}
@@ -427,7 +427,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.FN_FN_FOLDER
 		});
 
@@ -445,7 +445,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { modes: true },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.FN_FN_FOLDER
 		});
 
@@ -459,7 +459,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge-replace", api: "merge-replace" } },
+			api: { collision: { mode: { initial: "merge-replace", api: "merge-replace" } } },
 			base: DIRS.FN_FN_FOLDER
 		});
 
@@ -476,7 +476,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 

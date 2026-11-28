@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/core-reload-lazy-mode.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/core-reload-lazy-mode.test.vitest.mjs
  *	@Date: 2026-02-10T06:29:29-08:00 (1770733769)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-11-28T04:31:36-08:00 (1795869096)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,8 +51,10 @@ for (const { config, name } of lazyConfigs) {
 				base: TEST_DIRS.API_TEST,
 				api: {
 					collision: {
-						initial: "replace",
-						api: "replace"
+						mode: {
+							initial: "replace",
+							api: "replace"
+						}
 					},
 					mutations: {
 						add: true,
@@ -77,8 +79,8 @@ for (const { config, name } of lazyConfigs) {
 		 * @returns {{ materialized: boolean, inFlight: boolean }|null}
 		 */
 		function getWrapperState(proxyValue) {
-			if (!proxyValue || proxyValue.__mode === undefined) return null;
-			return { materialized: proxyValue.__materialized, inFlight: proxyValue.__inFlight };
+			if (!proxyValue || api.slothlet.node(proxyValue).mode === undefined) return null;
+			return { materialized: api.slothlet.node(proxyValue).materialized, inFlight: api.slothlet.node(proxyValue).loading };
 		}
 
 		// ─── 1. Materialized path resets to un-materialized after reload ───

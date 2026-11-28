@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test/advanced/self-object.mjs
+ *	@Filename: api_tests/api_test/advanced/self-object.mjs
  *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:28-07:00 (1791090868)
+ *	@Last modified time: 2026-11-28T04:27:13-08:00 (1795868833)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,28 +100,6 @@ export const selfObject =
 		addViaSelf(a, b) {
 			debugLog("[SELF-OBJECT DEBUG] addViaSelf called - dumping stack trace:");
 			debugLog(new Error().stack);
-			// Direct test of instance detection
-			import("@cldmv/slothlet/helpers/instance-manager")
-				.then(async ({ detectCurrentInstanceId, getInstanceData }) => {
-					const instanceId = detectCurrentInstanceId();
-					debugLog("[TEST] detectCurrentInstanceId():", instanceId);
-					if (instanceId) {
-						const instanceData = getInstanceData(instanceId);
-						debugLog("[TEST] instanceData keys:", instanceData ? Object.keys(instanceData) : "null");
-						if (instanceData) {
-							debugLog("[TEST] instanceData.self type:", typeof instanceData.self);
-							debugLog("[TEST] instanceData.context type:", typeof instanceData.context);
-							// NOTE: reference is no longer in instanceData, it's merged into the API
-							if (instanceData.self) {
-								debugLog("[TEST] instanceData.self keys:", Object.keys(instanceData.self));
-							}
-						}
-					}
-				})
-				.catch(() => {
-					// instance-manager not available in AsyncLocalStorage version
-					debugLog("[TEST] instance-manager not available (AsyncLocalStorage version)");
-				});
 
 			debugLog("[TEST] === Runtime Objects Debug ===");
 			debugLog("[TEST] typeof self:", typeof self);

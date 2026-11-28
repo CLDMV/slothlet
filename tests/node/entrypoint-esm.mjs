@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/node/entrypoint-esm.mjs
+ *	@Filename: tests/node/entrypoint-esm.mjs
  *	@Date: 2026-01-10T17:42:21-08:00 (1768095741)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-28T04:30:54-08:00 (1795869054)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,7 +51,7 @@ async function runEsmEntrypointTest() {
 		api = await slothlet({
 			base: TEST_DIR,
 			context: { user: "entrypoint-esm" },
-			api: { collision: { initial: "replace" } }
+			api: { collision: { mode: { initial: "replace" } } }
 		});
 		assertApi(api);
 		assert.ok(api.slothlet, "api.slothlet management object should exist");

@@ -4,7 +4,7 @@ Built-in-surface conditions — how slothlet protects reserved keys and shapes t
 
 - **Series**: `B##`
 - **Rule**: [Rule 21 — Reserved Keys & Built-in Surface](../API-RULES.md#rule-21-reserved-keys--built-in-surface)
-- Reserved-key protection at other layers is enforced by G08 (filename), G09 (mountPath), and the reserved-export throw in `loader.mjs` — all under Rule 21's umbrella.
+- Reserved-key protection at other layers is enforced by G08 (filename), G09 (mount), and the reserved-export throw in `loader.mjs` — all under Rule 21's umbrella.
 
 ---
 
@@ -54,21 +54,21 @@ if (userApi.slothlet) {
 **Related Rule**: [Rule 21](../API-RULES.md#rule-21-reserved-keys--built-in-surface)
 **Status**: ✅ Active
 
-**Pattern**: Per-call `collisionMode` / `mutateExisting` / `recordHistory` on `api.slothlet.api.add()` are stripped (with a warning) unless `api.mutations.allowCollisionOverride` is set; `forceOverwrite` / `moduleID` / `metadata` always pass through.
+**Pattern**: Per-call `collision.mode` / `collision.mutate` / `replay` on `api.slothlet.api.add()` are stripped (with a warning) unless `api.collision.override` is set; `collision.force` / `id` / `metadata` always pass through.
 
 **Source(s)**: `src/lib/builders/api_builder.mjs:785-806` (lock) · `:807-813` (always-allowed)
 
-**Trigger**: `!config.api?.mutations?.allowCollisionOverride` and a locked option is present
-**Result**: `WARNING_API_ADD_OPTION_LOCKED`; the option is dropped and the mount uses the instance policy. (Shipped: [#419](https://github.com/CLDMV/slothlet/pull/419).)
+**Trigger**: `!config.api?.mutations?.api.collision.override` and a locked option is present
+**Result**: `WARNING_COLLISION_OPTION_LOCKED`; the option is dropped and the mount uses the instance policy. (Shipped: [#419](https://github.com/CLDMV/slothlet/pull/419).)
 
 ---
 
-## B04: `versioning.unregister` Unknown Tag → No-Op
+## B04: `versioning.remove` Unknown Tag → No-Op
 
 **Related Rule**: [Rule 21](../API-RULES.md#rule-21-reserved-keys--built-in-surface) (with [Rule 19](../API-RULES.md#rule-19-versioned-mounts))
 **Status**: ✅ Active
 
-**Pattern**: `slothlet.versioning.unregister()` for an unknown logical path or version tag returns `false` without touching the api tree; only a known tag proceeds to `removeApiComponent`.
+**Pattern**: `slothlet.versioning.remove()` for an unknown logical path or version tag returns `false` without touching the api tree; only a known tag proceeds to `removeApiComponent`.
 
 **Source(s)**: `src/lib/builders/api_builder.mjs:2678-2690`
 
@@ -77,4 +77,4 @@ if (userApi.slothlet) {
 
 ---
 
-_Built-in family: B01–B04, under Rule 21. Dead code not catalogued: `delete namespace.hooks` (api_builder.mjs:3139 — targets a never-set plural key; hooks are a v3 placeholder). The `slothlet.scope`/`run` vs `slothlet.context.scope`/`run` duplication and the `api.shutdown()` vs `slothlet.shutdown()` call-graph difference are documented in the built-in surface reference, not as leaf-generation conditions._
+_Built-in family: B01–B04, under Rule 21. Dead code not catalogued: `delete namespace.hooks` (api_builder.mjs:3139 — targets a never-set plural key; hooks are a v3 placeholder). The `api.shutdown()` vs `slothlet.shutdown()` call-graph difference is documented in the built-in surface reference, not as leaf-generation conditions._

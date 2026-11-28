@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/context-live-host-callbacks.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/context-live-host-callbacks.test.vitest.mjs
  *	@Date: 2026-10-09T21:00:00-07:00 (1791604800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T21:00:00-07:00 (1791604800)
+ *	@Last modified time: 2026-11-28T04:31:24-08:00 (1795869084)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -200,7 +200,7 @@ describe.each(PLATFORMS)("Live runtime > a host-registered callback runs as the 
 		const api = await create(ROOT, MANIFEST);
 		const second = await create(SECOND, SECOND_MANIFEST);
 		const settle = await suspendPane(api);
-		const pinnedOnSecond = second.slothlet.lockCaller.caller(body(api));
+		const pinnedOnSecond = second.slothlet.pin.caller(body(api));
 		expect(await pinnedOnSecond()).toBe(null);
 		await settle();
 	});

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/boundary-patch-deferred-helpers.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/boundary-patch-deferred-helpers.test.vitest.mjs
  *	@Date: 2026-10-09T18:00:00-07:00 (1791594000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T18:00:00-07:00 (1791594000)
+ *	@Last modified time: 2026-11-28T04:31:22-08:00 (1795869082)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,17 +25,14 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { enablePromisePatching, disablePromisePatching, nativeThen } from "@cldmv/slothlet/helpers/promise-context";
-import {
-	enableEventTargetPropertyPatching,
-	disableEventTargetPropertyPatching
-} from "@cldmv/slothlet/helpers/eventtarget-property-context";
-import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
-import { enableSchedulerPatching, disableSchedulerPatching } from "@cldmv/slothlet/helpers/scheduler-context";
-import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
-import { enableEventTargetPatching, disableEventTargetPatching } from "@cldmv/slothlet/helpers/eventtarget-context";
+import { enablePromisePatching, disablePromisePatching, nativeThen } from "#helpers/promise-context";
+import { enableEventTargetPropertyPatching, disableEventTargetPropertyPatching } from "#helpers/eventtarget-property-context";
+import { enableObserverPatching, disableObserverPatching } from "#helpers/observer-context";
+import { enableSchedulerPatching, disableSchedulerPatching } from "#helpers/scheduler-context";
+import { setApiCallerPinner } from "#helpers/caller-pinning";
+import { enableEventTargetPatching, disableEventTargetPatching } from "#helpers/eventtarget-context";
 import { EventEmitter } from "node:events";
-import { enableEventEmitterPatching, disableEventEmitterPatching } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { enableEventEmitterPatching, disableEventEmitterPatching } from "#helpers/eventemitter-context";
 
 /**
  * Register a strategy that pins one callback and records the options it was registered with.

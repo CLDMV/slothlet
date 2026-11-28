@@ -115,7 +115,7 @@ Load with fast mode (install `esbuild`):
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: true // enables fast mode
 });
 
@@ -151,10 +151,10 @@ typescript: {
     sourcemap: true,           // Inline source maps. Default: on during a coverage run, otherwise off
     module: "esnext",          // Strict mode only. Module kind for the type check. Default: "esnext"
     strict: true,              // Strict mode only. tsc's strict checking. Default: true
-    compilerOptions: {},       // Strict mode only. Extra tsc compiler options (tsconfig.json form)
+    compiler: {},              // Strict mode only. Extra tsc compiler options (tsconfig.json form)
     types: {                   // Type generation. Strict mode only.
         output: "./types/api.d.ts",   // Required. Path to write the .d.ts file
-        interfaceName: "MyAPI"        // Required. Name of the generated interface
+        name: "MyAPI"                 // Required. Name of the generated interface
     }
 }
 ```
@@ -167,7 +167,7 @@ Accepts any valid ECMAScript target string: `"es2015"`, `"es2017"`, `"es2018"`, 
 
 When `true`, each transpiled module carries an inline source map whose `sources` entry is the absolute path of the `.ts` file. Transpiled modules are loaded from a cache directory (`.slothlet-cache/`), so without a map, stack frames point at the cached copy; with a map and Node's `--enable-source-maps` flag (or any tool that reads inline maps, such as a debugger), they point at the original `.ts` source. Applies to both fast and strict mode.
 
-Default: not set, which means **on during a coverage run and off otherwise**. A coverage run is a vitest run with coverage enabled, or any process started with `NODE_V8_COVERAGE` set (c8, or Node's native coverage). The map is what lets coverage reach the `.ts` source at all: the code that executes is the cached copy, and coverage tools remap it through the inline map. An explicit `true` or `false` always wins. A coverage run that loads TypeScript leaves with `sourcemap: false` emits a one-shot `WARNING_COVERAGE_TS_SOURCEMAP_OFF`, because that coverage can only ever land on the cached copies. The coverage tool also has to include the cache directory — see [Testing a slothlet-composed API](TESTING.md#typescript-leaves).
+Default: not set, which means **on during a coverage run and off otherwise**. A coverage run is a vitest run with coverage enabled, or any process started with `NODE_V8_COVERAGE` set (c8, or Node's native coverage). The map is what lets coverage reach the `.ts` source at all: the code that executes is the cached copy, and coverage tools remap it through the inline map. An explicit `true` or `false` always wins. A coverage run that loads TypeScript leaves with `sourcemap: false` emits a one-shot `WARNING_COVERAGE_TYPESCRIPT_SOURCEMAP_OFF`, because that coverage can only ever land on the cached copies. The coverage tool also has to include the cache directory — see [Testing a slothlet-composed API](TESTING.md#typescript-leaves).
 
 The cache file name hashes the transpiled output, map included, so mapped and unmapped output never share a cache file.
 
@@ -183,21 +183,21 @@ Strict mode only. The module kind tsc checks and emits against: `"esnext"`, `"es
 
 Strict mode only. Sets tsc's `strict` flag (`noImplicitAny`, `strictNullChecks`, and the rest of the strict family). Default: `true`. Set `strict: false` to type-check with the strict family off.
 
-#### `compilerOptions`
+#### `compiler`
 
-Strict mode only. Extra tsc compiler options, written as in the `compilerOptions` block of a `tsconfig.json` (string values such as `module: "commonjs"` are accepted), applied on top of the options above. Relative paths resolve against the current working directory. An unknown option or an invalid value throws `INVALID_CONFIG`.
+Strict mode only. Extra tsc compiler options, written as in the compilerOptions block of a `tsconfig.json` (string values such as `module: "commonjs"` are accepted), applied on top of the options above. Relative paths resolve against the current working directory. An unknown option or an invalid value throws `INVALID_CONFIG`.
 
 ```javascript
 typescript: {
     mode: "strict",
-    types: { output: "./types/api.d.ts", interfaceName: "MyAPI" },
-    compilerOptions: { noUnusedLocals: true, noUnusedParameters: true }
+    types: { output: "./types/api.d.ts", name: "MyAPI" },
+    compiler: { noUnusedLocals: true, noUnusedParameters: true }
 }
 ```
 
 #### Validation
 
-`target` and `module` must be strings, `sourcemap` and `strict` booleans, and `compilerOptions` a plain object. Any other value throws `INVALID_CONFIG` when `slothlet()` is called.
+`target` and `module` must be strings, `sourcemap` and `strict` booleans, and `compiler` a plain object. Any other value throws `INVALID_CONFIG` when `slothlet()` is called.
 
 ---
 
@@ -207,7 +207,7 @@ Fast mode uses esbuild to strip TypeScript syntax and transpile to JavaScript. I
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: {
 		mode: "fast",
 		target: "es2022",
@@ -228,7 +228,7 @@ Strict mode uses the TypeScript compiler (`tsc`) to transpile and type-check you
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: {
 		mode: "strict",
 		target: "es2020"
@@ -242,16 +242,16 @@ const api = await slothlet({
 
 Strict mode is slower than fast mode due to full compilation. It is well-suited for production validation, CI checks, or anywhere you want to catch type errors at startup.
 
-How strict the check is can be tuned with [`strict`](#strict), [`module`](#module), and [`compilerOptions`](#compileroptions):
+How strict the check is can be tuned with [`strict`](#strict), [`module`](#module), and [`compiler`](#compiler):
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: {
 		mode: "strict",
 		strict: true,
-		compilerOptions: { noUnusedLocals: true },
-		types: { output: "./types/api.d.ts", interfaceName: "MyAPI" }
+		compiler: { noUnusedLocals: true },
+		types: { output: "./types/api.d.ts", name: "MyAPI" }
 	}
 });
 ```
@@ -262,16 +262,16 @@ const api = await slothlet({
 
 Strict mode can generate a `.d.ts` declaration file from the loaded API structure. This gives consumers of your API full type safety and IDE autocomplete without any manual type writing.
 
-Both `types.output` and `types.interfaceName` are required when `types` is specified:
+Both `types.output` and `types.name` are required when `types` is specified:
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	typescript: {
 		mode: "strict",
 		types: {
 			output: "./types/api.d.ts",
-			interfaceName: "MyAPI"
+			name: "MyAPI"
 		}
 	}
 });
@@ -300,6 +300,11 @@ import type { SlothletAPI } from "@cldmv/slothlet";
 
 export interface MyAPI {
 	math: {
+		/**
+		 * Add two numbers.
+		 * @param a - First addend.
+		 * @returns The sum.
+		 */
 		add: typeof import("../api/math.js")["add"];
 	};
 	logger: typeof import("../api/logger.mjs")["default"] & {
@@ -327,24 +332,26 @@ declare module "@cldmv/slothlet/runtime" {
 
 > **Every leaf is typed by its own source.** Each member is `typeof import(...)` of the export slothlet actually placed there, so TypeScript reads the leaf's own types — JSDoc in `.mjs` / `.cjs`, annotations in `.ts` / `.mts` (including types it imports, such as `node:events`), frozen constants, object leaves typed through an interface. The origin comes from composition itself (slothlet records which export produced each api node), so flattened, hoisted, and merged members are typed correctly too. Specifiers are relative to the generated file and use each leaf's runtime extension (`.ts` → `.js`, `.mts` → `.mjs`), which resolves under both `NodeNext` and `Bundler`. Because JavaScript leaves are referenced directly, the program that includes the declaration needs `allowJs: true`.
 
-### Runtime Imports (`self`, `context`, `instanceID`)
+> **Each member carries its leaf's JSDoc.** With `docs` on (the default), the generator copies the JSDoc above each export onto the generated member: the description, `@param`, `@returns`, `@deprecated` and `@example`. Hovering `api.math.add` or `self.math.add` then shows the leaf's own documentation, and a `@deprecated` export is struck through at its call sites. `{type}` expressions are dropped from `@param` / `@returns`, since the member's type comes from the export itself, and other tags (`@type`, `@internal`, …) are left out. The JSDoc is found for top-level declarations (`export function`, `export const`, `export default`, `export class`), members of an exported object literal, CommonJS `module.exports` / `exports.name`, and a file-level binding that an export refers to (`module.exports = { shout }`, `export default greet`, `export { add as plus }`). Members typed as a whole module or export (`text: typeof import("../api/text.cjs")`) need nothing copied: TypeScript reads the docs of their members from the source. Pass `docs: false` to leave the comments out.
 
-All three named exports of `@cldmv/slothlet/runtime` — `self`, `context`, and `instanceID` — work the same way from TypeScript modules as they do from `.mjs` modules. Slothlet writes the transpiled `.ts` output to a project-local cache file (see [Limitations](#limitations)) so Node's resolver can anchor bare-specifier imports normally; relative imports resolve too — to plain `.mjs` / `.cjs` / `.js` files and to other `.ts` / `.mts` modules, which are transpiled and linked automatically. Those relative helpers are per instance exactly as they are for `.mjs` leaves — see [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance). Nothing about TypeScript changes the runtime API surface.
+### Runtime Imports (`self`, `context`, `instance`)
+
+All three named exports of `@cldmv/slothlet/runtime` — `self`, `context`, and `instance` — work the same way from TypeScript modules as they do from `.mjs` modules. Slothlet writes the transpiled `.ts` output to a project-local cache file (see [Limitations](#limitations)) so Node's resolver can anchor bare-specifier imports normally; relative imports resolve too — to plain `.mjs` / `.cjs` / `.js` files and to other `.ts` / `.mts` modules, which are transpiled and linked automatically. Those relative helpers are per instance exactly as they are for `.mjs` leaves — see [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance). Nothing about TypeScript changes the runtime API surface.
 
 ```typescript
 // api/utils.ts
-import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+import { self, context, instance } from "@cldmv/slothlet/runtime";
 
 export function fullReport(name: string) {
 	const upper = self.string.uppercase(name); // call sibling modules
 	const requestId = (context as { requestId?: string }).requestId ?? "anon";
-	return `[${instanceID}/${requestId}] ${upper}: ${self.math.add(1, 1)}`;
+	return `[${instance.id}/${requestId}] ${upper}: ${self.math.add(1, 1)}`;
 }
 ```
 
-`self` is declared as `SlothletSelf`, an empty class exported by `@cldmv/slothlet/runtime`. The generated `.d.ts` extends that class with the generated interface (and with `SlothletAPI`, since `self.slothlet.*` is the same framework surface as `api.slothlet.*`), which gives `self` full autocomplete and type-checking against your API shape in every leaf that imports it — `.ts`, `.mts`, and JSDoc-checked `.mjs` / `.cjs` alike. The same anchor types the consumer side: `slothlet()` resolves to `SlothletAPI & T`, where `T` defaults to `SlothletSelf`, so `const api = await slothlet({ base: "./api" })` is typed with no annotation. A program that loads more than one api passes its interface explicitly (`slothlet<OtherApi>({ base: "./other" })`) and generates the other declarations with `augmentRuntime: false` (`--no-augment-runtime`). `context` and `instanceID` are typed by the runtime module's own `.d.ts` (no extra config needed).
+`self` is declared as `SlothletSelf`, an empty class exported by `@cldmv/slothlet/runtime`. The generated `.d.ts` extends that class with the generated interface (and with `SlothletAPI`, since `self.slothlet.*` is the same framework surface as `api.slothlet.*`), which gives `self` full autocomplete and type-checking against your API shape in every leaf that imports it — `.ts`, `.mts`, and JSDoc-checked `.mjs` / `.cjs` alike. The same anchor types the consumer side: `slothlet()` resolves to `SlothletAPI & T`, where `T` defaults to `SlothletSelf`, so `const api = await slothlet({ base: "./api" })` is typed with no annotation. A program that loads more than one api passes its interface explicitly (`slothlet<OtherApi>({ base: "./other" })`) and generates the other declarations with `augment: false` (`--no-augment`). When the root file's default export is a function, the generated interface carries that function's call signature (its parameters and result, taken from its own type), so `self(…)` in a leaf and `api(…)` on the host type as calls of the root; for an object root neither is callable. `context` and `instanceID` are typed by the runtime module's own `.d.ts` (no extra config needed).
 
-See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for what `context` and `instanceID` carry and how they propagate across calls.
+See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for what `context` and `instance` carry and how they propagate across calls.
 
 ### Reuse on Subsequent Loads
 
@@ -359,7 +366,7 @@ import fs from "fs";
 import path from "path";
 
 const outputPath = "./types/api.d.ts";
-const api = await slothlet({ dir: "./api", typescript: { mode: "strict", types: { output: outputPath, interfaceName: "MyAPI" } } });
+const api = await slothlet({ base: "./api", typescript: { mode: "strict", types: { output: outputPath, name: "MyAPI" } } });
 
 // ...use api...
 
@@ -383,10 +390,10 @@ Strict mode generates a `.d.ts` automatically as a side-effect of the type-check
 npx slothlet typegen ./api ./types/api.d.ts MyApi
 
 # Long flags
-npx slothlet typegen --dir ./api --output ./types/api.d.ts --interface-name MyApi
+npx slothlet typegen --base ./api --output ./types/api.d.ts --name MyApi
 
 # Short flags
-npx slothlet typegen -d ./api -o ./types/api.d.ts -n MyApi
+npx slothlet typegen -b ./api -o ./types/api.d.ts -n MyApi
 
 # package.json fallback (no args)
 npx slothlet typegen
@@ -403,9 +410,9 @@ Resolution order per option: **flag → positional → `package.json.slothlet.ty
 	},
 	"slothlet": {
 		"typegen": {
-			"dir": "./api",
+			"base": "./api",
 			"output": "./types/api.d.ts",
-			"interfaceName": "MyApi"
+			"name": "MyApi"
 		}
 	}
 }
@@ -416,21 +423,21 @@ Resolution order per option: **flag → positional → `package.json.slothlet.ty
 Same logic, no shell:
 
 ```js
-import { generateTypes } from "@cldmv/slothlet/typegen";
+import { generate } from "@cldmv/slothlet/typegen";
 
-const { filePath, content } = await generateTypes({
-	dir: "./api",
+const { filePath, content } = await generate({
+	base: "./api",
 	output: "./types/api.d.ts",
-	interfaceName: "MyApi"
+	name: "MyApi"
 });
 console.log(`Wrote ${filePath} (${content.length} bytes)`);
 ```
 
-`generateTypes()` loads the API in eager + fast TypeScript mode internally, walks the composed structure, references each node's originating export (see [Example Generated Output](#example-generated-output)), writes the `.d.ts`, and shuts the loaded instance down before returning. It does not need the `typescript` package. If `dir`, `output`, or `interfaceName` is missing or empty, it throws `SlothletError("INVALID_CONFIG")` — the same error class everything else uses.
+`generate()` loads the API in eager + fast TypeScript mode internally, walks the composed structure, references each node's originating export (see [Example Generated Output](#example-generated-output)), writes the `.d.ts`, and shuts the loaded instance down before returning. It does not need the `typescript` package. If `base`, `output`, or `name` is missing or empty, it throws `SlothletError("INVALID_CONFIG")` — the same error class everything else uses. A key it does not take (`dir`, `interfaceName`, …) throws `INVALID_CONFIG_UNKNOWN_KEY`. Its options are `base`, `output`, `name`, `augment` (default `true`), `docs` (default `true`: copy each leaf's JSDoc onto its generated member, see the note under [Example Generated Output](#example-generated-output)) and `typescript`. The `package.json` `slothlet.typegen` fallback takes the same names.
 
 ### What the output looks like
 
-The generated file matches what strict mode emits — see [Example Generated Output](#example-generated-output) above. Concretely: a top-level `interface` whose members are `typeof import(...)` references to your leaves, and a `declare module "@cldmv/slothlet/runtime"` block that extends `SlothletSelf` (omitted with `augmentRuntime: false`).
+The generated file matches what strict mode emits — see [Example Generated Output](#example-generated-output) above. Concretely: a top-level `interface` whose members are `typeof import(...)` references to your leaves, and a `declare module "@cldmv/slothlet/runtime"` block that extends `SlothletSelf` (omitted with `augment: false`).
 
 ### Editor / build wiring tips
 
@@ -499,11 +506,11 @@ TypeScript compilation failed with 2 error(s) in api/math.ts:
 
 ### Missing required `types` fields
 
-If `mode: "strict"` is set with a `types` object but `output` or `interfaceName` is missing:
+If `mode: "strict"` is set with a `types` object but `output` or `name` is missing:
 
 ```text
 SlothletError: TypeScript strict mode requires 'types.output' to be configured in your typescript config.
-SlothletError: TypeScript strict mode requires 'types.interfaceName' to be configured in your typescript config.
+SlothletError: TypeScript strict mode requires 'types.name' to be configured in your typescript config.
 ```
 
 ---

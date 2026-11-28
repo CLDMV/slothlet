@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/handlers/api-cache-manager-branches.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/handlers/api-cache-manager-branches.test.vitest.mjs
  *	@Date: 2026-02-26T17:01:34-08:00 (1772154094)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-28T04:31:45-08:00 (1795869105)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -180,7 +180,7 @@ describe("ApiCacheManager.set — input validation throws SlothletError (lines 1
 		expect(() => cm.set("valid-mod", null)).toThrow(SlothletError);
 	});
 
-	it("throws CACHE_MODULEID_MISMATCH when entry.moduleID differs from key (line 128)", () => {
+	it("throws CACHE_MODULE_ID_MISMATCH when entry.moduleID differs from key (line 128)", () => {
 		const cm = new ApiCacheManager(makeMock());
 
 		const entry = makeEntry("different-mod"); // entry.moduleID = "different-mod"
@@ -189,10 +189,10 @@ describe("ApiCacheManager.set — input validation throws SlothletError (lines 1
 		expect(() => cm.set("correct-mod", entry)).toThrow(SlothletError);
 	});
 
-	it("CACHE_MODULEID_MISMATCH error message contains the mismatch info (line 128)", () => {
+	it("CACHE_MODULE_ID_MISMATCH error message contains the mismatch info (line 128)", () => {
 		const cm = new ApiCacheManager(makeMock());
 		const entry = makeEntry("owner-mod");
 
-		expect(() => cm.set("other-key", entry)).toThrow(/CACHE_MODULEID_MISMATCH/);
+		expect(() => cm.set("other-key", entry)).toThrow(/CACHE_MODULE_ID_MISMATCH/);
 	});
 });

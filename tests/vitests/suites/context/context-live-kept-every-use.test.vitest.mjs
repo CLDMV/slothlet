@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/context-live-kept-every-use.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/context-live-kept-every-use.test.vitest.mjs
  *	@Date: 2026-10-25T09:27:44-07:00 (1792945664)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T11:38:54-07:00 (1792953534)
+ *	@Last modified time: 2026-11-28T04:31:25-08:00 (1795869085)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,11 +59,11 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		 * @returns {Promise<object>} What the uses gave.
 		 */
 		async function useKept(name, runtime) {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { defaultPolicy: "allow" } });
-			if (name === "ns") await api.slothlet.api.add("mounts.ns", path.join(FIXTURE, "ns_values"), { moduleID: "values" });
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { policy: "allow" } });
+			if (name === "ns") await api.slothlet.api.add("mounts.ns", path.join(FIXTURE, "ns_values"), { id: "values" });
 			await api.probe.keep(name);
 			// Made callable after it was kept (#533).
-			if (name === "ns") await api.slothlet.api.add("mounts.ns", path.join(FIXTURE, "ns_callable"), { moduleID: "callable" });
+			if (name === "ns") await api.slothlet.api.add("mounts.ns", path.join(FIXTURE, "ns_callable"), { id: "callable" });
 			await api.probe.useLater();
 			const outcome = await waitOutcome(api);
 			await api.shutdown();

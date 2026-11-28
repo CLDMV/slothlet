@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/proxies/proxy-type-properties.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/proxies/proxy-type-properties.test.vitest.mjs
  *	@Date: 2026-02-26T06:59:00-08:00 (1772117940)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-28T04:32:56-08:00 (1795869176)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  *
  * @description
  * Tests the uncovered branches in unified-wrapper.mjs including:
- * - `__type` returning "number", "string", "boolean" for primitive default exports
+ * - a file's primitive default export at the api root reading as its value ("number", "string", "boolean")
  * - `Symbol.toStringTag` returning "Function" or "Object" based on impl type
  * - `.name` property derived from the API path
  * - `.length` property reflecting actual function arity
@@ -32,9 +32,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
 
-// ─── Primitive __type tests ────────────────────────────────────────────────
+// ─── Primitive default exports at the root ─────────────────────────────────
 
-describe.each(getMatrixConfigs())("Proxy __type Primitives > Config: '$name'", ({ config }) => {
+describe.each(getMatrixConfigs())("Proxy primitive defaults at the root > Config: '$name'", ({ config }) => {
 	let api;
 
 	beforeEach(async () => {
@@ -51,26 +51,22 @@ describe.each(getMatrixConfigs())("Proxy __type Primitives > Config: '$name'", (
 		}
 	});
 
-	it("should return __type 'number' for a numeric default export", async () => {
-		// In lazy mode, materialize first
-		if (config.mode === "lazy") {
-			await api.numval._materialize();
-		}
-		expect(api.numval.__type).toBe("number");
+	it("should read a numeric default export at the root as its value", async () => {
+		expect(api.numval).toBe(42);
+		expect(await api.numval).toBe(42);
+		expect(api.numval).toBe(42);
 	});
 
-	it("should return __type 'string' for a string default export", async () => {
-		if (config.mode === "lazy") {
-			await api.strval._materialize();
-		}
-		expect(api.strval.__type).toBe("string");
+	it("should read a string default export at the root as its value", async () => {
+		expect(api.strval).toBe("hello");
+		expect(await api.strval).toBe("hello");
+		expect(api.strval).toBe("hello");
 	});
 
-	it("should return __type 'boolean' for a boolean default export", async () => {
-		if (config.mode === "lazy") {
-			await api.boolval._materialize();
-		}
-		expect(api.boolval.__type).toBe("boolean");
+	it("should read a boolean default export at the root as its value", async () => {
+		expect(api.boolval).toBe(true);
+		expect(await api.boolval).toBe(true);
+		expect(api.boolval).toBe(true);
 	});
 });
 
@@ -188,33 +184,24 @@ describe.each(getMatrixConfigs())("Proxy set trap blocked keys > Config: '$name'
 		}
 	});
 
-	it("should silently absorb writes to __mode", async () => {
+	it("the node() report is frozen: a write to it throws and changes nothing", async () => {
 		await materialize(api, "math");
-		const modeBefore = api.math.__mode;
-		api.math.__mode = "totally-fake-mode";
-		const modeAfter = api.math.__mode;
-		expect(modeAfter).toBe(modeBefore);
+		const report = api.slothlet.node(api.math);
+		expect(Object.isFrozen(report)).toBe(true);
+		expect(Object.isFrozen(report.path)).toBe(true);
+		expect(() => {
+			report.mode = "totally-fake-mode";
+		}).toThrow(TypeError);
+		expect(() => {
+			report.path.push("fake");
+		}).toThrow(TypeError);
+		expect(api.slothlet.node(api.math)).toEqual(report);
 	});
 
-	it("should silently absorb writes to __type", async () => {
+	it("__mode / __type on a node are plain consumer names, not framework reports", async () => {
 		await materialize(api, "math");
-		const typeBefore = api.math.__type;
-		api.math.__type = "totally-fake-type";
-		expect(api.math.__type).toBe(typeBefore);
-	});
-
-	it("should silently absorb writes to __apiPath", async () => {
-		await materialize(api, "math");
-		const pathBefore = api.math.__apiPath;
-		api.math.__apiPath = "fake.path";
-		expect(api.math.__apiPath).toBe(pathBefore);
-	});
-
-	it("should silently absorb writes to __isCallable", async () => {
-		await materialize(api, "math");
-		const callableBefore = api.math.__isCallable;
-		api.math.__isCallable = !callableBefore;
-		expect(api.math.__isCallable).toBe(callableBefore);
+		expect(api.math.__mode).toBeUndefined();
+		expect(api.math.__type).toBeUndefined();
 	});
 
 	it("should NOT absorb writes to regular user properties", async () => {
@@ -243,25 +230,13 @@ describe.each(getMatrixConfigs())("Proxy delete trap blocked keys > Config: '$na
 		}
 	});
 
-	it("should silently absorb deletes of __type and preserve the value", async () => {
+	it("a delete on the node() report throws and the next report is unchanged", async () => {
 		await materialize(api, "math");
-		const typeBefore = api.math.__type;
-		delete api.math.__type;
-		expect(api.math.__type).toBe(typeBefore);
-	});
-
-	it("should silently absorb deletes of __mode and preserve the value", async () => {
-		await materialize(api, "math");
-		const modeBefore = api.math.__mode;
-		delete api.math.__mode;
-		expect(api.math.__mode).toBe(modeBefore);
-	});
-
-	it("should silently absorb deletes of __apiPath and preserve the value", async () => {
-		await materialize(api, "math");
-		const pathBefore = api.math.__apiPath;
-		delete api.math.__apiPath;
-		expect(api.math.__apiPath).toBe(pathBefore);
+		const report = api.slothlet.node(api.math);
+		expect(() => {
+			delete report.type;
+		}).toThrow(TypeError);
+		expect(api.slothlet.node(api.math).type).toBe(report.type);
 	});
 
 	it("should silently absorb deletes of ____slothletInternal (critical internal)", async () => {
@@ -271,7 +246,7 @@ describe.each(getMatrixConfigs())("Proxy delete trap blocked keys > Config: '$na
 			delete api.math.____slothletInternal;
 		}).not.toThrow();
 		// The wrapper is still functional after the no-op delete
-		expect(api.math.__type).toBeDefined();
+		expect(api.slothlet.node(api.math).type).toBeDefined();
 	});
 });
 
@@ -305,7 +280,7 @@ describe("Proxy hasTrap — impl function property check (unified-wrapper.mjs li
 	});
 });
 
-// ─── getOwnPropertyDescriptorTrap line 2772: lazy _materialize trigger ────
+// ─── getOwnPropertyDescriptorTrap line 2772: lazy ___materialize trigger ────
 
 describe("Proxy getOwnPropertyDescriptorTrap — lazy materialize trigger (unified-wrapper.mjs line 2772)", () => {
 	let api;
@@ -321,19 +296,19 @@ describe("Proxy getOwnPropertyDescriptorTrap — lazy materialize trigger (unifi
 		}
 	});
 
-	it("Object.getOwnPropertyDescriptor on a lazy wrapper triggers _materialize (line 2772)", async () => {
+	it("Object.getOwnPropertyDescriptor on a lazy wrapper triggers ___materialize (line 2772)", async () => {
 		// In lazy mode, api.math is unmaterialized. Calling getOwnPropertyDescriptor
 		// invokes getOwnPropertyDescriptorTrap, which checks materialized/inFlight at
-		// line 2768 and calls wrapper._materialize() at line 2772.
+		// line 2768 and calls wrapper.___materialize() at line 2772.
 		const desc = Object.getOwnPropertyDescriptor(api.math, "add");
-		// After _materialize fires, the descriptor should now be available
+		// After ___materialize fires, the descriptor should now be available
 		expect(desc).toBeDefined();
 	});
 
 	it("getOwnPropertyDescriptor on an already-materialized lazy wrapper does not double-materialize", async () => {
 		// Force eager materialization first
-		await api.math._materialize();
-		// Now calling getOwnPropertyDescriptor should NOT trigger _materialize again
+		await api.math.___materialize();
+		// Now calling getOwnPropertyDescriptor should NOT trigger ___materialize again
 		const desc = Object.getOwnPropertyDescriptor(api.math, "add");
 		expect(desc).toBeDefined();
 	});

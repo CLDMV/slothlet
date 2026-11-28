@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/modes/underscore-export-parity.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/modes/underscore-export-parity.test.vitest.mjs
  *	@Date: 2026-08-03T11:44:23-07:00 (1785782663)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:36-07:00 (1791091716)
+ *	@Last modified time: 2026-11-28T04:32:08-08:00 (1795869128)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -119,12 +119,12 @@ describe("Modes > underscore-prefixed exports compose in both modes", () => {
 				await instance.mod.plain;
 				const mod = await instance.mod;
 				// Nothing framework-reserved is an api member, so none of these may be enumerated.
-				for (const reserved of ["__childFilePaths", "__impl", "_materialize"]) {
+				for (const reserved of ["____childFilePaths", "____impl", "___materialize"]) {
 					expect(Object.keys(mod), `${mode} keys`).not.toContain(reserved);
 				}
 				// Metadata and private state must also be invisible to `in` — withholding
-				// `__childFilePaths` from ownKeys while `in` still answered true was the asymmetry here.
-				for (const hidden of ["__childFilePaths", "__impl"]) {
+				// `____childFilePaths` from ownKeys while `in` still answered true was the asymmetry here.
+				for (const hidden of ["____childFilePaths", "____impl"]) {
 					expect(hidden in mod, `${mode} in(${hidden})`).toBe(false);
 				}
 			} finally {
@@ -134,7 +134,7 @@ describe("Modes > underscore-prefixed exports compose in both modes", () => {
 	});
 
 	it("does not serve impl bookkeeping to a direct read or a descriptor", async () => {
-		// Hiding a name from `ownKeys` is not the same as withholding it. `__childFilePaths` is a lazy
+		// Hiding a name from `ownKeys` is not the same as withholding it. `____childFilePaths` is a lazy
 		// impl's map of child name -> ABSOLUTE host path; it is not in `INTERNAL_KEYS`, so getTrap's
 		// reserved-name filter used to miss it, the read fell through to the impl handing those paths to
 		// any caller, and a descriptor came back for a key `ownKeys` and `in` both denied. Eager, having
@@ -144,7 +144,7 @@ describe("Modes > underscore-prefixed exports compose in both modes", () => {
 			try {
 				await instance.mod.plain;
 				const mod = await instance.mod;
-				for (const meta of ["__childFilePaths", "__childFilePathsPreMaterialize"]) {
+				for (const meta of ["____childFilePaths", "____childFilePathsPreMaterialize"]) {
 					expect(mod[meta], `${mode} read(${meta})`).toBeUndefined();
 					expect(Object.getOwnPropertyDescriptor(mod, meta), `${mode} descriptor(${meta})`).toBeUndefined();
 				}
@@ -162,15 +162,15 @@ describe("Modes > underscore-prefixed exports compose in both modes", () => {
 			try {
 				await instance.mod.plain;
 				const mod = await instance.mod;
-				expect(typeof mod.__filePath, `${mode} __filePath`).toBe("string");
-				expect(typeof mod.__sourceFolder, `${mode} __sourceFolder`).toBe("string");
-				expect(typeof mod.__moduleID, `${mode} __moduleID`).toBe("string");
-				expect(mod.__apiPath, `${mode} __apiPath`).toBe("mod");
-				expect(mod.__mode, `${mode} __mode`).toBe(mode);
-				expect(typeof mod._materialize, `${mode} _materialize`).toBe("function");
+				expect(typeof instance.slothlet.node(mod).file, `${mode} ____filePath`).toBe("string");
+				expect(typeof instance.slothlet.node(mod).folder, `${mode} __sourceFolder`).toBe("string");
+				expect(typeof instance.slothlet.node(mod).module, `${mode} __moduleID`).toBe("string");
+				expect(instance.slothlet.node(mod).path.join("."), `${mode} __apiPath`).toBe("mod");
+				expect(instance.slothlet.node(mod).mode, `${mode} __mode`).toBe(mode);
+				expect(typeof mod.___materialize, `${mode} ___materialize`).toBe("function");
 				// Private state stays private regardless of how the filter is widened.
 				expect(mod.____slothletInternal, `${mode} ____slothletInternal`).toBeUndefined();
-				expect(mod.__impl, `${mode} __impl`).toBeUndefined();
+				expect(mod.____impl, `${mode} ____impl`).toBeUndefined();
 			} finally {
 				await instance.shutdown();
 			}
@@ -181,15 +181,15 @@ describe("Modes > underscore-prefixed exports compose in both modes", () => {
 		for (const mode of ["eager", "lazy"]) {
 			const instance = await slothlet({ mode, base: BASE });
 			try {
-				// `clash.mjs` exports `_materialize` and `__impl`. Freeing ordinary underscore exports must
-				// not free these: `_materialize` is how lazy mode drives materialization, so a module that
+				// `clash.mjs` exports `___materialize` and `____impl`. Freeing ordinary underscore exports must
+				// not free these: `___materialize` is how lazy mode drives materialization, so a module that
 				// could replace it would break loading outright.
 				const clash = mode === "lazy" ? await instance.clash : instance.clash;
-				expect(typeof clash._materialize, `${mode} _materialize stays the framework's`).toBe("function");
+				expect(typeof clash.___materialize, `${mode} ___materialize stays the framework's`).toBe("function");
 				expect(await clash.safe, `${mode} ordinary member unaffected`).toBe("safe");
 				// And the module still materializes — the reserved name is doing its real job. A rejection
 				// fails the await; the surface staying readable afterwards is the meaningful outcome.
-				await clash._materialize();
+				await clash.___materialize();
 				expect(await clash.safe, `${mode} member readable after explicit materialize`).toBe("safe");
 			} finally {
 				await instance.shutdown();
@@ -223,7 +223,7 @@ describe("Modes > underscore-prefixed exports compose in both modes", () => {
 
 	it("keeps framework-named module exports out of serialization", async () => {
 		// `_extractFullImpl` feeds toJSON. Its filter must be the same exact reserved set every other
-		// trap uses: `clash` exports `_materialize` / `__impl` as "HIJACKED", which `ownKeys` and `get`
+		// trap uses: `clash` exports `___materialize` / `____impl` as "HIJACKED", which `ownKeys` and `get`
 		// both withhold — serialization disclosing them would be a trap-by-trap disagreement.
 		for (const mode of ["eager", "lazy"]) {
 			const instance = await slothlet({ mode, base: BASE });
@@ -239,14 +239,14 @@ describe("Modes > underscore-prefixed exports compose in both modes", () => {
 	});
 
 	it("still hides framework metadata from the composed surface", async () => {
-		// The counterpart the fix must not undo: reserved names stay off the api. `__childFilePaths`
+		// The counterpart the fix must not undo: reserved names stay off the api. `____childFilePaths`
 		// rides on a lazy impl and is bookkeeping, never a member.
 		api = await slothlet({ mode: "lazy", base: BASE });
 
 		await api.mod.plain;
 		const keys = Object.keys(await api.mod);
-		expect(keys).not.toContain("__childFilePaths");
+		expect(keys).not.toContain("____childFilePaths");
 		expect(keys).not.toContain("____slothletInternal");
-		expect(keys).not.toContain("_materialize");
+		expect(keys).not.toContain("___materialize");
 	});
 });

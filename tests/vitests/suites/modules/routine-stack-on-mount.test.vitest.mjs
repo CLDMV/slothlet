@@ -1,20 +1,20 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/modules/routine-stack-on-mount.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/modules/routine-stack-on-mount.test.vitest.mjs
  *	@Date: 2026-09-14T15:15:27-07:00 (1789424127)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:36-07:00 (1791091716)
+ *	@Last modified time: 2026-11-28T04:32:09-08:00 (1795869129)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview A module mounted via api.modules.addModule()/addModules() must get its configured
+ * @fileoverview A module mounted via api.modules.add()/modules.add() must get its configured
  * routines' stacked callables installed (#362).
  *
  * @description
@@ -49,24 +49,26 @@ afterEach(async () => {
 	}
 });
 
-describe("routine stacks are installed for modules mounted via addModule()/addModules() (#362)", () => {
-	it("addModule() installs the configured routine's stacked callable at the mounted leaf, and it invokes the contributor", async () => {
+describe("routine stacks are installed for modules mounted via modules.add()/modules.add() (#362)", () => {
+	it("modules.add() installs the configured routine's stacked callable at the mounted leaf, and it invokes the contributor", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true,
-			routines: [{ name: "^ext.widget.initialize", mode: "manual" }],
-			api: { collision: { initial: "merge", api: "merge" } }
+			routines: {
+				entries: [{ name: "^ext.widget.initialize", mode: "manual" }]
+			},
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 
-		const res = await api.slothlet.api.modules.addModule("@local/routine-widget", { discover: { scanRoot: FIX_ROUTINE_MODULE } });
-		expect(res.mountPath).toBe("ext.widget");
+		const res = await api.slothlet.api.modules.add("@local/routine-widget", { discover: { root: FIX_ROUTINE_MODULE } });
+		expect(res.mount).toEqual(["ext", "widget"]);
 
 		// The mount path must have installed the routine's stacked callable (fails pre-#362-Fix-B:
-		// the leaf stays the bare mounted function, __slothletRoutineStack undefined).
-		expect(api.ext.widget.initialize.__slothletRoutineStack).toBe(true);
-		expect(api.ext.widget.initialize.__slothletRoutineName).toBe("^ext.widget.initialize");
+		// the leaf stays the bare mounted function, ____slothletRoutineStack undefined).
+		expect(api.ext.widget.initialize.____slothletRoutineStack).toBe(true);
+		expect(api.ext.widget.initialize.____slothletRoutineName).toBe("^ext.widget.initialize");
 
 		// And it actually runs the mounted module's contributor, forwarding args.
 		globalThis.__slothletRoutineModuleLog = [];
@@ -75,20 +77,22 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 		expect(globalThis.__slothletRoutineModuleLog).toEqual([{ from: "routine-widget", args: ["alpha", 7] }]);
 	});
 
-	it("addModules() installs the stacked callable the same way", async () => {
+	it("modules.add() installs the stacked callable the same way", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
 			silent: true,
-			routines: [{ name: "^ext.widget.initialize", mode: "manual" }],
-			api: { collision: { initial: "merge", api: "merge" } }
+			routines: {
+				entries: [{ name: "^ext.widget.initialize", mode: "manual" }]
+			},
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 
-		const found = await api.slothlet.api.modules.discover({ scanRoot: FIX_ROUTINE_MODULE });
-		await api.slothlet.api.modules.addModules(found);
+		const found = await api.slothlet.api.modules.discover({ root: FIX_ROUTINE_MODULE });
+		await api.slothlet.api.modules.add(found);
 
-		expect(api.ext.widget.initialize.__slothletRoutineStack).toBe(true);
+		expect(api.ext.widget.initialize.____slothletRoutineStack).toBe(true);
 
 		globalThis.__slothletRoutineModuleLog = [];
 		const out = await api.ext.widget.initialize("beta");

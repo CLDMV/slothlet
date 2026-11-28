@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/hooks/hook-manager-coverage-gaps.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/hooks/hook-manager-coverage-gaps.test.vitest.mjs
  *	@Date: 2026-03-03T16:00:00-08:00 (1772582400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-28T04:31:53-08:00 (1795869113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -62,7 +62,7 @@ afterEach(async () => {
 function getSlInstance(apiProxy, prop = "math") {
 	const wrapper = resolveWrapper(apiProxy[prop]);
 	if (!wrapper) throw new Error(`resolveWrapper(api.${prop}) returned null`);
-	return wrapper.slothlet;
+	return wrapper.____slothlet;
 }
 
 // ─── list({ id, enabled }) — mismatched enabled (line 321 third branch) ──────
@@ -74,7 +74,7 @@ describe("HookManager.list — filter.enabled mismatch with hook.enabled (line 3
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		// Register a hook — it is enabled by default
@@ -101,7 +101,7 @@ describe("HookManager.list — filter.enabled mismatch with hook.enabled (line 3
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		const hookId = api.slothlet.hook.on("**:before", () => {});
@@ -128,14 +128,14 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		const sl = getSlInstance(api);
 
 		// Capture what errorType the error hook receives
 		let capturedErrorType;
-		api.slothlet.hook.on("**:error", ({ errorType }) => {
+		api.slothlet.hook.on("**:error", ({ class: errorType }) => {
 			capturedErrorType = errorType;
 		});
 
@@ -146,7 +146,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 		sl.handlers.hookManager.executeErrorHooks(
 			"math.add",
 			bareObj,
-			{ type: "before", hookTag: "test-coverage", hookId: null, timestamp: new Date(), stack: "" },
+			{ type: "before", hook: "test-coverage", at: 0, stack: "" },
 			[],
 			api,
 			{}
@@ -161,13 +161,13 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		const sl = getSlInstance(api);
 
 		let capturedErrorType;
-		api.slothlet.hook.on("**:error", ({ errorType }) => {
+		api.slothlet.hook.on("**:error", ({ class: errorType }) => {
 			capturedErrorType = errorType;
 		});
 
@@ -175,7 +175,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 		sl.handlers.hookManager.executeErrorHooks(
 			"math.add",
 			new TypeError("test"),
-			{ type: "before", hookTag: "test-coverage", hookId: null, timestamp: new Date(), stack: "" },
+			{ type: "before", hook: "test-coverage", at: 0, stack: "" },
 			[],
 			api,
 			{}
@@ -194,7 +194,7 @@ describe("HookManager.#removeHook — cleanup: patternHooks becomes empty after 
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		// Register a single hook with a completely unique pattern so this bucket has exactly 1 entry.
@@ -222,7 +222,7 @@ describe("HookManager.#removeHook — patternHooks still has items after removal
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		// Register TWO hooks with the exact same type + pattern (same bucket).

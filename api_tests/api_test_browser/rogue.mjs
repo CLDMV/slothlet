@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_browser/rogue.mjs
+ *	@Filename: api_tests/api_test_browser/rogue.mjs
  *	@Date: 2026-07-29T12:00:00-07:00 (1785351600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:31-07:00 (1791090871)
+ *	@Last modified time: 2026-11-28T04:27:32-08:00 (1795868852)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

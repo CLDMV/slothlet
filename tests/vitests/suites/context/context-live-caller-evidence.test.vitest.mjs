@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/context-live-caller-evidence.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/context-live-caller-evidence.test.vitest.mjs
  *	@Date: 2026-10-17T00:00:00-07:00 (1792220400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:34-07:00 (1793485474)
+ *	@Last modified time: 2026-11-28T04:31:24-08:00 (1795869084)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@ const API = path.join(ROOT, "api");
 const PROBE = path.join(ROOT, "native-probe.mjs");
 
 const RULES = {
-	defaultPolicy: "allow",
+	policy: "allow",
 	rules: ["rogue", "adminExt", "relay", "rcjs", "relayPkg"].map((module) => ({ caller: `${module}.**`, target: "c.**", effect: "deny" }))
 };
 
@@ -94,27 +94,29 @@ beforeAll(() => {
 		"};"
 	]);
 	write("api/__lib/call.mjs", ["export function callWith(fn) {", "\treturn fn();", "}"]);
-	write("api/admin/helper.mjs", [
+	// admin's helper, a lib file outside the base.
+	write("lib/admin-helper.mjs", [
 		'import { self } from "@cldmv/slothlet/runtime";',
 		"export function probeC() {",
 		"\treturn self.c.probe();",
 		"}"
 	]);
-	// A module the rules deny, which imports admin's helper.
+	// A module the rules deny, which imports admin's helper and reaches admin's leaf functions through self.
 	write("api/rogue/rogue.mjs", [
 		...IMPORTS,
-		'import { probeC } from "../admin/helper.mjs";',
+		'import { probeC } from "../../lib/admin-helper.mjs";',
 		"export async function steal(gate) {",
 		"\tawait gate;",
 		"\treturn probeC();",
 		"}",
 		'import { callWith } from "../__lib/call.mjs";',
-		'import { apply, transact, exposedTools } from "../admin/admin.mjs";',
-		"// Its callback, run by admin's suspended entry function, or a same-named method of admin's file, called raw.",
+		"// Its callback, run by admin's suspended entry function, or a same-named method of admin's, from a boundary slothlet does not patch.",
 		"export function viaEntry(done) {",
+		"\tconst { transact } = self.admin;",
 		'\tstat(".", transact.bind(null, () => attempt(done), Promise.resolve()));',
 		"}",
 		"export function viaMethod(done) {",
+		"\tconst { exposedTools } = self.admin;",
 		'\tstat(".", exposedTools.transact.bind(exposedTools, () => attempt(done)));',
 		"}",
 		"// Its own callback, run by a function of admin's that it hands to a boundary slothlet does not patch.",
@@ -122,6 +124,7 @@ beforeAll(() => {
 		'\tstat(".", callWith.bind(null, () => attempt(done)));',
 		"}",
 		"export function viaLeaf(done) {",
+		"\tconst { apply } = self.admin;",
 		'\tstat(".", apply.bind(null, () => attempt(done)));',
 		"}",
 		"function attempt(done) {",
@@ -146,10 +149,10 @@ beforeAll(() => {
 	// A denied module whose code lives outside the base.
 	write("api/relay/relay.mjs", ['export { viaUnpatched } from "../../outside/impl.mjs";']);
 	write("outside/impl.mjs", [...IMPORTS, ...VIA_UNPATCHED]);
-	// An allowed module handing back the promise of a helper in another top-level folder of the base.
+	// An allowed module handing back the promise of a helper in its folder's hidden helper folder, and of one in a lib folder outside the base.
 	write("api/tools/tools.mjs", [
 		'import { later } from "../__lib/util.mjs";',
-		'import { later2 } from "../lib2/util.mjs";',
+		'import { later2 } from "../../lib/util2.mjs";',
 		"export function run(gate) {",
 		"\treturn later(gate);",
 		"}",
@@ -164,7 +167,7 @@ beforeAll(() => {
 		"\treturn self.c.probe();",
 		"}"
 	]);
-	write("api/lib2/util.mjs", [
+	write("lib/util2.mjs", [
 		'import { self } from "@cldmv/slothlet/runtime";',
 		"export async function later2(gate) {",
 		"\tawait gate;",
@@ -217,15 +220,15 @@ beforeAll(() => {
 		"\treturn self.c.probe();",
 		"};"
 	]);
-	// A denied module re-exporting a package that runs its callback through its own, untagged copy of admin's leaf.
+	// A denied module re-exporting a package that runs its callback through admin's leaf function, read through self.
 	write("api/relayPkg/relayPkg.mjs", ['export { viaPkg } from "evil-pkg";']);
 	write("node_modules/evil-pkg/package.json", ['{ "name": "evil-pkg", "type": "module", "exports": "./index.mjs" }']);
 	// The package cannot resolve slothlet from here; the runtime's `self` is handed to it through a global.
 	write("node_modules/evil-pkg/index.mjs", [
 		'const self = globalThis[Symbol.for("slothlet.test.evidenceSelf")];',
 		'import { stat } from "node:fs";',
-		'import { apply } from "../../api/admin/admin.mjs";',
 		"export function viaPkg(done) {",
+		"\tconst { apply } = self.admin;",
 		'\tstat(".", apply.bind(null, () => {',
 		"\t\ttry {",
 		"\t\t\tdone(self.c.probe());",
@@ -388,7 +391,7 @@ beforeAll(() => {
 		"\t\tpkg: await whileAdminSuspended(() => new Promise((resolve) => api.relayPkg.viaPkg(resolve)))",
 		"\t};",
 		"\tawait api.shutdown();",
-		'\tconst denying = await slothlet({ base, mode, runtime: "live", silent: true, permissions: { defaultPolicy: "allow", rules: [{ caller: "t6.**", target: "c.**", effect: "deny" }] } });',
+		'\tconst denying = await slothlet({ base, mode, runtime: "live", silent: true, permissions: { policy: "allow", rules: [{ caller: "t6.**", target: "c.**", effect: "deny" }] } });',
 		'\tconst allowing = await slothlet({ base, mode, runtime: "live", silent: true });',
 		"\tawait denying.t6;",
 		"\tawait allowing.t6;",
@@ -407,17 +410,17 @@ beforeAll(() => {
 		"\tout[mode].registry = {};",
 		"\tfor (const [name, extra, denied] of [",
 		'\t\t["onBoth", {}, null], ["onRegistryDenied", {}, "registry"], ["onPluginDenied", {}, "plugin"],',
-		'\t\t["offPluginDenied", { provenance: false }, "plugin"]',
+		'\t\t["offPluginDenied", { caller: { provenance: false } }, "plugin"]',
 		"\t]) {",
 		'\t\tconst rules = denied ? [{ caller: `${denied}.**`, target: "c.**", effect: "deny" }] : [];',
-		'\t\tconst reg = await slothlet({ base, mode, runtime: "live", silent: true, permissions: { defaultPolicy: "allow", rules, ...extra } });',
+		'\t\tconst reg = await slothlet({ base, mode, runtime: "live", silent: true, permissions: { policy: "allow", rules, ...extra } });',
 		'\t\tfor (const module of ["registry", "plugin", "c"]) await reg[module];',
 		"\t\treg.plugin.install();",
 		"\t\tout[mode].registry[name] = (await gated((gate) => reg.registry.fire(gate)))[0];",
 		"\t\tawait reg.shutdown();",
 		"\t}",
 		"}",
-		"console.log(JSON.stringify(out));"
+		"process.stdout.write(`${JSON.stringify(out)}\n`);"
 	]);
 });
 
@@ -546,7 +549,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 			runtime: "live",
 			typescript: true,
 			silent: true,
-			permissions: { defaultPolicy: "allow", rules: denied ? [{ caller: `${denied}.**`, target: "c.**", effect: "deny" }] : [] }
+			permissions: { policy: "allow", rules: denied ? [{ caller: `${denied}.**`, target: "c.**", effect: "deny" }] : [] }
 		});
 		await api.tts;
 		await api.c;
@@ -557,7 +560,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 		expect(await pending.catch((error) => error.code ?? error.message)).toBe(expected);
 	});
 
-	it("a package's own copy of another module's leaf does not make its callback that module's", async () => {
+	it("a package running another module's leaf function does not make its callback that module's", async () => {
 		await boot();
 		const outcome = await whileAdminSuspended(() => new Promise((resolve) => api.relayPkg.viaPkg(resolve)));
 		expect(outcome).not.toBe("reached");
@@ -565,8 +568,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 
 	it.each([
 		["a registry running the handlers other modules gave it", "registry", ["PERMISSION_DENIED"]],
-		// Returned code runs as the module that made it (#597).
-		["a module running a function another module's call returned", "user", "reached"]
+		// Returned code runs as the module that made it under whoever runs it (#726): `maker` may reach `c`, `user`, who
+		// runs it, may not.
+		["a module running a function another module's call returned", "user", "PERMISSION_DENIED"]
 	])("%s after an await runs them as itself", async (_label, module, expected) => {
 		api = await slothlet({
 			base: API,
@@ -574,7 +578,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 			runtime: "live",
 			silent: true,
 			// The registry's own identity, as before provenance: the native probe below covers it on (#597).
-			permissions: { defaultPolicy: "allow", provenance: false, rules: [{ caller: `${module}.**`, target: "c.**", effect: "deny" }] }
+			permissions: { policy: "allow", caller: { provenance: false }, rules: [{ caller: `${module}.**`, target: "c.**", effect: "deny" }] }
 		});
 		for (const name of ["registry", "plugin", "maker", "user", "c"]) await api[name];
 		api.plugin.install();
@@ -616,7 +620,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: the running 
 
 	it.each([
 		["a hidden helper folder", "run"],
-		["another top-level folder of the base", "run2"]
+		["a lib folder outside the base", "run2"]
 	])("a call handing back the promise of a helper in %s keeps its identity", async (_label, fn) => {
 		await boot();
 		let release;
@@ -666,14 +670,14 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 				mode,
 				runtime: "live",
 				silent: true,
-				permissions: { defaultPolicy: "allow", rules: [{ caller: "t6.**", target: "c.**", effect: "deny" }] }
+				permissions: { policy: "allow", rules: [{ caller: "t6.**", target: "c.**", effect: "deny" }] }
 			});
 			const allowing = await slothlet({
 				base: API,
 				mode,
 				runtime: "live",
 				silent: true,
-				permissions: { defaultPolicy: "allow", rules: [] }
+				permissions: { policy: "allow", rules: [] }
 			});
 			try {
 				for (const api of [denying, allowing]) {
@@ -715,11 +719,11 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: one folder m
 			mode,
 			runtime: "live",
 			silent: true,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "dupA.**", target: "c.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "dupA.**", target: "c.**", effect: "deny" }] }
 		});
 		try {
-			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup"), { moduleID: deniedID });
-			await api.slothlet.api.add(["dupB"], path.join(ROOT, "dup"), { moduleID: allowedID });
+			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup"), { id: deniedID });
+			await api.slothlet.api.add(["dupB"], path.join(ROOT, "dup"), { id: allowedID });
 			await api.c;
 			const settle = (promise) =>
 				promise.then(
@@ -745,7 +749,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: one folder m
 			mode,
 			runtime: "live",
 			silent: true,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "dupB.**", target: "c.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "dupB.**", target: "c.**", effect: "deny" }] }
 		});
 		try {
 			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup3"));
@@ -757,8 +761,10 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: one folder m
 			const outcome = await new Promise((resolve) => api.dupB.work.later(resolve));
 			release();
 			expect(await held).toBe("held");
-			// B has nothing suspended, so its callback is code no suspended call accounts for: refused, not B's or A's.
-			expect(outcome).toBe("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
+			// B has nothing suspended, so its callback is code no suspended call accounts for: refused, not B's or A's. Its
+			// frames name a file two mounts were built from, so its definer cannot be told either, which is a refusal of the
+			// access (#726), not a missing context.
+			expect(outcome).toBe("PERMISSION_DENIED");
 		} finally {
 			await api.shutdown();
 		}
@@ -787,7 +793,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: one folder m
 			mode,
 			runtime: "live",
 			silent: true,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "dupB.**", target: "c.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "dupB.**", target: "c.**", effect: "deny" }] }
 		});
 		try {
 			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup"));

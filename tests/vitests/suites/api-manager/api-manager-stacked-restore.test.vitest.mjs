@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-stacked-restore.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-stacked-restore.test.vitest.mjs
  *	@Date: 2026-02-27T22:17:01-08:00 (1772259421)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-11-28T04:31:13-08:00 (1795869073)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,7 +72,7 @@ async function makeApi(base, extra = {}) {
 		...base,
 		...extra,
 		base: TEST_DIRS.API_TEST,
-		api: { ...extra.api, mutations: { ...extra.api?.mutations, allowCollisionOverride: true } }
+		api: { ...extra.api, mutations: { ...extra.api?.mutations }, collision: { override: true } }
 	});
 }
 
@@ -92,15 +92,19 @@ describe.each(EAGER_CONFIGS)("stacked-module ownership restore — $name", ({ co
 		// Add a second module at a new path with "replace" collision mode
 		// (ownership tracks both modules at the same path)
 		const mid1 = await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST, {
-			collisionMode: "replace",
-			moduleID: "extra1_first"
+			collision: {
+				mode: "replace"
+			},
+			id: "extra1_first"
 		});
 		expect(mid1).toBeDefined();
 
 		// Add second module at the SAME path with "replace" mode (stacks ownership)
 		const mid2 = await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "replace",
-			moduleID: "extra1_second"
+			collision: {
+				mode: "replace"
+			},
+			id: "extra1_second"
 		});
 		expect(mid2).toBeDefined();
 
@@ -139,15 +143,19 @@ describe.each(EAGER_CONFIGS)("stacked-module ownership restore — $name", ({ co
 
 		// Add at a new path
 		const mid1 = await api.slothlet.api.add("stackedPath", TEST_DIRS.API_TEST, {
-			collisionMode: "replace",
-			moduleID: "stackedPath_first"
+			collision: {
+				mode: "replace"
+			},
+			id: "stackedPath_first"
 		});
 		expect(mid1).toBeDefined();
 
 		// Overwrite with a second module (replace mode → stacks ownership)
 		const mid2 = await api.slothlet.api.add("stackedPath", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "replace",
-			moduleID: "stackedPath_second"
+			collision: {
+				mode: "replace"
+			},
+			id: "stackedPath_second"
 		});
 		expect(mid2).toBeDefined();
 
@@ -162,8 +170,10 @@ describe.each(EAGER_CONFIGS)("stacked-module ownership restore — $name", ({ co
 
 		// Add module with explicit moduleID at two separate paths
 		const mid = await api.slothlet.api.add("pathA", TEST_DIRS.API_TEST, {
-			collisionMode: "replace",
-			moduleID: "sharedModule"
+			collision: {
+				mode: "replace"
+			},
+			id: "sharedModule"
 		});
 		expect(mid).toBeDefined();
 
@@ -202,14 +212,18 @@ describe.each(EAGER_CONFIGS)("removeApiComponent by apiPath ownership restore �
 
 		// Layer 1: api_test
 		await api.slothlet.api.add("layered", TEST_DIRS.API_TEST, {
-			collisionMode: "replace",
-			moduleID: "layered_base"
+			collision: {
+				mode: "replace"
+			},
+			id: "layered_base"
 		});
 
 		// Layer 2: api_test_mixed (overwrites)
 		await api.slothlet.api.add("layered", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "replace",
-			moduleID: "layered_mixed"
+			collision: {
+				mode: "replace"
+			},
+			id: "layered_mixed"
 		});
 
 		expect(api.layered).toBeDefined();
@@ -245,13 +259,17 @@ describe.each(EAGER_CONFIGS)("apiPath+moduleID ownership restore branch (lines 1
 		// This ensures the ownership detection classifies "uniquePath" as an apiPath,
 		// not as a moduleID, so the if (apiPath && moduleID) block fires.
 		await api.slothlet.api.add("uniquePath", TEST_DIRS.API_TEST, {
-			collisionMode: "replace",
-			moduleID: "alpha_v1"
+			collision: {
+				mode: "replace"
+			},
+			id: "alpha_v1"
 		});
 
 		await api.slothlet.api.add("uniquePath", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "replace",
-			moduleID: "beta_v2"
+			collision: {
+				mode: "replace"
+			},
+			id: "beta_v2"
 		});
 
 		expect(api.uniquePath).toBeDefined();
@@ -270,8 +288,10 @@ describe.each(EAGER_CONFIGS)("apiPath+moduleID ownership restore branch (lines 1
 		api = await makeApi(config);
 
 		await api.slothlet.api.add("soloPath", TEST_DIRS.API_TEST, {
-			collisionMode: "replace",
-			moduleID: "gamma_v1"
+			collision: {
+				mode: "replace"
+			},
+			id: "gamma_v1"
 		});
 
 		expect(api.soloPath).toBeDefined();

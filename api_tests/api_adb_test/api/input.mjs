@@ -1,0 +1,441 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: api_tests/api_adb_test/api/input.mjs
+ *	@Date: 2025-10-27T11:28:27-07:00 (1761589707)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-28T04:27:11-08:00 (1795868831)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview Input/keyboard API module for Android TV Remote - Dummy implementation for testing.
+ * @module api_adb_test.input
+ * @memberof module:api_adb_test
+ */
+/**
+ * @namespace input
+ * @memberof module:api_adb_test
+ * @alias module:api_adb_test.input
+ */
+
+// Slothlet runtime imports for live bindings
+import { self as _ } from "@cldmv/slothlet/runtime";
+
+// Dummy key data
+const keyboardKeys = {
+	"ENTER": "66",
+	"SPACE": "62",
+	"BACKSPACE": "67",
+	"TAB": "61"
+};
+
+const keycodes = {
+	"66": "KEYCODE_ENTER",
+	"62": "KEYCODE_SPACE",
+	"67": "KEYCODE_DEL",
+	"61": "KEYCODE_TAB"
+};
+
+/**
+ * Sends text input to the device.
+ *	@param {string} text - Text to input
+ *	@returns {Promise<void>}
+ * *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.text('hello');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.text('hello');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.text('hello');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.text('hello');
+ */
+/**
+ * text.
+ * @param {*} text - text.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.text('hello');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.text('hello');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.text('hello');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.text('hello');
+ */
+export async function text(text) {
+	return Promise.resolve({ inputText: text });
+}
+
+/**
+ * Sends a key event.
+ *	@param {string|number} key - Key name or code
+ *	@returns {Promise<void>}
+ * *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.key('myKey');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.key('myKey');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.key('myKey');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.key('myKey');
+ */
+/**
+ * key.
+ * @param {*} key - key.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.key('myKey');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.key('myKey');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.key('myKey');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.key('myKey');
+ */
+export async function key(key) {
+	return Promise.resolve({ keyPressed: key });
+}
+
+/**
+ * Sends a tap event at coordinates.
+ *	@param {number} x - X coordinate
+ *	@param {number} y - Y coordinate
+ *	@returns {Promise<void>}
+ * *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.tap(null, null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.tap(null, null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.tap(null, null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.tap(null, null);
+ */
+/**
+ * tap.
+ * @param {*} x - x.
+ * @param {*} y - y.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.tap(null, null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.tap(null, null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.tap(null, null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.tap(null, null);
+ */
+export async function tap(x, y) {
+	return Promise.resolve({ tapped: { x, y } });
+}
+
+/**
+ * Sends a swipe gesture.
+ *	@param {number} startX - Start X coordinate
+ *	@param {number} startY - Start Y coordinate
+ *	@param {number} endX - End X coordinate
+ *	@param {number} endY - End Y coordinate
+ *	@param {number} [duration=300] - Swipe duration in ms
+ *	@returns {Promise<void>}
+ * *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.swipe(null, null, null, null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.swipe(null, null, null, null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.swipe(null, null, null, null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.swipe(null, null, null, null);
+ */
+/**
+ * swipe.
+ * @param {*} startX - startX.
+ * @param {*} startY - startY.
+ * @param {*} endX - endX.
+ * @param {*} endY - endY.
+ * @param {*} [duration] - duration.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.swipe(null, null, null, null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.swipe(null, null, null, null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.input.swipe(null, null, null, null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.input.swipe(null, null, null, null);
+ */
+export async function swipe(startX, startY, endX, endY, duration = 300) {
+	return Promise.resolve({
+		swipe: { startX, startY, endX, endY, duration }
+	});
+}
+
+/**
+ * Gets available keyboard keys.
+ *	@returns {Object} Keyboard keys mapping
+ * *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.input.getKeyboardKeys();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.input.getKeyboardKeys();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.input.getKeyboardKeys();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.input.getKeyboardKeys();
+ */
+/**
+ * getKeyboardKeys.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.input.getKeyboardKeys();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.input.getKeyboardKeys();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.input.getKeyboardKeys();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.input.getKeyboardKeys();
+ */
+export function getKeyboardKeys() {
+	return keyboardKeys;
+}
+
+/**
+ * Gets keycodes mapping.
+ *	@returns {Object} Keycodes mapping
+ * *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.input.getKeycodes();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.input.getKeycodes();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.input.getKeycodes();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.input.getKeycodes();
+ */
+/**
+ * getKeycodes.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.input.getKeycodes();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.input.getKeycodes();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.input.getKeycodes();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.input.getKeycodes();
+ */
+export function getKeycodes() {
+	return keycodes;
+}
+
+// Default export object
+const input = {
+	text,
+	key,
+	tap,
+	swipe,
+	getKeyboardKeys,
+	getKeycodes
+};
+
+export default input;

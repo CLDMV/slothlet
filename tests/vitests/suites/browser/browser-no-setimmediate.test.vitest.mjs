@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/browser/browser-no-setimmediate.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/browser/browser-no-setimmediate.test.vitest.mjs
  *	@Date: 2026-10-07T00:00:00-07:00 (1791356400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T00:00:00-07:00 (1791356400)
+ *	@Last modified time: 2026-11-28T04:31:17-08:00 (1795869077)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,8 +35,8 @@
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
-import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
-import { scheduleMacrotask } from "@cldmv/slothlet/helpers/platform";
+import { generateManifest } from "#helpers/generate-manifest";
+import { scheduleMacrotask } from "#helpers/platform";
 import { Lifecycle } from "#handlers/lifecycle";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { getBrowserMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -52,10 +52,16 @@ const settle = async () => {
 };
 
 /**
- * Lifecycle handler warnings captured since the last clear.
+ * Lifecycle handler warnings the current stand-in recorded.
  * @returns {SlothletWarning[]}
  */
-const handlerWarnings = () => SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR");
+const handlerWarnings = () => recorded.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR");
+
+/**
+ * The warnings the current stand-in's warning class recorded (set fresh by each `makeMock()`).
+ * @type {SlothletWarning[]}
+ */
+let recorded = [];
 
 let manifest;
 let api;
@@ -68,28 +74,30 @@ afterEach(async () => {
 	vi.unstubAllGlobals();
 	if (api) await api.shutdown().catch(() => {});
 	api = null;
-	SlothletWarning.clearCaptured();
 });
 
 describe("scheduleMacrotask (#578)", () => {
 	it("uses setImmediate when the host has it", async () => {
 		const immediate = vi.fn((fn) => realSetTimeout(fn, 0));
-		vi.stubGlobal("setImmediate", immediate);
-		const ran = new Promise((resolve) => scheduleMacrotask(resolve));
+		// The schedulers handed in: scheduleMacrotask uses the host's as they were when slothlet loaded, not the globals.
+		const ran = new Promise((resolve) =>
+			scheduleMacrotask(resolve, { setImmediate: immediate, MessageChannel, setTimeout: realSetTimeout })
+		);
 		await ran;
 		expect(immediate).toHaveBeenCalledTimes(1);
 	});
 
 	it("falls back to a MessageChannel post when setImmediate is absent", async () => {
-		vi.stubGlobal("setImmediate", undefined);
 		const timeout = vi.fn(realSetTimeout);
-		vi.stubGlobal("setTimeout", timeout);
 		const order = [];
 		const ran = new Promise((resolve) =>
-			scheduleMacrotask(() => {
-				order.push("task");
-				resolve();
-			})
+			scheduleMacrotask(
+				() => {
+					order.push("task");
+					resolve();
+				},
+				{ setImmediate: undefined, MessageChannel, setTimeout: timeout }
+			)
 		);
 		// A macrotask runs after the current microtasks drain.
 		queueMicrotask(() => order.push("microtask"));
@@ -99,11 +107,8 @@ describe("scheduleMacrotask (#578)", () => {
 	});
 
 	it("falls back to setTimeout when neither setImmediate nor MessageChannel exists", async () => {
-		vi.stubGlobal("setImmediate", undefined);
-		vi.stubGlobal("MessageChannel", undefined);
 		const timeout = vi.fn(realSetTimeout);
-		vi.stubGlobal("setTimeout", timeout);
-		await new Promise((resolve) => scheduleMacrotask(resolve));
+		await new Promise((resolve) => scheduleMacrotask(resolve, { setImmediate: undefined, MessageChannel: undefined, setTimeout: timeout }));
 		expect(timeout).toHaveBeenCalledTimes(1);
 		expect(timeout.mock.calls[0][1]).toBe(0);
 	});
@@ -111,40 +116,42 @@ describe("scheduleMacrotask (#578)", () => {
 
 describe.each(getBrowserMatrixConfigs())("browser compose without setImmediate (#578) > $name", ({ config }) => {
 	it("raises no WARNING_LIFECYCLE_HANDLER_ERROR for function leaves", async () => {
-		SlothletWarning.clearCaptured();
 		vi.stubGlobal("setImmediate", undefined);
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_BROWSER, manifest });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_BROWSER, loader: { files: manifest }, diagnostics: true });
 		// Touch the leaves so lazy mode materializes them and fires impl:created too.
 		expect(await api.math.add(2, 3)).toBe(5);
 		expect(await api.utils.format.upper("a")).toBe("A");
 		await settle();
-		expect(handlerWarnings()).toEqual([]);
+		// Capture is per instance (#819), so read this instance's list, not the process-level one.
+		expect(api.slothlet.warnings.get().filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
 	});
 });
 
 describe("reactive routine stack patch without setImmediate (#578)", () => {
 	it("patches a late contributor into its stack", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
-			routines: [{ name: "^auth.initialize", mode: "manual" }],
-			stackRoutines: true,
+			base: TEST_DIRS.API_TEST_ROUTINES,
+			routines: {
+				entries: [{ name: "^auth.initialize", mode: "manual" }],
+				stack: true
+			},
 			silent: true
 		});
 		await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
-		const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+		const routineManager = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 
 		globalThis.__slothletRoutineLog = [];
 		api.auth.initialize = function postWrite() {
 			(globalThis.__slothletRoutineLog ??= []).push("post-write:initialize");
 		};
-		expect(api.auth.initialize.__slothletRoutineStack).toBeFalsy();
+		expect(api.auth.initialize.____slothletRoutineStack).toBeFalsy();
 
 		vi.stubGlobal("setImmediate", undefined);
 		routineManager.onImplCreated({
 			apiPath: "auth.initialize",
 			moduleID: "late-second-module",
 			wrapper: {
-				__impl: function lateContributor() {
+				____impl: function lateContributor() {
 					(globalThis.__slothletRoutineLog ??= []).push("late-contributor:initialize");
 				}
 			}
@@ -152,7 +159,7 @@ describe("reactive routine stack patch without setImmediate (#578)", () => {
 		await settle();
 		vi.unstubAllGlobals();
 
-		expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+		expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 		globalThis.__slothletRoutineLog = [];
 		await api.auth.initialize();
 		expect(globalThis.__slothletRoutineLog).toEqual(["post-write:initialize", "late-contributor:initialize"]);
@@ -164,10 +171,19 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 	 * Minimal slothlet stand-in for a bare Lifecycle.
 	 * @returns {object}
 	 */
-	const makeMock = () => ({ config: { debug: {} }, debug: vi.fn(), SlothletWarning });
+	const makeMock = () => {
+		recorded = [];
+		return {
+			config: { debug: {} },
+			debug: vi.fn(),
+			SlothletWarning: SlothletWarning.forInstance(
+				() => false,
+				(warning) => recorded.push(warning)
+			)
+		};
+	};
 
-	it("attaches a synchronous handler's error as the cause, with apiPath and moduleID", async () => {
-		SlothletWarning.clearCaptured();
+	it("attaches a synchronous handler's error as the cause, with path and module", async () => {
 		const lc = new Lifecycle(makeMock());
 		const boom = new ReferenceError("setImmediate is not defined");
 		lc.subscribeInternal("impl:created", () => {
@@ -177,13 +193,12 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 
 		const [warning] = handlerWarnings();
 		expect(warning.cause).toBe(boom);
-		expect(warning.context).toMatchObject({ event: "impl:created", apiPath: "math.add", moduleID: "base" });
+		expect(warning.details).toMatchObject({ event: "impl:created", path: ["math", "add"], module: "base" });
 		expect(warning.message).toContain("math.add");
 		expect(warning.message).toContain("base");
 	});
 
 	it("names only the event when the event is not about an api path", async () => {
-		SlothletWarning.clearCaptured();
 		const lc = new Lifecycle(makeMock());
 		const boom = new Error("init handler failure");
 		lc.on("init", () => {
@@ -193,22 +208,20 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 
 		const [warning] = handlerWarnings();
 		expect(warning.cause).toBe(boom);
-		expect(warning.context).toEqual({ event: "init" });
+		expect(warning.details).toEqual({ event: "init" });
 		expect(warning.message).toContain("'init'");
 	});
 
-	it("stays quiet when the instance is silent", async () => {
-		SlothletWarning.clearCaptured();
+	it("still records the warning when the instance is silent (#838)", async () => {
 		const lc = new Lifecycle({ ...makeMock(), config: { debug: {}, silent: true } });
 		lc.subscribeInternal("impl:created", () => {
 			throw new Error("silenced");
 		});
 		await lc.emitInternal("impl:created", { apiPath: "math.add", moduleID: "base", source: "test" });
-		expect(handlerWarnings()).toEqual([]);
+		expect(handlerWarnings()).toHaveLength(1);
 	});
 
 	it("attaches an async handler's rejection as the cause", async () => {
-		SlothletWarning.clearCaptured();
 		const lc = new Lifecycle(makeMock());
 		const boom = new Error("async failure");
 		lc.subscribeInternal("impl:created", async () => {
@@ -218,34 +231,30 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 
 		const [warning] = handlerWarnings();
 		expect(warning.cause).toBe(boom);
-		expect(warning.context).toMatchObject({ event: "impl:created", apiPath: "math.add", moduleID: "base" });
+		expect(warning.details).toMatchObject({ event: "impl:created", path: ["math", "add"], module: "base" });
 	});
 
 	it("prints the cause's stack when the warning reaches the console", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		SlothletWarning.suppressConsole = false;
 		try {
 			const boom = new Error("printed failure");
-			const warning = new SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "impl:created" }, boom);
+			const warning = new SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "impl:created" }, { cause: boom });
 			expect(warning.cause).toBe(boom);
 			const printed = warnSpy.mock.calls.flat().map(String).join("\n");
 			expect(printed).toContain("printed failure");
 			expect(printed).toContain(boom.stack.split("\n")[1].trim());
 		} finally {
-			SlothletWarning.suppressConsole = true;
 			warnSpy.mockRestore();
 		}
 	});
 
 	it("prints a thrown non-Error value as-is", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		SlothletWarning.suppressConsole = false;
 		try {
-			const warning = new SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "impl:created" }, "plain string throw");
+			const warning = new SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "impl:created" }, { cause: "plain string throw" });
 			expect(warning.cause).toBe("plain string throw");
 			expect(warnSpy).toHaveBeenCalledWith("Cause:", "plain string throw");
 		} finally {
-			SlothletWarning.suppressConsole = true;
 			warnSpy.mockRestore();
 		}
 	});

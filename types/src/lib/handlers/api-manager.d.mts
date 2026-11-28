@@ -1,4 +1,16 @@
 /**
+ * One change a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
+ * `builders/api_builder`), replayed by {@link ApiManager#carryRunWrites}.
+ * @typedef {object} RunWrite
+ * @property {string[]} parts - The path of the object changed, from the api root.
+ * @property {string|symbol} prop - The member changed.
+ * @property {string} op - The change: `"set"`, `"define"` or `"delete"`.
+ * @property {*} [value] - The value set, for `"set"`.
+ * @property {object} [descriptor] - The descriptor defined, for `"define"`.
+ * @property {string|null} [created] - The module that created the member, when the run's module created it.
+ * @private
+ */
+/**
  * Manages runtime API component lifecycle (add/remove/reload).
  * @class ApiManager
  * @extends ComponentBase
@@ -168,7 +180,7 @@ export class ApiManager extends ComponentBase {
      *   writes outside its own namespace.
      * @throws {SlothletError} `LOOSE_SET_RESERVED_KEY` when any path segment is
      *   a prototype-pollution key (`__proto__`, `prototype`, `constructor`).
-     * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty,
+     * @throws {SlothletError} `API_PATH_INVALID` when the path is empty,
      *   contains empty segments (e.g. `"a..b"`), or targets a reserved root name
      *   (`slothlet`, `shutdown`, `destroy`).
      * @public
@@ -189,21 +201,74 @@ export class ApiManager extends ComponentBase {
      * the module owns. The built-in ones keep every module off the framework's namespace and root functions and off
      * the framework's own keys on api nodes, until an allow lifts one for the callers it names. With the system off
      * only those built-in rules (and host rules on what they cover) are checked and ownership refuses nothing, so a
-     * module writes anywhere outside the framework's own; with it disabled nothing is checked.
+     * module writes anywhere outside the framework's own; with it disabled nothing is checked. While it is on, a write
+     * that passes is also held to the read the module would need of the member it changes: there is no write without
+     * the read.
      *
      * @param {string[]} parts - Segments of the api path being written.
      * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
      * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
      *   being checked (see {@link ApiManager#ownsPath}).
      * @returns {void}
-     * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write, and
-     *   `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
+     * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write or the module would be refused a read
+     *   of the member it changes, and `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
      * @public
      */
     public assertOwnedWrite(parts: string[], callerWrapper: object | null, inFlight?: {
         moduleID: string;
         prior: Map<string, any>;
     } | null): void;
+    /**
+     * Who owns what a module's write at `parts` stores: the module that owns the member already there, or, for a member
+     * that does not exist yet where the module writes by its own mount, the writing module, which creates it. Replacing
+     * another module's member transfers nothing, and neither does creating one through a write grant.
+     * A node built for an object or function the write stores is attributed to that owner, and a member it creates is
+     * recorded for it once written ({@link ApiManager#recordCreated}).
+     *
+     * @param {string[]} parts - Segments of the api path written.
+     * @param {object|null} writer - The executing module's wrapper, or null for host code.
+     * @returns {{owner: string, created: boolean}|null} The owning moduleID and whether the write creates the member;
+     *   null for host code, a writer with no recorded owner, the framework's own roots, and an unowned member.
+     * @public
+     *
+     * @example
+     * const placed = apiManager.writeOwnerOf(["p", "counter"], writer); // { owner: "B", created: true }
+     */
+    public writeOwnerOf(parts: string[], writer: object | null): {
+        owner: string;
+        created: boolean;
+    } | null;
+    /**
+     * Record the module that created a member at `parts` as its owner, once the write that created it stood: plain
+     * JavaScript's creator owns what it creates. The entry is an ordinary ownership entry, so removing the module
+     * removes the member with its other paths, and the owner grant, module privacy, and the write rules read it as they
+     * read a loaded member's. A node the write built for an object or function registered it already, for the same
+     * module ({@link ApiManager#writeOwnerOf}); the entry is marked as created either way. A runtime write is not
+     * replayed by a reload, and neither is its entry: the rebuilt api records only what it loads.
+     *
+     * @param {string[]} parts - Segments of the api path created.
+     * @param {string} moduleID - The creating module.
+     * @param {*} value - The value written: recorded for a primitive, which no node stands for.
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * apiManager.recordCreated(["p", "counter"], "B", 1);
+     */
+    public recordCreated(parts: string[], moduleID: string, value: any): void;
+    /**
+     * Drop the record of a member module code created at runtime once it is deleted: nothing is left to own, and a module
+     * that creates the member anew creates it as its own. A member anything else contributed to keeps its record, as a
+     * loaded member deleted at runtime does.
+     *
+     * @param {string[]} parts - Segments of the api path deleted.
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * apiManager.forgetCreated(["p", "counter"]);
+     */
+    public forgetCreated(parts: string[]): void;
     /**
      * Whether module writes are held to the ownership rule at all: only while the permission system is on. With no
      * permissions, nothing restricts where a module writes.
@@ -235,7 +300,7 @@ export class ApiManager extends ComponentBase {
      * @public
      *
      * @example
-     * apiManager.writeChecked(["victim", "v", "__mode"]); // true unless permissions are disabled
+     * apiManager.writeChecked(["victim", "v", "____state"]); // true unless permissions are disabled
      */
     public writeChecked(parts: string[]): boolean;
     /**
@@ -298,6 +363,26 @@ export class ApiManager extends ComponentBase {
      */
     public isRemovedCaller(callerWrapper: object | null): boolean;
     /**
+     * Whether `wrapper` is a node of the instance's tree a `restart()` has since replaced, while the permission system is
+     * on. A restart starts the instance over: the modules it replaced are gone with the instance they were in, so the
+     * code they made (a function, a bound function or an object's method they handed out, a snapshot their call took)
+     * has no standing, and everything it does through `self` is refused. With the permission system off nothing is
+     * checked, and such code acts on the rebuilt instance. A reload keeps the tree's epoch, and the trees runs keep of
+     * their own carry epochs of their own (below zero), so neither is affected by the instance's restart.
+     *
+     * A `restart()` in a `run()` / `scope()` starts the run's copy over the same way, for the run alone: in that run (and
+     * the runs opened in it afterwards), a node of a tree the run read before it is replaced too. Copies take ever lower
+     * epochs, so those are the nodes whose epoch is above the restarted tree's. Outside the run nothing changes.
+     *
+     * @param {object|null} wrapper - A node's wrapper.
+     * @returns {boolean} True for a node a restart replaced, with the permission system on.
+     * @public
+     *
+     * @example
+     * if (apiManager.isRestartReplaced(wrapper)) refuse();
+     */
+    public isRestartReplaced(wrapper: object | null): boolean;
+    /**
      * Whether `callerWrapper` is code of the module removed last under `moduleID`, and no module has been mounted under
      * the id since (#625): the module whose removal an event about `moduleID` tells of. Its subscribers hear that.
      *
@@ -307,7 +392,7 @@ export class ApiManager extends ComponentBase {
      * @public
      *
      * @example
-     * apiManager.isOwnRetired(reader, data.moduleID);
+     * apiManager.isOwnRetired(reader, data.module);
      */
     public isOwnRetired(callerWrapper: object, moduleID: string | null | undefined): boolean;
     /**
@@ -377,7 +462,7 @@ export class ApiManager extends ComponentBase {
     private _setShadowParked;
     /**
      * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
-     * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
+     * `loader.materialize: true` materialization cannot re-apply the rejected content later.
      * @param {unknown} api - Candidate subtree (or leaf) to walk.
      * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
      * @param {?Array<object>} [liveKept=null] - When given, a wrapper that is still the live node at its own
@@ -388,7 +473,7 @@ export class ApiManager extends ComponentBase {
      * @private
      *
      * @description
-     * `createProxy()` can kick off a wrapper's `_materialize()` in the background before
+     * `createProxy()` can kick off a wrapper's `___materialize()` in the background before
      * `setValueAtPath()`'s collision decision is even known. When that decision rejects the
      * candidate, `revertSpeculativeSubtree()` correctly undoes ownership/raw-capture state
      * immediately — but the in-flight materialization is a separate, already-running async
@@ -525,6 +610,8 @@ export class ApiManager extends ComponentBase {
      *
      * @param {string|null} moduleID - The module reloaded by its moduleID.
      * @param {string|null} apiPath - The path reloaded.
+     * @param {object|null} [writer] - The module asking for the reload, read where it asked; the code running now when
+     *   omitted.
      * @returns {void}
      * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
      * @public
@@ -532,7 +619,7 @@ export class ApiManager extends ComponentBase {
      * @example
      * apiManager.assertModuleReload(null, "victim.v"); // throws inside another module's call
      */
-    public assertModuleReload(moduleID: string | null, apiPath: string | null): void;
+    public assertModuleReload(moduleID: string | null, apiPath: string | null, writer?: object | null): void;
     /**
      * Add new API modules at runtime.
      * @param {object} params - Add parameters.
@@ -632,11 +719,11 @@ export class ApiManager extends ComponentBase {
     private _hasForeignOwnedDescendant;
     /**
      * Remove API modules at runtime.
-     * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the composite `__metadata.moduleID`.
+     * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the internal composite module id.
      * @param {object} [options={}] - Options.
      * @param {string} [options.scopedApiPath] - When set, `pathOrModuleId` is resolved strictly as a
      *   moduleID and only that module's single node at `scopedApiPath` is removed (drives the public
-     *   two-argument `api.remove(moduleID, apiPath)`); sibling modules and the module's other mounts stay.
+     *   two-argument `api.remove(apiPath, id)`); sibling modules and the module's other mounts stay.
      * @param {boolean} [options.recordHistory=true] - Whether to record the removal in the add/operation history.
      * @param {object|null} [options.writer] - The removing module's wrapper, or null for host code, when the caller read
      *   it before an await; read from the runtime otherwise (#625).
@@ -647,7 +734,7 @@ export class ApiManager extends ComponentBase {
      * @description
      * Removes an API subtree by apiPath, or every path owned by a moduleID. The argument is resolved by
      * splitting on the reserved composite separator ({@link MODULE_ID_SEPARATOR}): a plain id (which can
-     * never contain the separator) passes through whole, while a composite `__metadata.moduleID` strips to
+     * never contain the separator) passes through whole, while a composite module id strips to
      * its base. It matches a registered module verbatim or by its auto-generated `<base>_<hash>` form, and
      * otherwise falls back to treating the argument as an apiPath.
      *
@@ -732,6 +819,32 @@ export class ApiManager extends ComponentBase {
      * @private
      */
     private _findAffectedCaches;
+    /**
+     * Carry what code wrote into an api tree at runtime (`self.x = …`, a member the host set on the api, a value written
+     * over a module's member) into a copy of the tree built from the same modules for a run (see `Slothlet#buildCopy`),
+     * which has only what loads and the replayed `add()` / `remove()` history. Walks the nodes both trees have; a lazy
+     * node the copied tree loaded is loaded in the copy first. A member a module created stays that module's in the copy.
+     * A plain object or array written at runtime is the same object in both trees, as a shallow copy shares it.
+     *
+     * @param {object|Function} fromRoot - The copied tree's root.
+     * @param {object|Function} toRoot - The copy's root (this api manager's tree).
+     * @param {object|null} fromOwnership - The copied tree's ownership records.
+     * @returns {Promise<void>}
+     * @internal
+     */
+    carryRuntimeMembers(fromRoot: object | Function, toRoot: object | Function, fromOwnership: object | null): Promise<void>;
+    /**
+     * Write what a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
+     * `builders/api_builder`) into the tree built for the run, in the order the run made the changes, as
+     * {@link ApiManager#carryRuntimeMembers} carries what was written into a tree at runtime: each change was checked when
+     * the run made it, so it is made here as the framework's own write, a node written being carried as what was written
+     * for the copy to make its own node of. A member the run's module created is recorded as that module's.
+     *
+     * @param {RunWrite[]} log - The changes.
+     * @returns {void}
+     * @internal
+     */
+    carryRunWrites(log: RunWrite[]): void;
     /**
      * Collect user-set custom properties from a proxy/wrapper that are NOT in the fresh API.
      * Custom properties are those set by the user at runtime (e.g., api.custom.testFlag = true)
@@ -843,6 +956,22 @@ export class ApiManager extends ComponentBase {
      */
     private _partitionNamespaceChildren;
     /**
+     * How a namespace at the api root takes a reload of the modules in `reloadGroup`, judged as
+     * {@link ApiManager#_partitionNamespaceChildren} judges a child of a namespace, without setting it aside: `"held"` when
+     * another module replaced it and still holds it, `"shared"` when another module contributes to it or is mounted inside
+     * it, and `"own"` when only the reloaded modules contribute.
+     * @param {object} wrapper - The raw wrapper at the root key.
+     * @param {string} key - The root key.
+     * @param {Set<string>} reloadGroup - moduleIDs being rebuilt in this cycle.
+     * @param {?Map<string, Array<{entry: Object, isMergeLoss: boolean}>>} ownershipBefore - Ownership stacks from before
+     *   the rebuild.
+     * @param {{ held: Set<string>, mounts: string[] }} [placement] - Other modules' mounts, and the ones that replaced
+     *   what was there.
+     * @returns {"held"|"shared"|"own"} The answer.
+     * @private
+     */
+    private _rootKeyContribution;
+    /**
      * Every module a wrapper's materialized subtree carries, from each wrapper's own moduleID — the
      * contributors of a namespace when ownership tracking is off (#525). Walks raw wrappers only, so an
      * unmaterialized lazy subtree is never materialized by the walk.
@@ -890,5 +1019,35 @@ export class ApiManager extends ComponentBase {
     private _restoreApiTree;
     #private;
 }
+/**
+ * One change a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
+ * `builders/api_builder`), replayed by {@link ApiManager#carryRunWrites}.
+ */
+export type RunWrite = {
+    /**
+     * - The path of the object changed, from the api root.
+     */
+    parts: string[];
+    /**
+     * - The member changed.
+     */
+    prop: string | symbol;
+    /**
+     * - The change: `"set"`, `"define"` or `"delete"`.
+     */
+    op: string;
+    /**
+     * - The value set, for `"set"`.
+     */
+    value?: any;
+    /**
+     * - The descriptor defined, for `"define"`.
+     */
+    descriptor?: object | undefined;
+    /**
+     * - The module that created the member, when the run's module created it.
+     */
+    created?: string | null | undefined;
+};
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=api-manager.d.mts.map

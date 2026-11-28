@@ -1,0 +1,202 @@
+{
+	"source": "Data-shape rulings from the v4 decision record (2026-11-16): names a program READS off slothlet objects (event and lifecycle payloads, hook contexts, error details, diagnostics). Report-only: the audit cannot prove what a value is, so it lists each read with the v4 replacement.",
+	"notation": {
+		"scopes": "scope id -> { label, keys }",
+		"keys": "v3 key path (dotted for nested reads) -> v4 key, or { to, note }; to null = no replacement, see note",
+		"paths": "every api path slothlet reports is a segments array in v4, so a renamed path key also changes type"
+	},
+	"scopes": {
+		"lifecycle": {
+			"label": "lifecycle event payload",
+			"keys": {
+				"filePath": "file",
+				"sourceFolder": "folder",
+				"moduleID": "module",
+				"apiPath": { "to": "path", "note": "A segments array in v4; join it where you need a dotted string." },
+				"collisionMode": "collision",
+				"instanceID": "instance",
+				"previousInstanceID": "previous",
+				"timestamp": "at",
+				"scanRoot": "root",
+				"mountPath": { "to": "mount", "note": "A segments array in v4." },
+				"discoverResult": "found",
+				"packageRoot": "folder",
+				"conditionMatched": { "to": null, "note": "Dropped; read `e.rule.condition != null`." }
+			}
+		},
+		"event-meta": {
+			"label": "event listener meta",
+			"keys": { "instanceID": "instance" }
+		},
+		"strategy": {
+			"label": "event strategy envelope",
+			"keys": {
+				"instanceID": "instance",
+				"emitter.moduleID": "emitter.module",
+				"emitter.apiPath": { "to": "emitter.path", "note": "A segments array in v4." }
+			}
+		},
+		"hook": {
+			"label": "hook handler context",
+			"keys": {
+				"hasError": { "to": null, "note": "Dropped; use `ctx.errors.length > 0` in an always hook." },
+				"errorType": "class",
+				"timestamp": { "to": "at", "note": "A number (clock.now()), not a Date." },
+				"source": "origin",
+				"source.hookId": "origin.hook",
+				"source.hookTag": "origin.hook",
+				"source.timestamp": "origin.at"
+			}
+		},
+		"error": {
+			"label": "error / warning details",
+			"keys": {
+				"moduleID": "module",
+				"apiPath": { "to": "path", "note": "A segments array in v4." },
+				"filePath": "file",
+				"modulePath": "file",
+				"dir": "folder",
+				"instanceID": "instance",
+				"mountPath": { "to": "mount", "note": "A segments array in v4." },
+				"packageName": "package",
+				"packageVersion": "version",
+				"manifestPath": "manifest",
+				"apiDir": "base",
+				"collisionMode": "collision",
+				"collisionContext": "phase",
+				"isolationMode": "isolation",
+				"schemaVersion": "schema",
+				"existingModuleId": "owner",
+				"existingModuleID": "owner",
+				"newModuleId": "incoming",
+				"availableInstances": "instances",
+				"callerApiPath": "caller",
+				"hookId": "id",
+				"ruleId": "id",
+				"receivedType": "received",
+				"actualType": "received",
+				"typePattern": "received",
+				"validSubsets": "expected",
+				"rootContributors": { "to": "contributors", "note": "An array of module ids." },
+				"firstContributor": { "to": null, "note": "Dropped; read `contributors[0]`." },
+				"cacheKey": "expected",
+				"entryModuleID": "received",
+				"manifestName": {
+					"to": "expected / received",
+					"note": "MODULE_MANIFEST_NAME_MISMATCH carries { package, expected (package.json), received (manifest) }."
+				},
+				"manifestVersion": {
+					"to": "expected / received",
+					"note": "MODULE_MANIFEST_VERSION_MISMATCH carries { package, expected (package.json), received (manifest) }."
+				},
+				"handlersKeys": { "to": null, "note": "Dropped; it listed internal handler names." },
+				"mountPathRoot": { "to": null, "note": "Dropped; read `mount[0]`." },
+				"resolvedPath": "resolved",
+				"packageRoot": "folder",
+				"chainLabel": { "to": "chain", "note": "An array in v4 (the message joins it)." },
+				"maxDepth": "depth",
+				"validationError": { "to": null, "note": "Internal flag, no longer stored on the details." },
+				"stub": { "to": null, "note": "Internal flag, no longer stored on the details." }
+			}
+		},
+		"versioning-list": {
+			"label": "versioning.list() entry",
+			"keys": {
+				"versionTag": "tag",
+				"moduleID": "module",
+				"versionedPath": { "to": "path", "note": "The mounted path as a segments array in v4 (`[\"v1\", \"auth\"]`)." },
+				"versionedParts": { "to": "path", "note": "Same array; `versionedPath` and `versionedParts` are one key in v4." },
+				"isDefault": "default",
+				"versionMeta": "metadata"
+			}
+		},
+		"versioning-metadata": {
+			"label": "versioning.metadata.get() result",
+			"keys": {
+				"logicalPath": {
+					"to": "path",
+					"note": "A segments array in v4 (`[\"auth\"]`). `version` and `path` are reserved in version metadata: a key of either name you supply is replaced by the injected value (v3 reserved only `logicalPath`)."
+				}
+			}
+		},
+		"diag-inspect": {
+			"label": "diag.inspect() result",
+			"keys": {
+				"isLoaded": "loaded",
+				"instanceID": "instance",
+				"context.instances": {
+					"to": null,
+					"note": "Other instances are not exposed; this instance's data is `instance`, `at`, `context` and `self`."
+				},
+				"context": {
+					"to": "runtime",
+					"note": "The context manager group is `runtime` ({ type, running }); `context` now holds your context data."
+				}
+			}
+		},
+		"diag-context": {
+			"label": "context.diagnostics() result",
+			"keys": {
+				"storeFromInstancesMap.createdAt": "at",
+				"storeFromInstancesMap.context": "context",
+				"storeFromInstancesMap": "context",
+				"baseContext": "base",
+				"currentALSContext": "current",
+				"currentInstanceID": "current",
+				"instanceID": "instance",
+				"managerType": { "to": "runtime", "note": "\"async\" or \"live\" (the config `runtime` words)." },
+				"instancesMapKeys": { "to": null, "note": "Dropped; other instances are not exposed." },
+				"instancesMapSize": { "to": null, "note": "Dropped; other instances are not exposed." }
+			}
+		},
+		"diag-caches": {
+			"label": "diag.caches.get() result",
+			"keys": {
+				"totalCaches": { "to": null, "note": "Dropped; read `caches.length`." },
+				"timestamp": "at",
+				"folderPath": "folder",
+				"moduleID": "module",
+				"endpoint": "path",
+				"pathCount": "count"
+			}
+		},
+		"diag-owner": {
+			"label": "diag.owner.list() result",
+			"keys": {
+				"conflictedPaths": "conflicts",
+				"totalPaths": "paths",
+				"totalModules": { "to": null, "note": "Dropped; read `modules.length`." }
+			}
+		},
+		"diag-any": {
+			"label": "diagnostics shape",
+			"keys": {
+				"storeFromInstancesMap": "context",
+				"baseContext": "base",
+				"currentALSContext": "current",
+				"currentInstanceID": "current",
+				"instancesMapKeys": { "to": null, "note": "Dropped; other instances are not exposed." },
+				"instancesMapSize": { "to": null, "note": "Dropped; other instances are not exposed." },
+				"contextKeys": { "to": null, "note": "Dropped; read your context data from diag.inspect().context." },
+				"selfKeys": { "to": "self", "note": "diag.inspect().self is the list of top-level api names." },
+				"managerType": "runtime",
+				"totalCaches": { "to": null, "note": "Dropped; read `caches.length`." },
+				"conflictedPaths": "conflicts",
+				"pathCount": "count"
+			}
+		}
+	},
+	"sourceValues": {
+		"note": "Lifecycle `source` values, compared as strings (`e.source === \"addApi\"`).",
+		"values": {
+			"buildAPI": "build",
+			"addApi": "add",
+			"hot-reload": "reload",
+			"lazy-materialization": "materialize",
+			"module-mount": "mount",
+			"removal": "remove",
+			"initial": "create"
+		},
+		"via": { "checkCall": "check.call" }
+	}
+}

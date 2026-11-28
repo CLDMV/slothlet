@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "3.24.0",
+	"version": "4.0.0",
 	"moduleVersions": {
 		"lazy": "3.0.0",
 		"eager": "3.0.0",
@@ -28,105 +28,107 @@
 		"./typegen": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/typegen/typegen.d.mts",
-				"import": "./src/lib/typegen/typegen.mjs"
+				"import": "./src/lib/typegen/typegen.mjs",
+				"default": "./src/lib/typegen/typegen.mjs"
 			},
 			"types": "./types/stub/lib/typegen/typegen.d.mts",
-			"import": "./dist/lib/typegen/typegen.mjs"
-		},
-		"./slothlet": {
-			"slothlet-dev": {
-				"types": "./types/src/slothlet.d.mts",
-				"import": "./src/slothlet.mjs"
-			},
-			"types": "./types/stub/slothlet.d.mts",
-			"import": "./dist/slothlet.mjs"
+			"import": "./dist/lib/typegen/typegen.mjs",
+			"default": "./dist/lib/typegen/typegen.mjs"
 		},
 		"./runtime": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime.d.mts",
-				"import": "./src/lib/runtime/runtime.mjs"
+				"import": "./src/lib/runtime/runtime.mjs",
+				"default": "./src/lib/runtime/runtime.mjs"
 			},
 			"types": "./types/stub/lib/runtime/runtime.d.mts",
-			"import": "./dist/lib/runtime/runtime.mjs"
+			"import": "./dist/lib/runtime/runtime.mjs",
+			"default": "./dist/lib/runtime/runtime.mjs"
 		},
 		"./runtime/async": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-asynclocalstorage.d.mts",
-				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
+				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs",
+				"default": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
 			},
 			"types": "./types/stub/lib/runtime/runtime-asynclocalstorage.d.mts",
-			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
+			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs",
+			"default": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
 		},
 		"./runtime/live": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-livebindings.d.mts",
-				"import": "./src/lib/runtime/runtime-livebindings.mjs"
+				"import": "./src/lib/runtime/runtime-livebindings.mjs",
+				"default": "./src/lib/runtime/runtime-livebindings.mjs"
 			},
 			"types": "./types/stub/lib/runtime/runtime-livebindings.d.mts",
-			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
+			"import": "./dist/lib/runtime/runtime-livebindings.mjs",
+			"default": "./dist/lib/runtime/runtime-livebindings.mjs"
 		},
-		"./helpers/*": {
+		"./errors": {
 			"slothlet-dev": {
-				"types": "./types/src/lib/helpers/*.d.mts",
-				"import": "./src/lib/helpers/*.mjs"
+				"types": "./types/src/lib/errors.d.mts",
+				"import": "./src/lib/errors.mjs",
+				"default": "./src/lib/errors.mjs"
 			},
-			"types": "./types/stub/lib/helpers/*.d.mts",
-			"import": "./dist/lib/helpers/*.mjs"
+			"types": "./types/stub/lib/errors.d.mts",
+			"import": "./dist/lib/errors.mjs",
+			"default": "./dist/lib/errors.mjs"
 		},
-		"./modes/*": {
+		"./i18n": {
 			"slothlet-dev": {
-				"types": "./types/src/lib/modes/*.d.mts",
-				"import": "./src/lib/modes/*.mjs"
+				"types": "./types/src/i18n.d.mts",
+				"import": "./src/i18n.mjs",
+				"default": "./src/i18n.mjs"
 			},
-			"types": "./types/stub/lib/modes/*.d.mts",
-			"import": "./dist/lib/modes/*.mjs"
+			"types": "./types/stub/i18n.d.mts",
+			"import": "./dist/i18n.mjs",
+			"default": "./dist/i18n.mjs"
 		},
-		"./builders/*": {
+		"./i18n/language/*": {
+			"slothlet-dev": "./src/lib/i18n/languages/*",
+			"default": "./dist/lib/i18n/languages/*"
+		},
+		"./vite": {
+			"slothlet-dev": {
+				"types": "./types/src/vite.d.mts",
+				"import": "./src/vite.mjs",
+				"default": "./src/vite.mjs"
+			},
+			"types": "./types/stub/vite.d.mts",
+			"import": "./dist/vite.mjs",
+			"default": "./dist/vite.mjs"
+		},
+		"./files": {
+			"slothlet-dev": {
+				"types": "./types/src/files.d.mts",
+				"import": "./src/files.mjs",
+				"default": "./src/files.mjs"
+			},
+			"types": "./types/stub/files.d.mts",
+			"import": "./dist/files.mjs",
+			"default": "./dist/files.mjs"
+		},
+		"./sanitize": {
+			"slothlet-dev": {
+				"types": "./types/src/sanitize.d.mts",
+				"import": "./src/sanitize.mjs",
+				"default": "./src/sanitize.mjs"
+			},
+			"types": "./types/stub/sanitize.d.mts",
+			"import": "./dist/sanitize.mjs",
+			"default": "./dist/sanitize.mjs"
+		},
+		"./schemas/slothlet.module.schema.json": "./schemas/slothlet.module.schema.json"
+	},
+	"imports": {
+		"#builders/*": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/builders/*.d.mts",
 				"import": "./src/lib/builders/*.mjs"
 			},
 			"types": "./types/stub/lib/builders/*.d.mts",
 			"import": "./dist/lib/builders/*.mjs"
-		},
-		"./processors/*": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/processors/*.d.mts",
-				"import": "./src/lib/processors/*.mjs"
-			},
-			"types": "./types/stub/lib/processors/*.d.mts",
-			"import": "./dist/lib/processors/*.mjs"
-		},
-		"./errors": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/errors.d.mts",
-				"import": "./src/lib/errors.mjs"
-			},
-			"types": "./types/stub/lib/errors.d.mts",
-			"import": "./dist/lib/errors.mjs"
-		},
-		"./i18n": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/i18n/translations.d.mts",
-				"import": "./src/lib/i18n/translations.mjs"
-			},
-			"types": "./types/stub/lib/i18n/translations.d.mts",
-			"import": "./dist/lib/i18n/translations.mjs"
-		},
-		"./i18n/language/*": {
-			"slothlet-dev": "./src/lib/i18n/languages/*",
-			"default": "./dist/lib/i18n/languages/*"
-		},
-		"./schemas/slothlet.module.schema.json": "./schemas/slothlet.module.schema.json"
-	},
-	"imports": {
-		"#handlers/*": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/handlers/*.d.mts",
-				"import": "./src/lib/handlers/*.mjs"
-			},
-			"types": "./types/stub/lib/handlers/*.d.mts",
-			"import": "./dist/lib/handlers/*.mjs"
 		},
 		"#factories/*": {
 			"slothlet-dev": {
@@ -135,11 +137,104 @@
 			},
 			"types": "./types/stub/lib/factories/*.d.mts",
 			"import": "./dist/lib/factories/*.mjs"
+		},
+		"#handlers/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/handlers/*.d.mts",
+				"import": "./src/lib/handlers/*.mjs"
+			},
+			"types": "./types/stub/lib/handlers/*.d.mts",
+			"import": "./dist/lib/handlers/*.mjs"
+		},
+		"#helpers/platform": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/helpers/platform.d.mts",
+				"browser": "./src/lib/helpers/platform.browser.mjs",
+				"node": "./src/lib/helpers/platform.mjs",
+				"default": "./src/lib/helpers/platform.browser.mjs"
+			},
+			"types": "./types/stub/lib/helpers/platform.d.mts",
+			"browser": "./dist/lib/helpers/platform.browser.mjs",
+			"node": "./dist/lib/helpers/platform.mjs",
+			"default": "./dist/lib/helpers/platform.browser.mjs"
+		},
+		"#helpers/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/helpers/*.d.mts",
+				"import": "./src/lib/helpers/*.mjs"
+			},
+			"types": "./types/stub/lib/helpers/*.d.mts",
+			"import": "./dist/lib/helpers/*.mjs"
+		},
+		"#modes/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/modes/*.d.mts",
+				"import": "./src/lib/modes/*.mjs"
+			},
+			"types": "./types/stub/lib/modes/*.d.mts",
+			"import": "./dist/lib/modes/*.mjs"
+		},
+		"#processors/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/processors/*.d.mts",
+				"import": "./src/lib/processors/*.mjs"
+			},
+			"types": "./types/stub/lib/processors/*.d.mts",
+			"import": "./dist/lib/processors/*.mjs"
+		},
+		"#slothlet": {
+			"slothlet-dev": {
+				"types": "./types/src/slothlet.d.mts",
+				"import": "./src/slothlet.mjs"
+			},
+			"types": "./types/stub/slothlet.d.mts",
+			"import": "./dist/slothlet.mjs"
+		},
+		"#errors": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/errors.d.mts",
+				"import": "./src/lib/errors.mjs"
+			},
+			"types": "./types/stub/lib/errors.d.mts",
+			"import": "./dist/lib/errors.mjs"
+		},
+		"#i18n": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/i18n/translations.d.mts",
+				"import": "./src/lib/i18n/translations.mjs"
+			},
+			"types": "./types/stub/lib/i18n/translations.d.mts",
+			"import": "./dist/lib/i18n/translations.mjs"
+		},
+		"#runtime": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/runtime/runtime.d.mts",
+				"import": "./src/lib/runtime/runtime.mjs"
+			},
+			"types": "./types/stub/lib/runtime/runtime.d.mts",
+			"import": "./dist/lib/runtime/runtime.mjs"
+		},
+		"#runtime/async": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/runtime/runtime-asynclocalstorage.d.mts",
+				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
+			},
+			"types": "./types/stub/lib/runtime/runtime-asynclocalstorage.d.mts",
+			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
+		},
+		"#runtime/live": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/runtime/runtime-livebindings.d.mts",
+				"import": "./src/lib/runtime/runtime-livebindings.mjs"
+			},
+			"types": "./types/stub/lib/runtime/runtime-livebindings.d.mts",
+			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
 		}
 	},
 	"types": "./types/stub/index.d.mts",
 	"scripts": {
 		"precommit": "node tools/dev/precommit-validation.mjs",
+		"precommit:local": "node tools/dev/precommit-headers.mjs",
 		"prepare": "node -e \"import('./.githooks/install.mjs').catch(()=>{})\"",
 		"debug": "node tests/debug-slothlet.mjs",
 		"i18n:check": "node tools/ci/check-i18n-languages.mjs",
@@ -151,6 +246,7 @@
 		"coverage:merge": "node tools/coverage/merge-browser-coverage.mjs",
 		"coverage": "npm run coverage:node && npm run coverage:browser && npm run coverage:merge",
 		"coverage:analyze": "node tools/coverage/analyze-coverage.mjs",
+		"coverage:file": "node tools/coverage/coverage-file.mjs",
 		"coverage:all": "npm run coverage && npm run coverage:analyze",
 		"ci:coverage": "npm run coverage",
 		"test": "npm run test:pre-build",
@@ -158,12 +254,15 @@
 		"test:post-build": "npm run test:types",
 		"test:complete": "node tests/test-conditional.mjs && npm run test:post-build",
 		"test:node": "node tests/run-all-tests.mjs",
+		"test:runtime-floor": "node tests/smoke/run-runtime-floor.mjs",
+		"test:runtime-floor:dist": "node tests/smoke/run-runtime-floor.mjs --dist",
 		"test:all": "node tests/test-conditional.mjs && npm run test:node",
 		"test:types": "node tests/validate-typescript.mjs",
 		"test:typestubs": "node tests/validate-typestubs.mjs",
-		"ci:test:types": "npm run build:dist && npm run build:types && npm run build:typestubs && npm run test:types && npm run test:typestubs",
+		"ci:test:types": "npm run types:check",
 		"test:performance": "node tests/performance/performance-benchmark-aggregated.mjs",
 		"test:performance-simple": "node tests/performance/performance-benchmark.mjs",
+		"test:performance:compare": "node tests/performance/compare-v3-v4.mjs",
 		"pretest:browser": "npx playwright install chromium",
 		"test:browser": "node --conditions=slothlet-dev tests/browser/playwright-smoke.mjs",
 		"lint": "eslint --config .configs/eslint.config.mjs .",
@@ -176,20 +275,23 @@
 		"format": "prettier --write . --config .configs/.prettierrc",
 		"format:check": "prettier --check . --config .configs/.prettierrc",
 		"build": "npm run build:dev",
-		"build:ci": "npm run build:cleanup && npm run build:dist && npm run build:minify && npm run build:types && npm run build:exports && npm run build:typestubs && npm run test:types && npm run test:typestubs && npm run build:prepend-license && npm run ci:cleanup-src",
-		"build:dev": "npm run build:cleanup && npm run build:dist && npm run build:minify && npm run build:types && npm run build:exports && npm run build:typestubs && npm run test:types && npm run test:typestubs && npm run build:prepend-license",
-		"build:dev:test": "npm run build:cleanup && npm run build:dist && npm run build:minify && npm run build:types && npm run build:exports && npm run build:typestubs && npm run test:types && npm run test:typestubs && npm run build:prepend-license && npm run build:cleanup",
-		"build:unsafe": "npm run build:cleanup && npm run build:dist && npm run build:minify && npm run build:types && npm run build:exports && npm run build:typestubs && npm run test:types && npm run test:typestubs && npm run build:prepend-license",
+		"build:ci": "npm run docs:migration:check && npm run build:cleanup && npm run build:dist && npm run build:minify && npm run types:build && npm run build:exports && npm run build:typestubs && npm run test:types && npm run test:typestubs && npm run build:prepend-license && npm run ci:cleanup-src",
+		"build:dev": "npm run build:cleanup && npm run build:dist && npm run build:minify && npm run types:build && npm run build:exports && npm run build:typestubs && npm run test:types && npm run test:typestubs && npm run build:prepend-license",
+		"build:dev:test": "npm run build:cleanup && npm run build:dist && npm run build:minify && npm run types:build && npm run build:exports && npm run build:typestubs && npm run test:types && npm run test:typestubs && npm run build:prepend-license && npm run build:cleanup",
+		"build:unsafe": "npm run build:cleanup && npm run build:dist && npm run build:minify && npm run types:build && npm run build:exports && npm run build:typestubs && npm run test:types && npm run test:typestubs && npm run build:prepend-license",
 		"ci:cleanup-src": "node tools/ci/ci-cleanup-src.mjs",
 		"build:cleanup": "shx rm -rf types && shx rm -rf dist",
 		"build:dist": "shx mkdir -p dist && node tools/build/build-dist.mjs && shx rm -rf dist/**/*.backup",
 		"build:minify": "node tools/build/minify-dist.mjs",
-		"build:types": "shx rm -rf types && npx tsc -p .configs/tsconfig.dts.jsonc",
+		"types:check": "npm run build:dist && npm run types:build && npm run build:typestubs && npm run test:types && npm run test:typestubs",
+		"types:build": "shx rm -rf types && npx tsc -p .configs/tsconfig.dts.jsonc",
 		"build:exports": "node tools/build/build-exports.mjs",
 		"build:typestubs": "node tools/build/build-typestubs.mjs",
 		"build:prepend-license": "node tools/build/prepend-license.mjs dist",
 		"build:subpackages": "node tools/build/build-subpackages.mjs",
 		"prepublish-check": "npm run build && npm pack && node tools/build/prepublish-check.mjs",
+		"docs:migration": "node tools/docs/build-migration.mjs",
+		"docs:migration:check": "node tools/docs/build-migration.mjs --check",
 		"docs:build": "npm run docs:build:slothlet && npm run docs:build:api-tests",
 		"docs:build:slothlet": "jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"src/{slothlet.mjs,lib/**/**/*.mjs}\" > docs/generated/API.md",
 		"publish:manual": "npm publish --access public",
@@ -264,12 +366,12 @@
 		"zero-dependencies"
 	],
 	"engines": {
-		"node": ">=22.15.0"
+		"node": ">=24.15.0"
 	},
 	"devEngines": {
 		"runtime": {
 			"name": "node",
-			"version": ">=22.22.0",
+			"version": ">=24.15.0",
 			"onFail": "error"
 		}
 	},
@@ -292,8 +394,8 @@
 	},
 	"type": "module",
 	"peerDependencies": {
-		"@cldmv/slothlet-i18n": "^3.11.0",
-		"@cldmv/slothlet-types": "^3.11.0",
+		"@cldmv/slothlet-i18n": "^4.0.0",
+		"@cldmv/slothlet-types": "^4.0.0",
 		"esbuild": "^0.28.0",
 		"typescript": "^6.0.3 || ^7.0.0"
 	},
@@ -312,13 +414,13 @@
 		}
 	},
 	"devDependencies": {
-		"@cldmv/configs": "^1.2.4",
-		"@cldmv/fix-headers": "^2.2.2",
-		"@cldmv/vitest-runner": "^1.5.1",
+		"@cldmv/configs": "^1.5.0",
+		"@cldmv/fix-headers": "^2.6.1",
+		"@cldmv/vitest-runner": "^1.11.4",
 		"@eslint/css": "^2.0.1",
 		"@eslint/js": "^10.0.1",
 		"@eslint/json": "^2.0.1",
-		"@eslint/markdown": "^8.0.3",
+		"@eslint/markdown": "^9.0.0",
 		"@types/node": "^26.1.1",
 		"@vitest/browser": "^5.0.0",
 		"@vitest/browser-playwright": "^5.0.0",

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/addapi/addapi-reload-force-overwrite.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/addapi/addapi-reload-force-overwrite.test.vitest.mjs
  *	@Date: 2026-09-29T02:02:27-07:00 (1790672547)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:17-07:00 (1791091697)
+ *	@Last modified time: 2026-11-28T04:31:07-08:00 (1795869067)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,7 +76,7 @@ function createInstance(config) {
  * @returns {Record<string, {stack: string[], owner: (string|undefined)}>} Ownership by path.
  */
 function sessionOwnership(api) {
-	const ownership = resolveWrapper(api.launcher).slothlet.handlers.ownership;
+	const ownership = resolveWrapper(api.launcher).____slothlet.handlers.ownership;
 	const result = {};
 	for (const apiPath of ["launcher.session", "launcher.session.create", "launcher.session.peek", "launcher.session.close"]) {
 		result[apiPath] = {
@@ -106,8 +106,8 @@ for (const { config, name } of getMatrixConfigs()) {
 		 */
 		async function mount(launcherDir = LAUNCHER_DIR) {
 			api = await createInstance(config);
-			await api.slothlet.api.add("launcher", launcherDir, { moduleID: "launcher" });
-			await api.slothlet.api.add("launcher.session", SHADOW_DIR, { moduleID: "shadow", forceOverwrite: true });
+			await api.slothlet.api.add("launcher", launcherDir, { id: "launcher" });
+			await api.slothlet.api.add("launcher.session", SHADOW_DIR, { id: "shadow", collision: { force: true } });
 			expect(await api.launcher.session.create()).toBe("shadow:create");
 			expect(await api.launcher.session.peek()).toBe("shadow:peek");
 			expect(api.launcher.session.close).toBeUndefined();
@@ -182,8 +182,8 @@ for (const { config, name } of getMatrixConfigs()) {
 
 		it("an overwrite of the reloaded module's whole mount keeps its outcome across the reload", async () => {
 			api = await createInstance(config);
-			await api.slothlet.api.add("leaf", REVERT_A_DIR, { moduleID: "A" });
-			await api.slothlet.api.add("leaf", REVERT_B_DIR, { moduleID: "B", forceOverwrite: true });
+			await api.slothlet.api.add("leaf", REVERT_A_DIR, { id: "A" });
+			await api.slothlet.api.add("leaf", REVERT_B_DIR, { id: "B", collision: { force: true } });
 			expect(api.leaf.am).toBeUndefined();
 
 			await api.slothlet.api.reload("A");
@@ -201,8 +201,8 @@ for (const { config, name } of getMatrixConfigs()) {
 
 		it("a module mounted inside the reloaded module's own subfolder keeps its leaves", async () => {
 			api = await createInstance(config);
-			await api.slothlet.api.add("launcher", LAUNCHER_DIR, { moduleID: "launcher" });
-			await api.slothlet.api.add("launcher.session.extra", SHADOW_DIR, { moduleID: "shadow" });
+			await api.slothlet.api.add("launcher", LAUNCHER_DIR, { id: "launcher" });
+			await api.slothlet.api.add("launcher.session.extra", SHADOW_DIR, { id: "shadow" });
 			const extraBefore = api.launcher.session.extra;
 
 			await api.slothlet.api.reload("launcher");
@@ -216,7 +216,7 @@ for (const { config, name } of getMatrixConfigs()) {
 
 		it("keeps shadow's overwrite when ownership tracking is unavailable", async () => {
 			await mount();
-			const sl = resolveWrapper(api.launcher).slothlet;
+			const sl = resolveWrapper(api.launcher).____slothlet;
 			const ownership = sl.handlers.ownership;
 			sl.handlers.ownership = null;
 			try {

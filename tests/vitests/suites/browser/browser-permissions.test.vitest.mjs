@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/browser/browser-permissions.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/browser/browser-permissions.test.vitest.mjs
  *	@Date: 2026-05-30T00:06:52-07:00 (1780124812)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-28T04:31:17-08:00 (1795869077)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -78,7 +78,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "allow",
+					policy: "allow",
 					rules: [{ caller: "probe.**", target: "math.**", effect: "deny" }]
 				}
 			})
@@ -99,7 +99,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "allow",
+					policy: "allow",
 					rules: [{ caller: "probe.**", target: "math.**", effect: "deny" }]
 				}
 			})
@@ -116,7 +116,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "allow",
+					policy: "allow",
 					rules: [{ caller: "advanced.calc.**", target: "math.**", effect: "deny" }]
 				}
 			})
@@ -139,7 +139,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					rules: [{ caller: "advanced.calc.**", target: "math.**", effect: "allow" }]
 				}
 			})
@@ -163,7 +163,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "allow",
+					policy: "allow",
 					rules: []
 				}
 			})
@@ -180,7 +180,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					rules: []
 				}
 			})
@@ -211,7 +211,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					rules: [
 						{
 							caller: "advanced.calc.**",
@@ -236,7 +236,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					rules: [
 						{
 							caller: "advanced.calc.**",
@@ -266,7 +266,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					rules: [
 						{
 							caller: "advanced.calc.**",
@@ -291,7 +291,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					rules: [
 						{
 							caller: "advanced.calc.**",
@@ -320,7 +320,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					rules: [
 						{
 							caller: "probe.**",
@@ -359,8 +359,10 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "allow",
-					readGating: true,
+					policy: "allow",
+					gating: {
+						read: true
+					},
 					rules: [{ caller: "probe.**", target: "math.multiply", effect: "deny" }]
 				}
 			})
@@ -383,8 +385,10 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "allow",
-					readGating: false,
+					policy: "allow",
+					gating: {
+						read: false
+					},
 					rules: [{ caller: "probe.**", target: "math.multiply", effect: "deny" }]
 				}
 			})
@@ -419,7 +423,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "allow",
+					policy: "allow",
 					audit: "verbose",
 					rules: [{ caller: "advanced.calc.**", target: "math.**", effect: "deny" }]
 				}
@@ -437,7 +441,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 
 		expect(deniedEvents.length).toBeGreaterThan(0);
 		// The denied event must include a target that touches the math namespace.
-		const evt = deniedEvents.find((e) => String(e?.target ?? "").startsWith("math."));
+		const evt = deniedEvents.find((e) => (e?.target ?? []).join(".").startsWith("math."));
 		expect(evt).toBeDefined();
 	});
 
@@ -447,7 +451,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					rules: [
 						{ caller: "advanced.calc.**", target: "math.**", effect: "allow", condition: { env: "production" } },
 						{ caller: "advanced.calc.**", target: "math.**", effect: "deny", condition: { env: "sandbox" } }
@@ -479,8 +483,10 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 		api = await slothlet(
 			browserCfg(config, {
 				permissions: {
-					defaultPolicy: "deny",
-					readGating: true,
+					policy: "deny",
+					gating: {
+						read: true
+					},
 					rules: []
 				}
 			})

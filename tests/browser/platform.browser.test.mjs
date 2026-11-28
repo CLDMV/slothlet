@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/browser/platform.browser.test.mjs
+ *	@Filename: tests/browser/platform.browser.test.mjs
  *	@Date: 2026-06-16T19:29:13-07:00 (1781663353)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:58-07:00 (1791424198)
+ *	@Last modified time: 2026-11-28T04:30:52-08:00 (1795869052)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@ import { describe, it, expect } from "vitest";
 
 describe("platform browser host arms", () => {
 	it("detects browser host + installs the util shim", async () => {
-		const platform = await import("@cldmv/slothlet/helpers/platform");
+		const platform = await import("#helpers/platform");
 		// Module-init: `const isNode = … process …` resolves false in a browser.
 		expect(platform.isNode).toBe(false);
 		// The `else` arm ran: util is the browser shim, not node:util.
@@ -35,7 +35,7 @@ describe("platform browser host arms", () => {
 	});
 
 	it("scheduleMacrotask runs callbacks without setImmediate (#578)", async () => {
-		const { scheduleMacrotask } = await import("@cldmv/slothlet/helpers/platform");
+		const { scheduleMacrotask } = await import("#helpers/platform");
 		expect(typeof globalThis.setImmediate).toBe("undefined");
 		const order = [];
 		const ran = new Promise((resolve) =>
@@ -50,7 +50,7 @@ describe("platform browser host arms", () => {
 	});
 
 	it("loadJson takes the async dynamic-import branch in a browser", async () => {
-		const { loadJson } = await import("@cldmv/slothlet/helpers/platform");
+		const { loadJson } = await import("#helpers/platform");
 		// In a browser loadJson returns a Promise (async import branch executes regardless of
 		// whether the specifier ultimately resolves under the test's module server).
 		const result = loadJson("@cldmv/slothlet/i18n/language/es-mx.json");
@@ -60,7 +60,7 @@ describe("platform browser host arms", () => {
 	});
 
 	it("loadJson resolves to null when the dynamic import fails (browser)", async () => {
-		const { loadJson } = await import("@cldmv/slothlet/helpers/platform");
+		const { loadJson } = await import("#helpers/platform");
 		// A specifier with no served module under the test's importmap: the dynamic import rejects,
 		// so loadJsonBrowser's `catch` returns null — the documented failed-import contract (the node
 		// run can never exercise this arm: in node loadJson never reaches the browser delegate).

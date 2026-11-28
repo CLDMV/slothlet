@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/pattern-matcher.mjs
+ *	@Filename: src/lib/helpers/pattern-matcher.mjs
  *	@Date: 2026-04-14T07:17:33-07:00 (1776176253)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-28T04:30:44-08:00 (1795869044)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,18 +27,35 @@
  * functions that test against dot-separated API paths.
  *
  * @example
- * import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
+ * import { compilePattern, expandBraces } from "#helpers/pattern-matcher";
  * const matcher = compilePattern("payments.**");
  * matcher("payments.charge");         // true
  * matcher("payments.stripe.webhook"); // true
  * matcher("admin.manage");            // false
  */
 
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError } from "#errors";
+import {
+	appendList,
+	ArrayMethods,
+	filterList,
+	listPush,
+	mapList,
+	RegExp,
+	RegExpMethods,
+	SetMethods,
+	regExpReplace,
+	splitText,
+	StringMethods,
+	textReplace
+} from "#helpers/intrinsics";
+import { UNSAFE_PATH_SEGMENTS } from "#helpers/segments";
 
 /**
  * Compile a glob pattern into a matcher function.
- * Supports: * (any chars except .), ** (any chars including .), ? (single char),
+ * Supports: * (any chars except .), ** (any number of segments, none included, when it is a whole segment: `payments.**`
+ * matches `payments` itself, `**.charge` matches `charge`, `a.**.b` matches `a.b`; any chars including . inside a segment),
+ * ? (single char),
  * {a,b} brace expansion, !pattern whole-pattern negation, and !(a|b) scoped exclusion —
  * a per-segment complement matching any single segment except the listed literal alternatives
  * (e.g. `admin.!(initialize)` matches `admin.start` but not `admin.initialize`).
@@ -52,13 +69,16 @@ import { SlothletError } from "@cldmv/slothlet/errors";
  * const matcher = compilePattern("payments.**");
  * matcher("payments.charge"); // true
  * matcher("admin.users");     // false
+ *
+ * @example
+ * compilePattern("payments.**")("payments"); // true
  */
 export function compilePattern(pattern, options = {}) {
 	// Handle whole-pattern negation (leading "!"), but NOT the scoped "!(...)" exclusion extglob,
 	// which is a per-segment operator handled below.
-	const isNegation = pattern.startsWith("!") && !pattern.startsWith("!(");
+	const isNegation = StringMethods.startsWith(pattern, "!") && !StringMethods.startsWith(pattern, "!(");
 	if (isNegation) {
-		pattern = pattern.slice(1);
+		pattern = StringMethods.slice(pattern, 1);
 		const matcher = compilePattern(pattern, options);
 		return (path) => !matcher(path);
 	}
@@ -67,8 +87,8 @@ export function compilePattern(pattern, options = {}) {
 	const expanded = expandBraces(pattern, 0, 10, options);
 	if (expanded.length > 1) {
 		// Multiple patterns - match if ANY match
-		const matchers = expanded.map((p) => compilePattern(p, options));
-		return (path) => matchers.some((m) => m(path));
+		const matchers = mapList(expanded, (p) => compilePattern(p, options));
+		return (path) => ArrayMethods.some(matchers, (m) => m(path));
 	}
 
 	// Single pattern - convert to regex
@@ -81,36 +101,85 @@ export function compilePattern(pattern, options = {}) {
 	// alternatives are treated as literals (their regex specials are escaped); globs inside `!(...)`
 	// are not supported.
 	const extglobs = [];
-	pattern = pattern.replace(/!\(([^()]*)\)/g, (_match, body) => {
-		const alts = body
-			.split("|")
-			.filter((alt) => alt.length > 0)
-			.map((alt) => alt.replace(/[.+^$()|[\]\\*?{}]/g, "\\$&"));
+	pattern = regExpReplace(/!\(([^()]*)\)/g, pattern, (_match, body) => {
+		const alts = mapList(
+			filterList(splitText(body, "|"), (alt) => alt.length > 0),
+			(alt) => regExpReplace(/[.+^$()|[\]\\*?{}]/g, alt, "\\$&")
+		);
 		// `!()` (no alternatives) excludes nothing → any single segment matches.
-		const guard = alts.length ? `(?!(?:${alts.join("|")})(?:\\.|$))` : "";
+		const guard = alts.length ? `(?!(?:${ArrayMethods.join(alts, "|")})(?:\\.|$))` : "";
 		const token = `__EXTGLOB_${extglobs.length}__`;
-		extglobs.push(`${guard}[^.]+`);
+		listPush(extglobs, `${guard}[^.]+`);
 		return token;
 	});
 
-	// Escape special regex characters except * and ?
-	let regexPattern = pattern
-		.replace(/[.+^$()|[\]\\]/g, "\\$&") // Escape . and other regex specials; {} already expanded
-		.replace(/\*\*/g, "__DOUBLESTAR__") // Placeholder for **
-		.replace(/\*/g, "[^.]*") // * matches any chars except .
-		.replace(/__DOUBLESTAR__/g, ".*") // ** matches any chars including .
-		.replace(/\?/g, "."); // ? matches single char
+	// A `**` that is a whole segment stands for any number of segments, none included, and takes the `.` beside it
+	// with it (#726). A run of them (`a.**.**`) says the same as one, so it is read as one.
+	const segments = [];
+	for (let ofIndex = 0, ofList = splitText(pattern, "."); ofIndex < ofList.length; ofIndex++) {
+		const segment = ofList[ofIndex];
+		if (segment === "**" && segments[segments.length - 1] === "**") continue;
+		listPush(segments, segment);
+	}
+	let regexPattern = "";
+	for (let index = 0; index < segments.length; index++) {
+		const segment = segments[index];
+		const first = index === 0;
+		const last = index === segments.length - 1;
+		if (segment === "**") {
+			if (first && last) regexPattern += ".*";
+			else if (first) regexPattern += "(?:.*\\.)?";
+			else if (last) regexPattern += "(?:\\..*)?";
+			else regexPattern += "\\.(?:.*\\.)?";
+			continue;
+		}
+		// The `.` before this segment, unless a `**` before it already took it.
+		if (!first && segments[index - 1] !== "**") regexPattern += "\\.";
+		regexPattern += regExpReplace(
+			/\?/g,
+			regExpReplace(
+				/__DOUBLESTAR__/g,
+				regExpReplace(/\*/g, regExpReplace(/\*\*/g, regExpReplace(/[+^$()|[\]\\]/g, segment, "\\$&"), "__DOUBLESTAR__"), "[^.]*"),
+				".*"
+			),
+			"."
+		); // ? matches single char
+	}
 
 	// Restore scoped-exclusion segment matchers (function replacement avoids `$` in the lookahead
 	// being read as a replacement token).
-	extglobs.forEach((re, i) => {
-		regexPattern = regexPattern.replace(`__EXTGLOB_${i}__`, () => re);
+	ArrayMethods.forEach(extglobs, (re, i) => {
+		regexPattern = textReplace(regexPattern, `__EXTGLOB_${i}__`, () => re);
 	});
 
 	regexPattern = `^${regexPattern}$`;
 	const regex = new RegExp(regexPattern);
 
-	return (path) => regex.test(path);
+	return (path) => RegExpMethods.exec(regex, path) !== null;
+}
+
+/**
+ * The first segment of a path pattern that no api path can hold (`__proto__`, `constructor`, `prototype`), if any.
+ * Braces are expanded and a leading whole-pattern `!` is read past, so `{a,constructor}.x` and `!*.prototype` are
+ * found; globs (`*`, `**`, `?`) and the exclusion form `!(a|b)` never name one. `toString`, `valueOf` and the like are
+ * ordinary api names and pass.
+ * @param {string} pattern - Glob path pattern.
+ * @returns {{ segment: string, index: number }|null} The offending segment and its index, or null when the pattern names none.
+ * @example
+ * unsafeSegmentOf("db.constructor"); // { segment: "constructor", index: 1 }
+ * unsafeSegmentOf("db.toString"); // null
+ * @package
+ */
+export function unsafeSegmentOf(pattern) {
+	if (typeof pattern !== "string") return null;
+	const body =
+		StringMethods.startsWith(pattern, "!") && !StringMethods.startsWith(pattern, "!(") ? StringMethods.slice(pattern, 1) : pattern;
+	for (let ofIndex = 0, ofList = expandBraces(body); ofIndex < ofList.length; ofIndex++) {
+		for (let segIndex = 0, segList = splitText(ofList[ofIndex], "."); segIndex < segList.length; segIndex++) {
+			if (SetMethods.has(UNSAFE_PATH_SEGMENTS, segList[segIndex])) return { segment: segList[segIndex], index: segIndex };
+		}
+	}
+	return null;
 }
 
 /**
@@ -133,11 +202,11 @@ export function expandBraces(pattern, depth = 0, maxDepth = 10, options = {}) {
 			options.onMaxDepth(maxDepth);
 		}
 		// Fallback throw: only reached when onMaxDepth is not supplied.
-		throw new SlothletError("BRACE_EXPANSION_MAX_DEPTH", { maxDepth, validationError: true });
+		throw new SlothletError("BRACE_EXPANSION_MAX_DEPTH", { depth: maxDepth });
 	}
 
 	// Find first brace group
-	const braceStart = pattern.indexOf("{");
+	const braceStart = StringMethods.indexOf(pattern, "{");
 	if (braceStart === -1) {
 		return [pattern]; // No braces to expand
 	}
@@ -161,20 +230,21 @@ export function expandBraces(pattern, depth = 0, maxDepth = 10, options = {}) {
 	}
 
 	// Extract parts
-	const prefix = pattern.slice(0, braceStart);
-	const braceContent = pattern.slice(braceStart + 1, braceEnd);
-	const suffix = pattern.slice(braceEnd + 1);
+	const prefix = StringMethods.slice(pattern, 0, braceStart);
+	const braceContent = StringMethods.slice(pattern, braceStart + 1, braceEnd);
+	const suffix = StringMethods.slice(pattern, braceEnd + 1);
 
 	// Split on commas (but not nested ones)
 	const alternatives = splitBraceAlternatives(braceContent);
 
 	// Generate expanded patterns
 	const expanded = [];
-	for (const alt of alternatives) {
+	for (let ofIndex = 0, ofList = alternatives; ofIndex < ofList.length; ofIndex++) {
+		const alt = ofList[ofIndex];
 		const combined = prefix + alt + suffix;
 		// Recursively expand nested braces
 		const recursiveExpanded = expandBraces(combined, depth + 1, maxDepth, options);
-		expanded.push(...recursiveExpanded);
+		appendList(expanded, recursiveExpanded);
 	}
 
 	return expanded;
@@ -203,7 +273,7 @@ export function splitBraceAlternatives(content) {
 			depth--;
 			current += char;
 		} else if (char === "," && depth === 0) {
-			alternatives.push(current);
+			listPush(alternatives, current);
 			current = "";
 		} else {
 			current += char;
@@ -211,7 +281,7 @@ export function splitBraceAlternatives(content) {
 	}
 
 	if (current) {
-		alternatives.push(current);
+		listPush(alternatives, current);
 	}
 
 	return alternatives;

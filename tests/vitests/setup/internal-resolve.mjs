@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/setup/internal-resolve.mjs
+ *	@Filename: tests/vitests/setup/internal-resolve.mjs
  *	@Date: 2026-07-20T10:04:22-07:00 (1784567062)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:16-07:00 (1791091696)
+ *	@Last modified time: 2026-11-28T04:31:05-08:00 (1795869065)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,10 +23,10 @@
  * signal. Tests must not hard-code `../../../src/...` relative paths (they break the moment `src/` is
  * gone). Instead:
  *
- *   - Public surface → import the package export, e.g. `@cldmv/slothlet/helpers/module-sort`.
- *   - Internals with a package `imports` mapping → the `#handlers/*` / `#factories/*` specifiers, which
- *     already detect src vs dist via conditions (they were removed from `exports` for the permission
- *     boundary in v3.12.0).
+ *   - Public surface → import the package export, e.g. `@cldmv/slothlet/sanitize`.
+ *   - Internals → the package `imports` specifiers (`#helpers/*`, `#handlers/*`, `#factories/*`,
+ *     `#builders/*`, `#modes/*`, `#processors/*`, `#slothlet`), which already detect src vs dist via
+ *     conditions (handlers/factories left `exports` in v3.12.0, the rest in v4).
  *   - Anything else an internal test needs (importing an internal with no `#` mapping, or READING a
  *     source file for static analysis) → this module: `hasSource`, `internalLibPath`, `importInternal`.
  *
@@ -63,8 +63,8 @@ export function internalLibPath(rel) {
 
 /**
  * Dynamically import a lib-internal module from the active (src or dist) tree — the middle-man for an
- * internal that has no package export and no `#` mapping. Prefer `#handlers/*` / `#factories/*` where
- * they exist; use this only for internals without one.
+ * internal that has no package export and no `#` mapping. Prefer the `#…` specifiers where they
+ * exist; use this only for internals without one.
  * @param {string} rel - Path under `lib/`, e.g. `"processors/flatten.mjs"`.
  * @returns {Promise<object>} The imported module namespace.
  */

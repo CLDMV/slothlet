@@ -23,6 +23,9 @@ export class SlothletSelf {
  * giving API modules access to all other API methods without import cycles.
  * Typed as {@link SlothletSelf}, which generated api types extend.
  *
+ * Each instance's files get the form its api root takes, as the host's `api` does: an object for an object root, a
+ * function for a function root, which `self(...)` and `new self(...)` call under the root's call rule (#803).
+ *
  * @memberof module:@cldmv/slothlet/runtime
  * @type {SlothletSelf}
  * @example
@@ -30,7 +33,7 @@ export class SlothletSelf {
  * // Inside an API function:
  * const result = await self.math.add(1, 2);
  */
-export const self: SlothletSelf;
+export let self: SlothletSelf;
 /**
  * The current ambient context object. Seeded at instance startup via `config.context` and
  * persists for the lifetime of the instance. `api.slothlet.context.run()` and `.scope()` can
@@ -48,14 +51,19 @@ export const self: SlothletSelf;
  */
 export const context: object;
 /**
- * Current Slothlet instance identifier. Unique per `slothlet()` call; useful when
- * multiple Slothlet instances coexist and you need to identify which one is active.
+ * Read-only facts about the running slothlet instance.
  *
  * @memberof module:@cldmv/slothlet/runtime
- * @type {string}
+ * @type {Readonly<{id: (string|undefined)}>}
+ * @description
+ * `instance.id` is the id of the instance whose call is running, read at access: a real string inside a call (unique per
+ * `slothlet()` call, so it tells instances apart when several coexist), undefined outside one. Both runtimes answer it
+ * alike (#764).
  * @example
- * import { instanceID } from "@cldmv/slothlet/runtime";
- * console.log(instanceID); // e.g. "slothlet-1"
+ * import { instance } from "@cldmv/slothlet/runtime";
+ * console.log(instance.id); // e.g. "slothlet_1794877110644_b1nk0g540"
  */
-export const instanceID: string;
+export const instance: Readonly<{
+    id: (string | undefined);
+}>;
 //# sourceMappingURL=runtime.d.mts.map

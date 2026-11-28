@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-self-outside-module.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-self-outside-module.test.vitest.mjs
  *	@Date: 2026-07-30T12:00:00-07:00 (1785438000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
+ *	@Last modified time: 2026-11-28T04:32:41-08:00 (1795869161)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  * to the module making it. Code that is not a module has no such attribution — so if `self` resolved
  * for it, it would resolve as the host, which is exempt from the rules. Any script able to
  * `import { self } from "@cldmv/slothlet/runtime"` would then hold full authority over a running
- * instance, including `slothlet.permissions.control.disable()`, regardless of what the rules say.
+ * instance, including `slothlet.permissions.control.mode("off")`, regardless of what the rules say.
  *
  * The async runtime refuses this for free: with no AsyncLocalStorage store there is nothing to read
  * through. The live runtime keeps its store in a field that stays populated for the instance's whole
@@ -53,18 +53,18 @@ describe.each(getMatrixConfigs())("Permissions > self outside a module > $name",
 	it("refuses to read through while no module is executing", async () => {
 		api = await slothlet({ ...config, base: BASE });
 
-		expect(() => self.db).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		expect(() => self.db).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 	});
 
 	it("refuses to reach the internal namespace, so the permission system cannot be turned off", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "callers.**", effect: "allow" }] }
+			permissions: { policy: "deny", rules: [{ caller: "**", target: "callers.**", effect: "allow" }] }
 		});
 
-		// The worst version of the read above: `control.disable()` would drop enforcement wholesale.
-		expect(() => self.slothlet).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		// The worst version of the read above: `control.mode("off")` would drop enforcement wholesale.
+		expect(() => self.slothlet).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 	});
 
 	it("discloses no shape through enumeration, membership, or descriptors", async () => {
@@ -83,7 +83,7 @@ describe.each(getMatrixConfigs())("Permissions > self outside a module > $name",
 		// writing module. With no module writing there is nobody to attribute it to.
 		expect(() => {
 			self.injected = () => "owned";
-		}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+		}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 		expect(api.injected).toBeUndefined();
 	});
 

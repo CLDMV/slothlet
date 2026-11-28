@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/runtime/self-assign-framework-namespace.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/runtime/self-assign-framework-namespace.test.vitest.mjs
  *	@Date: 2026-10-18T15:35:35-07:00 (1792362935)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:16:15-07:00 (1793056575)
+ *	@Last modified time: 2026-11-28T04:32:59-08:00 (1795869179)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,12 +28,11 @@
  * built-in rules are off too: a module mounted with `api.add` owns none of the namespace and is refused by the
  * ownership rule, and the base module, which owns the whole tree, changes it as in the released 3.x line.
  *
- * Fixture: `api_tests/api_test_framework_namespace_guard` — `base/` and `guest/` both run `shared/attacks.mjs`.
+ * Fixture: `api_tests/api_test_framework_namespace_guard` — `api/` and `api_test_framework_namespace_guard_guest/` both run `lib/attacks.mjs`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutputSync, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_FRAMEWORK_NAMESPACE_GUARD;
 const REFUSED = "PERMISSION_DENIED";
@@ -49,10 +48,10 @@ const CONFIGS = [
 const READ_NAMESPACE = { caller: "**", target: "slothlet.**", effect: "allow" };
 const PERMISSIONS = [
 	{ label: "permissions with defaults", options: { permissions: {} } },
-	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: [READ_NAMESPACE] } } }
+	{ label: "permissions defaultPolicy deny", options: { permissions: { policy: "deny", rules: [READ_NAMESPACE] } } }
 ];
 
-const MEMBERS = ["lockCaller", "bind", "metadata", "hook", "event", "permissions", "api", "reload", "version"];
+const MEMBERS = ["pin", "bind", "metadata", "hook", "event", "permissions", "api", "reload", "version"];
 
 /**
  * A report with every refused change marked `"refused"`, so a change that went through stands out.
@@ -85,8 +84,8 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function load() {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			return api;
 		}
 
@@ -127,8 +126,8 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 
 		it("refuses changes at any depth under self.slothlet", async () => {
 			await load();
-			const caller = api.slothlet.lockCaller.caller;
-			const addRule = api.slothlet.permissions.addRule;
+			const caller = api.slothlet.pin.caller;
+			const addRule = api.slothlet.permissions.rules.add;
 			const on = api.slothlet.hook.on;
 			const add = api.slothlet.api.add;
 			const metadataProto = Object.getPrototypeOf(api.slothlet.metadata);
@@ -138,8 +137,8 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 				const report = await withSuppressedSlothletErrorOutputSync(() => attack.changeNested());
 				expect({ label, report: markRefused(report, refusals) }).toEqual({ label, report: allRefused(report) });
 			}
-			expect(api.slothlet.lockCaller.caller).toBe(caller);
-			expect(api.slothlet.permissions.addRule).toBe(addRule);
+			expect(api.slothlet.pin.caller).toBe(caller);
+			expect(api.slothlet.permissions.rules.add).toBe(addRule);
 			expect(api.slothlet.permissions.planted).toBeUndefined();
 			expect(api.slothlet.hook.on).toBe(on);
 			expect(Object.isFrozen(api.slothlet.hook)).toBe(false);
@@ -149,7 +148,7 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			expect(api.slothlet.materialize.get.planted).toBeUndefined();
 			expect(Object.getPrototypeOf(api.slothlet.materialize.get)).toBe(Function.prototype);
 			expect(api.slothlet.materialize.wait.planted).toBeUndefined();
-			expect(Object.getOwnPropertyDescriptor(api.slothlet.materialize, "materialized").get.planted).toBeUndefined();
+			expect(Object.getOwnPropertyDescriptor(api.slothlet.materialize, "complete").get.planted).toBeUndefined();
 			expect(api.slothlet.permissions[symbol]).toBeUndefined();
 		});
 
@@ -185,7 +184,7 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			]) {
 				const kept = await attack.keepMaterializeGet();
 				expect(typeof kept()).toBe("object");
-				api.slothlet.permissions.addRule({ caller, target: "slothlet.materialize.get", effect: "deny" });
+				api.slothlet.permissions.rules.add({ caller, target: "slothlet.materialize.get", effect: "deny" });
 				let code = null;
 				withSuppressedSlothletErrorOutputSync(() => {
 					try {
@@ -201,14 +200,14 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 
 		it("refuses a write through a namespace a module kept, made later from outside any call", async () => {
 			await load();
-			const lockCaller = api.slothlet.lockCaller;
+			const lockCaller = api.slothlet.pin;
 			const on = api.slothlet.hook.on;
 			for (const [label, attack] of modules()) {
 				const later = await attack.keepNamespace();
 				const report = withSuppressedSlothletErrorOutputSync(() => later());
 				expect({ label, report: markRefused(report, refusals) }).toEqual({ label, report: allRefused(report) });
 			}
-			expect(api.slothlet.lockCaller).toBe(lockCaller);
+			expect(api.slothlet.pin).toBe(lockCaller);
 			expect(api.slothlet.hook.on).toBe(on);
 			expect(typeof api.slothlet.version).toBe("string");
 		});
@@ -219,9 +218,9 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 				const read = await attack.readAndCall();
 				expect(read).toEqual({
 					version: api.slothlet.version,
-					lockCaller: "function",
+					pin: "function",
 					has: true,
-					ownLockCaller: "function",
+					ownPin: "function",
 					hooks: true
 				});
 			}
@@ -231,34 +230,34 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 			if (!options.permissions) return;
 			const grant = { caller: "**", target: "slothlet.hostGranted:write", effect: "allow" };
 			api = await slothlet({
-				base: path.join(FIXTURE, "base"),
+				base: apiPart(FIXTURE),
 				mode,
 				runtime,
 				silent: true,
 				permissions: { ...options.permissions, rules: [...(options.permissions.rules ?? []), grant] }
 			});
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			// The grant names every caller: the guest, which owns none of the namespace, writes too.
 			expect(await api.guest.attack.writeMember("hostGranted", 2)).toBe("done");
 			expect(api.slothlet.hostGranted).toBe(2);
 			expect(await api.attack.writeMember("hostGranted", 1)).toBe("done");
 			expect(api.slothlet.hostGranted).toBe(1);
 			// Only the member the rule names is lifted.
-			expect(withSuppressedSlothletErrorOutputSync(() => api.attack.writeMember("lockCaller", 1))).toBe(REFUSED);
-			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.writeMember("lockCaller", 1))).toBe(REFUSED);
+			expect(withSuppressedSlothletErrorOutputSync(() => api.attack.writeMember("pin", 1))).toBe(REFUSED);
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.writeMember("pin", 1))).toBe(REFUSED);
 		});
 
 		it("a host rule lifting the built-in write rule for the root module only leaves the guest refused", async () => {
 			if (!options.permissions) return;
 			const grant = { caller: "attack.**", target: "slothlet.hostGranted:write", effect: "allow" };
 			api = await slothlet({
-				base: path.join(FIXTURE, "base"),
+				base: apiPart(FIXTURE),
 				mode,
 				runtime,
 				silent: true,
 				permissions: { ...options.permissions, rules: [...(options.permissions.rules ?? []), grant] }
 			});
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 			expect(await api.attack.writeMember("hostGranted", 1)).toBe("done");
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.writeMember("hostGranted", 2))).toBe(REFUSED);
 			expect(api.slothlet.hostGranted).toBe(1);
@@ -302,8 +301,8 @@ describe.each(CONFIGS)("module writes to the framework namespace, permission sys
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+		await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}
 
@@ -315,8 +314,8 @@ describe.each(CONFIGS)("module writes to the framework namespace, permission sys
 		["leaves, with the system disabled,", { permissions: { mode: "disabled" } }, DONE]
 	])("%s a module mounted with api.add changing a member of the namespace", async (_label, options, expected) => {
 		await load(options);
-		expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.changeMember("lockCaller"))).toEqual(expected);
-		expect(api.slothlet.lockCaller === undefined).toBe(expected === DONE);
+		expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.changeMember("pin"))).toEqual(expected);
+		expect(api.slothlet.pin === undefined).toBe(expected === DONE);
 	});
 
 	it.each([
@@ -324,7 +323,7 @@ describe.each(CONFIGS)("module writes to the framework namespace, permission sys
 		["leaves, with the system disabled,", { permissions: { mode: "disabled" } }, DONE]
 	])("%s the base module, which owns the whole tree, changing a member of the namespace", async (_label, options, expected) => {
 		await load(options);
-		expect(withSuppressedSlothletErrorOutputSync(() => api.attack.changeMember("lockCaller"))).toEqual(expected);
-		expect(api.slothlet.lockCaller === undefined).toBe(expected === DONE);
+		expect(withSuppressedSlothletErrorOutputSync(() => api.attack.changeMember("pin"))).toEqual(expected);
+		expect(api.slothlet.pin === undefined).toBe(expected === DONE);
 	});
 });

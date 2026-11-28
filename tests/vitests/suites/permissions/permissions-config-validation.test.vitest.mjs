@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-config-validation.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-config-validation.test.vitest.mjs
  *	@Date: 2026-04-14T17:20:42-07:00 (1776212442)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-28T04:32:23-08:00 (1795869143)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "invalid",
+					policy: "invalid",
 					rules: []
 				}
 			});
@@ -49,7 +49,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					rules: "not-an-array"
 				}
 			});
@@ -65,7 +65,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					audit: "invalid-value",
 					rules: []
 				}
@@ -76,14 +76,16 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		}
 	});
 
-	it("permissions config with non-boolean readGating is rejected", async () => {
+	it("permissions config with non-boolean gating.read is rejected", async () => {
 		try {
 			api = await slothlet({
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
-					readGating: "yes",
+					policy: "deny",
+					gating: {
+						read: "yes"
+					},
 					rules: []
 				}
 			});
@@ -93,14 +95,16 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		}
 	});
 
-	it("permissions config with non-boolean failOpenOnAbsentCaller is rejected", async () => {
+	it("permissions config with non-boolean caller.anonymous is rejected", async () => {
 		try {
 			api = await slothlet({
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
-					failOpenOnAbsentCaller: "yes",
+					policy: "deny",
+					caller: {
+						anonymous: "yes"
+					},
 					rules: []
 				}
 			});
@@ -110,15 +114,17 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		}
 	});
 
-	it("permissions config with non-boolean references.capture is rejected", async () => {
+	it("permissions config with non-boolean caller.capture is rejected", async () => {
 		try {
 			api = await slothlet({
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
-					references: { capture: "yes" },
-					rules: []
+					policy: "deny",
+					rules: [],
+					caller: {
+						capture: "yes"
+					}
 				}
 			});
 			expect.unreachable("Should have thrown for invalid references.capture");
@@ -127,7 +133,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		}
 	});
 
-	it("permissions config with a non-object references block is rejected", async () => {
+	it("permissions config with a non-object caller block is rejected", async () => {
 		// Rejected rather than ignored: a dropped option reads as "the default is in effect" while the
 		// author believes they changed it, which for a security default is the expensive direction.
 		try {
@@ -135,8 +141,8 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
-					references: 42,
+					policy: "deny",
+					caller: 42,
 					rules: []
 				}
 			});
@@ -146,7 +152,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		}
 	});
 
-	it("permissions config with an array references block is rejected", async () => {
+	it("permissions config with an array caller block is rejected", async () => {
 		// `typeof [] === "object"`, so an array slips past a bare typeof check and every option inside
 		// it reads as unset — the author believes capture is off while the secure default is silently in
 		// effect. Same rejection the manifest and lifecycle blocks already apply to arrays.
@@ -155,8 +161,8 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
-					references: [{ capture: false }],
+					policy: "deny",
+					caller: [{ capture: false }],
 					rules: []
 				}
 			});
@@ -185,7 +191,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					events: 42,
 					rules: []
 				}
@@ -205,7 +211,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					events: [{ default: "allow" }],
 					rules: []
 				}
@@ -216,14 +222,14 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 		}
 	});
 
-	it("permissions config with an invalid events.default value is rejected", async () => {
+	it("permissions config with an invalid events.policy value is rejected", async () => {
 		try {
 			api = await slothlet({
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
-					events: { default: "bogus" },
+					policy: "deny",
+					events: { policy: "bogus" },
 					rules: []
 				}
 			});
@@ -240,7 +246,7 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 				...config,
 				base: `${BASE}/callers`,
 				permissions: {
-					defaultPolicy: "deny",
+					policy: "deny",
 					events: { rules: "not-an-array" },
 					rules: []
 				}

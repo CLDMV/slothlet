@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/addapi/addapi-remove-namespace-creator.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/addapi/addapi-remove-namespace-creator.test.vitest.mjs
  *	@Date: 2026-10-02T00:00:00-07:00 (1790924400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:17-07:00 (1791091697)
+ *	@Last modified time: 2026-11-28T04:31:07-08:00 (1795869067)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -126,7 +126,7 @@ for (const { config, name } of getMatrixConfigs()) {
 					silent: true,
 					api: {
 						...config.api,
-						collision: { ...(config.api?.collision ?? {}), api: collisionApi },
+						collision: { mode: { initial: "merge", api: collisionApi } },
 						mutations: { add: true, remove: true, reload: true }
 					}
 				});
@@ -140,13 +140,13 @@ for (const { config, name } of getMatrixConfigs()) {
 			])("%s created by the first of %j", async (_label, [creator, survivor]) => {
 				// The key order the survivor's namespace has on its own.
 				const alone = await createInstance();
-				await alone.slothlet.api.add("plugins", MODULES[survivor].dir, { moduleID: survivor });
+				await alone.slothlet.api.add("plugins", MODULES[survivor].dir, { id: survivor });
 				const survivorOrder = Object.keys(alone.plugins);
 				await alone.shutdown();
 
 				api = await createInstance();
-				await api.slothlet.api.add("plugins", MODULES[creator].dir, { moduleID: creator });
-				await api.slothlet.api.add("plugins", MODULES[survivor].dir, { moduleID: survivor });
+				await api.slothlet.api.add("plugins", MODULES[creator].dir, { id: creator });
+				await api.slothlet.api.add("plugins", MODULES[survivor].dir, { id: survivor });
 
 				// Call every surviving leaf once (materializing it under lazy mode), then hold its reference.
 				const survivorLeaves = MODULES[survivor].leaves;
@@ -206,13 +206,13 @@ describe("invalidateSpeculativeWrappers with a live-kept list (#555)", () => {
 			silent: true,
 			api: { mutations: { add: true, remove: true } }
 		});
-		await api.slothlet.api.add("plugins", MODULES.other.dir, { moduleID: "other" });
-		const slothletInstance = resolveWrapper(api.plugins).slothlet;
+		await api.slothlet.api.add("plugins", MODULES.other.dir, { id: "other" });
+		const slothletInstance = resolveWrapper(api.plugins).____slothlet;
 		const UnifiedWrapper = resolveWrapper(api.plugins).constructor;
 		const gamma = api.plugins.gamma;
 		// A wrapper that was never placed in the tree, at a path nothing occupies.
 		const detached = new UnifiedWrapper(slothletInstance, { mode: "eager", apiPath: "nowhere.thing", initialImpl: () => "detached" });
-		const detachedProxy = detached.createProxy();
+		const detachedProxy = detached.___createProxy();
 		expect(await detachedProxy()).toBe("detached");
 
 		const kept = [];

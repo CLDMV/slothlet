@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/i18n/translations-edge-cases.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/i18n/translations-edge-cases.test.vitest.mjs
  *	@Date: 2026-02-26T07:11:14-08:00 (1772118674)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:08-07:00 (1791090908)
+ *	@Last modified time: 2026-11-28T04:31:57-08:00 (1795869117)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  * @description
  * Targets the branches not reached by integration tests:
  * - Line 103-105: `setLanguage` else-branch when language JSON fails to load
- *   (console.warn + currentLanguage reset to "en-us")
+ *   (a coded SlothletWarning + currentLanguage reset to "en-us")
  * - Line 133-134: `translate` fallback to `INVALID_CONFIG_generic` template
  *   when an `INVALID_CONFIG_*` code has no specific translation
  * - Lines 167-171: `initI18n` catch-block when options argument is null
@@ -31,7 +31,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { setLanguage, translate, initI18n, getLanguage } from "@cldmv/slothlet/i18n";
+import { setLanguage, translate, initI18n, getLanguage } from "#i18n";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 describe("translations.mjs edge cases", () => {
 	let warnSpy;
@@ -48,13 +49,14 @@ describe("translations.mjs edge cases", () => {
 
 	// ─── setLanguage failure path (lines 103-105) ───────────────────────────
 
-	it("should log a warning and fall back to 'en-us' when the language file cannot be loaded", () => {
+	it("should log a warning and fall back to 'en-us' when the language file cannot be loaded", async () => {
 		// "zz" is not a valid language; its JSON file does not exist in languages/
 		// → i18n_loadLanguageSync returns null → else branch fires (lines 103-105)
-		setLanguage("zz");
+		const warnings = await captureWarnings(() => setLanguage("zz"));
 
-		// console.warn should have been called with the failure message
-		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to load language 'zz'"));
+		// A coded, translated SlothletWarning (#820); outside any instance it is printed, not kept
+		const [warning] = warnings.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
+		expect(warning.message).toContain("Failed to load language 'zz'");
 
 		// Language should reset to the English fallback
 		expect(getLanguage()).toBe("en-us");
@@ -63,7 +65,7 @@ describe("translations.mjs edge cases", () => {
 	it("should still produce valid translations after recovering from a failed setLanguage call", () => {
 		setLanguage("totally-invalid-lang-code");
 		// After recovery, translate() should still work normally with English defaults
-		const msg = translate("MODULE_NOT_FOUND", { modulePath: "./api.mjs" });
+		const msg = translate("MODULE_IMPORT_FAILED", { modulePath: "./api.mjs" });
 		expect(typeof msg).toBe("string");
 		expect(msg.length).toBeGreaterThan(0);
 	});
@@ -99,7 +101,7 @@ describe("translations.mjs edge cases", () => {
 	it("should remain functional (language = 'en-us') after initI18n catches an error", () => {
 		initI18n(null);
 		// Translations should still produce valid output after the fallback
-		const msg = translate("MODULE_NOT_FOUND", { modulePath: "./x.mjs" });
+		const msg = translate("MODULE_IMPORT_FAILED", { modulePath: "./x.mjs" });
 		expect(typeof msg).toBe("string");
 		expect(msg.length).toBeGreaterThan(0);
 		expect(getLanguage()).toBe("en-us");

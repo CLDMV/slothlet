@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/processors/typescript.mjs
+ *	@Filename: src/lib/processors/typescript.mjs
  *	@Date: 2026-02-14T14:39:47-08:00 (1771108787)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-28T04:30:47-08:00 (1795869047)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,13 +20,63 @@
  */
 
 // NO static imports of esbuild/typescript - only dynamic imports when needed
-import fs from "fs";
-import path from "path";
-import { writeFile, mkdir, readdir, rm } from "node:fs/promises";
-import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
-import { SlothletError } from "@cldmv/slothlet/errors";
+import * as nodeFs from "fs";
+import * as nodePath from "path";
+import * as nodeFsPromises from "node:fs/promises";
+import * as nodeCrypto from "node:crypto";
+import * as nodeOs from "node:os";
+import * as nodeUrl from "node:url";
+import { SlothletError } from "#errors";
+import {
+	ArrayMethods,
+	BufferMethods,
+	Buffers,
+	concatLists,
+	Dates,
+	encodeURIComponent,
+	filterList,
+	FunctionMethods,
+	JSON,
+	listPush,
+	Map,
+	mapEntries,
+	mapFrom,
+	mapList,
+	MapMethods,
+	NativeProcess,
+	Number,
+	Objects,
+	Processes,
+	promiseAllSettled,
+	Reflect,
+	RegExp,
+	regExpMatch,
+	RegExpMethods,
+	regExpReplace,
+	regExpSearch,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	StringMethods,
+	Uint8Array,
+	URLMethods
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
+
+// Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
+// on Node's module object later does not run here.
+const fs = Objects.freeze({ ...nodeFs });
+const path = Objects.freeze({ ...nodePath });
+const { writeFile, mkdir, readdir, rm } = nodeFsPromises;
+const { createHash } = nodeCrypto;
+const { tmpdir } = nodeOs;
+const { pathToFileURL } = nodeUrl;
+// The methods of the hash objects `createHash` makes, from one made now.
+const HASH_PROTOTYPE = Objects.getPrototypeOf(createHash("sha256"));
+const HASH_UPDATE = HASH_PROTOTYPE.update;
+const HASH_DIGEST = HASH_PROTOTYPE.digest;
 
 let esbuildInstance = null;
 let typescriptInstance = null;
@@ -45,7 +95,7 @@ async function getEsbuild() {
 			// The catch only fires in end-user environments where esbuild is not installed.
 			/* v8 ignore start */
 		} catch (error) {
-			throw new SlothletError("TYPESCRIPT_ESBUILD_NOT_INSTALLED", { mode: "fast" }, error);
+			throw new SlothletError("TYPESCRIPT_ESBUILD_NOT_INSTALLED", { mode: "fast" }, { cause: error });
 		}
 		/* v8 ignore stop */
 	}
@@ -95,14 +145,12 @@ export async function getTypeScript() {
 			// The catch only fires in end-user environments where typescript is not installed.
 			/* v8 ignore start */
 		} catch (error) {
-			throw new SlothletError("TYPESCRIPT_TSC_NOT_INSTALLED", { mode: "strict" }, error);
+			throw new SlothletError("TYPESCRIPT_TSC_NOT_INSTALLED", { mode: "strict" }, { cause: error });
 		}
 		/* v8 ignore stop */
 		const api = resolveStrictCompilerApi(ts);
 		if (!api) {
-			throw new SlothletError("TYPESCRIPT_STRICT_REQUIRES_TS6", { version: ts?.version ?? ts?.default?.version ?? "unknown" }, null, {
-				validationError: true
-			});
+			throw new SlothletError("TYPESCRIPT_STRICT_REQUIRES_TS6", { version: ts?.version ?? ts?.default?.version ?? "unknown" });
 		}
 		typescriptInstance = api;
 	}
@@ -149,7 +197,7 @@ export async function transformTypeScript(filePath, options = {}) {
 export function createDataUrl(code) {
 	// Use proper JavaScript MIME type
 	const encoded = encodeURIComponent(code);
-	const timestamp = Date.now();
+	const timestamp = Dates.now();
 	return `data:text/javascript;charset=utf-8,${encoded}#t=${timestamp}`;
 }
 
@@ -199,7 +247,7 @@ function findPackageRoot(startPath) {
  */
 function isProcessAlive(pid) {
 	try {
-		process.kill(pid, 0);
+		Processes.kill(pid, 0);
 		return true;
 	} catch (err) {
 		// Fail-safe: only a confirmed ESRCH means dead; anything else → alive.
@@ -262,7 +310,7 @@ const LEGACY_FALLBACK_MIN_AGE_MS = 24 * 60 * 60 * 1000;
  * @private
  */
 function getSecureFallbackRoot() {
-	return (secureFallbackRoot ??= fs.mkdtempSync(path.join(tmpdir(), `slothlet-${process.pid}-`)));
+	return (secureFallbackRoot ??= fs.mkdtempSync(path.join(tmpdir(), `slothlet-${NativeProcess.pid}-`)));
 }
 
 /**
@@ -273,7 +321,7 @@ function getSecureFallbackRoot() {
  * @private
  */
 function ownedByCurrentUser(stats) {
-	return typeof process.getuid !== "function" || stats.uid === process.getuid();
+	return typeof Processes.getuid !== "function" || stats.uid === Processes.getuid();
 }
 
 /**
@@ -290,27 +338,27 @@ function ownedByCurrentUser(stats) {
  * @returns {Promise<void>}
  * @public
  */
-export async function sweepStaleFallbackRoots() {
+async function sweepStaleFallbackRoots() {
 	let entries;
 	try {
 		entries = await readdir(tmpdir(), { withFileTypes: true });
 	} catch {
 		return;
 	}
-	const now = Date.now();
-	await Promise.allSettled(
-		entries.map(async (entry) => {
+	const now = Dates.now();
+	await promiseAllSettled(
+		mapList(entries, async (entry) => {
 			if (!entry.isDirectory()) return; // Dirent never reports a symlink as a directory
 			const fullPath = path.join(tmpdir(), entry.name);
 			if (fullPath === secureFallbackRoot) return;
-			const owned = FALLBACK_ROOT_NAME.exec(entry.name);
-			const legacy = !owned && LEGACY_FALLBACK_ROOT_NAME.test(entry.name);
+			const owned = RegExpMethods.exec(FALLBACK_ROOT_NAME, entry.name);
+			const legacy = !owned && RegExpMethods.exec(LEGACY_FALLBACK_ROOT_NAME, entry.name) !== null;
 			if (!owned && !legacy) return;
 			const stats = fs.lstatSync(fullPath);
 			if (!stats.isDirectory() || !ownedByCurrentUser(stats)) return;
 			if (owned) {
 				const pid = Number(owned[1]);
-				if (pid === process.pid || isProcessAlive(pid)) return;
+				if (pid === NativeProcess.pid || isProcessAlive(pid)) return;
 			} else {
 				if (now - stats.mtimeMs < LEGACY_FALLBACK_MIN_AGE_MS) return;
 				let caches = [];
@@ -319,8 +367,8 @@ export async function sweepStaleFallbackRoots() {
 				} catch {
 					// No cache directory at all — nothing inside can be in use.
 				}
-				const inUse = caches.some((name) => {
-					const match = /^(\d+)-/.exec(name);
+				const inUse = ArrayMethods.some(caches, (name) => {
+					const match = RegExpMethods.exec(/^(\d+)-/, name);
 					return match !== null && isProcessAlive(Number(match[1]));
 				});
 				if (inUse) return;
@@ -339,7 +387,7 @@ export async function sweepStaleFallbackRoots() {
  * @returns {Promise<boolean>} True when the root was removed.
  * @public
  */
-export async function releaseSecureFallbackRoot() {
+async function releaseSecureFallbackRoot() {
 	const root = secureFallbackRoot;
 	if (!root || pendingFallbackWrites > 0) return false;
 	let remaining = [];
@@ -350,7 +398,7 @@ export async function releaseSecureFallbackRoot() {
 	}
 	if (remaining.length > 0 || pendingFallbackWrites > 0 || secureFallbackRoot !== root) return false;
 	secureFallbackRoot = undefined;
-	sweepPromises.delete(root);
+	MapMethods.delete(sweepPromises, root);
 	await rm(root, { recursive: true, force: true });
 	return true;
 }
@@ -368,7 +416,7 @@ export async function releaseSecureFallbackRoot() {
  * @private
  */
 function sweepStaleSlothletCache(projectRoot) {
-	if (sweepPromises.has(projectRoot)) return sweepPromises.get(projectRoot);
+	if (MapMethods.has(sweepPromises, projectRoot)) return MapMethods.get(sweepPromises, projectRoot);
 	const promise = (async () => {
 		const cacheRoot = path.join(projectRoot, ".slothlet-cache");
 		let entries;
@@ -377,11 +425,11 @@ function sweepStaleSlothletCache(projectRoot) {
 		} catch {
 			return;
 		}
-		const currentPid = process.pid;
-		await Promise.allSettled(
-			entries.map(async (entry) => {
+		const currentPid = NativeProcess.pid;
+		await promiseAllSettled(
+			mapList(entries, async (entry) => {
 				if (!entry.isDirectory()) return;
-				const match = entry.name.match(/^(\d+)-/);
+				const match = regExpMatch(/^(\d+)-/, entry.name);
 				if (!match) return;
 				const pid = Number(match[1]);
 				if (pid === currentPid || isProcessAlive(pid)) return;
@@ -389,7 +437,7 @@ function sweepStaleSlothletCache(projectRoot) {
 			})
 		);
 	})();
-	sweepPromises.set(projectRoot, promise);
+	MapMethods.set(sweepPromises, projectRoot, promise);
 	return promise;
 }
 
@@ -421,15 +469,16 @@ export function resolveModuleFile(absoluteTarget) {
 		}
 	};
 	if (isFile(absoluteTarget)) {
-		return { path: absoluteTarget, isTS: TS_SOURCE_EXT.test(absoluteTarget) };
+		return { path: absoluteTarget, isTS: RegExpMethods.exec(TS_SOURCE_EXT, absoluteTarget) !== null };
 	}
 	// Literal target missing — probe the TS source extension for the importer's
 	// declared output extension (`./x.mjs` → `x.mts`, `./x.js` → `x.ts`) and the
 	// extensionless form.
 	const ext = path.extname(absoluteTarget);
-	const base = ext ? absoluteTarget.slice(0, -ext.length) : absoluteTarget;
+	const base = ext ? StringMethods.slice(absoluteTarget, 0, -ext.length) : absoluteTarget;
 	const candidates = ext === ".mjs" ? [".mts"] : ext === ".js" ? [".ts"] : ext === "" ? [".mts", ".ts"] : [];
-	for (const candidate of candidates) {
+	for (let ofIndex = 0, ofList = candidates; ofIndex < ofList.length; ofIndex++) {
+		const candidate = ofList[ofIndex];
 		if (isFile(base + candidate)) {
 			return { path: base + candidate, isTS: true };
 		}
@@ -446,7 +495,7 @@ export function resolveModuleFile(absoluteTarget) {
  * @constant
  * @private
  */
-const REGEX_PRECEDING_KEYWORDS = new Set([
+const REGEX_PRECEDING_KEYWORDS = setFrom([
 	"return",
 	"typeof",
 	"instanceof",
@@ -473,7 +522,7 @@ const REGEX_PRECEDING_KEYWORDS = new Set([
  * @private
  */
 function isIdentifierChar(ch) {
-	const cc = ch.charCodeAt(0);
+	const cc = StringMethods.charCodeAt(ch, 0);
 	return (
 		(cc >= 0x61 && cc <= 0x7a) || // a-z
 		(cc >= 0x41 && cc <= 0x5a) || // A-Z
@@ -569,7 +618,7 @@ export function maskStringsAndComments(code) {
 			// out once (not built char-by-char) to stay linear in the word length.
 			const start = i;
 			while (i < n && isIdentifierChar(code[i])) i++;
-			regexAllowed = REGEX_PRECEDING_KEYWORDS.has(code.slice(start, i));
+			regexAllowed = SetMethods.has(REGEX_PRECEDING_KEYWORDS, StringMethods.slice(code, start, i));
 		} else {
 			// Punctuator or numeric literal. `)`, `]` and digits are values (a `/`
 			// after them is division); every other punctuator — operators, `(`,
@@ -668,7 +717,7 @@ const DYNAMIC_IMPORT_RE = new RegExp(`(?<![.\\w$])import(${TOKEN_GAP}\\(${TOKEN_
  */
 export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
 	const sourceDir = path.dirname(sourcePath);
-	const resolveSpecifier = resolve ?? ((absoluteTarget, suffix) => pathToFileURL(absoluteTarget).href + suffix);
+	const resolveSpecifier = resolve ?? ((absoluteTarget, suffix) => URLMethods.href(pathToFileURL(absoluteTarget)) + suffix);
 	/**
 	 * Map one relative specifier to its replacement, splitting off any
 	 * `?query`/`#hash` suffix first (only the path portion is resolved).
@@ -676,9 +725,9 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
 	 * @returns {string} The replacement specifier
 	 */
 	const handle = (specifier) => {
-		const suffixIdx = specifier.search(/[?#]/);
-		const pathPart = suffixIdx === -1 ? specifier : specifier.slice(0, suffixIdx);
-		const suffix = suffixIdx === -1 ? "" : specifier.slice(suffixIdx);
+		const suffixIdx = regExpSearch(/[?#]/, specifier);
+		const pathPart = suffixIdx === -1 ? specifier : StringMethods.slice(specifier, 0, suffixIdx);
+		const suffix = suffixIdx === -1 ? "" : StringMethods.slice(specifier, suffixIdx);
 		return resolveSpecifier(path.resolve(sourceDir, pathPart), suffix, specifier);
 	};
 	/**
@@ -692,11 +741,11 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
 	 */
 	const rewriteWith = (text, regex, replacer) => {
 		const mask = maskStringsAndComments(text);
-		return text.replace(regex, (...args) => {
+		return regExpReplace(regex, text, (...args) => {
 			// String.prototype.replace passes (match, ...groups, offset, string);
 			// with no named groups, the offset is the second-to-last argument.
 			const offset = args[args.length - 2];
-			return mask[offset] ? args[0] : replacer(...args);
+			return mask[offset] ? args[0] : Reflect.apply(replacer, undefined, args);
 		});
 	};
 	let out = code;
@@ -733,7 +782,7 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
  * file in the graph produces fresh URLs for every importer — a reload never
  * serves stale linked output.
  *
- * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
+ * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<hash of instanceID>/<hash>.mjs` —
  * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
  * at a `node_modules` segment and would otherwise break self-reference resolution
  * (needed when slothlet runs inside its own repo / monorepo workspace, where no
@@ -744,10 +793,12 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
  * @param {string} instanceID - Slothlet instance ID (used as cache namespace)
  * @param {(filePath: string) => Promise<string>} [transform] - Transpiles a `.ts`/`.mts`
  *   file to JavaScript; enables following relative `.ts`/`.mts` imports.
+ * @param {(from: string, to: string) => void} [checkEdge] - Asked for each relative import of the graph, by the
+ *   importing file's and the imported file's paths; throws to refuse it (a leaf file, see the loader).
  * @returns {Promise<{url: string, cacheDir: string}>} Entry file URL and the cache directory for this instance
  * @public
  */
-export async function writeTransformedToCache(originalPath, code, instanceID, transform) {
+export async function writeTransformedToCache(originalPath, code, instanceID, transform, checkEdge) {
 	// Normalize to an absolute path up front. The hash below must use the SAME
 	// absolute form: hashing a relative `originalPath` would make the cache key —
 	// and the resulting file:// URL and Node's module identity — depend on
@@ -762,12 +813,25 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 		const projectRoot = packageRoot ?? getSecureFallbackRoot();
 		if (usesFallback) await (fallbackSweepPromise ??= sweepStaleFallbackRoots());
 		await sweepStaleSlothletCache(projectRoot);
-		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${process.pid}-${instanceID}`);
+		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${NativeProcess.pid}-${cacheDirKey(instanceID)}`);
 		await mkdir(cacheDir, { recursive: true });
-		return await writeTransformedGraph(absolutePath, code, cacheDir, transform);
+		return await writeTransformedGraph(absolutePath, code, cacheDir, transform, checkEdge);
 	} finally {
 		if (usesFallback) pendingFallbackWrites--;
 	}
+}
+
+/**
+ * The part of an instance's cache folder name after the PID: a hash of the instance ID, so the name stays the same
+ * length however long the ID is.
+ * @param {string} instanceID - Slothlet instance ID.
+ * @returns {string} 24 hex characters.
+ * @private
+ */
+function cacheDirKey(instanceID) {
+	const hash = createHash("sha256");
+	Reflect.apply(HASH_UPDATE, hash, [`${instanceID}`]);
+	return StringMethods.slice(Reflect.apply(HASH_DIGEST, hash, ["hex"]), 0, 24);
 }
 
 /**
@@ -778,31 +842,33 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
  * @param {string} code - Transformed JavaScript for `absolutePath`.
  * @param {string} cacheDir - Existing cache directory for this instance.
  * @param {(filePath: string) => Promise<string>} [transform] - Transpiles a `.ts`/`.mts` file.
+ * @param {(from: string, to: string) => void} [checkEdge] - Asked for each relative import of the graph.
  * @returns {Promise<{url: string, cacheDir: string}>} Entry file URL and the cache directory.
  * @private
  */
-async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
+async function writeTransformedGraph(absolutePath, code, cacheDir, transform, checkEdge) {
 	// Phase 1 — transpile the transitive graph of relative `.ts`/`.mts` imports.
 	// `transformed` maps each absolute TS source path to its transpiled (pre-rewrite)
 	// code; `deps` records the relative-`.ts`/`.mts` edges used for closure hashing.
-	const transformed = new Map([[absolutePath, code]]);
+	const transformed = mapFrom([[absolutePath, code]]);
 	const deps = new Map();
 	if (transform) {
 		const pending = [absolutePath];
 		while (pending.length > 0) {
-			const file = pending.pop();
+			const file = ArrayMethods.pop(pending);
 			const fileDeps = new Set();
-			deps.set(file, fileDeps);
+			MapMethods.set(deps, file, fileDeps);
 			// Discovery pass: collect relative `.ts`/`.mts` targets without rewriting.
-			rewriteRelativeSpecifiers(transformed.get(file), file, (absoluteTarget, _suffix, specifier) => {
+			rewriteRelativeSpecifiers(MapMethods.get(transformed, file), file, (absoluteTarget, _suffix, specifier) => {
 				const resolved = resolveModuleFile(absoluteTarget);
-				if (resolved.isTS) fileDeps.add(resolved.path);
+				if (checkEdge) checkEdge(file, resolved.path);
+				if (resolved.isTS) SetMethods.add(fileDeps, resolved.path);
 				return specifier;
 			});
-			for (const dep of fileDeps) {
-				if (!transformed.has(dep)) {
-					transformed.set(dep, await transform(dep));
-					pending.push(dep);
+			for (const dep of setValues(fileDeps)) {
+				if (!MapMethods.has(transformed, dep)) {
+					MapMethods.set(transformed, dep, await transform(dep));
+					listPush(pending, dep);
 				}
 			}
 		}
@@ -818,15 +884,15 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 	 * @returns {Set<string>} Every TS source reachable from `file` (incl. `file`)
 	 */
 	const closureOf = (file) => {
-		if (closureCache.has(file)) return closureCache.get(file);
+		if (MapMethods.has(closureCache, file)) return MapMethods.get(closureCache, file);
 		const seen = new Set();
 		const walk = (node) => {
-			if (seen.has(node)) return;
-			seen.add(node);
-			for (const next of deps.get(node) ?? []) walk(next);
+			if (SetMethods.has(seen, node)) return;
+			SetMethods.add(seen, node);
+			for (const next of setValues(MapMethods.get(deps, node))) walk(next);
 		};
 		walk(file);
-		closureCache.set(file, seen);
+		MapMethods.set(closureCache, file, seen);
 		return seen;
 	};
 	/**
@@ -837,17 +903,25 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 	 */
 	const cacheName = (file) => {
 		const hash = createHash("sha256");
+		const update = (part) => Reflect.apply(HASH_UPDATE, hash, [part]);
 		// The NUL separators prevent path/code boundary collisions.
-		for (const member of [...closureOf(file)].sort()) {
-			hash.update(member).update("\0").update(transformed.get(member)).update("\0");
+		for (let ofIndex = 0, ofList = ArrayMethods.sort(setToArray(closureOf(file))); ofIndex < ofList.length; ofIndex++) {
+			const member = ofList[ofIndex];
+			update(member);
+			update("\0");
+			update(MapMethods.get(transformed, member));
+			update("\0");
 		}
-		hash.update("entry\0").update(file);
-		return `${hash.digest("hex").slice(0, 16)}.mjs`;
+		update("entry\0");
+		update(file);
+		return `${StringMethods.slice(Reflect.apply(HASH_DIGEST, hash, ["hex"]), 0, 16)}.mjs`;
 	};
 
 	// Phase 3 — rewrite each file's specifiers and write it to its cache file (the caller already
 	// created cacheDir).
-	for (const [file, fileCode] of transformed) {
+	for (const ofEntry of mapEntries(transformed)) {
+		const file = ofEntry[0],
+			fileCode = ofEntry[1];
 		const rewritten = rewriteRelativeSpecifiers(fileCode, file, (absoluteTarget, suffix) => {
 			const resolved = resolveModuleFile(absoluteTarget);
 			// A relative `.ts`/`.mts` import that was followed → its cache file;
@@ -857,10 +931,10 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 			// points at `dep.ts`, not a non-existent `dep.js`. For plain `.mjs`/`.cjs`/
 			// `.js` targets `resolveModuleFile` leaves `resolved.path === absoluteTarget`,
 			// so this is identical for them.
-			if (resolved.isTS && transformed.has(resolved.path)) {
-				return pathToFileURL(path.join(cacheDir, cacheName(resolved.path))).href + suffix;
+			if (resolved.isTS && MapMethods.has(transformed, resolved.path)) {
+				return URLMethods.href(pathToFileURL(path.join(cacheDir, cacheName(resolved.path)))) + suffix;
 			}
-			return pathToFileURL(resolved.path).href + suffix;
+			return URLMethods.href(pathToFileURL(resolved.path)) + suffix;
 		});
 		const cachePath = path.join(cacheDir, cacheName(file));
 		// Atomic create-exclusive: cacheName() is a content hash, so an existing
@@ -873,7 +947,7 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 			if (err.code !== "EEXIST") throw err;
 		}
 	}
-	return { url: pathToFileURL(path.join(cacheDir, cacheName(absolutePath))).href, cacheDir };
+	return { url: URLMethods.href(pathToFileURL(path.join(cacheDir, cacheName(absolutePath)))), cacheDir };
 }
 
 /**
@@ -932,8 +1006,8 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 		nodenext: ts.ModuleKind.NodeNext
 	};
 
-	const targetKey = (options.target || "es2020").toLowerCase();
-	const moduleKey = (options.module || "esnext").toLowerCase();
+	const targetKey = StringMethods.toLowerCase(options.target || "es2020");
+	const moduleKey = StringMethods.toLowerCase(options.module || "esnext");
 
 	const compilerOptions = {
 		target: targetMap[targetKey] || ts.ScriptTarget.ES2020,
@@ -961,17 +1035,17 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 			if (fileName === filePath) {
 				return code;
 			}
-			return originalReadFile.call(host, fileName);
+			return FunctionMethods.call(originalReadFile, host, fileName);
 		};
 
 		// Create program with single file
 		const program = ts.createProgram([filePath], compilerOptions, host);
 
 		// Get all diagnostics (semantic + syntactic)
-		const allDiagnostics = [...program.getSemanticDiagnostics(), ...program.getSyntacticDiagnostics()];
+		const allDiagnostics = concatLists(program.getSemanticDiagnostics(), program.getSyntacticDiagnostics());
 
 		// Filter to only this file's diagnostics
-		diagnostics = allDiagnostics.filter((d) => d.file && d.file.fileName === filePath);
+		diagnostics = filterList(allDiagnostics, (d) => d.file && d.file.fileName === filePath);
 	}
 
 	// Transform using transpileModule (fast, doesn't require full type checking)
@@ -999,20 +1073,16 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
  */
 function convertCompilerOptions(ts, compilerOptions) {
 	if (!compilerOptions) return {};
-	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, process.cwd());
+	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, Processes.cwd());
 	if (errors.length > 0) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "typescript.compilerOptions",
-				value: errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, " ")).join(" "),
-				expected: "valid tsconfig.json compilerOptions",
-				hint: "HINT_INVALID_CONFIG",
-				validationError: true
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_CONFIG", {
+			option: "typescript.compiler",
+			value: ArrayMethods.join(
+				mapList(errors, (error) => ts.flattenDiagnosticMessageText(error.messageText, " ")),
+				" "
+			),
+			expected: "valid tsconfig.json compilerOptions"
+		});
 	}
 	return options;
 }
@@ -1028,11 +1098,13 @@ function convertCompilerOptions(ts, compilerOptions) {
  */
 function withAbsoluteMapSource(code, absolutePath) {
 	const marker = "//# sourceMappingURL=data:application/json;base64,";
-	const index = code.lastIndexOf(marker);
-	const map = JSON.parse(Buffer.from(code.slice(index + marker.length).trim(), "base64").toString("utf8"));
+	const index = StringMethods.lastIndexOf(code, marker);
+	const map = JSON.parse(
+		BufferMethods.toString(Buffers.from(StringMethods.trim(StringMethods.slice(code, index + marker.length)), "base64"), "utf8")
+	);
 	map.sources = [absolutePath];
 	delete map.sourceRoot;
-	return code.slice(0, index) + marker + Buffer.from(JSON.stringify(map), "utf8").toString("base64");
+	return StringMethods.slice(code, 0, index) + marker + BufferMethods.toString(Buffers.from(JSON.stringify(map), "utf8"), "base64");
 }
 
 /**
@@ -1043,7 +1115,7 @@ function withAbsoluteMapSource(code, absolutePath) {
  * @public
  */
 export function formatDiagnostics(diagnostics, ts) {
-	return diagnostics.map((diagnostic) => {
+	return mapList(diagnostics, (diagnostic) => {
 		const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
 		if (diagnostic.file && diagnostic.start !== undefined) {
 			const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
@@ -1053,3 +1125,50 @@ export function formatDiagnostics(diagnostics, ts) {
 		return message;
 	});
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/processors/typescript", import.meta.url);
+	return { releaseSecureFallbackRoot };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof sweepStaleFallbackRoots} */
+const guarded_sweepStaleFallbackRoots = guardInternal(sweepStaleFallbackRoots, "sweepStaleFallbackRoots", import.meta.url);
+/** @type {typeof releaseSecureFallbackRoot} */
+const guarded_releaseSecureFallbackRoot = guardInternal(releaseSecureFallbackRoot, "releaseSecureFallbackRoot", import.meta.url);
+export { guarded_sweepStaleFallbackRoots as sweepStaleFallbackRoots, guarded_releaseSecureFallbackRoot as releaseSecureFallbackRoot };

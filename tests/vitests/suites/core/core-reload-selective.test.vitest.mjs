@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/core-reload-selective.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/core-reload-selective.test.vitest.mjs
  *	@Date: 2026-01-30T17:01:40-08:00 (1769821300)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:26-07:00 (1791091706)
+ *	@Last modified time: 2026-11-28T04:31:36-08:00 (1795869096)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,8 +45,10 @@ for (const { config, name } of configs) {
 				base: TEST_DIRS.API_TEST,
 				api: {
 					collision: {
-						initial: "replace",
-						api: "replace"
+						mode: {
+							initial: "replace",
+							api: "replace"
+						}
 					},
 					mutations: {
 						add: true,
@@ -92,7 +94,7 @@ for (const { config, name } of configs) {
 
 		it("reload does not register a garbage (non-string) ownership entry", async () => {
 			const id = await api.slothlet.api.add("gcComp", TEST_DIRS.API_TEST);
-			const ownership = resolveWrapper(api.gcComp).slothlet.handlers.ownership;
+			const ownership = resolveWrapper(api.gcComp).____slothlet.handlers.ownership;
 
 			await api.slothlet.api.reload("gcComp");
 

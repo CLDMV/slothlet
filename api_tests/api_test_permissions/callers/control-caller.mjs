@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_permissions/callers/control-caller.mjs
+ *	@Filename: api_tests/api_test_permissions/callers/control-caller.mjs
  *	@Date: 2026-04-21T06:45:00-07:00 (1776779100)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:40-07:00 (1791090880)
+ *	@Last modified time: 2026-11-28T04:29:07-08:00 (1795868947)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,7 +28,7 @@ let cachedMaterializedGetterRef = null;
  * @example
  * api.callers.controlCaller.callEnable();
  */
-export const callEnable = () => self.slothlet.permissions.control.enable();
+export const callEnable = () => self.slothlet.permissions.control.mode("on");
 
 /**
  * Attempt to seal the permission control surface via inter-module call.
@@ -48,29 +48,29 @@ export const callSeal = () => self.slothlet.permissions.control.seal();
  * @example
  * api.callers.controlCaller.callDisable();
  */
-export const callDisable = () => self.slothlet.permissions.control.disable();
+export const callDisable = () => self.slothlet.permissions.control.mode("off");
 
 /**
  * Attempt to add a permission rule via inter-module call.
- * Used in tests verifying that addRule is permission-gated for module callers.
+ * Used in tests verifying that rules.add is permission-gated for module callers.
  *
  * @param {object} rule - Permission rule to register.
  * @returns {string} Registered rule ID.
  * @example
  * api.controlCaller.callAddRule({ caller: "**", target: "db.**", effect: "deny" });
  */
-export const callAddRule = (rule) => self.slothlet.permissions.addRule(rule);
+export const callAddRule = (rule) => self.slothlet.permissions.rules.add(rule);
 
 /**
  * Attempt to remove a permission rule via inter-module call.
- * Used in tests verifying that removeRule is permission-gated for module callers.
+ * Used in tests verifying that rules.remove is permission-gated for module callers.
  *
  * @param {string} ruleId - Permission rule ID.
  * @returns {boolean} True when the rule is removed.
  * @example
  * api.controlCaller.callRemoveRule("perm-1");
  */
-export const callRemoveRule = (ruleId) => self.slothlet.permissions.removeRule(ruleId);
+export const callRemoveRule = (ruleId) => self.slothlet.permissions.rules.remove(ruleId);
 
 /**
  * Attempt to set global metadata via inter-module call.
@@ -82,7 +82,7 @@ export const callRemoveRule = (ruleId) => self.slothlet.permissions.removeRule(r
  * @example
  * api.controlCaller.callSetGlobalMetadata("tenant", "alpha");
  */
-export const callSetGlobalMetadata = (key, value) => self.slothlet.metadata.setGlobal(key, value);
+export const callSetGlobalMetadata = (key, value) => self.slothlet.metadata.global(key, value);
 
 /**
  * Attempt to set i18n language via inter-module call.
@@ -93,7 +93,7 @@ export const callSetGlobalMetadata = (key, value) => self.slothlet.metadata.setG
  * @example
  * api.controlCaller.callSetLanguage("en-us");
  */
-export const callSetLanguage = (lang) => self.slothlet.i18n.setLanguage(lang);
+export const callSetLanguage = (lang) => self.slothlet.i18n.language.set(lang);
 
 /**
  * Read slothlet version via inter-module route access.
@@ -118,7 +118,8 @@ export const callReadVersion = () => self.slothlet.version;
 export const callAddRuleViaDescriptorBypass = (rule) => {
 	const permissionsDescriptor = Object.getOwnPropertyDescriptor(self.slothlet, "permissions");
 	const permissionsNamespace = permissionsDescriptor?.value;
-	const addRuleDescriptor = Reflect.getOwnPropertyDescriptor(permissionsNamespace, "addRule");
+	const rulesNamespace = Reflect.getOwnPropertyDescriptor(permissionsNamespace, "rules")?.value;
+	const addRuleDescriptor = Reflect.getOwnPropertyDescriptor(rulesNamespace, "add");
 	return addRuleDescriptor.value(rule);
 };
 
@@ -137,7 +138,7 @@ export const callReadTranslateNameAfterTWarmup = () => {
 };
 
 /**
- * Cache a reference to slothlet.permissions.addRule for later invocation.
+ * Cache a reference to slothlet.permissions.rules.add for later invocation.
  * Used in tests verifying invocation-time permission checks for cached
  * callable internal slothlet routes.
  *
@@ -146,12 +147,12 @@ export const callReadTranslateNameAfterTWarmup = () => {
  * const type = api.controlCaller.cacheAddRuleReference();
  */
 export const cacheAddRuleReference = () => {
-	cachedAddRuleRef = self.slothlet.permissions.addRule;
+	cachedAddRuleRef = self.slothlet.permissions.rules.add;
 	return typeof cachedAddRuleRef;
 };
 
 /**
- * Invoke the previously cached slothlet.permissions.addRule reference.
+ * Invoke the previously cached slothlet.permissions.rules.add reference.
  *
  * @param {object} rule - Permission rule to register.
  * @returns {string} Registered rule ID.
@@ -161,7 +162,7 @@ export const cacheAddRuleReference = () => {
 export const callCachedAddRuleReference = (rule) => cachedAddRuleRef(rule);
 
 /**
- * Cache a slothlet.permissions.addRule function through descriptor reflection.
+ * Cache a slothlet.permissions.rules.add function through descriptor reflection.
  * Used in tests verifying descriptor-returned callables still enforce permission
  * checks at invocation time.
  *
@@ -172,13 +173,14 @@ export const callCachedAddRuleReference = (rule) => cachedAddRuleRef(rule);
 export const cacheAddRuleDescriptorReference = () => {
 	const permissionsDescriptor = Reflect.getOwnPropertyDescriptor(self.slothlet, "permissions");
 	const permissionsNamespace = permissionsDescriptor?.value;
-	const addRuleDescriptor = Reflect.getOwnPropertyDescriptor(permissionsNamespace, "addRule");
+	const rulesNamespace = Reflect.getOwnPropertyDescriptor(permissionsNamespace, "rules")?.value;
+	const addRuleDescriptor = Reflect.getOwnPropertyDescriptor(rulesNamespace, "add");
 	cachedAddRuleDescriptorRef = addRuleDescriptor?.value;
 	return typeof cachedAddRuleDescriptorRef;
 };
 
 /**
- * Invoke the previously cached descriptor-derived addRule reference.
+ * Invoke the previously cached descriptor-derived rules.add reference.
  *
  * @param {object} rule - Permission rule to register.
  * @returns {string} Registered rule ID.
@@ -203,7 +205,7 @@ export const callReadTranslateLengthViaDescriptor = () => {
 };
 
 /**
- * Read materialize.materialized by extracting and invoking its accessor getter
+ * Read materialize.complete by extracting and invoking its accessor getter
  * via descriptor reflection.
  * Used in tests verifying accessor descriptors cannot bypass internal route
  * permission enforcement.
@@ -214,7 +216,7 @@ export const callReadTranslateLengthViaDescriptor = () => {
  */
 export const callReadMaterializedViaDescriptorGetter = () => {
 	const materializeNamespace = self.slothlet.materialize;
-	const descriptor = Object.getOwnPropertyDescriptor(materializeNamespace, "materialized");
+	const descriptor = Object.getOwnPropertyDescriptor(materializeNamespace, "complete");
 	return descriptor?.get();
 };
 
@@ -241,7 +243,7 @@ export const cacheMaterializeGetReference = () => {
 export const callCachedMaterializeGetReference = () => cachedMaterializeGetRef();
 
 /**
- * Cache the slothlet.materialize.materialized getter function through descriptor reflection.
+ * Cache the slothlet.materialize.complete getter function through descriptor reflection.
  * Used in tests verifying frozen accessor getters re-check permission at invocation time.
  *
  * @returns {string} Type of cached getter reference.
@@ -250,13 +252,13 @@ export const callCachedMaterializeGetReference = () => cachedMaterializeGetRef()
  */
 export const cacheMaterializedGetterReference = () => {
 	const materializeNamespace = self.slothlet.materialize;
-	const descriptor = Object.getOwnPropertyDescriptor(materializeNamespace, "materialized");
+	const descriptor = Object.getOwnPropertyDescriptor(materializeNamespace, "complete");
 	cachedMaterializedGetterRef = descriptor?.get;
 	return typeof cachedMaterializedGetterRef;
 };
 
 /**
- * Invoke the previously cached slothlet.materialize.materialized getter.
+ * Invoke the previously cached slothlet.materialize.complete getter.
  *
  * @returns {boolean} Current materialized state.
  * @example
@@ -265,18 +267,18 @@ export const cacheMaterializedGetterReference = () => {
 export const callCachedMaterializedGetterReference = () => cachedMaterializedGetterRef();
 
 /**
- * Read permissions.control.enabled by extracting and invoking its accessor
+ * Read permissions.control.sealed by extracting and invoking its accessor
  * getter via descriptor reflection.
  * Used in tests verifying configurable accessor descriptors cannot bypass
  * route-level permission enforcement.
  *
- * @returns {boolean} Current permissions enabled state.
+ * @returns {boolean} Whether the control surface is sealed.
  * @example
- * const enabled = api.controlCaller.callReadPermissionsEnabledViaDescriptorGetter();
+ * const sealed = api.controlCaller.callReadPermissionsSealedViaDescriptorGetter();
  */
-export const callReadPermissionsEnabledViaDescriptorGetter = () => {
+export const callReadPermissionsSealedViaDescriptorGetter = () => {
 	const controlNamespace = self.slothlet.permissions.control;
-	const descriptor = Object.getOwnPropertyDescriptor(controlNamespace, "enabled");
+	const descriptor = Object.getOwnPropertyDescriptor(controlNamespace, "sealed");
 	return descriptor?.get();
 };
 

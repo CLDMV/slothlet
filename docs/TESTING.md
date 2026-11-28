@@ -56,7 +56,7 @@ Inlining has costs beyond fidelity:
 - **Speed.** Composition becomes noticeably slower. Measured on one consumer (vitest 4.1.7), the first composing test went from 1.1–1.8 s to 6.0–9.5 s and vitest's transform time from ~0.2 s to 22–28 s. Suites that compose an api per test may need a larger `hookTimeout` / `testTimeout`; one of two full inline runs there hit `Hook timed out in 10000ms` in a `beforeEach` composition.
 - **Timing.** The slower boot can expose latent races in the tests themselves — for example, a worker's first message arriving before the test attached its handler.
 - **Files outside the workspace (vitest 3 / vite-node).** With slothlet inlined, every leaf load goes through vite, and vite only loads files inside `server.fs.allow`. Leaves written to `os.tmpdir()` (or anywhere else outside the project) then fail with `MODULE_IMPORT_FAILED … Cannot find module '/tmp/…/leaf.mjs?slothlet_instance=…'`. Extend the allow-list — `server: { fs: { allow: [projectRoot, os.tmpdir()] } }` at the top level of the config. The same limit applies to the `import` hook below, and to a test file's own `import()` of such a path. This was observed on vitest 3.2.4; the same probe loaded fine on vitest 5.
-- **A second runtime copy for `.cjs` leaves.** A `.cjs` leaf is loaded natively by `require`, outside vite, so its `await import("@cldmv/slothlet/runtime")` resolves Node's copy of the runtime while the inlined slothlet uses vite's copy. The leaf then sees no active context: `self` access throws `RUNTIME_NO_ACTIVE_CONTEXT_SELF`. Measured on vitest 5.0.2. Use the `import` hook instead when any `.cjs` leaf uses the runtime.
+- **`.cjs` leaves and the runtime.** A `.cjs` leaf is loaded natively by `require`, outside vite, so its `await import("@cldmv/slothlet/runtime")`, and the imports of any file it loads with `import()`, are Node's to resolve while the inlined slothlet runs in vite's module graph. Slothlet answers those imports with the runtime it runs on, so `self`, `context` and `instanceID` work there as in an ES module leaf. (Before 3.25.0 Node evaluated a second copy of the runtime, which knew no instance: `self` threw `CONTEXT_NOT_ACTIVE_SELF`.) If the process also loads a whole second copy of slothlet natively (a CommonJS dependency that `require`s it, say), that copy keeps Node's own evaluation of the runtime, and the files of its instances get that one; a file with no instance's tag that both copies' instances load is one module, bound to the runtime of whichever loaded it first.
 
 ## Fix 2 (recommended): `slothlet({ import })`
 
@@ -66,25 +66,31 @@ Instead of inlining the whole package, hand the loader an importer bound to **yo
 // In your test setup (only under coverage, if you prefer):
 const api = await slothlet({
 	base: "./api",
-	import: (url) => import(url) // YOUR import(), so the leaf rides YOUR runner's module graph
+	loader: { import: (url) => import(url) } // YOUR import(), so the leaf rides YOUR runner's module graph
 });
 ```
 
 Because the `import()` executes in the consumer's (vitest-transformed) code, the leaf load enters the runner's module graph and attributes — while slothlet itself stays externalized and byte-for-byte native. Unset, the loader uses its own native import and nothing changes; per-instance isolation and hot reload behave identically either way, since everything that matters rides the URL.
 
-This keeps a single copy of slothlet and its runtime, so `.cjs` leaves that use `@cldmv/slothlet/runtime` keep working, and `.cjs` leaves themselves attribute correctly without any setting (they load through a native `require` of the plain path). Prefer it over inlining. Don't combine the two: with `server.deps.inline` also set, the `.cjs` runtime problem above comes back.
+This keeps a single copy of slothlet and its runtime, so `.cjs` leaves that use `@cldmv/slothlet/runtime` keep working, and `.cjs` leaves themselves attribute correctly without any setting (they load through a native `require` of the plain path). Prefer it over inlining.
 
-A non-function value throws `INVALID_CONFIG_IMPORT` at construction.
+A non-function value throws `INVALID_CONFIG_IMPORTER_INVALID` at construction.
 
 Slothlet also detects the misattribution scenario itself: booting under a vitest **coverage** run (a plain test run stays quiet) while this slothlet copy is externalized and no `import` importer is configured emits a one-shot `WARNING_COVERAGE_IMPORTER_UNSET` pointing here. The detection reads vitest's worker state defensively — if vitest ever changes its internals the hint simply stops appearing; behavior never changes. `silent: true` suppresses it like any other warning.
 
-**Trust model:** the importer controls what code loads for every leaf, so it carries the same authority as choosing `base` or `node_modules` — which is why it is host-only, boot-time configuration, like `versionDispatcher` and `resolveModuleSpecifier`. Never construct it from untrusted input; an importer built from external configuration is a code-injection point. (It grants modules nothing: in-process code can already `import()` natively — see the enforcement boundary in [PERMISSIONS.md](PERMISSIONS.md).)
+**Trust model:** the importer controls what code loads for every leaf, so it carries the same authority as choosing `base` or `node_modules` — which is why it is host-only, boot-time configuration, like `versioning.dispatcher` and `loader.resolve`. Never construct it from untrusted input; an importer built from external configuration is a code-injection point. (It grants modules nothing: in-process code can already `import()` natively — see the enforcement boundary in [PERMISSIONS.md](PERMISSIONS.md).)
+
+## Leaves of a mounted module
+
+A leaf of a module mounted with `api.slothlet.api.add()` loads under `?slothlet_instance=…&module=<moduleID>`. `@vitest/coverage-v8` decodes the whole URL once before it remaps the script, and vite then takes the last `/` of that id as the file's name. If the moduleID still had a `/` after that decode (a package name such as `@scope/pkg`), the leaf's coverage would land on a file named after the end of the moduleID (`pkg`), which does not exist, and the provider would drop it: the leaf reads 0% whichever fix above is used.
+
+From 4.0.0 slothlet writes the moduleID escaped twice, so one decode leaves `%2F` and never a `/`, and a mounted leaf attributes the same as a leaf of the root module. The same holds for a helper copy under `helpers: "module"`, whose URL names the api file it is loaded for (`slothlet_for=`). Earlier versions could leave the `/` in: on 3.22.1 a mount named after its package read 0% with inlining, with the `import` hook and externalized alike (#1042). On those versions, strip the query in a custom coverage provider before the provider converts the script, or mount under a moduleID without a `/`.
 
 ## TypeScript leaves
 
 A `.ts` / `.mts` leaf never executes from its own file. Slothlet transpiles it and imports the output from a cache file, `<package root>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs`, where the package root is the nearest directory above the leaf with a `package.json`. (A leaf with no `package.json` above it is cached in a private directory under `os.tmpdir()` instead, which no coverage `include` can reach — keep TypeScript leaves inside a package.) Coverage of a TypeScript leaf reaches the `.ts` source only through the **inline source map** in that cache file. Two things are needed:
 
-1. **Source maps on.** `typescript.sourcemap` turns on automatically during a coverage run — a vitest run with coverage enabled, or a process started with `NODE_V8_COVERAGE` set (c8, or Node's native coverage) — so leave it unset. An explicit `sourcemap: false` wins; with it, a coverage run that loads TypeScript leaves emits a one-shot `WARNING_COVERAGE_TS_SOURCEMAP_OFF`, because that coverage can only land on the cache copies. Relative `.ts` imports between your modules are cached and mapped the same way.
+1. **Source maps on.** `typescript.sourcemap` turns on automatically during a coverage run — a vitest run with coverage enabled, or a process started with `NODE_V8_COVERAGE` set (c8, or Node's native coverage) — so leave it unset. An explicit `sourcemap: false` wins; with it, a coverage run that loads TypeScript leaves emits a one-shot `WARNING_COVERAGE_TYPESCRIPT_SOURCEMAP_OFF`, because that coverage can only land on the cache copies. Relative `.ts` imports between your modules are cached and mapped the same way.
 2. **The cache directory in `coverage.include`.** `@vitest/coverage-v8` filters coverage by the file that _executed_ — the cache `.mjs` — before it remaps through the source map. With `include: ["src/**"]` alone, the cache files are dropped before remapping and every TypeScript leaf reports 0%. Add `**/.slothlet-cache/**`; after remapping, the results land on your `.ts` files and the cache files themselves do not appear in the report.
 
 A complete config for a mixed `.mjs` / `.cjs` / `.ts` api under `api/`:
@@ -112,7 +118,7 @@ test("composes", async () => {
 	const api = await slothlet({
 		base: new URL("./api", import.meta.url).pathname,
 		typescript: "fast", // sourcemap left unset: on during coverage
-		import: (url) => import(url)
+		loader: { import: (url) => import(url) }
 	});
 	expect(api.typed.pick(true)).toBe("r");
 	await api.slothlet.shutdown();
@@ -131,7 +137,7 @@ npx c8 --include "api/**" --include "**/.slothlet-cache/**" node app-test.mjs
 
 `--enable-source-maps` is not needed for coverage; it only changes stack traces.
 
-## Per-instance helpers under vitest: `slothletInstanceImports()`
+## Per-instance helpers under vitest: the `@cldmv/slothlet/vite` plugin
 
 Every relative (or `file:`) module a leaf imports belongs to the leaf's instance: slothlet copies the leaf's instance parameter (`?slothlet_instance=…`) onto those helpers, so module-level state in a helper is never shared between two instances, and a full reload (`api.slothlet.reload()`) gives the instance fresh helpers (see [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance)). Under native Node this happens through a resolve hook slothlet registers itself — nothing to configure.
 
@@ -140,18 +146,60 @@ Both coverage fixes above move leaf loading into **vitest's** module graph, and 
 ```js
 // vitest.config.mjs
 import { defineConfig } from "vitest/config";
-import { slothletInstanceImports } from "@cldmv/slothlet/helpers/instance-imports";
+import { plugin } from "@cldmv/slothlet/vite";
 
 export default defineConfig({
-	plugins: [slothletInstanceImports()],
+	plugins: [plugin()],
 	test: {
 		coverage: { provider: "v8", include: ["api/**"] }
 	}
 });
 ```
 
-The plugin applies the same rule as the Node hook: only relative / `file:` specifiers imported by a module that carries a slothlet instance query are rewritten; bare packages, `node:` builtins and `@cldmv/slothlet` itself stay shared. A CommonJS helper imported this way (a `.cjs` file, or a `.js` file Node treats as CommonJS) is loaded as the same per-instance wrapper the Node hook uses, so the helper and everything it `require()`s run natively through the instance's CommonJS cache, shared with the instance's `.cjs` leaves. A plain test run that leaves slothlet externalized and sets no `import` importer does not need the plugin — the leaves then load natively and the Node hook covers them.
+The plugin applies the same rule as the Node hook: the specifiers a module that carries a slothlet instance query imports are rewritten when they resolve into the module's own package, whether relative, `file:`, a subpath `#imports` entry or a self-reference by the package's name; bare packages, `node:` builtins, files of another package however they are reached, and `@cldmv/slothlet` itself stay shared. Under vite a module's `import.meta.url` drops the query of its id, so a per-instance copy reports its plain file URL there. A CommonJS helper imported this way (a `.cjs` file, or a `.js` file Node treats as CommonJS) is loaded as the same per-instance wrapper the Node hook uses, so the helper and everything it `require()`s run natively through the instance's CommonJS cache, shared with the instance's `.cjs` leaves. A `.cjs` leaf's own `require()` of an ES module of its package, by a relative path, a `#imports` entry or the package's name, is served the instance's copy by the Node hook, natively: one copy per instance, but not the copy vite gives the instance's ES module leaves. A plain test run that leaves slothlet externalized and sets no `import` importer does not need the plugin for this — the leaves then load natively and the Node hook covers them — but still needs it for the host's own files, below.
+
+### The host's own files under vitest
+
+With permissions on, code of the host's own files that runs inside a module's call — a context object the host hands a module's `activate`, whose closures call `api.slothlet.pin`, `api.slothlet.metadata`, `api.slothlet.event` or the host's own leaves, a hook handler the host installed — runs as that call. Under Node, slothlet checks such code against the file's source on disk. Under vitest the host's files (the test file, and the source files it imports, and the host's package when it is in `server.deps.inline`) are transformed by vite, so that check cannot pass. slothlet checks them against vitest's own record of the code its runner evaluated instead. That record is read once, when slothlet's runtime loads (at the first `slothlet()` call; under vitest's default isolation, once per test file), and never again. A host file vitest had evaluated by then needs nothing configured and gets the answer Node's loader gives. A file vite evaluates later, and anything added to the record later, is not read, so it is not taken as the file's own source on the strength of the record.
+
+A module's helper outside its api folder, which vite loads when the module loads, is refused under vitest without the plugin below until [#682](https://github.com/CLDMV/slothlet/issues/682).
+
+A package an api file imports is the one other case the plugin changes. vitest externalizes `node_modules`, so its runner imports the package itself, and slothlet's resolve hook sees the runner, not the api file, as the importer. Without the plugin, the package's code then counts as a file no module loaded: it acts for the code that called it. A package one module ships and another module's call runs (the first module hands out a function of the package) then runs as the calling module only, where Node also holds it to the module that ships it, so a rule that denies the shipping module refuses it under Node and lets it through under vitest. With the plugin it is held to both, as under Node.
+
+`plugin()` from `@cldmv/slothlet/vite` covers the files vite evaluates after slothlet's runtime loaded, and every file under another vite runner. It appends one statement to every JavaScript or TypeScript ES module vite transforms that is not under `node_modules` and not slothlet's own. The statement records the script vite compiled the file into. slothlet accepts the record only when vitest's or vite's runner evaluated the file. Each such file that is not an instance file also imports a virtual module the plugin writes, which records the modules that loaded the file, as the plugin resolved their imports. A package's file under `node_modules`, which vite leaves untransformed and vitest's runner imports itself, gets that record too, written into the instance file that imports it. With both, a file vite evaluates later gets the answer Node's loader gives: a file only the host loaded (the files of the package that created the instance, the nearest folder holding a `package.json` above the file whose code called `slothlet()`, and a package's file the host imports once the instance exists) runs as the module's call it is in, and a file a module loaded runs as that module. Code compiled with `vm` under a file's name stays refused. A JSON file a leaf imports (`with { type: "json" }`) carries the instance's query, as under Node, and the plugin loads it as Node loads a JSON module. The plugin also keeps slothlet's own files to slothlet as Node's loader does (see [MODULE-STRUCTURE.md](MODULE-STRUCTURE.md#what-a-module-imports-from-slothlet)): a module's import of one of them fails as it resolves, and each `import()` and `import.meta.resolve()` of an instance file is checked as it runs. The refusal reaches the module through vite's runner as an error whose message starts with `[MODULE_INTERNAL_NOT_IMPORTABLE]`. See [PERMISSIONS.md](PERMISSIONS.md#code-passed-by-routes-slothlet-does-not-see).
+
+vitest 5 keeps transformed modules on disk between runs (`fsModuleCache`), keyed by each file's content and the configured plugins' names, so a transform cached under an earlier slothlet version is reused after an upgrade; clear `node_modules/.vitest-cache` after upgrading slothlet.
+
+### The permission system under vitest
+
+vitest compiles every module file it loads with `vm.runInThisContext`, a route of `capability:code`, which the permission system refuses to module code. A module file's top-level code runs as the file's module, so with the permission system on, the compile of a file slothlet is loading would be refused. The plugin adds a worker setup file at the front of `setupFiles` that records the code the vitest server sends for each module, and slothlet treats vitest's compile of exactly that code, for a file the instance is loading or for the `self` module the plugin writes for the instance's runtime import, as the loader's own (see [PERMISSIONS.md](PERMISSIONS.md#built-in-capabilities)). Any other code compiled under a loading file's name stays refused.
+
+This needs vitest's `forks` pool, which is vitest's default. Under the `threads` pool the setup records nothing, so a module file loading with the permission system on (an eager instance, or a lazy node's first access) is refused with `PERMISSION_CAPABILITY_REFUSED`. Without the plugin no setup runs, and inside the vitest worker the first compile of each loading file is decided by the code making it: vitest's runner is no module's code, so the file loads, and a module's own code compiling under a loading file's name is still refused. The plugin is what lets slothlet check that the compiled code is exactly what the server sent. The setup reads vitest's internal message and wrapper shapes; a vitest release that changes them makes the compile refused rather than allowed, and slothlet's own suite has a test that fails when that happens.
+
+## Fake timers and the instance's clock
+
+slothlet reads `Date.now` and the timers from the copies it took when it loaded, so `vi.useFakeTimers()` after an instance exists does not move it: a principal's `ttl` still runs on real time, and the timestamps it records are real. To drive an instance's time from a test, give it the `clock` option ([CONFIGURATION.md](CONFIGURATION.md#clock)): `clock: { now: () => time }` for a time you set yourself, or, with fake timers installed before the instance is created, `clock: { now: Date.now, setTimeout, clearTimeout }`.
 
 ## Scope
 
 The `.mjs` artifact appears with any setup that externalizes `node_modules` and attributes coverage from the runner's module graph (vitest + the v8 provider). It is independent of eager vs lazy mode and of the `slothlet-dev` condition — the deciding axis is externalized vs inlined, nothing else. The TypeScript requirements (source maps and the cache directory in `include`) apply in every setup, including inlined slothlet and slothlet's own repo.
+
+## Node.js floor
+
+slothlet has one Node.js floor: `engines.node` and `devEngines` are both `>=24.15.0`, the first Node 24 release with everything the async runtime and the module hooks rely on (`async_hooks.createHook({ trackPromises: false })`, and `module.registerHooks()` asked for a `require.resolve()`). CI's test matrix starts there. `tests/smoke/runtime-floor.mjs` is a plain-Node script with no dev dependencies that builds a small api in eager and lazy mode, loads the CJS entry and `@cldmv/slothlet/runtime`, boots once with permissions on, and checks an AsyncContextFrame canary; it checks a Node binary by hand without the vitest toolchain. `npm run test:runtime-floor` runs it on src and `npm run test:runtime-floor:dist` (after `npm run build`) on dist, each once with Node's default flags and once with `--no-async-context-frame`, on the Node binary named by `SLOTHLET_FLOOR_NODE` (`SLOTHLET_FLOOR_NODE=/path/to/node-v24.15.0/bin/node npm run test:runtime-floor`), or on the Node running npm when it is not set.
+
+## Re-measuring one source file
+
+A full coverage run takes a long time, and most of it is spent on test files that never touch the file I'm working on. `npm run coverage:file` runs only the test files that reach one source file and prints that file's uncovered lines:
+
+```sh
+npm run coverage:file -- src/lib/helpers/module-sort.mjs
+npm run coverage:file -- src/lib/helpers/module-sort.mjs --fn sortModules --dry-run
+npm run coverage:file -- src/lib/helpers/module-sort.mjs -- --workers 2
+```
+
+It reads `coverage-index.json`, which `@cldmv/vitest-runner` writes when it merges the blobs of a coverage run (`npm run coverage:node` and CI both produce it, merged with a 12 GB heap that `VITEST_MERGE_HEAP_MB` overrides): for each source file, every function and the test files that executed it. Module top-level code isn't indexed, so a test that only loads a file doesn't count as reaching it. The script takes the index from `--index <path>`, else from `coverage/coverage-index.json` when that was written for the current HEAD, else from the index CI publishes for the branch on the `badges` branch (`--branch next|master|hotfixes`, `next` by default). An index for another commit still works, but it prints a warning: tests added since won't be in it.
+
+`--fn <name>` narrows the run to the tests that reach one function. A name used more than once in a file is indexed as `name@<line>`; the bare name matches all of them. `--dry-run` lists the tests and stops. Anything after a second `--` goes to `npm run coverage:node`.
+
+One limit for now: the run measures the whole `src` tree, because `npm run vitest` doesn't pass `--coverage.include` on to the per-file runs yet ([#954](https://github.com/CLDMV/slothlet/issues/954)); the report is filtered to the one file, so only the run time is affected.

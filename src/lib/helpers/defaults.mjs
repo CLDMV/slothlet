@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/defaults.mjs
+ *	@Filename: src/lib/helpers/defaults.mjs
  *	@Date: 2026-09-07T09:49:38-07:00 (1788799778)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:12-07:00 (1791091692)
+ *	@Last modified time: 2026-11-28T04:30:42-08:00 (1795869042)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,17 +25,20 @@
  * @module @cldmv/slothlet/helpers/defaults
  * @internal
  */
-// The reserved-key Sets come from a module with no imports. index.mjs imports this file
+// The reserved-key Sets come from a module whose only import is helpers/intrinsics. index.mjs imports this file
 // statically to attach `slothlet.defaults`, and index.cjs loads index.mjs through Node's
 // synchronous require(esm), so this module's import graph must stay free of top-level await
 // (the wrapper classes reach `helpers/platform`, which uses it).
-import { WRAPPER_INTERNAL_KEYS, IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
-import { markSlothletProxy } from "#handlers/framework-internals";
+import { internals as reservedKeysInternals } from "#helpers/reserved-keys";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { concatLists, FunctionMethods, NativeProxy, Objects, Reflect, setFrom, setToArray, TypeError } from "#helpers/intrinsics";
+const reservedKeysOwn = reservedKeysInternals("lib/helpers/defaults");
+const { markSlothletProxy } = frameworkInternalsInternals("lib/helpers/defaults");
 
 /**
  * The default `apiDepth` (directory-traversal depth) applied when a caller does not specify one.
  * Unbounded by default. The config normalizer ({@link module:@cldmv/slothlet/helpers/config}) is
- * what every real compose path reads — it resolves `config.apiDepth` once and the mode processors
+ * what every real compose path reads — it resolves `config.depth` once and the mode processors
  * receive that already-normalized value. The mode processors' and the loader's own parameter
  * defaults exist only for the case where they are invoked directly, bypassing normalization (a
  * standalone call, a future direct consumer); they read this same constant so that case can never
@@ -43,6 +46,21 @@ import { markSlothletProxy } from "#handlers/framework-internals";
  * @type {number}
  */
 export const DEFAULT_API_DEPTH = Infinity;
+
+/**
+ * How many levels of objects, the outermost counted, a value handed into a call or returned out of one is searched
+ * for code when `permissions.search.depth` is not set. Read by the config normalizer and, for an instance with no
+ * `permissions` config, by the searches themselves.
+ * @type {number}
+ */
+export const DEFAULT_SEARCH_DEPTH = 4;
+
+/**
+ * How many own properties, all values of one search counted together, are read when `permissions.search.properties`
+ * is not set. Read where {@link DEFAULT_SEARCH_DEPTH} is.
+ * @type {number}
+ */
+export const DEFAULT_SEARCH_PROPERTIES = 512;
 
 /**
  * The built-in `routines` list applied when a caller omits the `routines` config option entirely.
@@ -56,9 +74,9 @@ export const DEFAULT_API_DEPTH = Infinity;
  * entries by reference safely without risking a mutation here leaking across consumers.
  * @type {ReadonlyArray<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy"}>}
  */
-export const DEFAULT_ROUTINES = Object.freeze([
-	Object.freeze({ name: "initialize", mode: "startup" }),
-	Object.freeze({ name: "shutdown", mode: "shutdown" })
+export const DEFAULT_ROUTINES = Objects.freeze([
+	Objects.freeze({ name: "initialize", mode: "startup" }),
+	Objects.freeze({ name: "shutdown", mode: "shutdown" })
 ]);
 
 /**
@@ -82,9 +100,9 @@ function freezeSet(set) {
 	// `[[Extensible]]` to false, which is what `Object.isFrozen()` actually checks — freezing the
 	// target keeps that introspection honest. The Proxy layer below is what actually stops
 	// `add`/`delete`/`clear`, which `Object.freeze()` alone never touches.
-	Object.freeze(set);
+	Objects.freeze(set);
 	return markSlothletProxy(
-		new Proxy(set, {
+		new NativeProxy(set, {
 			get(target, prop) {
 				if (prop === "add" || prop === "delete" || prop === "clear") {
 					return () => {
@@ -92,22 +110,25 @@ function freezeSet(set) {
 					};
 				}
 				const value = Reflect.get(target, prop, target);
-				return typeof value === "function" ? value.bind(target) : value;
+				return typeof value === "function" ? FunctionMethods.bind(value, target) : value;
 			}
 		})
 	);
 }
 
 /**
- * The complete set of framework-reserved export names — names a module export can never
- * meaningfully claim because the framework's own wrapper machinery already owns them.
+ * The framework-reserved names the framework's own code looks up by name — names a module export can never
+ * meaningfully claim because the framework's own wrapper machinery already owns them. Every other name that starts
+ * with three underscores is reserved too (`isFrameworkName()` in `#helpers/reserved-keys` checks the prefix):
+ * the wrapper's own `___` / `____` members carry it.
  *
  * Derived as the union of `ComponentBase.INTERNAL_KEYS` (wrapper state/control properties)
- * and `IMPL_METADATA_KEYS` (child-adoption metadata) — the same two Sets `isFrameworkReservedKey()`
- * (`#handlers/unified-wrapper`) checks against, combined here into one Set for convenient
+ * and `IMPL_METADATA_KEYS` (child-adoption metadata), combined here into one Set for convenient
  * introspection. Wrapped via {@link freezeSet} — `Object.freeze()` alone would leave `add`/
  * `delete`/`clear` callable, letting a consumer mutate this shared singleton (and corrupt what
  * every other consumer in the same process sees) despite it claiming to be frozen.
  * @type {ReadonlySet<string>}
  */
-export const RESERVED_EXPORTS = freezeSet(new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]));
+export const RESERVED_EXPORTS = freezeSet(
+	setFrom(concatLists(setToArray(reservedKeysOwn.WRAPPER_INTERNAL_KEYS), setToArray(reservedKeysOwn.IMPL_METADATA_KEYS)))
+);

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-caller-supplied-round2.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-caller-supplied-round2.test.vitest.mjs
  *	@Date: 2026-10-17T00:00:00-07:00 (1792220400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:51-07:00 (1793485491)
+ *	@Last modified time: 2026-11-28T04:32:21-08:00 (1795869141)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,14 +31,15 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { apiPart, getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND2;
 
 /** Deny by default; the secret is the callee's and the keeper's alone. */
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "callee.**", target: "vault.secret.secret", effect: "allow" },
 	{ caller: "keeper.**", target: "vault.secret.secret", effect: "allow" },
 	{ caller: "holder.**", target: "vault.secret.secret", effect: "allow" },
@@ -57,12 +58,12 @@ const RULES = [
 	{ caller: "callee.**", target: "callee2.**", effect: "allow" },
 	{ caller: "callee.**", target: "supplier.hooks.**", effect: "allow" },
 	{ caller: "callee.**", target: "supplier.bag.**", effect: "allow" },
-	{ caller: "callee.**", target: "slothlet.lockCaller.caller", effect: "allow" },
+	{ caller: "callee.**", target: "slothlet.pin.caller", effect: "allow" },
 	{ caller: "supplier.**", target: "slothlet.permissions.principal.**", effect: "allow" },
 	{ caller: "callee.**", target: "slothlet.permissions.principal.**", effect: "allow" },
-	{ caller: "**", target: "slothlet.scope", effect: "allow" },
+	{ caller: "**", target: "slothlet.context.scope", effect: "allow" },
 	// The slothlet functions themselves, so binding one reads what it needs to: the tests are about who calling it is.
-	{ caller: "**", target: "slothlet.scope.**", effect: "allow" },
+	{ caller: "**", target: "slothlet.context.scope.**", effect: "allow" },
 	{ caller: "**", target: "slothlet.event.**", effect: "allow" },
 	{ caller: "**", target: "slothlet.hook.**", effect: "allow" }
 ];
@@ -97,12 +98,12 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 	const build = async (permissions = {}) => {
 		api = await slothlet({
 			...config,
-			base: path.join(DIR, "base"),
+			base: apiPart(DIR),
 			hook: true,
-			permissions: { defaultPolicy: "deny", rules: RULES, events: { default: "allow" }, ...permissions }
+			permissions: { policy: "deny", rules: RULES, events: { policy: "allow" }, ...permissions }
 		});
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+		await api.slothlet.api.add("callee", apiPart(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", apiPart(DIR, "supplier"), { id: "supplier-mod" });
 		return api;
 	};
 
@@ -162,31 +163,34 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.boundScope())).toEqual(DENIED);
 		});
 
-		it("control: lockCaller.caller is refused to a supplier that may not take it", async () => {
+		it("control: pin.caller is refused to a supplier that may not take it", async () => {
 			await build();
 			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.boundLockCallerCaller())).toEqual(DENIED);
 		});
 	});
 
 	describe("a leaf's own function handed over as a value", () => {
-		it("imported raw and handed to the leaf's module, runs as the supplier", async () => {
+		it("imported raw: the supplier that imports the holder's leaf file is refused", async () => {
 			await build();
-			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.rawLeafHanded())).toEqual(DENIED);
-		});
-
-		it.each([false, true])("imported raw, inside a plain options object (frozen: %s), runs as the supplier", async (frozen) => {
-			await build();
-			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.rawLeafInOptions(frozen))).toEqual(DENIED);
+			// Module code may not import a leaf file: a supplier importing the holder's file to hand it the function raw does
+			// not load (on api.add() in an eager tree, when its folder is built in a lazy one).
+			let thrown = null;
+			try {
+				await withSuppressedSlothletErrorOutput(async () => {
+					await api.slothlet.api.add("rawsupplier", apiPart(DIR, "rawsupplier"), { id: "rawsupplier-mod" });
+					await api.rawsupplier.probe.rawLeafHanded();
+				});
+			} catch (error) {
+				thrown = error;
+			}
+			const causes = [];
+			for (let at = thrown; at && causes.length < 10; at = at.cause) causes.push(at?.code);
+			expect(causes).toContain("MODULE_LEAF_IMPORT_REFUSED");
 		});
 
 		it.each([false, true])("the leaf's very function, handed back (in options: %s), is gated as that leaf", async (inOptions) => {
 			await build();
 			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.sharedLeafHanded(inOptions))).toEqual(DENIED);
-		});
-
-		it("imported raw and called from the supplier's closure, runs as the supplier", async () => {
-			await build();
-			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.rawLeafInClosure())).toEqual(DENIED);
 		});
 
 		it("control: the holder calls it on its own account", async () => {
@@ -219,20 +223,20 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 		});
 
 		it('with ceiling "chain", it survives a pin and a second callee the pinned code hands code to', async () => {
-			await build({ ceiling: "chain" });
+			await build({ caller: { ceiling: "chain" } });
 			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.nestedPin())).toEqual(DENIED);
 		});
 
 		it('ceiling must be "leaf" or "chain", and provenance a boolean', async () => {
-			for (const permissions of [{ ceiling: "yes" }, { ceiling: true }, { provenance: "yes" }]) {
-				await expect(
-					slothlet({ ...config, base: path.join(DIR, "base"), permissions: { defaultPolicy: "deny", ...permissions } })
-				).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+			for (const permissions of [{ caller: { ceiling: "yes" } }, { caller: { ceiling: true } }, { caller: { provenance: "yes" } }]) {
+				await expect(slothlet({ ...config, base: apiPart(DIR), permissions: { policy: "deny", ...permissions } })).rejects.toMatchObject({
+					code: "INVALID_CONFIG"
+				});
 			}
 		});
 
 		it('with ceiling "chain", the module\'s own code is not held to anything', async () => {
-			await build({ ceiling: "chain" });
+			await build({ caller: { ceiling: "chain" } });
 			expect(await api.supplier.probe.ownCallThroughCallee2()).toEqual({ ok: true, value: "supplied" });
 		});
 	});
@@ -281,15 +285,17 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code on a versi
 	const build = async () => {
 		api = await slothlet({
 			...config,
-			base: path.join(DIR, "base"),
-			versionDispatcher: (_allVersions, caller) => {
-				const apiPath = caller?.metadata?.apiPath ?? "";
-				if (apiPath.startsWith("supplier.")) return "v2";
-				if (apiPath.startsWith("callee.")) return "v1";
-				return null;
+			base: apiPart(DIR),
+			versioning: {
+				dispatcher: (_allVersions, caller) => {
+					const apiPath = caller?.path?.join(".") ?? "";
+					if (apiPath.startsWith("supplier.")) return "v2";
+					if (apiPath.startsWith("callee.")) return "v1";
+					return null;
+				}
 			},
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "supplier.**", target: "callee.**", effect: "allow" },
 					{ caller: "supplier.**", target: "v2.auth.**", effect: "allow" },
@@ -297,10 +303,10 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code on a versi
 				]
 			}
 		});
-		await api.slothlet.api.add("auth", path.join(DIR, "auth-v1"), { moduleID: "auth-v1" }, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", path.join(DIR, "auth-v2"), { moduleID: "auth-v2" }, { version: "v2" });
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+		await api.slothlet.api.add("auth", apiPart(DIR, "auth-v1"), { id: "auth-v1", version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", apiPart(DIR, "auth-v2"), { id: "auth-v2", version: { tag: "v2" } });
+		await api.slothlet.api.add("callee", apiPart(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", apiPart(DIR, "supplier"), { id: "supplier-mod" });
 		return api;
 	};
 

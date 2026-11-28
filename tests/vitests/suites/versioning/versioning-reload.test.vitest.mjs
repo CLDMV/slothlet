@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/versioning/versioning-reload.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/versioning/versioning-reload.test.vitest.mjs
  *	@Date: 2026-04-01T22:43:31-07:00 (1775108611)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-28T04:33:17-08:00 (1795869197)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,11 +38,14 @@ describe.each(getMatrixConfigs())("Versioning > Reload > $name", ({ config }) =>
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: () => null // always use default
+			versioning: {
+				dispatcher: () => null
+			}
+			// always use default
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Verify initial routing
 		const before = api.unversionedCaller.callLogin("testUser");
@@ -50,7 +53,7 @@ describe.each(getMatrixConfigs())("Versioning > Reload > $name", ({ config }) =>
 
 		// Get the moduleID for v1.auth and reload it
 		const list = api.slothlet.versioning.list("auth");
-		const v1ModuleID = list.versions.v1?.moduleID;
+		const v1ModuleID = list.versions.v1?.module;
 		expect(v1ModuleID).toBeDefined();
 
 		await api.slothlet.api.reload(v1ModuleID);
@@ -63,11 +66,11 @@ describe.each(getMatrixConfigs())("Versioning > Reload > $name", ({ config }) =>
 	it("version list is intact after reload", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		const list = api.slothlet.versioning.list("auth");
-		const v1ID = list.versions.v1?.moduleID;
+		const v1ID = list.versions.v1?.module;
 
 		await api.slothlet.api.reload(v1ID);
 

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/metadata/metadata-key-validation-coverage.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/metadata/metadata-key-validation-coverage.test.vitest.mjs
  *	@Date: 2026-05-12T19:35:50-07:00 (1778639750)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-28T04:32:05-08:00 (1795869125)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,19 +42,19 @@ describe("metadata.mjs key-validation coverage", () => {
 	it("set silently accepts an empty-string key (length-zero early return)", () => {
 		// metadata.set hits setUserMetadata → #mergeMetadataValue → #assertSafeMetadataKeySegment("")
 		// where typeof "" === "string" && "".length === 0 → early return, no throw.
-		// (metadata.setGlobal does pre-validation in api_builder.mjs and would throw before reaching this branch.)
+		// (metadata.global does pre-validation in api_builder.mjs and would throw before reaching this branch.)
 		expect(() => api.slothlet.metadata.set(api.rootMath.add, "", "ignored")).not.toThrow();
 	});
 
-	it("set throws INVALID_METADATA_KEY when a dot-segment is __proto__", () => {
+	it("set throws METADATA_KEY_INVALID when a dot-segment is __proto__", () => {
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => {
 				api.slothlet.metadata.set(api.rootMath.add, "outer.__proto__.inner", "anything");
-			}).toThrow(/INVALID_METADATA_KEY/);
+			}).toThrow(/METADATA_KEY_INVALID/);
 		});
 	});
 
-	it("set throws INVALID_METADATA_KEY for a deeply-nested object containing __proto__ (walk depth ≥ 2)", () => {
+	it("set throws METADATA_KEY_INVALID for a deeply-nested object containing __proto__ (walk depth ≥ 2)", () => {
 		// First do a deep but clean set so the assertNoReservedMetadataKeys walk
 		// recurses past depth 1 — this hits the line-177 ternary's `path ? ... : key`
 		// true arm during the inner walk call.
@@ -71,7 +71,7 @@ describe("metadata.mjs key-validation coverage", () => {
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => {
 				api.slothlet.metadata.set(api.rootMath.add, "deepBad", tainted);
-			}).toThrow(/INVALID_METADATA_KEY/);
+			}).toThrow(/METADATA_KEY_INVALID/);
 		});
 	});
 });

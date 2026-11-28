@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/dev/precommit-validation.mjs
+ *	@Filename: tools/dev/precommit-validation.mjs
  *	@Date: 2025-10-27T09:42:13-07:00 (1761583333)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:29-07:00 (1791090929)
+ *	@Last modified time: 2026-11-28T04:33:19-08:00 (1795869199)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,6 +77,7 @@ async function main() {
 		{ name: "Format (Prettier)", command: "npm", args: ["run", "format"] },
 		{ name: "Analyze Error and i18n Quality", command: "npm", args: ["run", "analyze"] },
 		{ name: "i18n Language Parity + Script Purity", command: "npm", args: ["run", "i18n:check"] },
+		{ name: "Migration Guide In Sync", command: "npm", args: ["run", "docs:migration:check"] },
 		{ name: "Build Full Artifacts", command: "npm", args: ["run", "build:dev"] },
 		{ name: "API Structure Debug", command: "npm", args: ["run", "debug"] },
 		{ name: "Node Test Suite", command: "npm", args: ["run", "test:node"] }

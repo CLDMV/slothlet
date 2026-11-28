@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/isolation/helper-imports-mixed-formats.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/isolation/helper-imports-mixed-formats.test.vitest.mjs
  *	@Date: 2026-10-02T12:27:51-07:00 (1790969271)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:33-07:00 (1791091713)
+ *	@Last modified time: 2026-11-28T04:31:58-08:00 (1795869118)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,9 +37,9 @@ import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-const FIXTURE = path.resolve(TEST_DIRS.API_TEST_HELPER_IMPORTS, "../__mixed");
+const FIXTURE = TEST_DIRS.API_TEST_HELPER_IMPORTS_MIXED;
 const BASE = path.join(FIXTURE, "api");
-const NATIVE_PROBE = path.join(FIXTURE, "native-probe.mjs");
+const NATIVE_PROBE = path.join(FIXTURE, "lib", "native-probe.mjs");
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
 const CONFIGS = [

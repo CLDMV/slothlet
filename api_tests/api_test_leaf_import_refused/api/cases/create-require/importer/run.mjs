@@ -1,0 +1,22 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: api_tests/api_test_leaf_import_refused/api/cases/create-require/importer/run.mjs
+ *	@Date: 2026-11-23T19:51:36-08:00 (1795492296)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-28T04:28:35-08:00 (1795868915)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+
+export function run() {
+	return require("../target/t.cjs").value;
+}

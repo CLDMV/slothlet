@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_cross_instance/probe.mjs
+ *	@Filename: api_tests/api_test_cross_instance/probe.mjs
  *	@Date: 2026-09-21T04:11:27+00:00 (1789963887)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:27:46-07:00 (1791091666)
+ *	@Last modified time: 2026-11-28T04:27:51-08:00 (1795868871)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@ import { self } from "@cldmv/slothlet/runtime";
 /**
  * Report this module's own identity via `self.slothlet.caller()` — a same-instance sanity check that
  * the accessor still names this module correctly when its OWN instance's flow is active.
- * @returns {string|null} This module's dotted api path.
+ * @returns {{path: string[], module: string|null, metadata: object, version: object|null}|null} This module's caller object.
  */
 export function whoami() {
 	return self.slothlet.caller();

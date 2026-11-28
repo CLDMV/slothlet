@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-stacking-order.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-stacking-order.test.vitest.mjs
  *	@Date: 2026-04-14T17:13:37-07:00 (1776212017)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-28T04:32:42-08:00 (1795869162)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,13 +27,13 @@ describe.each(getMatrixConfigs())("Permissions > Stacking Order > $name", ({ con
 		api = null;
 	});
 
-	it("config → api.add → addRule stacking order determines tiebreak", async () => {
+	it("config → api.add → rules.add stacking order determines tiebreak", async () => {
 		// Config denies callers → payments
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]
 			}
 		});
@@ -46,8 +46,8 @@ describe.each(getMatrixConfigs())("Permissions > Stacking Order > $name", ({ con
 			expect(err.message).toMatch(/PERMISSION_DENIED/);
 		}
 
-		// addRule overrides with allow (registered later = wins at same specificity)
-		api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "allow" });
+		// rules.add overrides with allow (registered later = wins at same specificity)
+		api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "allow" });
 
 		// Now should be allowed
 		const result = await api.callers.paymentsCaller.callCharge(100);

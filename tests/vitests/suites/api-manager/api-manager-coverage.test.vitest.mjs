@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-coverage.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-coverage.test.vitest.mjs
  *	@Date: 2026-09-14T15:15:27-07:00 (1789424127)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:19-07:00 (1791091699)
+ *	@Last modified time: 2026-11-28T04:31:10-08:00 (1795869070)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,14 +34,14 @@ afterEach(async () => {
 describe("ApiManager guard coverage", () => {
 	it("invalidateSpeculativeWrappers skips reserved meta keys during its walk (api-manager.mjs:1011)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		const apiManager = resolveWrapper(api.math).slothlet.handlers.apiManager;
-		// The walk enumerates own keys and `continue`s on reserved meta keys (__metadata/__type/…).
-		expect(() => apiManager.invalidateSpeculativeWrappers({ __metadata: { a: 1 }, __type: "x", real: () => {} })).not.toThrow();
+		const apiManager = resolveWrapper(api.math).____slothlet.handlers.apiManager;
+		// The walk enumerates own keys and `continue`s on reserved keys (____impl/___materialize/…).
+		expect(() => apiManager.invalidateSpeculativeWrappers({ ____impl: { a: 1 }, ___materialize: "x", real: () => {} })).not.toThrow();
 	});
 
 	it("mutateApiValue returns early when existing === next (api-manager.mjs:1061-1062)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		const apiManager = resolveWrapper(api.math).slothlet.handlers.apiManager;
+		const apiManager = resolveWrapper(api.math).____slothlet.handlers.apiManager;
 		const same = { shared: true };
 		// Same reference on both sides → the identity guard returns before any merge work.
 		await expect(apiManager.mutateApiValue(same, same, { removeMissing: false }, {})).resolves.toBeUndefined();

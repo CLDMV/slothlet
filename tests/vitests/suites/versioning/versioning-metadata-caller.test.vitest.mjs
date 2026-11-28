@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/versioning/versioning-metadata-caller.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/versioning/versioning-metadata-caller.test.vitest.mjs
  *	@Date: 2026-04-01T22:44:38-07:00 (1775108678)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-28T04:33:17-08:00 (1795869197)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,12 +43,10 @@ describe.each(getMatrixConfigs())("Versioning > Metadata Caller > $name", ({ con
 			hook: { enabled: true }
 		});
 
-		await api.slothlet.api.add(
-			"auth",
-			`${BASE}/v1`,
-			{ metadata: { regularField: "hello" } },
-			{ version: "v1", default: true, metadata: { versionField: "secret" } }
-		);
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {
+			metadata: { regularField: "hello" },
+			version: { tag: "v1", default: true, metadata: { versionField: "secret" } }
+		});
 
 		api.slothlet.hook.on("v1.auth.login:before", (ctx) => {
 			hookFirings.push(ctx);
@@ -74,14 +72,12 @@ describe.each(getMatrixConfigs())("Versioning > Metadata Caller > $name", ({ con
 	it("getVersionMetadata returns versionConfig.metadata not options.metadata", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add(
-			"auth",
-			`${BASE}/v1`,
-			{ metadata: { regularField: "options-meta" } },
-			{ version: "v1", default: true, metadata: { tier: "beta", versionSpecific: true } }
-		);
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {
+			metadata: { regularField: "options-meta" },
+			version: { tag: "v1", default: true, metadata: { tier: "beta", versionSpecific: true } }
+		});
 
-		const versionMeta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
+		const versionMeta = api.slothlet.versioning.metadata.get("auth", "v1");
 
 		// versionMeta should have versionConfig.metadata fields
 		expect(versionMeta).toHaveProperty("tier", "beta");

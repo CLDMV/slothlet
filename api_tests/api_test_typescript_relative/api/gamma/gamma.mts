@@ -1,4 +1,4 @@
-import { cycleOne } from "../../external/cycle-one.mts";
+import { cycleOne } from "../../lib/cycle-one.mts";
 
 /**
  * Reaches into a circular `.mts` ⇄ `.mts` relative-import pair — exercises

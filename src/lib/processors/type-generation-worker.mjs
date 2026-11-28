@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/processors/type-generation-worker.mjs
+ *	@Filename: src/lib/processors/type-generation-worker.mjs
  *	@Date: 2026-02-14T18:14:33-08:00 (1771121673)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-28T04:30:46-08:00 (1795869046)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,11 +30,17 @@
  * Importing the module does nothing; only running it as the process's entry script starts a build.
  */
 
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import * as nodeUrl from "node:url";
+import * as nodePath from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { generateTypes } from "#processors/type-generator";
+import { SlothletError } from "#errors";
+import { JSON, NativeProcess, Processes, PromiseMethods } from "#helpers/intrinsics";
+
+// Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
+// on Node's module object later does not run here.
+const { fileURLToPath } = nodeUrl;
+const { resolve } = nodePath;
 
 /**
  * IPC sender to the parent process (`process.send` in the fork).
@@ -52,8 +58,9 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
  * Build the api described by `configJson` and write its declaration file.
- * @param {string|undefined} configJson - The serialized worker config (`SLOTHLET_CONFIG`): the
- *   slothlet config for an eager, fast-mode instance plus `types` (`{ output, interfaceName, ... }`).
+ * @param {string|undefined} configJson - The serialized worker config (`SLOTHLET_CONFIG`):
+ *   `{ config, types }`, the slothlet config for an eager, fast-mode instance and the `typescript.types` option
+ *   (`{ output, name }`).
  * @param {WorkerMessageSender|undefined} send - IPC sender to the parent (`process.send` in the
  *   fork); `undefined` when there is no IPC channel.
  * @returns {Promise<number>} The process exit code: `0` on success, `1` on failure.
@@ -64,11 +71,11 @@ export async function runTypeGeneration(configJson, send) {
 	let api = null;
 	try {
 		if (!configJson) {
-			throw new SlothletError("TS_TYPE_GENERATION_WORKER_NO_CONFIG", {}, null, { validationError: true });
+			throw new SlothletError("TYPESCRIPT_TYPE_GENERATION_WORKER_NO_CONFIG", {});
 		}
-		const config = JSON.parse(configJson);
+		const { config, types } = JSON.parse(configJson);
 		api = await slothlet(config);
-		await generateTypes(api, config.types);
+		await generateTypes(api, { output: types?.output, interfaceName: types?.name });
 		send?.({ type: "success" });
 		return 0;
 	} catch (error) {
@@ -95,7 +102,7 @@ export function runIfEntry(argv1, configJson, send, exit) {
 	if (!argv1 || resolve(argv1) !== fileURLToPath(import.meta.url)) {
 		return null;
 	}
-	return runTypeGeneration(configJson, send).then(exit);
+	return PromiseMethods.then(runTypeGeneration(configJson, send), exit);
 }
 
-runIfEntry(process.argv[1], process.env.SLOTHLET_CONFIG, process.send?.bind(process), process.exit.bind(process));
+runIfEntry(NativeProcess.argv[1], NativeProcess.env.SLOTHLET_CONFIG, Processes.send, Processes.exit);

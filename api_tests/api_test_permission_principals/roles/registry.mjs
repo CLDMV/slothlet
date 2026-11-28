@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_permission_principals/roles/registry.mjs
+ *	@Filename: api_tests/api_test_permission_principals/roles/registry.mjs
  *	@Date: 2026-09-26T22:18:59-07:00 (1790486339)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:40-07:00 (1791090880)
+ *	@Last modified time: 2026-11-28T04:29:07-08:00 (1795868947)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@ let resolveCount = 0;
 
 /**
  * Register the "roles" principal.
- * @param {object} [options] - Extra definition fields (e.g. `maxAge`).
+ * @param {object} [options] - Extra definition fields (e.g. `ttl`).
  * @param {boolean} [options.record=false] - When true, the resolver records to `ledger.log` — a target only
  *   this plugin may call, so a successful resolve proves it ran as this plugin.
  * @param {boolean} [options.race=false] - When true, the user's roles are invalidated while the resolve

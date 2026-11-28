@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/browser/init.browser.test.mjs
+ *	@Filename: tests/browser/init.browser.test.mjs
  *	@Date: 2026-06-16T19:29:13-07:00 (1781663353)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-28T04:30:50-08:00 (1795869050)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@ describe("slothlet loads in a real browser", () => {
 
 	it("loads the platform helper with isNode=false (executes the browser detection arm)", async () => {
 		// Directly import a module that has browser-only arms so coverage can prove it maps to src.
-		const platform = await import("@cldmv/slothlet/helpers/platform");
+		const platform = await import("#helpers/platform");
 		expect(platform.isNode).toBe(false);
 	});
 });

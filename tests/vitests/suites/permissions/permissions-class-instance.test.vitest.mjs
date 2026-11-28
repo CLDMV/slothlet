@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-class-instance.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-class-instance.test.vitest.mjs
  *	@Date: 2026-07-10T00:00:00-07:00 (1783666800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:15-07:00 (1791090915)
+ *	@Last modified time: 2026-11-28T04:32:23-08:00 (1795869143)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,7 +41,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Permissions > Class-insta
 		// defaultPolicy:allow because the class-method call presented no caller identity.
 		// (In lazy mode the factory's first call materializes async, so `makeService()` resolves to
 		// the wrapped instance — await it before reaching the method.)
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
 		const svc = await api.callers.classService.makeService();
 		const result = await svc.readViaMethod();
 		expect(result).toMatchObject({ ok: true, module: "db.read" });
@@ -54,7 +54,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Permissions > Class-insta
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "callers.classService.**", target: "db.read.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "callers.classService.**", target: "db.read.**", effect: "deny" }] }
 		});
 		const svc = await api.callers.classService.makeService();
 		let denied = false;
@@ -74,7 +74,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Permissions > Class-insta
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "callers.classService.**", target: "db.read.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "callers.classService.**", target: "db.read.**", effect: "deny" }] }
 		});
 		let fnDenied = false;
 		let methodDenied = false;

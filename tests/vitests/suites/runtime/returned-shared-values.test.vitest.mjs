@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/runtime/returned-shared-values.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/runtime/returned-shared-values.test.vitest.mjs
  *	@Date: 2026-10-27T06:58:07-07:00 (1793109487)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:04:30-07:00 (1793426670)
+ *	@Last modified time: 2026-11-28T04:32:58-08:00 (1795869178)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,8 +20,10 @@
  * and slothlet's runtime are made by no module and come back as themselves: `===` and `instanceof` hold against the
  * host's own import, for every module and instance. A package's exports are handed out as the module's, like its own
  * code — anyone can put code under `node_modules` — and work as they would, though `instanceof` holds against the class
- * the module hands out rather than the host's own import of the package. A function a module puts on a built-in,
- * and a plugin's own helper reached through its package name, are that module's code and stay stand-ins.
+ * the module hands out rather than the host's own import of the package. A function a module puts on a built-in is
+ * that module's code and stays a stand-in. A plugin's own helper, reached through its package name, is the plugin's
+ * too: the instance loads the plugin's files under its own URL (#731), so the function is the instance's copy of the
+ * helper, not the one the host's own import of the file evaluates, whether or not anything is wrapped.
  */
 
 import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
@@ -88,13 +90,13 @@ beforeAll(() => {
 			"\t\tmode,",
 			"\t\truntime,",
 			"\t\tsilent: true,",
-			'\t\tpermissions: { defaultPolicy: "allow", rules: [{ caller: "caller.**", target: "vault.**", effect: "deny" }] }',
+			'\t\tpermissions: { policy: "allow", rules: [{ caller: "caller.**", target: "vault.**", effect: "deny" }] }',
 			"\t});",
-			`\tawait api.slothlet.api.add("plug2", ${JSON.stringify(path.join(PLUGIN, "api"))}, { moduleID: "plug2" });`,
+			`\tawait api.slothlet.api.add("plug2", ${JSON.stringify(path.join(PLUGIN, "api"))}, { id: "plug2" });`,
 			"\tout[`${mode}/${runtime}`] = await api.caller.viaPlugin();",
 			"\tawait api.slothlet.shutdown();",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);
@@ -111,7 +113,7 @@ beforeAll(() => {
 			"\t\tmode,",
 			"\t\truntime,",
 			"\t\tsilent: true,",
-			'\t\tpermissions: { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }',
+			'\t\tpermissions: { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }',
 			"\t});",
 			"\tconst results = { own: await api.trusted.own() };",
 			'\tfor (const route of ["objCb", "arrCb", "fill", "map", "emitter", "global", "patched", "generator", "chainKept", "chainRoot", "chainNode", "nsKept"])',
@@ -123,7 +125,7 @@ beforeAll(() => {
 			"\t\tmode,",
 			"\t\truntime,",
 			"\t\tsilent: true,",
-			'\t\tpermissions: { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }',
+			'\t\tpermissions: { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }',
 			"\t});",
 			"\tconst unloaded = {};",
 			"\tawait fresh.plug.keepNamespace(unloaded);",
@@ -138,7 +140,7 @@ beforeAll(() => {
 			"\t\tmode,",
 			"\t\truntime,",
 			"\t\tsilent: true,",
-			'\t\tpermissions: { defaultPolicy: "allow", provenance: false, rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }',
+			'\t\tpermissions: { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }], caller: { provenance: false } }',
 			"\t});",
 			'\tresults.provenanceOff = await open.trusted.run("global");',
 			"\tawait open.slothlet.shutdown();",
@@ -146,7 +148,7 @@ beforeAll(() => {
 			'\t\t["bothAllowed", []],',
 			'\t\t["onlyPlugAllowed", [{ caller: "trusted.**", target: "vault.**", effect: "deny" }]]',
 			"\t]) {",
-			`\t\tconst other = await slothlet({ base: ${JSON.stringify(CHANNELS)}, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", rules } });`,
+			`\t\tconst other = await slothlet({ base: ${JSON.stringify(CHANNELS)}, mode, runtime, silent: true, permissions: { policy: "allow", rules } });`,
 			'\t\tresults[name] = await other.trusted.run("global");',
 			"\t\tconst kept = {};",
 			"\t\tawait other.plug.keepNamespace(kept);",
@@ -156,7 +158,7 @@ beforeAll(() => {
 			"\t}",
 			"\tout[`${mode}/${runtime}`] = results;",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);
@@ -273,9 +275,10 @@ beforeAll(() => {
 			'for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) {',
 			"\tconst results = {};",
 			"\tfor (const [name, permissions] of [",
-			'\t\t["plugDenied", { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }],',
-			'\t\t["bothAllowed", { defaultPolicy: "allow", rules: [] }],',
-			'\t\t["plugDeniedProvenanceOff", { defaultPolicy: "allow", provenance: false, rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }]',
+			// Code from strings and data: imports are built-in capabilities (D4 ruling part 1); the rows are about where such code runs.
+			'\t\t["plugDenied", { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }, { caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }],',
+			'\t\t["bothAllowed", { policy: "allow", rules: [{ caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }],',
+			'\t\t["plugDeniedProvenanceOff", { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }, { caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }], caller: { provenance: false } }]',
 			"\t]) {",
 			`\t\tconst api = await slothlet({ base: ${JSON.stringify(PACKAGES_API)}, mode, runtime, silent: true, permissions });`,
 			"\t\tresults[name] = {",
@@ -289,7 +292,7 @@ beforeAll(() => {
 			"\t}",
 			"\tout[`${mode}/${runtime}`] = results;",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);
@@ -301,11 +304,11 @@ beforeAll(() => {
 			"Error.stackTraceLimit = 1;",
 			"const out = {};",
 			'for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) {',
-			`\tconst api = await slothlet({ base: ${JSON.stringify(PACKAGES_API)}, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] } });`,
+			`\tconst api = await slothlet({ base: ${JSON.stringify(PACKAGES_API)}, mode, runtime, silent: true, permissions: { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] } });`,
 			'\tout[`${mode}/${runtime}`] = await api.trusted.viaPlug("fillRequired");',
 			"\tawait api.slothlet.shutdown();",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);
@@ -319,14 +322,14 @@ beforeAll(() => {
 			'for (const format of ["esm", "cjs"]) for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) {',
 			`\tconst base = ${JSON.stringify(API)};`,
 			'\tconst rules = [{ caller: `${format}.**`, target: "vault.**", effect: "deny" }];',
-			'\tconst gone = await slothlet({ base, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", rules } });',
-			'\tconst live = await slothlet({ base, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", rules } });',
+			'\tconst gone = await slothlet({ base, mode, runtime, silent: true, permissions: { policy: "allow", rules } });',
+			'\tconst live = await slothlet({ base, mode, runtime, silent: true, permissions: { policy: "allow", rules } });',
 			"\tconst read = await gone[format].laterReader();",
 			"\tawait gone.slothlet.shutdown();",
 			"\tout[`${format}/${mode}/${runtime}`] = await live.esm.callLater(read);",
 			"\tawait live.slothlet.shutdown();",
 			"}",
-			"console.log(JSON.stringify(out));",
+			"process.stdout.write(`${JSON.stringify(out)}\n`);",
 			""
 		].join("\n")
 	);
@@ -366,10 +369,11 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 
 	/**
 	 * Create an instance over the fixture, tracked for shutdown.
+	 * @param {object} [permissions] - A `permissions` block, or none for the permission system off.
 	 * @returns {Promise<object>} The api.
 	 */
-	async function create() {
-		const api = await slothlet({ base: API, ...config, silent: true });
+	async function create(permissions) {
+		const api = await slothlet({ base: API, ...config, silent: true, ...(permissions ? { permissions } : {}) });
 		instances.push(api);
 		return api;
 	}
@@ -388,31 +392,37 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 		const api = await create();
 		const refs = await api.esm.refs();
 		expect(refs.EventEmitter).toBe(EventEmitter);
-		expect(refs.runtime).toBe(runtime);
+		// An api file's runtime is its instance's own module (#803): its members are the runtime's own.
+		for (const key of ["context", "instanceID", "SlothletSelf"]) expect(refs.runtime[key]).toBe(runtime[key]);
+		expect(Object.keys(refs.runtime).sort()).toEqual(Object.keys(runtime).sort());
 		expect(new EventEmitter()).toBeInstanceOf(refs.EventEmitter);
 	});
 
-	it("hands out a package's exports as the module's, working as they would", async () => {
-		const api = await create();
-		const refs = await api.esm.refs();
-		const { fakeEsm, fakeCjs } = await hostPackages();
-		for (const key of ["Thing", "tools", "make", "fakeCjs"]) expect(types.isProxy(refs[key])).toBe(true);
-		expect(refs.Thing).not.toBe(fakeEsm.Thing);
-		expect(refs.fakeCjs).not.toBe(fakeCjs);
-		// Its instances are instances of the class as the module hands it out, not of the host's own import of it.
-		expect(refs.make()).toBeInstanceOf(refs.Thing);
-		expect(refs.tools.make()).toBeInstanceOf(refs.Thing);
-		expect(new refs.Thing()).toBeInstanceOf(refs.Thing);
-		expect(refs.make()).not.toBeInstanceOf(fakeEsm.Thing);
-		expect(refs.fakeCjs.fn()).toBe("fn");
+	it("hands the host a package's exports a module returns in data as the exports themselves, working as they would", async () => {
+		// Plain data comes back to the host as it is, unsearched (#726): what it holds is the package's own export, as
+		// `return { Thing, tools, make, fakeCjs }` gives in plain JavaScript, with the permission system off or on.
+		for (const permissions of [undefined, { policy: "allow" }]) {
+			const api = await create(permissions);
+			const refs = await api.esm.refs();
+			const { fakeEsm, fakeCjs } = await hostPackages();
+			for (const key of ["Thing", "tools", "make", "fakeCjs"]) expect(types.isProxy(refs[key])).toBe(false);
+			expect(refs.Thing).toBe(fakeEsm.Thing);
+			expect(refs.fakeCjs).toBe(fakeCjs);
+			expect(refs.make()).toBeInstanceOf(refs.Thing);
+			expect(refs.tools.make()).toBeInstanceOf(refs.Thing);
+			expect(new refs.Thing()).toBeInstanceOf(refs.Thing);
+			expect(refs.make()).toBeInstanceOf(fakeEsm.Thing);
+			expect(refs.fakeCjs.fn()).toBe("fn");
+		}
 	});
 
-	it("hands out a CommonJS package's exports as the module's from a CommonJS module, working as they would", async () => {
+	it("hands the host a CommonJS package's exports a CommonJS module returns in data as the exports themselves", async () => {
 		const api = await create();
 		const refs = await api.cjs.refs();
 		const { fakeCjs } = await hostPackages();
-		expect(refs.fakeCjs).not.toBe(fakeCjs);
-		expect(refs.fn).not.toBe(fakeCjs.fn);
+		// Plain data, handed to the host as it is (#726).
+		expect(refs.fakeCjs).toBe(fakeCjs);
+		expect(refs.fn).toBe(fakeCjs.fn);
 		expect(refs.fn()).toBe("fn");
 		expect(refs.inner()).toBe("inner");
 		expect(refs.fakeCjs.nested.inner()).toBe("inner");
@@ -422,15 +432,20 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 		const a = await create();
 		const b = await create();
 		const [refsA, refsB] = [await a.esm.refs(), await b.esm.refs()];
-		for (const key of ["EventEmitter", "runtime"]) expect(refsA[key]).toBe(refsB[key]);
+		expect(refsA.EventEmitter).toBe(refsB.EventEmitter);
+		// Each instance's api files get a runtime module of their own (#803), whose members are the runtime's own.
+		for (const key of ["context", "instanceID", "SlothletSelf"]) expect(refsA.runtime[key]).toBe(refsB.runtime[key]);
 	});
 
 	it("keeps a built-in's class a module put its own code on as that module's", async () => {
-		const api = await create();
+		// A stand-in is made only while the permission system is on; with it off the class comes back as itself (#726).
+		const api = await create({ policy: "allow" });
+		const off = await create();
 		try {
 			const handed = await api.esm.plantOnBuiltin();
 			expect(handed).not.toBe(EventEmitter);
 			expect(types.isProxy(handed)).toBe(true);
+			expect(await off.esm.plantOnBuiltin()).toBe(EventEmitter);
 		} finally {
 			delete EventEmitter.slothletTestPlanted;
 		}
@@ -438,10 +453,12 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 	});
 
 	it("keeps a built-in's class a module put its own code on deep below it as that module's", async () => {
-		const api = await create();
+		const api = await create({ policy: "allow" });
+		const off = await create();
 		try {
 			const handed = await api.esm.plantDeepOnBuiltin();
 			expect(types.isProxy(handed)).toBe(true);
+			expect(await off.esm.plantDeepOnBuiltin()).toBe(EventEmitter);
 		} finally {
 			delete EventEmitter.prototype.slothletTestDeep;
 		}
@@ -449,7 +466,8 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 	});
 
 	it("records none of a module's code through the instance-import state", async () => {
-		const api = await create();
+		// The function is the module's code: a stand-in while the permission system is on.
+		const api = await create({ policy: "allow" });
 		const forged = await api.esm.forge();
 		expect(types.isProxy(forged)).toBe(true);
 		expect(forged()).toBe("forged");
@@ -458,9 +476,13 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 
 	it("keeps a plugin's own helper, reached through its package name, as the plugin's", async () => {
 		const api = await create();
-		await api.slothlet.api.add("plug", path.join(PACKAGES, "plug", "api"), { moduleID: "plug" });
+		await api.slothlet.api.add("plug", path.join(PACKAGES, "plug", "api"), { id: "plug" });
 		const helper = await api.plug.leaf.helper();
 		const own = await import(pathToFileURL(path.join(PACKAGES, "plug", "lib", "helper.mjs")).href);
+		// The permission system is off here, so nothing is wrapped: the helper is the plugin's function itself, not a
+		// stand-in. It differs from the host's import because the instance loads the plugin's own files under its own
+		// URL (#731): the plugin's `helperFn` is the instance's copy of `helper.mjs`, the host's is another.
+		expect(types.isProxy(helper)).toBe(false);
 		expect(helper).not.toBe(own.helperFn);
 		expect(helper()).toBe("helper");
 	});
@@ -484,7 +506,15 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) �
 			base: API,
 			...config,
 			silent: true,
-			permissions: { defaultPolicy: "allow", ...permissions, rules: [{ caller: "slots.**", target: "vault.**", effect: "deny" }] }
+			// Code from strings is a built-in capability (D4 ruling part 1); these tests are about where such code runs.
+			permissions: {
+				policy: "allow",
+				...permissions,
+				rules: [
+					{ caller: "slots.**", target: "vault.**", effect: "deny" },
+					{ caller: "**", target: "capability:code", effect: "allow" }
+				]
+			}
 		});
 		return api;
 	}
@@ -501,20 +531,121 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) �
 		expect(await api.esm.viaHolding(kind)).toBe("PERMISSION_DENIED");
 	});
 
-	// The stand-in alone, without the stack check: the live runtime's own `then` is the engine's.
+	// With provenance off no frames are read, so what a module returns is searched for code when it is handed out and
+	// the code stands for the module that made it: turning the stack check off gives up nothing a return value carries.
 	it.each(HOLDERS)("runs the module's code a %s holds as that module with provenance off", async (kind) => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		expect(await api.esm.viaHolding(kind)).toBe("PERMISSION_DENIED");
 	});
 
+	/** The engine's own `next` of an array's iterator and of an iterator helper, taken before any module ran. */
+	const ARRAY_NEXT = Object.getPrototypeOf([][Symbol.iterator]()).next;
+	const HELPER_NEXT = Object.getPrototypeOf([0][Symbol.iterator]().map((value) => value)).next;
+	const DISGUISED = [
+		{ kind: "plainArrayIterator", next: ARRAY_NEXT },
+		{ kind: "plainIteratorHelper", next: HELPER_NEXT },
+		{ kind: "bareArrayIterator", next: ARRAY_NEXT }
+	];
+
+	/**
+	 * Step what the slots module handed the host with the engine's own `next`, and have the esm module, which may read
+	 * the vault, run what it yields.
+	 * @param {object} held - What the host was handed.
+	 * @param {Function} next - The engine's `next`.
+	 * @returns {Promise<*>} `"not stepped"` when the engine's `next` refuses it, else what running the yield gave.
+	 */
+	async function stepAndRun(held, next) {
+		let yielded;
+		try {
+			yielded = Reflect.apply(next, held, []).value;
+		} catch (error) {
+			return error instanceof TypeError ? "not stepped" : String(error);
+		}
+		return await api.esm.callLater(yielded);
+	}
+
+	// One of the language's iterators given the prototype of plain data keeps what it holds where no member shows it.
+	// With provenance off nothing reads the frames of what it yields, so it comes back as the module's: a stand-in the
+	// engine's own `next` refuses, never the iterator itself.
+	it.each(DISGUISED)("hands out $kind as the module's with provenance off", async ({ kind, next }) => {
+		await create({ caller: { provenance: false } });
+		const held = await api.slots.holding(kind);
+		expect(types.isProxy(held)).toBe(true);
+		expect(await stepAndRun(held, next)).toBe("not stepped");
+	});
+
+	// With provenance on, what it yields is told by its frames: it runs as the module that wrote it, whoever runs it.
+	it.each(DISGUISED)("runs what $kind yields as the module with provenance on", async ({ kind, next }) => {
+		await create();
+		expect(await stepAndRun(await api.slots.holding(kind), next)).toBe("PERMISSION_DENIED");
+	});
+
+	it("hands out data with the prototype of plain data as itself with provenance off", async () => {
+		await create({ caller: { provenance: false } });
+		const held = await api.slots.plainData();
+		expect(types.isProxy(held)).toBe(false);
+		expect(types.isProxy(held.nested)).toBe(false);
+		expect(held).toEqual({ nested: { list: [1, "x".repeat(5000)], when: new Date(0), bare: { n: 1 } } });
+	});
+
+	// An error of the language's own is told by the engine's brand check and read from its descriptors, so data holding
+	// one is checked for disguised iterators like any other data and comes back as itself.
+	it.each(["error", "typeError", "aggregate", "causeAndMembers", "stackRead"])(
+		"hands out data holding an error (%s) as itself with provenance off",
+		async (kind) => {
+			await create({ caller: { provenance: false } });
+			const held = await api.slots.errorData(kind);
+			expect(types.isProxy(held)).toBe(false);
+			expect(types.isProxy(held.error)).toBe(false);
+			expect(types.isNativeError(held.error)).toBe(true);
+			if (kind === "aggregate") expect(held.error.errors.map((error) => error.message)).toEqual(["a", "b"]);
+			if (kind === "causeAndMembers") expect([held.error.cause, held.error.code, held.error.detail]).toEqual([{ code: 1 }, "E1", { n: 1 }]);
+		}
+	);
+
+	it.each(["iteratorHoldingError", "iteratorPosingAsError", "errorBesideIterator", "prototypeReplaced", "stackGetter"])(
+		"hands out data holding what only looks like plain data and an error (%s) as the module's with provenance off",
+		async (kind) => {
+			await create({ caller: { provenance: false } });
+			const held = await api.slots.errorData(kind);
+			expect(types.isProxy(held)).toBe(true);
+			expect(await api.slots.stackGetterCount()).toBe(0);
+		}
+	);
+
+	it("hands out data holding an error without formatting its stack, with provenance off", async () => {
+		await create({ caller: { provenance: false } });
+		const saved = Object.getOwnPropertyDescriptor(Error, "prepareStackTrace");
+		let formatted = 0;
+		Error.prepareStackTrace = () => {
+			formatted++;
+			return "formatted";
+		};
+		try {
+			const held = await api.slots.errorData("error");
+			expect(formatted).toBe(0);
+			// Read afterwards, the stack is formatted as plain JavaScript formats it: by the formatter set now, once.
+			expect(held.error.stack).toBe("formatted");
+			expect(formatted).toBe(1);
+		} finally {
+			if (saved) Object.defineProperty(Error, "prepareStackTrace", saved);
+			else delete Error.prepareStackTrace;
+		}
+	});
+
 	it("hands out a compiled script of the module's as the module's, with provenance off", async () => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		expect(types.isProxy(await api.slots.script())).toBe(true);
 		expect(await api.esm.viaScript()).toBe("PERMISSION_DENIED");
 	});
 
 	it("runs a compiled script of the module's that may read the vault, with provenance off", async () => {
-		api = await slothlet({ base: API, ...config, silent: true, permissions: { defaultPolicy: "allow", provenance: false, rules: [] } });
+		api = await slothlet({
+			base: API,
+			...config,
+			silent: true,
+			permissions: { policy: "allow", caller: { provenance: false }, rules: [{ caller: "**", target: "capability:code", effect: "allow" }] }
+		});
 		expect(await api.esm.viaScript()).toBe(42);
 	});
 
@@ -544,7 +675,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) �
 		async (kind) => {
 			await create();
 			// Refused: as the module, or as code of no module running inside the caller's call.
-			expect(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]).toContain(await api.esm.viaCallback(kind));
+			expect(["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"]).toContain(await api.esm.viaCallback(kind));
 		}
 	);
 
@@ -649,7 +780,7 @@ describe("a module's own function passed by routes slothlet does not see, run un
 			// A namespace the module kept before any of it was loaded is held to the module as well (hostNsCalled).
 			expect(Object.keys(routes)).toHaveLength(14);
 			for (const [route, value] of Object.entries(routes))
-				expect([config, route, ["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"].includes(value)]).toEqual([config, route, true]);
+				expect([config, route, ["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"].includes(value)]).toEqual([config, route, true]);
 		}
 	});
 });
@@ -710,21 +841,26 @@ describe("what a module of a shut-down instance made, run under Node's own loade
 		expect(result.stderr).toBe("");
 		const out = JSON.parse(result.stdout);
 		expect(Object.keys(out)).toHaveLength(8);
-		for (const [key, value] of Object.entries(out)) expect([key, value]).toEqual([key, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
+		// Refused in every row. A CommonJS file two instances load is one file under one path, so in eager mode its frames
+		// name no single instance and its definer cannot be told (#735): that is a refusal of the access. Every other row
+		// has no context to read `self` from.
+		const untellable = new Set(["cjs/eager/async", "cjs/eager/live"]);
+		for (const [key, value] of Object.entries(out))
+			expect([key, value]).toEqual([key, untellable.has(key) ? "PERMISSION_DENIED" : "CONTEXT_NOT_ACTIVE_SELF"]);
 	});
 });
 
 describe.each(CONFIGS)("what a module of a shut-down instance made (#597) — $mode / $runtime", (config) => {
-	it("runs as plain code that reaches no instance, even called inside another instance's call", async () => {
+	it("reads the instance of the call it runs inside, having none of its own left", async () => {
 		const gone = await slothlet({ base: API, ...config, silent: true });
 		const live = await slothlet({ base: API, ...config, silent: true });
 		try {
 			const read = await gone.esm.reader();
 			expect(await read()).toBe(42);
 			await gone.slothlet.shutdown();
-			const result = await live.esm.call(read);
-			expect(result).not.toBe(42);
-			expect(typeof result).toBe("string");
+			// The permission system is off, so nothing is checked: run inside another instance's call, the closure reads
+			// that call's `self` (#726).
+			expect(await live.esm.call(read)).toBe(42);
 		} finally {
 			await live.slothlet.shutdown();
 		}
@@ -733,7 +869,7 @@ describe.each(CONFIGS)("what a module of a shut-down instance made (#597) — $m
 
 describe.each(CONFIGS)("what a node removed since made (#625) — $mode / $runtime", (config) => {
 	it.each([
-		["has no standing left while the permission system is on", { defaultPolicy: "allow" }, "PERMISSION_DENIED"],
+		["has no standing left while the permission system is on", { policy: "allow" }, "PERMISSION_DENIED"],
 		["runs as plain JavaScript with the permission system off", undefined, 42]
 	])("%s", async (_label, permissions, expected) => {
 		const api = await slothlet({ base: API, ...config, silent: true, ...(permissions ? { permissions } : {}) });

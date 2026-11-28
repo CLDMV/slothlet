@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/listener-cleanup/shutdown-keeps-listeners.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/listener-cleanup/shutdown-keeps-listeners.test.vitest.mjs
  *	@Date: 2026-10-10T19:32:01-07:00 (1791685921)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:04:16-07:00 (1793426656)
+ *	@Last modified time: 2026-11-28T04:32:04-08:00 (1795869124)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -110,8 +110,8 @@ describe.each(getMatrixConfigs({}))("the last shutdown keeps a module's listener
 		// The once listener that has not fired yet holds nothing of slothlet's.
 		const [pendingOnce] = conn.rawListeners("close");
 		expect(pendingOnce.listener.name).toBe(onClose.name);
-		expect(pendingOnce._slothletOriginal).toBeUndefined();
-		expect(pendingOnce._slothletResource).toBeUndefined();
+		expect(pendingOnce.____slothletOriginal).toBeUndefined();
+		expect(pendingOnce.____slothletResource).toBeUndefined();
 		expect(() => conn.emit("error", new Error("late"))).not.toThrow();
 		conn.emit("close");
 		conn.emit("close");
@@ -168,7 +168,7 @@ describe.each(getMatrixConfigs({}))("the last shutdown keeps a module's listener
 		api = null;
 		for (const event of ["error", "close", "ready"]) {
 			const [wrapper] = frozen.conn.rawListeners(event);
-			expect(wrapper._slothletResource ?? null, event).toBeNull();
+			expect(wrapper.____slothletResource ?? null, event).toBeNull();
 		}
 	});
 

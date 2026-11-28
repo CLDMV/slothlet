@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_live_caller_identity/d/d.mjs
+ *	@Filename: api_tests/api_test_live_caller_identity/d/d.mjs
  *	@Date: 2026-10-09T18:00:00-07:00 (1791594000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T18:00:00-07:00 (1791594000)
+ *	@Last modified time: 2026-11-28T04:28:41-08:00 (1795868921)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@ import { self, context } from "@cldmv/slothlet/runtime";
 export async function resume(gate) {
 	const svc = self.svc;
 	const meta = self.slothlet.metadata;
-	const lockCaller = self.slothlet.lockCaller;
+	const lockCaller = self.slothlet.pin;
 	await gate;
 	// The instance's own context, as the `context` binding resolves it after the await.
 	const tag = context.tag;
@@ -39,7 +39,7 @@ export async function resume(gate) {
 	}
 	let metadataSelf;
 	try {
-		metadataSelf = meta.self()?.apiPath ?? null;
+		metadataSelf = meta.self()?.path.join(".") ?? null;
 	} catch (error) {
 		metadataSelf = error.code;
 	}

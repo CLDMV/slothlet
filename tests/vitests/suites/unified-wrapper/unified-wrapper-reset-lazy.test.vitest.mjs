@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/unified-wrapper/unified-wrapper-reset-lazy.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/unified-wrapper/unified-wrapper-reset-lazy.test.vitest.mjs
  *	@Date: 2026-02-28T14:24:16-08:00 (1772317456)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-28T04:33:14-08:00 (1795869194)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,9 +34,9 @@
  *
  * Additional paths covered:
  * - ___invalidate() lines 760-773: Clearing children when api.remove() is called
- * - _extractFullImpl metadata paths (lines 457-468): Reload where impl has __childFilePaths
+ * - _extractFullImpl metadata paths (lines 457-468): Reload where impl has ____childFilePaths
  * - Inner ___adoptImplChildren debug paths (lines 901-909): symbol keys during adoption
- * - _materialize() deduplication: concurrent materializations reuse existing promise
+ * - ___materialize() deduplication: concurrent materializations reuse existing promise
  *
  * @module tests/vitests/suites/unified-wrapper/unified-wrapper-reset-lazy
  */
@@ -127,7 +127,7 @@ describe("unified-wrapper: ___resetLazy via lazy mode reload (lines 595-640)", (
 		api = await makeLazyApi();
 
 		// Add a module at a new endpoint in lazy mode
-		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { moduleID: "ext-lazy-mod" });
+		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { id: "ext-lazy-mod" });
 		expect(api.ext).toBeDefined();
 
 		// Access it to materialize
@@ -171,7 +171,7 @@ describe("unified-wrapper: ___resetLazy via lazy mode reload (lines 595-640)", (
 		api = await makeLazyApi();
 
 		// Add nested module
-		await api.slothlet.api.add("nest.level", TEST_DIRS.API_TEST_MIXED, { moduleID: "nest-lazy" });
+		await api.slothlet.api.add("nest.level", TEST_DIRS.API_TEST_MIXED, { id: "nest-lazy" });
 		await new Promise((r) => setTimeout(r, 50));
 
 		// Trigger materialization of nest.level
@@ -210,7 +210,7 @@ describe("unified-wrapper: ___invalidate via api.remove (lines 760-773)", () => 
 
 		// Add a module, access it, then remove → ___invalidate fires on child wrappers
 		const ____modID = await api.slothlet.api.add("toRemove", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "remove-test"
+			id: "remove-test"
 		});
 		expect(api.toRemove).toBeDefined();
 
@@ -223,7 +223,7 @@ describe("unified-wrapper: ___invalidate via api.remove (lines 760-773)", () => 
 		api = await makeLazyApi();
 
 		const ____modID = await api.slothlet.api.add("toRemoveLazy", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "remove-lazy-test"
+			id: "remove-lazy-test"
 		});
 
 		// Access to materialize
@@ -237,8 +237,8 @@ describe("unified-wrapper: ___invalidate via api.remove (lines 760-773)", () => 
 });
 
 // ---------------------------------------------------------------------------
-// 3. Concurrent materialization: _materialize() deduplication via materializationPromise
-//    Triggering _materialize() twice simultaneously reuses the same promise
+// 3. Concurrent materialization: ___materialize() deduplication via materializationPromise
+//    Triggering ___materialize() twice simultaneously reuses the same promise
 //    (lines 661-675)
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: concurrent materialization deduplication (lines 661-675)", () => {
@@ -268,8 +268,8 @@ describe("unified-wrapper: concurrent materialization deduplication (lines 661-6
 		expect(api.math).toBeDefined();
 	});
 
-	it("tracking.materialization=true with concurrent accesses still deduplicates", async () => {
-		api = await makeLazyApi({ tracking: { materialization: true } });
+	it("loader.materialize=true with concurrent accesses still deduplicates", async () => {
+		api = await makeLazyApi({ loader: { materialize: true } });
 
 		// Background materialization starts immediately + we also access it
 		// The deduplication should prevent multiple `materializeFunc` calls
@@ -285,7 +285,7 @@ describe("unified-wrapper: concurrent materialization deduplication (lines 661-6
 
 // ---------------------------------------------------------------------------
 // 4. _extractFullImpl metadata paths (lines 457-468)
-//    Reload of a module that has __childFilePaths or __childFilePathsPreMaterialize
+//    Reload of a module that has ____childFilePaths or ____childFilePathsPreMaterialize
 //    in its impl → the metadata paths in _extractFullImpl fire
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: _extractFullImpl metadata paths (lines 457-468)", () => {
@@ -319,7 +319,7 @@ describe("unified-wrapper: _extractFullImpl metadata paths (lines 457-468)", () 
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
 			runtime: "async",
-			api: { collision: { initial: "merge" } }
+			api: { collision: { mode: { initial: "merge" } } }
 		});
 
 		// math has both file and folder exports merged → wrapper has many children

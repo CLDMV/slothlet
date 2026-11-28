@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/core-reference-persistence.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/core-reference-persistence.test.vitest.mjs
  *	@Date: 2026-02-06T23:45:39-08:00 (1770450339)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-11-28T04:31:36-08:00 (1795869096)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

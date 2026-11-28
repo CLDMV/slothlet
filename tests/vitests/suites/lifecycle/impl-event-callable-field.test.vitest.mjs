@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/lifecycle/impl-event-callable-field.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/lifecycle/impl-event-callable-field.test.vitest.mjs
  *	@Date: 2026-09-21T01:27:16+00:00 (1789954036)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-28T04:32:02-08:00 (1795869122)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,11 +15,11 @@
 
 /**
  * @fileoverview #433 — the PUBLIC `impl:created` / `impl:changed` events expose the leaf's callable on
- * a stable `impl` field again, and no longer re-expose the reserved internal `wrapper.__impl` handle.
+ * a stable `impl` field again, and no longer re-expose the reserved internal `wrapper.____impl` handle.
  *
  * @description
  * #398 correctly stopped the public tier from carrying the RAW unwrapped impl, but between 3.16.2 and
- * 3.17.0 the wrapped callable was reachable only via the reserved internal `wrapper.__impl` handle —
+ * 3.17.0 the wrapped callable was reachable only via the reserved internal `wrapper.____impl` handle —
  * a public subscriber reading the pre-3.17 `e.impl` field silently got `undefined`. The fix (#433)
  * restores a stable public `impl` field holding the wrapped callable and DROPS `wrapper` from the
  * public event (it was redundant with `impl` and re-exposed an internal name). The internal tier still
@@ -64,9 +64,9 @@ describe.each(getMatrixConfigs())("Lifecycle > public impl event callable field 
 
 		expect(created.length).toBeGreaterThan(0);
 		for (const data of created) {
-			// #433: the reserved wrapper.__impl handle is no longer re-exposed publicly; `impl` replaces it.
+			// #433: the reserved wrapper.____impl handle is no longer re-exposed publicly; `impl` replaces it.
 			expect(data.wrapper).toBeUndefined();
-			expect(data.__wrapperRef).toBeUndefined();
+			expect(data.____wrapperRef).toBeUndefined();
 		}
 	});
 

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/unified-wrapper/unified-wrapper-waiting-apply.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/unified-wrapper/unified-wrapper-waiting-apply.test.vitest.mjs
  *	@Date: 2026-03-02T00:00:00-08:00 (1772438400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-28T04:33:15-08:00 (1795869195)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  *  GROUP A — Waiting proxy APPLY trap — not-materialized, not-inFlight (lines 1716-1717):
  *    Triggered by calling a waiting proxy created via `resolveWrapper().___createWaitingProxy()`
  *    (bypassing the lazy GET trap so the wrapper is still !inFlight when the APPLY trap runs).
- *    The APPLY trap finds `!materialized && !inFlight` and calls `await wrapper._materialize()`.
+ *    The APPLY trap finds `!materialized && !inFlight` and calls `await wrapper.___materialize()`.
  *
  *  GROUP B — Waiting proxy APPLY trap — inFlight path (line 1732):
  *    Triggered when the wrapper is already inFlight at the time the waiting proxy is called.
@@ -116,7 +116,7 @@ async function makeLazyTV() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GROUP A — APPLY trap: !materialized && !inFlight → await _materialize()
+// GROUP A — APPLY trap: !materialized && !inFlight → await ___materialize()
 // Lines: 1716, 1717
 // ─────────────────────────────────────────────────────────────────────────────
 describe("waiting proxy APPLY trap — !materialized, !inFlight branch (lines 1716-1717)", () => {
@@ -126,12 +126,12 @@ describe("waiting proxy APPLY trap — !materialized, !inFlight branch (lines 17
 		// After resolveWrapper, `task` is still !materialized && !inFlight.
 		// Creating a waiting proxy via ___createWaitingProxy() does NOT trigger materialization.
 		// Calling the waiting proxy triggers the APPLY trap which hits the
-		// `!materialized && !inFlight` branch → calls `await wrapper._materialize()` (lines 1716-1717).
+		// `!materialized && !inFlight` branch → calls `await wrapper.___materialize()` (lines 1716-1717).
 		const api = await makeLazy();
 
 		// api.task goes through the root wrapper's lazy GET trap, but since 'task' is an own
 		// property of the root wrapper (pre-registered), it returns the task proxy WITHOUT
-		// triggering task._materialize().  resolveWrapper() then gives us the raw backing wrapper.
+		// triggering task.___materialize().  resolveWrapper() then gives us the raw backing wrapper.
 		const taskProxy = api.task;
 		const taskW = resolveWrapper(taskProxy);
 		expect(taskW).not.toBeNull();
@@ -147,7 +147,7 @@ describe("waiting proxy APPLY trap — !materialized, !inFlight branch (lines 17
 
 		// Calling the waiting proxy triggers the APPLY trap (lines 1698+).
 		// Branch: `mode === "lazy" && !materialized && !inFlight` → true → lines 1716-1717 fire.
-		// After _materialize(), propChain=["autoIP"] resolves to the autoIP function.
+		// After ___materialize(), propChain=["autoIP"] resolves to the autoIP function.
 		// autoIP returns "testAutoIP" asynchronously.
 		const result = await wp();
 		expect(result).toBe("testAutoIP");
@@ -189,7 +189,7 @@ describe("waiting proxy APPLY trap — !materialized, !inFlight branch (lines 17
 // ─────────────────────────────────────────────────────────────────────────────
 describe("waiting proxy APPLY trap — inFlight branch (line 1732)", () => {
 	it("calling a waiting proxy for an already-inFlight wrapper awaits the existing materialization promise", async () => {
-		// APPROACH: Trigger _materialize() on the `advanced` folder wrapper so it becomes inFlight.
+		// APPROACH: Trigger ___materialize() on the `advanced` folder wrapper so it becomes inFlight.
 		// Then create a second waiting proxy via ___createWaitingProxy on the already-inFlight wrapper.
 		// When we call the second proxy, inFlight=true → APPLY trap hits line 1732.
 		const api = await makeLazy();
@@ -198,8 +198,8 @@ describe("waiting proxy APPLY trap — inFlight branch (line 1732)", () => {
 
 		// Manually start materialization so the WRAPPER becomes inFlight.
 		// Do NOT await — we want inFlight=true with materialization still in progress.
-		const materializePromise = advancedW._materialize();
-		// After calling _materialize(), inFlight=true is set synchronously inside the async
+		const materializePromise = advancedW.___materialize();
+		// After calling ___materialize(), inFlight=true is set synchronously inside the async
 		// IIFE before any `await` is reached.
 		expect(advancedW.____slothletInternal.state.inFlight).toBe(true);
 
@@ -214,9 +214,9 @@ describe("waiting proxy APPLY trap — inFlight branch (line 1732)", () => {
 		await materializePromise.catch(() => {});
 	});
 
-	it("calling a waiting proxy while inFlight (no materializationPromise stored) falls back to _materialize()", async () => {
+	it("calling a waiting proxy while inFlight (no materializationPromise stored) falls back to ___materialize()", async () => {
 		// Edge case: inFlight=true but materializationPromise is null (manually simulated).
-		// The APPLY trap falls back to `await wrapper._materialize()`.
+		// The APPLY trap falls back to `await wrapper.___materialize()`.
 		const api = await makeLazy();
 		const taskW = resolveWrapper(api.task);
 
@@ -227,10 +227,10 @@ describe("waiting proxy APPLY trap — inFlight branch (line 1732)", () => {
 		const wp = taskW.___createWaitingProxy(["autoIP"]);
 
 		// The APPLY trap sees: `!materialized && inFlight && !materializationPromise` →
-		// falls back to `await wrapper._materialize()`.
-		// _materialize detects inFlight=true, returns the (null) promise — so it effectively
+		// falls back to `await wrapper.___materialize()`.
+		// ___materialize detects inFlight=true, returns the (null) promise — so it effectively
 		// returns quickly.  We manually reset state for a clean call.
-		taskW.____slothletInternal.state.inFlight = false; // restore so _materialize() can run
+		taskW.____slothletInternal.state.inFlight = false; // restore so ___materialize() can run
 		const result = await wp();
 		expect(result).toBe("testAutoIP");
 	});
@@ -383,7 +383,7 @@ describe("waiting proxy APPLY trap — propChain walking and function invocation
 // Fires when !inFlight && !materialized inside the waiting proxy's OWN get trap.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("waiting proxy GET trap — materialization trigger (line 1424)", () => {
-	it("accessing a non-fast-return property on a waiting proxy for an un-touched lazy wrapper fires _materialize() (line 1424)", async () => {
+	it("accessing a non-fast-return property on a waiting proxy for an un-touched lazy wrapper fires ___materialize() (line 1424)", async () => {
 		// The waiting proxy's GET trap has its own materialization check (lines 1419-1425).
 		// Properties like __mode, __materialized, __inFlight are FAST RETURNS (lines 1410-1414)
 		// that exit BEFORE the materialization trigger. Any other property falls through to line 1419.
@@ -397,11 +397,11 @@ describe("waiting proxy GET trap — materialization trigger (line 1424)", () =>
 
 		// Accessing a property that is NOT a fast-return (not __mode, not __inFlight etc.)
 		// will fall through to the materialization check at lines 1419-1425, which fires
-		// wrapper._materialize() (line 1424). The call sets inFlight=true synchronously
-		// inside the async IIFE of _materialize().
+		// wrapper.___materialize() (line 1424). The call sets inFlight=true synchronously
+		// inside the async IIFE of ___materialize().
 		// After line 1424, inFlight=true → the `util.inspect.custom` path at line 1434-1435 fires.
 		const _nested = wp.arbitraryNonFastReturnProp; // triggers line 1424
-		// inFlight should now be true (set synchronously inside _materialize's async IIFE)
+		// inFlight should now be true (set synchronously inside ___materialize's async IIFE)
 		expect(taskW.____slothletInternal.state.inFlight).toBe(true);
 		// The accessed prop returns a nested waiting proxy (or undefined) — it's defined
 		expect(_nested !== null).toBe(true);
@@ -411,17 +411,17 @@ describe("waiting proxy GET trap — materialization trigger (line 1424)", () =>
 		// The ordering of fast-returns vs. the materialization trigger:
 		// __inFlight (line 1414) is a FAST RETURN, before the trigger at lines 1419-1425.
 		// So accessing __inFlight returns false WITHOUT triggering materialization.
-		// But accessing any arbitrary non-fast-return property DOES trigger _materialize() (line 1424).
+		// But accessing any arbitrary non-fast-return property DOES trigger ___materialize() (line 1424).
 		const api = await makeLazy();
 		const taskW = resolveWrapper(api.task);
 		expect(taskW.____slothletInternal.state.inFlight).toBe(false);
 		const wp = taskW.___createWaitingProxy(["autoIP"]);
 
 		// Fast-return: __inFlight is returned immediately without hitting line 1424.
-		expect(wp.__inFlight).toBe(false);
+		expect(api.slothlet.node(wp).loading).toBe(false);
 		expect(taskW.____slothletInternal.state.inFlight).toBe(false); // not yet triggered
 
-		// Non-fast-return: falls through to line 1419, fires _materialize() at line 1424.
+		// Non-fast-return: falls through to line 1419, fires ___materialize() at line 1424.
 		const _nested = wp.aPropertyThatIsNotAFastReturn;
 		expect(taskW.____slothletInternal.state.inFlight).toBe(true); // now triggered
 		expect(_nested).toBeDefined(); // returns a nested waiting proxy or value
@@ -443,9 +443,9 @@ describe("waiting proxy GET trap — util.inspect.custom handler (lines 1434-144
 		// Create a waiting proxy before inFlight is set.
 		const wp = taskW.___createWaitingProxy(["autoIP"]);
 
-		// Trigger inFlight by calling _materialize() (fire-and-forget).
-		// _materialize() sets inFlight=true synchronously inside the async IIFE.
-		taskW._materialize();
+		// Trigger inFlight by calling ___materialize() (fire-and-forget).
+		// ___materialize() sets inFlight=true synchronously inside the async IIFE.
+		taskW.___materialize();
 		expect(taskW.____slothletInternal.state.inFlight).toBe(true);
 		expect(taskW.____slothletInternal.state.materialized).toBe(false);
 
@@ -466,7 +466,7 @@ describe("waiting proxy GET trap — util.inspect.custom handler (lines 1434-144
 		const wp = taskW.___createWaitingProxy(["autoIP"]);
 
 		// Fully materialize the task wrapper so impl is set.
-		await taskW._materialize();
+		await taskW.___materialize();
 		await new Promise((r) => setImmediate(r));
 		expect(taskW.____slothletInternal.state.materialized).toBe(true);
 
@@ -481,20 +481,20 @@ describe("waiting proxy GET trap — util.inspect.custom handler (lines 1434-144
 	});
 
 	it("util.inspect on waiting proxy for wrapper with null materializeFunc returns string (line 1434 unmaterialized path)", async () => {
-		// Covers the path where _materialize() is called (line 1424) but is a no-op because
-		// materializeFunc is null. After _materialize() returns, inFlight is STILL false.
+		// Covers the path where ___materialize() is called (line 1424) but is a no-op because
+		// materializeFunc is null. After ___materialize() returns, inFlight is STILL false.
 		// The util.inspect.custom handler then sees: !inFlight && !materialized → return waitingTarget.
 		const api = await makeLazy();
 		const taskW = resolveWrapper(api.task);
 
-		// Null out the materializeFunc so _materialize() returns early without setting inFlight.
+		// Null out the materializeFunc so ___materialize() returns early without setting inFlight.
 		const savedMaterializeFunc = taskW.____slothletInternal.materializeFunc;
 		taskW.____slothletInternal.materializeFunc = null;
 
 		try {
 			const wp = taskW.___createWaitingProxy(["someKey"]);
 			// Access any non-fast-path property to hit line 1424.
-			// _materialize() will be called (line 1424) but returns immediately (no materializeFunc).
+			// ___materialize() will be called (line 1424) but returns immediately (no materializeFunc).
 			// inFlight stays false.
 			// Then util.inspect.custom fires: !inFlight && !materialized → return waitingTarget.
 			const inspected = util.inspect(wp);
@@ -527,7 +527,7 @@ describe("waiting proxy GET trap — impl is a custom Proxy with propChain (line
 		//   6. Return result["getStatus"] → the getStatus method.
 		const api = await makeLazyTV();
 
-		// Resolve the proxyTest wrapper directly (avoids triggering _materialize via GET trap).
+		// Resolve the proxyTest wrapper directly (avoids triggering ___materialize via GET trap).
 		const proxyTestProxy = api.proxyTest;
 		const proxyTestW = resolveWrapper(proxyTestProxy);
 		expect(proxyTestW).not.toBeNull();
@@ -536,7 +536,7 @@ describe("waiting proxy GET trap — impl is a custom Proxy with propChain (line
 		const wp = proxyTestW.___createWaitingProxy(["tv1"]);
 
 		// Materialize proxyTest so impl = LGTVControllers custom Proxy.
-		await proxyTestW._materialize();
+		await proxyTestW.___materialize();
 		await new Promise((r) => setImmediate(r));
 
 		// Confirm impl is a Proxy.
@@ -562,7 +562,7 @@ describe("waiting proxy GET trap — impl is a custom Proxy with propChain (line
 		const wp = proxyTestW.___createWaitingProxy([]);
 
 		// Materialize so impl = custom Proxy.
-		await proxyTestW._materialize();
+		await proxyTestW.___materialize();
 		await new Promise((r) => setImmediate(r));
 
 		// Accessing any property on the waiting proxy with empty propChain:
@@ -595,7 +595,7 @@ describe("___adoptImplChildren cleanup loop — orphan key deletion (lines 1128-
 		//   6. resolveWrapper(orphanProxy) is non-null → ___invalidate() called (lines 1133-1134).
 		const api = await makeEager();
 		// Obtain the slothlet instance via a known wrapper.
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		// Create a fresh parent wrapper with no initial impl.
 		const parentW = new UnifiedWrapper(sl, {
@@ -611,7 +611,7 @@ describe("___adoptImplChildren cleanup loop — orphan key deletion (lines 1128-
 			apiPath: "test.cleanup.orphan",
 			initialImpl: { dummy: () => "dummy" }
 		});
-		const orphanProxy = orphanW.createProxy();
+		const orphanProxy = orphanW.___createProxy();
 
 		// Define the orphan as a NON-CONFIGURABLE own property on parentW.
 		// Non-configurable means the "replace" deletion block (which does `if (configurable) delete`)
@@ -666,7 +666,7 @@ describe("___adoptImplChildren cleanup loop — orphan key deletion (lines 1128-
 		// NOTE: This path doesn't find orphans in the cleanup loop (they were deleted by "replace" block).
 		// This test documents the expected behavior and confirms the cleanup loop runs on every !isMergeScenario call.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const freshW = new UnifiedWrapper(sl, {
 			mode: "eager",
@@ -800,7 +800,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		//   Iter 1: chainProp="childProp", current=parentW, parentW.impl is plain → B263=false → advance to childW.
 		//   Iter 2: chainProp="someElem", current=childW, childW.impl=isProxy → B263=TRUE → L1608-1614!
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		// Child wrapper: force-set impl to a custom Proxy via direct assignment (bypasses ___adoptImplChildren).
 		const customProxy = new Proxy(
@@ -821,7 +821,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		parentW.____slothletInternal.state.materialized = true;
 
 		// Attach childW proxy as a child of parentW.
-		const childProxy = childW.createProxy();
+		const childProxy = childW.___createProxy();
 		parentW["childProp"] = childProxy;
 
 		// propChain=["childProp","someElem"] → two iterations.
@@ -842,7 +842,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		// After the for-loop completes (one iteration), current=childW, childW.impl=isProxy.
 		// The post-loop check at line 1638 (`if (current && isProxy(current.impl))`) fires → line 1644.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const customProxy2 = new Proxy(
 			{ result: "from-proxy" },
@@ -859,7 +859,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		const parentW2 = new UnifiedWrapper(sl, { mode: "eager", apiPath: "k.parent2", initialImpl: null });
 		parentW2.____slothletInternal.impl = { marker2: true };
 		parentW2.____slothletInternal.state.materialized = true;
-		parentW2["childProp"] = childW2.createProxy();
+		parentW2["childProp"] = childW2.___createProxy();
 
 		// propChain=["childProp"] → one for-loop iteration, then post-loop isProxy check.
 		const wp2 = parentW2.___createWaitingProxy(["childProp"]);
@@ -876,7 +876,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		// After the for-loop: current=childW, childW.impl=plain → L1638=false.
 		// isFinalInternal=false, "nonExistentPropK1" not in childW → B272 false → line 1654: return undefined.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const childW3 = new UnifiedWrapper(sl, { mode: "eager", apiPath: "k.child-plain", initialImpl: null });
 		childW3.____slothletInternal.impl = { existing: true };
@@ -885,7 +885,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		const parentW3 = new UnifiedWrapper(sl, { mode: "eager", apiPath: "k.parent3", initialImpl: null });
 		parentW3.____slothletInternal.impl = { marker3: true };
 		parentW3.____slothletInternal.state.materialized = true;
-		parentW3["childProp"] = childW3.createProxy();
+		parentW3["childProp"] = childW3.___createProxy();
 
 		const wp3 = parentW3.___createWaitingProxy(["childProp"]);
 
@@ -940,7 +940,7 @@ describe("waiting proxy GET trap — premature hasOwn check and inFlight=false f
 		//   • premature hasOwn check doesn't return (prop not in wrapper).
 		// A freshly created eager wrapper with initialImpl=null satisfies all three.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const freshW = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: "test.j.inflight-false",
@@ -984,7 +984,7 @@ describe("waiting proxy GET trap — __type on materialized wrapper and __slothl
 		//   FALSE (B244): wrapper not yet materialized → return TYPE_STATES.IN_FLIGHT.
 		// Previous tests only exercised the FALSE path (lazy wrappers before materialization).
 		// An eager wrapper is always materialized → TRUE path fires.
-		// propChain=[] → no chain walk → current = wrapper.createProxy() = taskProxy (a function).
+		// propChain=[] → no chain walk → current = wrapper.___createProxy() = taskProxy (a function).
 		// resolvedType = "function".
 		const api = await makeEager();
 		const taskW = resolveWrapper(api.task);
@@ -994,7 +994,7 @@ describe("waiting proxy GET trap — __type on materialized wrapper and __slothl
 
 		// Access __type: B244 TRUE → propChain walk (empty) → resolvedType depends on current.
 		// task wrapper createProxy() is a proxy wrapping a function → typeof === "function".
-		const type = wp.__type;
+		const type = api.slothlet.node(wp).type;
 		expect(typeof type).toBe("string");
 	});
 
@@ -1006,7 +1006,7 @@ describe("waiting proxy GET trap — __type on materialized wrapper and __slothl
 		// a waiting proxy with propChain=["objProp"].  After the chain walk current = the plain object
 		// → typeof === "object" → B247 TRUE → returns "object".
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const plainObj = { hello: "world" };
 		const testW = new UnifiedWrapper(sl, { mode: "eager", apiPath: "l.b247-test", initialImpl: null });
@@ -1019,8 +1019,9 @@ describe("waiting proxy GET trap — __type on materialized wrapper and __slothl
 		const wp = testW.___createWaitingProxy(["objProp"]);
 		// Access __type: chain walks "objProp" → current = { hello: "world" } (plain object).
 		// resolvedType = "object" (B247 TRUE).
-		const type = wp.__type;
-		expect(type).toBe("object");
+		const type = api.slothlet.node(wp).type;
+		// A plain object with members is a namespace (D-4).
+		expect(type).toBe("namespace");
 	});
 
 	it("__slothletPath on a waiting proxy returns the wrapper's API path (B257 true, line 1559-1562)", async () => {
@@ -1033,7 +1034,7 @@ describe("waiting proxy GET trap — __type on materialized wrapper and __slothl
 		const wp = taskW.___createWaitingProxy([]);
 
 		// Access __slothletPath on the waiting proxy.
-		const slothletPath = wp.__slothletPath;
+		const slothletPath = api.slothlet.node(wp).path.join(".");
 		// Should match the wrapper's apiPath.
 		expect(slothletPath).toBe(taskW.____slothletInternal.apiPath);
 	});
@@ -1056,7 +1057,7 @@ describe("waiting proxy GET trap — util.inspect.custom null mid-chain (lines 1
 		//   iter 1: current = { key1: null }, `!current` = false → current = impl["key1"] = null
 		//   iter 2: current = null, `!current` = true → B233 TRUE → return undefined
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const eagerW = new UnifiedWrapper(sl, { mode: "eager", apiPath: "m.inspect-null", initialImpl: null });
 		// Set impl with a null mid-chain value and mark as materialized.
@@ -1093,13 +1094,13 @@ describe("waiting proxy GET trap — __type for-loop non-wrapper and null breaks
 		// FALSE fires when `resolveWrapper(current) = null` (current is a plain object/value).
 		// Setup: wrapper with impl = { myProp: { nested: 42 } }, propChain = ["myProp", "nested"].
 		// Walk:
-		//   iter 1: current = wrapper.createProxy(), resolveWrapper = wrapper (B239 TRUE)
+		//   iter 1: current = wrapper.___createProxy(), resolveWrapper = wrapper (B239 TRUE)
 		//           → impl["myProp"] = { nested: 42 } → current = { nested: 42 }
 		//   iter 2: resolveWrapper({ nested: 42 }) = null → B239 FALSE
 		//           → current = { nested: 42 }["nested"] = 42
 		// resolvedType = typeof 42 = "number"
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const testW = new UnifiedWrapper(sl, { mode: "eager", apiPath: "n.type-nonwrap", initialImpl: null });
 		testW.____slothletInternal.impl = { myProp: { nested: 42 } };
@@ -1108,8 +1109,9 @@ describe("waiting proxy GET trap — __type for-loop non-wrapper and null breaks
 		// The impl-based branch at lines 1498-1503 will resolve it instead.
 
 		const wp = testW.___createWaitingProxy(["myProp", "nested"]);
-		const type = wp.__type;
-		expect(type).toBe("number");
+		const type = api.slothlet.node(wp).type;
+		// A number is data (D-4).
+		expect(type).toBe("data");
 	});
 
 	it("__type propChain walk takes B238 true (break) when a value becomes null/undefined (L1483)", async () => {
@@ -1123,15 +1125,15 @@ describe("waiting proxy GET trap — __type for-loop non-wrapper and null breaks
 		//   iter 3: !undefined = true → B238 TRUE → break
 		// resolvedType = typeof undefined = "undefined"
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const testW = new UnifiedWrapper(sl, { mode: "eager", apiPath: "n.type-break", initialImpl: null });
 		testW.____slothletInternal.impl = { myProp: { nested: 42 } };
 		testW.____slothletInternal.state.materialized = true;
 
 		const wp = testW.___createWaitingProxy(["myProp", "missing", "x"]);
-		const type = wp.__type;
-		expect(type).toBe("undefined");
+		// The chain reaches nothing: there is no node to report.
+		expect(api.slothlet.node(wp)).toBeUndefined();
 	});
 });
 
@@ -1156,7 +1158,7 @@ describe("waiting proxy then handler — uncovered propChain paths (lines 1391-1
 		// Setup: eager wrapper with impl = custom Proxy, propChain = [].
 		// `await wp` triggers the then handler → propChain empty → check impl is Proxy → TRUE → return impl.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const baseObj = { value: 42 };
 		const customProxy = new Proxy(baseObj, {});
@@ -1179,7 +1181,7 @@ describe("waiting proxy then handler — uncovered propChain paths (lines 1391-1
 		// Setup: eager wrapper with impl = { someKey: "implValue" }, propChain = ["someKey"].
 		// Do NOT set w["someKey"] so hasOwn check is FALSE; impl check finds it.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const w = new UnifiedWrapper(sl, { mode: "eager", apiPath: "o.then-implprop", initialImpl: null });
 		w.____slothletInternal.impl = { someKey: "implValue" };
@@ -1200,7 +1202,7 @@ describe("waiting proxy then handler — uncovered propChain paths (lines 1391-1
 		// but `resolveWrapper(child) = null` (child is a non-wrapper value, e.g., a plain function).
 		// Setup: eager wrapper with a plain function set as an own property, propChain = ["someChild"].
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const w = new UnifiedWrapper(sl, { mode: "eager", apiPath: "o.then-nonwrapper", initialImpl: null });
 		w.____slothletInternal.impl = {};

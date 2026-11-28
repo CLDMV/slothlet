@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/promise-context.mjs
+ *	@Filename: src/lib/helpers/promise-context.mjs
  *	@Date: 2026-10-09T18:00:00-07:00 (1791594000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T08:08:14-08:00 (1793549294)
+ *	@Last modified time: 2026-11-28T04:30:45-08:00 (1795869045)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,8 +39,23 @@
  * sandbox. See `docs/PERMISSIONS.md` on what the live runtime does and does not bound.
  */
 
-import { pinManyToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { pinManyForResult, pinManyToCurrentCaller } from "#helpers/caller-pinning";
+import { inheritsFrom, util } from "#helpers/platform";
+import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
+import {
+	FunctionMethods,
+	Objects,
+	Promise,
+	Promises,
+	PrototypeFunctions,
+	Reflect,
+	Symbol,
+	Symbols,
+	TypeError,
+	WeakSet,
+	WeakSetMethods
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
  * Where a patched `then` keeps the function it replaced. Registered globally so a second copy of
@@ -48,7 +63,7 @@ import { openLayer, markLayer, closeLayer, holdsValue } from "@cldmv/slothlet/he
  * @type {symbol}
  * @private
  */
-const ORIGINAL_THEN = Symbol.for("slothlet.promise.originalThen");
+const ORIGINAL_THEN = Symbols.for("slothlet.promise.originalThen");
 
 /**
  * Follow patched `then` functions down to the one they replaced.
@@ -67,7 +82,117 @@ function runtime_unwrapThen(then) {
  * @type {Function}
  * @private
  */
-const NATIVE_THEN = runtime_unwrapThen(Promise.prototype.then);
+const NATIVE_THEN = runtime_unwrapThen(PrototypeFunctions.Promise.then);
+
+/**
+ * Register reactions on a promise through a `then` of the engine's (or this copy's wrapper of it), and hand back a
+ * promise of slothlet's own that settles as the one `then` returns would. The engine's `then` builds the promise it
+ * returns from the receiver's `constructor` and that constructor's `Symbol.species`, both of which module code can
+ * replace on `Promise.prototype` and `Promise`; the promise handed back here is made with the `Promise` taken at load
+ * and settled by the reactions themselves, so what the caller receives and what it settles with are never steered by
+ * them. A receiver of a `Promise` subclass gets a derived promise of that subclass, as the engine's `then` gives it, made
+ * with the receiver's prototype and no code of the subclass run. The one `then` makes is left unused.
+ * @param {Function} then - The `then` to call: the engine's, or this copy's wrapper of it.
+ * @param {Promise<*>} promise - The receiver.
+ * @param {Function} [onFulfilled] - Fulfillment reaction.
+ * @param {Function} [onRejected] - Rejection reaction.
+ * @param {function(Function[]): Function[]} [pin] - Pins the two reactions `then` is handed, when `then` does not.
+ * @returns {Promise<*>} The derived promise.
+ * @private
+ */
+function runtime_derive(then, promise, onFulfilled, onRejected, pin) {
+	if (runtime_derivesPromise(promise)) {
+		const reactions = pin ? pin([onFulfilled, onRejected]) : [onFulfilled, onRejected];
+		return FunctionMethods.call(then, promise, reactions[0], reactions[1]);
+	}
+	let resolve;
+	let reject;
+	// The reactions run as jobs, never during `then`, so the promise they settle is made once `then` has accepted the
+	// receiver (below).
+	let fulfilled =
+		typeof onFulfilled === "function"
+			? (value) => {
+					try {
+						resolve(onFulfilled(value));
+					} catch (error) {
+						reject(error);
+					}
+				}
+			: (value) => resolve(value);
+	let rejected =
+		typeof onRejected === "function"
+			? (error) => {
+					try {
+						resolve(onRejected(error));
+					} catch (thrown) {
+						reject(thrown);
+					}
+				}
+			: (error) => reject(error);
+	if (pin) {
+		const pinned = pin([fulfilled, rejected]);
+		fulfilled = pinned[0];
+		rejected = pinned[1];
+	}
+	// A receiver `then` refuses, or a species constructor that throws, throws here as `then` itself would.
+	FunctionMethods.call(then, promise, fulfilled, rejected);
+	const executor = (settleValue, settleError) => {
+		resolve = settleValue;
+		reject = settleError;
+	};
+	// `then` accepted the receiver, so it is a genuine promise and reading its prototype runs no trap. A promise of a
+	// module's `Promise` subclass derives one of that subclass, as the engine's `then` would, made with the receiver's
+	// own prototype: no `constructor`, `Symbol.species` or constructor body of the module's runs.
+	const proto = Reflect.getPrototypeOf(promise);
+	if (proto === Promise.prototype || proto === null) return new Promise(executor);
+	DERIVED_TARGET.prototype = proto;
+	try {
+		return Reflect.construct(Promise, [executor], DERIVED_TARGET);
+	} finally {
+		DERIVED_TARGET.prototype = null;
+	}
+}
+
+/**
+ * Node's brand check of a promise, taken at load: false for a Proxy, whose traps it never runs.
+ * @type {function(*): boolean}
+ * @private
+ */
+const IS_PROMISE = util.types.isPromise;
+
+/**
+ * The getter `Promise[Symbol.species]` had at load.
+ * @type {Function|undefined}
+ * @private
+ */
+const SPECIES_GETTER = Reflect.getOwnPropertyDescriptor(Promise, Symbol.species)?.get;
+
+/**
+ * Whether the engine's `then` on `promise` makes a promise of the `Promise` taken at load and runs no code but the
+ * engine's: a genuine promise of `Promise.prototype` with no `constructor` of its own, while `Promise.prototype.constructor`
+ * and `Promise[Symbol.species]` are as they were at load. The promise `then` makes is then handed back as it is, as the
+ * engine's `then` hands it back. Read through descriptors, so no getter or trap runs.
+ * @param {*} promise - The receiver.
+ * @returns {boolean} True when the engine's own promise can be handed back.
+ * @private
+ */
+function runtime_derivesPromise(promise) {
+	if (typeof IS_PROMISE !== "function" || !IS_PROMISE(promise)) return false;
+	if (Reflect.getPrototypeOf(promise) !== Promise.prototype) return false;
+	if (Reflect.getOwnPropertyDescriptor(promise, "constructor") !== undefined) return false;
+	const constructor = Objects.getOwnPropertyDescriptor(Promise.prototype, "constructor");
+	if (constructor === undefined || constructor.value !== Promise) return false;
+	const species = Reflect.getOwnPropertyDescriptor(Promise, Symbol.species);
+	return species !== undefined && species.get === SPECIES_GETTER;
+}
+
+/**
+ * The `new.target` {@link runtime_derive} constructs a subclass's derived promise through, its `prototype` set to the
+ * receiver's for that one construction.
+ * @type {Function}
+ * @private
+ */
+const DERIVED_TARGET = function () {};
 
 /**
  * Register reactions on a promise without pinning them to the current caller.
@@ -78,21 +203,59 @@ const NATIVE_THEN = runtime_unwrapThen(Promise.prototype.then);
  * @param {Promise<*>} promise - A promise, or a Proxy around one.
  * @param {Function} [onFulfilled] - Fulfillment reaction.
  * @param {Function} [onRejected] - Rejection reaction.
- * @returns {Promise<*>} The derived promise, as `then` returns it.
+ * @returns {Promise<*>} The derived promise, as `then` returns it, made by slothlet (see {@link runtime_derive}).
  * @internal
  */
 export function nativeThen(promise, onFulfilled, onRejected) {
 	try {
-		return NATIVE_THEN.call(promise, onFulfilled, onRejected);
+		return runtime_derive(NATIVE_THEN, promise, onFulfilled, onRejected);
 	} catch (error) {
 		// A Proxy around a promise (a wrapped return value) passes `instanceof Promise` but has no
 		// promise internals, so the engine's `then` refuses it as a receiver. Adopt it into a genuine
 		// promise — which reads its `then` through the proxy — and react to that one instead. Anything
 		// else the engine refused is not a promise (a plain object only tagged "Promise", which the
 		// browser's tag check cannot tell apart), so the refusal stands and the caller keeps the value.
-		if (!(error instanceof TypeError) || !(promise instanceof Promise)) throw error;
-		return NATIVE_THEN.call(Promise.resolve(promise), onFulfilled, onRejected);
+		if (!inheritsFrom(error, TypeError) || !inheritsFrom(promise, Promise)) throw error;
+		return runtime_derive(NATIVE_THEN, Promises.resolve(promise), onFulfilled, onRejected);
 	}
+}
+
+/**
+ * Register reactions on a promise of the engine's own as its `then` would while this copy's patch is installed: through
+ * this copy's wrapper, which pins them to the current caller (see {@link enablePromisePatching}), or the engine's `then`
+ * when no patch is installed. Neither is read off the promise or `Promise.prototype`, so a `then` module code put there
+ * is never called, and the promise handed back is slothlet's own, so a `constructor` or `Symbol.species` module code
+ * put on `Promise.prototype` or `Promise` does not decide what it is or what it settles with (see {@link runtime_derive}).
+ *
+ * @param {Promise<*>} promise - A promise of the engine's own (not a Proxy).
+ * @param {Function} [onFulfilled] - Fulfillment reaction.
+ * @param {Function} [onRejected] - Rejection reaction.
+ * @returns {Promise<*>} The derived promise.
+ * @internal
+ * @example
+ * pinnedThen(promise, (value) => value, (error) => { throw error; });
+ */
+export function pinnedThen(promise, onFulfilled, onRejected) {
+	return runtime_derive(installed === null ? NATIVE_THEN : installed.wrapper, promise, onFulfilled, onRejected);
+}
+
+/**
+ * Register reactions on the promise a call returned, as {@link pinnedThen} does, pinned to who made the call rather
+ * than to whoever the stack says is registering them: the runtime that ran the call already knows its caller (see
+ * `pinManyForResult` in `helpers/caller-pinning`). A promise the runtime does not know is pinned as `pinnedThen` pins.
+ *
+ * @param {Promise<*>} promise - The promise a call returned, of the engine's own (not a Proxy).
+ * @param {Function} [onFulfilled] - Fulfillment reaction.
+ * @param {Function} [onRejected] - Rejection reaction.
+ * @returns {Promise<*>} The derived promise.
+ * @internal
+ * @example
+ * pinnedResultThen(result, (value) => value, (error) => { throw error; });
+ */
+export function pinnedResultThen(promise, onFulfilled, onRejected) {
+	// Disabled under another copy's wrapper, the wrapper passes reactions through unpinned: so does pinnedThen.
+	if (installed === null || !installed.layer.active) return pinnedThen(promise, onFulfilled, onRejected);
+	return runtime_derive(installed.original, promise, onFulfilled, onRejected, (reactions) => pinManyForResult(promise, reactions));
 }
 
 /**
@@ -114,7 +277,7 @@ const THEN_WRAPPERS = new WeakSet();
  */
 export function engineThenOf(fn) {
 	if (fn === NATIVE_THEN) return NATIVE_THEN;
-	return THEN_WRAPPERS.has(fn) ? NATIVE_THEN : null;
+	return WeakSetMethods.has(THEN_WRAPPERS, fn) ? NATIVE_THEN : null;
 }
 
 /**
@@ -142,9 +305,9 @@ const runtime_descriptorValue = (descriptor) => descriptor?.value;
  * @returns {void}
  * @public
  */
-export function enablePromisePatching() {
+function enablePromisePatching() {
 	if (installed) return;
-	const descriptor = Object.getOwnPropertyDescriptor(Promise.prototype, "then");
+	const descriptor = Objects.getOwnPropertyDescriptor(Promise.prototype, "then");
 	// A host that froze or replaced `then` with something exotic keeps it as it is: this patch is
 	// best-effort like the others, not a requirement.
 	if (!descriptor || typeof descriptor.value !== "function" || !descriptor.configurable) return;
@@ -157,18 +320,20 @@ export function enablePromisePatching() {
 	const wrapper = {
 		then(onFulfilled, onRejected) {
 			// Disabled while another copy's wrapper sat on top of this one: a plain pass-through.
-			if (!layer.active) return original.call(this, onFulfilled, onRejected);
+			if (!layer.active) return FunctionMethods.call(original, this, onFulfilled, onRejected);
 			// Both reactions were registered by the same caller: resolved once for the pair.
-			const [fulfilled, rejected] = pinManyToCurrentCaller([onFulfilled, onRejected]);
-			return original.call(this, fulfilled, rejected);
+			const unpacked1 = pinManyToCurrentCaller([onFulfilled, onRejected]),
+				fulfilled = unpacked1[0],
+				rejected = unpacked1[1];
+			return FunctionMethods.call(original, this, fulfilled, rejected);
 		}
 	}.then;
-	Object.defineProperty(wrapper, ORIGINAL_THEN, { value: original });
-	THEN_WRAPPERS.add(wrapper);
+	Objects.defineProperty(wrapper, ORIGINAL_THEN, { __proto__: null, value: original });
+	WeakSetMethods.add(THEN_WRAPPERS, wrapper);
 	markLayer(wrapper, layer);
 
-	Object.defineProperty(Promise.prototype, "then", { ...descriptor, value: wrapper });
-	installed = { layer, wrapper };
+	Objects.defineProperty(Promise.prototype, "then", { __proto__: null, ...descriptor, value: wrapper });
+	installed = { layer, wrapper, original };
 }
 
 /**
@@ -182,9 +347,56 @@ export function enablePromisePatching() {
  * @returns {void}
  * @public
  */
-export function disablePromisePatching() {
+function disablePromisePatching() {
 	if (!installed) return;
 	const restore = closeLayer(installed.layer, runtime_descriptorValue);
-	if (holdsValue(Promise.prototype, "then", installed.wrapper)) Object.defineProperty(Promise.prototype, "then", restore);
+	if (holdsValue(Promise.prototype, "then", installed.wrapper)) Objects.defineProperty(Promise.prototype, "then", restore);
 	installed = null;
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/helpers/promise-context", import.meta.url);
+	return { disablePromisePatching, enablePromisePatching };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof enablePromisePatching} */
+const guarded_enablePromisePatching = guardInternal(enablePromisePatching, "enablePromisePatching", import.meta.url);
+/** @type {typeof disablePromisePatching} */
+const guarded_disablePromisePatching = guardInternal(disablePromisePatching, "disablePromisePatching", import.meta.url);
+export { guarded_enablePromisePatching as enablePromisePatching, guarded_disablePromisePatching as disablePromisePatching };

@@ -1,262 +1,77 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/platform.mjs
- *	@Date: 2026-05-29T22:02:43-07:00 (1780117363)
+ *	@Filename: src/lib/helpers/platform.mjs
+ *	@Date: 2026-05-30T20:46:07-07:00 (1780199167)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T18:49:56-07:00 (1791424196)
+ *	@Last modified time: 2026-11-28T04:30:44-08:00 (1795869044)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Single source of truth for Node.js-vs-browser host differences.
+ * @fileoverview `#helpers/platform` under Node.js: Node's builtin modules, imported statically and handed to
+ * `platform-host.mjs`, which every other file of slothlet's reads them through.
  * @module @cldmv/slothlet/helpers/platform
  * @internal
  *
  * @description
- * Slothlet runs in two hosts: Node.js (full filesystem access) and browser /
- * Electron-renderer "browser mode" (no `node:*` builtins, manifest-based loading).
- * Rather than scatter `typeof process` checks and gated `await import("node:*")`
- * blocks across a dozen modules (#123), every host difference is decided ONCE here
- * and the rest of the codebase imports the resolved builtins (or browser shims)
- * plus `isNode` via plain static imports — no `node:*` specifier ever enters the
- * static-import graph a browser must parse.
- *
- * The builtins are pulled in through a single top-level-await `import()` block
- * guarded by `isNode`. In a browser the same exports resolve to `null` (for the
- * Node-only ones, whose every call site is `isNode`-guarded) or to a minimal shim
- * (`util`, which is consumed in both hosts for `inspect` / `types.isProxy`).
- *
- * Anything that genuinely cannot run outside Node and is never reachable from a
- * browser module graph (TypeScript compilation, type generation, manifest
- * generation) keeps its own direct `node:*` imports — routing those through here
- * would only drag build-time-only builtins (`crypto`, `os`) into the shared hub.
- *
- * ## Browser-only branches & coverage (policy)
- * The browser arms here — and in the modules that import `isNode` (the `else`/`: null` shims, the
- * i18n browser paths, the live-mode null-ALS arm) — are UNREACHABLE under the Node coverage run:
- * `process.versions.node` is always truthy there, even in the `platform:"browser"` node-side suites.
- *
- * They are now genuinely covered+counted by a **vitest browser-mode** run (real headless Chromium,
- * Playwright provider — `.configs/vitest.browser.config.mjs`, `tests/browser/*.browser.test.mjs`).
- * Because that run uses the SAME `@vitest/coverage-v8` provider over vite-transformed source as the
- * node run, the two `coverage-final.json` maps align and merge cleanly
- * (`tools/coverage/merge-browser-coverage.mjs`, wired as `npm run coverage:all`). An earlier merge was
- * rejected, but that was of the raw-source Playwright *smoke* (`npm run test:browser`), whose importmap
- * serves raw `src/` — those maps don't align with node's. The vitest-browser run does, which is what
- * makes the merge correct. Only arms unreachable in BOTH hosts (e.g. an exotic non-Node host with no
- * `process`/`navigator`) keep a precise v8 ignore-next comment. The smoke remains as a raw-importmap
- * load check (the path a real consumer uses), not the coverage justification.
+ * Static imports, not a top-level `await import()`: nothing in slothlet's graph awaits at its top level, so Node's
+ * synchronous `require(esm)` loads a package that imports slothlet (#1034). Imported, not taken with
+ * `process.getBuiltinModule`, so a host's loader hooks and a test's module mocks (`vi.mock("child_process")`) apply.
+ * A browser build resolves `#helpers/platform` to `platform.browser.mjs` instead (package.json `imports`), so no
+ * `node:*` specifier reaches it.
  */
 
-// Detection runs once. In a browser/worker `process` is absent and this resolves false; the vitest
-// browser run exercises that arm (the node run cannot — `process` is always present there).
-const isNode = typeof process !== "undefined" && Boolean(process?.versions?.node);
+import * as fsModule from "node:fs";
+import * as fspModule from "node:fs/promises";
+import * as pathModule from "node:path";
+import * as urlModule from "node:url";
+import * as utilModule from "node:util";
+import * as eventsModule from "node:events";
+import * as asyncHooksModule from "node:async_hooks";
+import * as moduleModule from "node:module";
+import * as vmModule from "node:vm";
+// Without the `node:` scheme, as the loader has always imported it: a test's `vi.mock("child_process")` applies.
+import * as childProcessModule from "child_process";
+import { useNodeBuiltins } from "./platform-host.mjs";
 
-/**
- * Resolved Node.js builtins (Node host) or browser shims / `null` (browser host).
- *
- * Each is initialized to `null` and reassigned to the real builtin inside the `isNode`
- * block below; in a browser the Node-only ones stay `null` (every call site is
- * `isNode`-guarded) and `util` becomes a minimal shim. Annotated `any` (not bare `null`,
- * which would make a TS consumer treat them as non-callable, nor the precise
- * `typeof import("node:*")` shape, which would force `@types/node` onto every consumer —
- * including browser ones — and break the no-extra-types export contract). `any` keeps them
- * usable from TS while the polymorphic real-module / shim / `null` behavior is documented here.
- * @private
- */
-/** @type {any} */
-let fs = null;
-/** @type {any} */
-let fsp = null;
-/** @type {any} */
-let path = null;
-/** @type {any} */
-let url = null;
-/** @type {any} */
-let util = null;
-/** @type {any} */
-let EventEmitter = null;
-/** @type {any} */
-let AsyncLocalStorage = null;
-/** @type {any} */
-let AsyncResource = null;
-/** @type {any} */
-let createRequire = null;
+// The static imports above loaded, so this host has Node's builtins.
+useNodeBuiltins({
+	fs: fsModule,
+	fsp: fspModule,
+	path: pathModule,
+	url: urlModule,
+	util: utilModule,
+	events: eventsModule,
+	asyncHooks: asyncHooksModule,
+	module: moduleModule,
+	vm: vmModule,
+	childProcess: childProcessModule
+});
 
-if (isNode) {
-	const [fsMod, fspMod, pathMod, urlMod, utilMod, eventsMod, asyncHooksMod, moduleMod] = await Promise.all([
-		import("node:fs"),
-		import("node:fs/promises"),
-		import("node:path"),
-		import("node:url"),
-		import("node:util"),
-		import("node:events"),
-		import("node:async_hooks"),
-		import("node:module")
-	]);
-	fs = fsMod;
-	fsp = fspMod;
-	path = pathMod;
-	url = urlMod;
-	util = utilMod;
-	({ EventEmitter } = eventsMod);
-	({ AsyncLocalStorage, AsyncResource } = asyncHooksMod);
-	({ createRequire } = moduleMod);
-	// Browser host: the `else` arm (util shim) runs without `process`; exercised by the vitest browser run.
-} else {
-	// What every generator object and every async generator object inherits from.
-	const GENERATOR_PROTOTYPES = [Object.getPrototypeOf(function* () {}).prototype, Object.getPrototypeOf(async function* () {}).prototype];
-	// `util` is the one builtin consumed in both hosts: `inspect` (with its custom
-	// symbol) for value formatting and `types.isProxy` for proxy detection. Slothlet's
-	// own wrappers are resolved via resolveWrapper(), so a browser-side `isProxy()`
-	// that always returns false only loses detection of *arbitrary user* proxies —
-	// a documented browser limitation, not a correctness bug for slothlet internals.
-	util = {
-		inspect: Object.assign((value) => value, { custom: Symbol.for("nodejs.util.inspect.custom") }),
-		types: {
-			isProxy: () => false,
-			// A native promise of any realm (an iframe's), by its built-in tag: the browser stand-in for
-			// Node's brand check. A plain object that sets `Symbol.toStringTag` to "Promise" passes too.
-			// Reading the tag runs a value's own `Symbol.toStringTag` getter; one that throws is simply not
-			// a promise, so the check never changes what an ordinary return value does.
-			isPromise: (value) => {
-				if (value instanceof Promise) return true;
-				try {
-					return Object.prototype.toString.call(value) === "[object Promise]";
-				} catch {
-					return false;
-				}
-			},
-			// Constructor-name check: the browser stand-in for Node's native brand check. Its
-			// false negatives (a bound or wrapped async function) are the same detection blind
-			// spots the Node check has, and fail in the same conservative direction — the sync
-			// pipeline, whose thenable refusal names the `{ async: true }` declaration fix.
-			isAsyncFunction: (fn) => typeof fn === "function" && fn.constructor?.name === "AsyncFunction",
-			// Prototype check: the browser stand-in for Node's brand check of a generator object, an async
-			// generator's included. An object merely inheriting from a generator function's `prototype` passes too.
-			isGeneratorObject: (value) =>
-				value !== null &&
-				typeof value === "object" &&
-				GENERATOR_PROTOTYPES.some((prototype) => Object.prototype.isPrototypeOf.call(prototype, value))
-		}
-	};
-}
-
-/**
- * Load and parse JSON, branching on host — this is the single place that knows how each
- * environment reads JSON.
- *
- * @description
- * - **Node**: synchronous `fs.readFileSync` + parse. Returns the parsed object directly (or
- *   `null` on a read/parse failure). `ref` is a filesystem path or `file:` URL.
- * - **Browser**: asynchronous dynamic `import(ref, { with: { type: "json" } })`. Returns a
- *   `Promise<object|null>` — a miss resolves to `null` (callers keep their bundled default;
- *   a failed import also surfaces a console error, which is harmless). `ref` is a module
- *   specifier resolvable via the page's importmap (e.g. `@cldmv/slothlet/i18n/language/es-mx.json`).
- *
- * The return type is therefore polymorphic by host: `object|null` in Node, `Promise<object|null>`
- * in a browser. Callers that already branch on `isNode` consume the matching form directly;
- * `await loadJson(...)` is safe in both (awaiting a non-promise is a no-op).
- *
- * @param {string} ref - Filesystem path / `file:` URL (Node) or importmap specifier (browser).
- * @returns {object|null|Promise<object|null>} Parsed JSON (Node, sync) or a promise of it (browser).
- * @internal
- *
- * @example
- * // Node (sync):
- * const pkg = loadJson(new URL("../../package.json", import.meta.url));
- * // Browser (async):
- * const es = await loadJson("@cldmv/slothlet/i18n/language/es-mx.json");
- */
-function loadJson(ref) {
-	// Browser host: async dynamic JSON import, delegated to loadJsonBrowser (exercised by the vitest
-	// browser run via loadJson()). Delegated rather than inlined as `import(...).then().catch()` so the
-	// `import(...)` expression is the LAST token on its line: vitest's browser transform wraps dynamic
-	// imports and shifts the columns of anything after them, which moves trailing `.then`/`.catch`
-	// callbacks off the positions the node (SSR) transform maps them to — defeating the location-based
-	// coverage merge. The await form keeps every coverable entry starting at/before the import.
-	if (!isNode) {
-		return loadJsonBrowser(ref);
-	}
-	try {
-		return JSON.parse(fs.readFileSync(ref, "utf-8"));
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Browser host helper for {@link loadJson}: dynamic JSON import.
- *
- * @description
- * `import(ref, { with: { type: "json" } })` — a JSON module always exposes the parsed value as
- * `default`, so that is returned (coalesced to `null` to uphold the `object | null` contract); a failed import resolves to `null` so the caller keeps its
- * bundled default. Kept separate from {@link loadJson} so the import expression ends its own line (see
- * the note in loadJson on vitest's dynamic-import wrapping and the coverage merge).
- *
- * @param {string} ref - Importmap specifier (e.g. "@cldmv/slothlet/i18n/language/es-mx.json").
- * @returns {Promise<object|null>} Parsed JSON, or null on a failed import.
- * @private
- */
-async function loadJsonBrowser(ref) {
-	try {
-		const mod = await import(ref, { with: { type: "json" } });
-		// A JSON module always default-exports its parsed value, so for a real locale (always an object)
-		// `mod.default` is never nullish here; the `?? null` only upholds the documented `object | null`
-		// return contract and is therefore unreachable, so its arm is honestly ignored (no contrived
-		// null-JSON fixture needed). A failed import is handled by the catch below.
-		/* v8 ignore next */
-		return mod.default ?? null;
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Run `fn` on a later macrotask, in any host.
- *
- * @description
- * `setImmediate` is Node-only: a browser has none, and neither does an Electron context-isolated
- * renderer, so calling it directly from browser-reachable code throws (#578). This picks the best
- * macrotask primitive the host offers, in order:
- * - `setImmediate` (Node), read from `globalThis` at call time so the context-carrying version
- *   installed by `helpers/scheduler-context` is the one used;
- * - a `MessageChannel` post (browsers, workers), which runs ahead of clamped timers;
- * - `setTimeout(fn, 0)` as the last resort.
- *
- * All three run `fn` only after the current call stack and every queued microtask have drained,
- * which is the guarantee callers rely on.
- *
- * @param {Function} fn - Callback to run.
- * @returns {void}
- * @internal
- *
- * @example
- * scheduleMacrotask(() => patchAfterAssignment());
- */
-function scheduleMacrotask(fn) {
-	const immediate = globalThis.setImmediate;
-	if (typeof immediate === "function") {
-		immediate(fn);
-		return;
-	}
-	if (typeof globalThis.MessageChannel === "function") {
-		const channel = new globalThis.MessageChannel();
-		channel.port1.onmessage = () => {
-			// Closing the port releases it; in Node an open port would keep the event loop alive.
-			channel.port1.close();
-			fn();
-		};
-		channel.port2.postMessage(null);
-		return;
-	}
-	setTimeout(fn, 0);
-}
-
-export { isNode, fs, fsp, path, url, util, EventEmitter, AsyncLocalStorage, AsyncResource, createRequire, loadJson, scheduleMacrotask };
+export {
+	isNode,
+	fs,
+	fsp,
+	path,
+	url,
+	util,
+	EventEmitter,
+	AsyncLocalStorage,
+	AsyncResource,
+	executionAsyncResource,
+	executionAsyncId,
+	createHook,
+	createRequire,
+	vm,
+	childProcess,
+	loadJson,
+	fileParts,
+	scheduleMacrotask,
+	inheritsFrom
+} from "./platform-host.mjs";

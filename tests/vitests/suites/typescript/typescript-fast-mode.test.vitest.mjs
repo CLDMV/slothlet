@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/typescript-fast-mode.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/typescript-fast-mode.test.vitest.mjs
  *	@Date: 2026-02-14T15:25:01-08:00 (1771111501)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:23-07:00 (1791090923)
+ *	@Last modified time: 2026-11-28T04:33:08-08:00 (1795869188)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -173,19 +173,21 @@ describe("TypeScript Fast Mode", () => {
 		});
 
 		it("should have metadata on TypeScript functions", async () => {
-			const metadata = api.math.add.__metadata;
+			const metadata = api.slothlet.metadata.get(api.math.add);
+			const metadataNode = api.slothlet.node(api.math.add);
 
 			expect(metadata).toBeDefined();
-			expect(metadata.filePath).toContain("math.ts");
-			expect(metadata.apiPath).toBe("math.add");
+			expect(metadataNode.file).toContain("math.ts");
+			expect(metadataNode.path.join(".")).toBe("math.add");
 		});
 
 		it("should track moduleID for TypeScript modules", async () => {
-			const metadata = api.string.capitalize.__metadata;
+			const metadata = api.slothlet.metadata.get(api.string.capitalize);
+			const metadataNode = api.slothlet.node(api.string.capitalize);
 
 			expect(metadata).toBeDefined();
-			expect(metadata.moduleID).toBeDefined();
-			expect(metadata.filePath).toContain("string.ts");
+			expect(metadataNode.module).toBeDefined();
+			expect(metadataNode.file).toContain("string.ts");
 		});
 	});
 
@@ -281,7 +283,7 @@ describe("TypeScript Fast Mode", () => {
 
 			// Add TypeScript module
 			await api.slothlet.api.add("tsModule", "./api_tests/api_test_typescript", {
-				moduleID: "ts_addon"
+				id: "ts_addon"
 			});
 
 			expect(api.tsModule).toBeDefined();

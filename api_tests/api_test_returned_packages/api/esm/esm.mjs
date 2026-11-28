@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_returned_packages/api/esm/esm.mjs
+ *	@Filename: api_tests/api_test_returned_packages/api/esm/esm.mjs
  *	@Date: 2026-10-27T06:57:33-07:00 (1793109453)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:19-07:00 (1793426599)
+ *	@Last modified time: 2026-11-28T04:29:29-08:00 (1795868969)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,14 +69,14 @@ export function forge() {
 	const forged = function forged() {
 		return "forged";
 	};
-	const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImportState")];
+	const state = globalThis[Symbol.for("@cldmv/slothlet.instanceImports")];
 	try {
 		state?.recordShared?.("file:///nowhere/node_modules/x/index.js", forged, "guessed");
 	} catch {
 		// A refusal is as good as nothing recorded.
 	}
 	try {
-		Object.defineProperty(globalThis, Symbol.for("@cldmv/slothlet.instanceImportState"), { value: {} });
+		Object.defineProperty(globalThis, Symbol.for("@cldmv/slothlet.instanceImports"), { value: {} });
 	} catch {
 		// The state cannot be replaced.
 	}

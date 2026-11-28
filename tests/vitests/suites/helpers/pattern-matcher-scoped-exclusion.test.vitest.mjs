@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/pattern-matcher-scoped-exclusion.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/pattern-matcher-scoped-exclusion.test.vitest.mjs
  *	@Date: 2026-09-20T15:33:32+00:00 (1789918412)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
+ *	@Last modified time: 2026-11-28T04:31:51-08:00 (1795869111)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { compilePattern } from "#helpers/pattern-matcher";
 
 describe("pattern-matcher > scoped exclusion !(a|b) (#360)", () => {
 	it("excludes exactly the listed segment; other siblings match", () => {

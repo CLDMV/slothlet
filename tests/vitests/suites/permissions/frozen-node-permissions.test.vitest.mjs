@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/frozen-node-permissions.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/frozen-node-permissions.test.vitest.mjs
  *	@Date: 2026-10-12T20:59:52-07:00 (1791863992)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T12:17:58-07:00 (1792178278)
+ *	@Last modified time: 2026-11-28T04:32:15-08:00 (1795869135)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 const BASE = new URL("../../../../api_tests/api_test_frozen_permissions", import.meta.url).pathname;
-const PERMISSIONS = { defaultPolicy: "allow", rules: [{ caller: "rogue.**", target: "secrets.**", effect: "deny" }] };
+const PERMISSIONS = { policy: "allow", rules: [{ caller: "rogue.**", target: "secrets.**", effect: "deny" }] };
 
 /**
  * Whether any outcome handed over a protected value.
@@ -64,7 +64,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		expect(leaked(outcomes, "SECRET")).toBe(false);
 		expect(outcomes.direct.error).toBe("PERMISSION_DENIED");
 		expect(outcomes.descriptor.error).toBe("PERMISSION_DENIED");
-		expect(outcomes.json.error).toBe("PERMISSION_DENIED");
+		expect(outcomes.json).toEqual({ value: "{}" });
 		expect(api.secrets.key).toBe("SECRET");
 	});
 
@@ -93,7 +93,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("serializing a namespace refuses an array element Object.keys() does not list, which JSON.stringify writes", async () => {
 		const rules = [{ caller: "rogue.**", target: "secrets.hidden.1", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.secrets;
 		const outcome = await api.rogue.serializeSecrets();
 		expect(JSON.stringify(outcome.value ?? null)).not.toContain("HIDDEN");
@@ -103,7 +103,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("serializing a namespace leaves out an array element's leaves at the position the caller may not read, though it may read them at another", async () => {
 		const rules = [{ caller: "rogue.**", target: "secrets.shared.1.**", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.secrets;
 		const outcome = await api.rogue.serializeSecrets();
 		expect(JSON.parse(outcome.value).shared).toEqual([{ v: "SHARED" }, {}]);
@@ -112,9 +112,9 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("serializing a member leaves out an object's leaves at the key the caller may not read, though it may read them at another", async () => {
 		const rules = [{ caller: "rogue.**", target: "secrets.pair.second.**", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.secrets;
-		expect(await api.rogue.serializePair()).toEqual({ first: { v: "SHARED" }, second: {} });
+		expect(await api.rogue.serializePair()).toEqual({ first: { v: "SHARED" } });
 	});
 
 	it("a function an array member holds keeps its reader's identity when called later past an unpatched boundary", async () => {
@@ -165,7 +165,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("a function an array holds under two keys is gated at the key it is called by", async () => {
 		const rules = [{ caller: "rogue.**", target: "secrets.aliased.denied", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.secrets;
 		const aliased = api.secrets.aliased;
 		// The allowed key is read first: its stand-in must not serve the denied key.
@@ -177,7 +177,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("a function an array holds is gated at the path its array sits at now, after the array moved", async () => {
 		const rules = [{ caller: "rogue.**", target: "secrets.nested.0.fn", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.secrets;
 		const nested = api.secrets.nested;
 		const inner = nested[1];
@@ -194,7 +194,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("serializing a namespace holding a sparse array of the largest length fails as it does in plain JavaScript, without walking every index", async () => {
 		const rules = [{ caller: "rogue.**", target: "sparse.big.1", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.sparse;
 		const started = Date.now();
 		const outcome = await api.rogue.serializeSparse();
@@ -205,7 +205,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("serializing a namespace checks an element the array only inherits, which JSON.stringify reads", async () => {
 		const rules = [{ caller: "rogue.**", target: "inherited.inh.0", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.inherited;
 		const outcome = await api.rogue.serializeInherited();
 		expect(outcome.error).toBe("PERMISSION_DENIED");
@@ -214,7 +214,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("serializing a namespace reads an array's element once, and gates the value it reads", async () => {
 		const rules = [{ caller: "rogue.**", target: "stateful.flip.0", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.stateful;
 		// The getter answers {} on its first read and "SECRET" after: JSON.stringify reads it once, as in plain JS.
 		expect(await api.rogue.serializeStateful()).toEqual({ value: '{"flip":[{}]}' });
@@ -224,7 +224,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("serializing a namespace checks an element an array proxy supplies from its get trap, which JSON.stringify reads", async () => {
 		const rules = [{ caller: "rogue.**", target: "virtual.virt.0", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.virtual;
 		const outcome = await api.rogue.serializeVirtual();
 		expect(outcome.error).toBe("PERMISSION_DENIED");
@@ -235,7 +235,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		"a %s-keyed member a denied module took and called past every patched boundary is refused",
 		async (kind) => {
 			const rules = [{ caller: "rogue.**", target: "tools.**", effect: "deny" }];
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 			await api.tools;
 			// Reading the member is itself allowed here: the rule bites on the call.
 			// The node is handed to the module by the host, so the module's read of the member is the first that names it.
@@ -254,7 +254,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("a denied caller cannot read an object element through the array's descriptor", async () => {
 		const rules = [{ caller: "rogue.**", target: "objects.items.**", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.objects;
 		const outcome = await api.rogue.readObjectElement(api.objects.items);
 		expect(outcome.error).toBe("PERMISSION_DENIED");
@@ -263,7 +263,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("a denied caller cannot call a function the array inherits from its prototype", async () => {
 		const rules = [{ caller: "rogue.**", target: "objects.lst.**", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.objects;
 		const outcome = await api.rogue.callInherited(api.objects.lst);
 		expect(outcome.error).toBe("PERMISSION_DENIED");
@@ -280,7 +280,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("a denied caller cannot read an accessor element through the getter its descriptor hands out", async () => {
 		const rules = [{ caller: "rogue.**", target: "objects.acc.**", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.objects;
 		const outcome = await api.rogue.callElementGetter(api.objects.acc);
 		expect(outcome.error).toBe("PERMISSION_DENIED");
@@ -289,7 +289,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("a denied caller cannot take an element out of a composed array node with pop()", async () => {
 		const rules = [{ caller: "rogue.**", target: "composed.**", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.composed;
 		const outcome = await api.rogue.popIt(api.composed);
 		expect(outcome.error).toBe("PERMISSION_DENIED");
@@ -301,7 +301,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 		["inspect hook", "hook", "secrets", "list"]
 	])("a %s a denied module took from a descriptor is not callable later as the host", async (_label, kind, ns, member) => {
 		const rules = [{ caller: "rogue.**", target: `${ns}.**`, effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api[ns];
 		const stashed = await api.rogue.stashDescriptorFunction(api[ns][member], kind === "getter" ? "getter" : "hook");
 		if (stashed === "hidden") return;
@@ -318,7 +318,7 @@ describe.each(getMatrixConfigs({}))("frozen node permissions (#609) > Config: $n
 
 	it("a symbol-keyed terminal value read from an object a denied module took, past every patched boundary, is refused", async () => {
 		const rules = [{ caller: "rogue.**", target: "symtools.**", effect: "deny" }];
-		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules } });
+		api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules } });
 		await api.symtools;
 		expect(await api.rogue.stashSymbolNode(api.symtools.holder)).toBe("stashed");
 		expect(await api.rogue.readSymbolLeafLater()).toBe("armed");

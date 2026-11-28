@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/caller-pinning.mjs
+ *	@Filename: src/lib/helpers/caller-pinning.mjs
  *	@Date: 2026-07-30T12:00:00-07:00 (1785438000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:19:22-07:00 (1792210762)
+ *	@Last modified time: 2026-11-28T04:30:41-08:00 (1795869041)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,6 +34,8 @@
  * This module holds the one hook the boundary patches consult. The live context manager registers a
  * pinner; the async manager leaves it unset and its boundaries pass callbacks through untouched.
  */
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
+import { ArrayMethods, FunctionMethods, mapList, Objects, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
 
 /**
  * Binds a callback to the caller active at registration, or `null` when the runtime does not need it.
@@ -51,7 +53,7 @@ let pinner = null;
  * @returns {void}
  * @internal
  */
-export function setApiCallerPinner(strategy) {
+function setApiCallerPinner(strategy) {
 	pinner = strategy;
 }
 
@@ -72,6 +74,38 @@ export function pinToCurrentCaller(callback) {
 }
 
 /**
+ * Bind a callback to the caller and flow active right now, after one quick check that there is any: outside every
+ * `run()` / `scope()` flow and every module call the callback is handed back as it is, as it would run the same either
+ * way. For a boundary that sees many calls from host code (Node's callback-style APIs, see
+ * `helpers/node-callback-context`). A strategy that offers no `idle` check pins as {@link pinToCurrentCaller} does.
+ *
+ * @param {Function} callback - Callback about to be deferred.
+ * @returns {Function} The callback, bound to the current caller and flow where there is one.
+ * @internal
+ */
+export function pinToCurrentFlow(callback) {
+	if (!pinner || typeof callback !== "function") return callback;
+	if (typeof pinner.idle === "function" && pinner.idle()) return callback;
+	return pinner(callback);
+}
+
+/**
+ * Bind a callback that runs code in a resource's scope (what an `AsyncResource`, a snapshot or a bound function runs
+ * later) to the caller active right now. Whoever holds the resource chooses the code, so the strategy tells it by its
+ * frames when it runs: the code of the caller it was pinned to keeps the pin, anyone else's runs as whatever was running
+ * where the resource was used. A strategy that offers no `scope` form pins it as any callback.
+ *
+ * @param {Function} callback - The callback.
+ * @returns {Function} The callback, bound to the current caller where one exists.
+ * @internal
+ */
+export function pinScopeToCurrentCaller(callback) {
+	if (!pinner || typeof callback !== "function") return callback;
+	if (typeof pinner.scope === "function") return pinner.scope(callback);
+	return pinner(callback);
+}
+
+/**
  * Bind several callbacks registered at the same moment to the caller active right now, resolving that
  * caller once for all of them — a promise reaction's two callbacks, say. A strategy that offers no
  * `many` form pins each one in turn.
@@ -82,7 +116,187 @@ export function pinToCurrentCaller(callback) {
  * @internal
  */
 export function pinManyToCurrentCaller(callbacks) {
-	if (!pinner || !callbacks.some((callback) => typeof callback === "function")) return callbacks;
+	if (!pinner || !ArrayMethods.some(callbacks, (callback) => typeof callback === "function")) return callbacks;
 	if (typeof pinner.many === "function") return pinner.many(callbacks);
-	return callbacks.map((callback) => pinToCurrentCaller(callback));
+	return mapList(callbacks, (callback) => pinToCurrentCaller(callback));
 }
+
+/**
+ * Pin the reactions registered on the promise a call returned to who made the call, when the runtime knows it (a
+ * strategy's `forResult`), instead of resolving who is registering them now; otherwise as
+ * {@link pinManyToCurrentCaller} pins them.
+ * @param {Promise<*>} result - The promise the call returned.
+ * @param {Array<Function|undefined>} callbacks - The reactions.
+ * @returns {Array<Function|undefined>} Each reaction, pinned where there is a caller to pin it to.
+ * @internal
+ * @example
+ * const [fulfilled, rejected] = pinManyForResult(result, [onFulfilled, onRejected]);
+ */
+export function pinManyForResult(result, callbacks) {
+	if (pinner && typeof pinner.forResult === "function") {
+		const pinned = pinner.forResult(result, callbacks);
+		if (pinned) return pinned;
+	}
+	return pinManyToCurrentCaller(callbacks);
+}
+
+/**
+ * Count a callback about to be deferred as work of the `run()` / `scope()` the registering code runs in, where the
+ * runtime counts it this way (the live runtime; the async runtime counts it through its async hooks). The run's copy of
+ * the instance lives until all such work has finished (see `holdRunWork` in `helpers/flow-stores`).
+ *
+ * @returns {Function|null} What releases the count, once (a second call does nothing), or null when nothing was
+ *   counted: no run, or a runtime that counts some other way.
+ * @internal
+ */
+export function holdForCurrentFlow() {
+	if (!pinner || typeof pinner.hold !== "function") return null;
+	return pinner.hold();
+}
+
+/**
+ * The run record of the `run()` / `scope()` the registering code runs in, for work that begins later than its callback
+ * is registered (an observer is work from its first `observe()` until it is disconnected): count it with `holdRunWork`
+ * in `helpers/flow-stores` once it begins. Only where the runtime counts work this way (the live runtime).
+ *
+ * @returns {object|null} The record, or null: no run, or a runtime that counts some other way.
+ * @internal
+ */
+export function recordOfCurrentFlow() {
+	if (!pinner || typeof pinner.record !== "function") return null;
+	return pinner.record();
+}
+
+/**
+ * A callback that releases a count {@link holdForCurrentFlow} took once it has run, for a boundary that calls its
+ * callback once (a timer, a microtask, a Node callback).
+ *
+ * @param {Function} callback - The callback, pinned already.
+ * @param {Function} release - The release.
+ * @returns {Function} The callback, releasing the count after it runs, whether it returns or throws.
+ * @internal
+ */
+export function releaseAfterCall(callback, release) {
+	return function slothlet_releasedAfterCall(...args) {
+		try {
+			return FunctionMethods.apply(callback, this, args);
+		} finally {
+			release();
+		}
+	};
+}
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+/**
+ * Functions the framework itself pinned to a caller: a `pin` / `pin.caller` wrapper, a hook
+ * handler the hook manager pinned to its module, and the handler {@link runtime_selfHookHandler} built over
+ * one. Recognised by membership only, never by a property such as `____slothletOriginal`: module code can put
+ * any property on its own function, and a handler that passed for pinned would run unpinned, as whichever
+ * caller triggered it (#625).
+ * @type {WeakSet<Function>}
+ * @private
+ */
+const CALLER_LOCKED = new WeakSet();
+
+/**
+ * Record a function the framework pinned to a caller (see {@link isCallerLocked}).
+ *
+ * @param {Function} fn - The pinned function.
+ * @returns {Function} `fn`.
+ * @internal
+ *
+ * @example
+ * return markCallerLocked(locked);
+ */
+function markCallerLocked(fn) {
+	WeakSetMethods.add(CALLER_LOCKED, fn);
+	// The framework reads the original back (async detection for a pinned hook), so it is fixed once pinned (#625).
+	if (Objects.hasOwn(fn, "____slothletOriginal")) {
+		Objects.defineProperty(fn, "____slothletOriginal", {
+			__proto__: null,
+			value: fn.____slothletOriginal,
+			writable: false,
+			enumerable: true,
+			configurable: false
+		});
+	}
+	return fn;
+}
+
+/**
+ * Whether the framework pinned `fn` to a caller ({@link markCallerLocked}).
+ *
+ * @param {*} fn - Candidate.
+ * @returns {boolean} True for a function the framework pinned.
+ * @internal
+ *
+ * @example
+ * if (isCallerLocked(handler)) return handler;
+ */
+function isCallerLocked(fn) {
+	return typeof fn === "function" && WeakSetMethods.has(CALLER_LOCKED, fn);
+}
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`). Each file is given
+ * what it uses.
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (
+		!mayTakeInternals(consumer, [
+			"lib/builders/api_builder",
+			"lib/handlers/context-live",
+			"lib/handlers/hook-manager",
+			"lib/handlers/unified-wrapper/run",
+			"lib/handlers/unified-wrapper/views"
+		])
+	)
+		throw ownBindingsRefusal("lib/helpers/caller-pinning", import.meta.url);
+	if (consumer === "lib/handlers/context-live") return { setApiCallerPinner };
+	if (consumer === "lib/builders/api_builder") return { markCallerLocked };
+	if (consumer === "lib/handlers/unified-wrapper/run") return { isCallerLocked };
+	return { markCallerLocked, isCallerLocked };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof setApiCallerPinner} */
+const guarded_setApiCallerPinner = guardInternal(setApiCallerPinner, "setApiCallerPinner", import.meta.url);
+export { guarded_setApiCallerPinner as setApiCallerPinner };

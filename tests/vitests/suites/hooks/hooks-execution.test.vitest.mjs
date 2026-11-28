@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/hooks/hooks-execution.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/hooks/hooks-execution.test.vitest.mjs
  *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:07-07:00 (1791090907)
+ *	@Last modified time: 2026-11-28T04:31:55-08:00 (1795869115)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,7 +54,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		const fullConfig = {
 			...config,
 			base: TEST_DIRS.API_TEST,
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		};
 		api = await slothlet(fullConfig);
 	});
