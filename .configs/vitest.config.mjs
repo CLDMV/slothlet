@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T01:35:52-08:00 (1795599352)
+ *	@Last modified time: 2026-11-28T03:06:22-08:00 (1795863982)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -129,6 +129,9 @@ export default defineConfig({
 		exclude: ["node_modules"],
 		environment: "node",
 		globals: true,
+		// Fixture module packages resolve slothlet from their own node_modules, as an installed module does; the links are
+		// made here, once per run, and the run stops with the package named when one still cannot resolve it.
+		globalSetup: ["./tests/vitests/setup/fixture-packages.mjs"],
 		setupFiles: ["./tests/vitests/setup/vitest.setup.mjs"],
 		// `test.nodeOptions` is not a Vitest option (it passes nothing to workers); `execArgv` is (#710).
 		execArgv: workerExecArgv,
