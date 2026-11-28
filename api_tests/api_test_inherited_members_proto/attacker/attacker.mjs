@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_inherited_members_proto/attacker/attacker.mjs
+ *	@Filename: api_tests/api_test_inherited_members_proto/attacker/attacker.mjs
  *	@Date: 2026-11-04T22:51:34-08:00 (1793861494)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T22:52:46-08:00 (1793861566)
+ *	@Last modified time: 2026-11-28T04:28:20-08:00 (1795868900)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

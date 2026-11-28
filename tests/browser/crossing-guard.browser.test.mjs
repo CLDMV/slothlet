@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/browser/crossing-guard.browser.test.mjs
+ *	@Filename: tests/browser/crossing-guard.browser.test.mjs
  *	@Date: 2026-11-10T20:53:39-08:00 (1794372819)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:03-08:00 (1794882483)
+ *	@Last modified time: 2026-11-28T04:30:49-08:00 (1795869049)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/browser/permissions-baseline-no-csp.browser.test.mjs
+ *	@Filename: tests/browser/permissions-baseline-no-csp.browser.test.mjs
  *	@Date: 2026-11-16T03:00:00-08:00 (1794826800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:01-08:00 (1794882541)
+ *	@Last modified time: 2026-11-28T04:30:51-08:00 (1795869051)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

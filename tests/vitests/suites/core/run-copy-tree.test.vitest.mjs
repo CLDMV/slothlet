@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/run-copy-tree.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/run-copy-tree.test.vitest.mjs
  *	@Date: 2026-11-17T21:18:28-08:00 (1794979108)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:25:21-08:00 (1794979521)
+ *	@Last modified time: 2026-11-28T04:31:42-08:00 (1795869102)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

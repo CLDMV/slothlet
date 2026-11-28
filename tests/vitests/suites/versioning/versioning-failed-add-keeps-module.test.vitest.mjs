@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/versioning/versioning-failed-add-keeps-module.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/versioning/versioning-failed-add-keeps-module.test.vitest.mjs
  *	@Date: 2026-11-25T08:35:48-08:00 (1795624548)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T09:10:30-08:00 (1795626630)
+ *	@Last modified time: 2026-11-28T04:33:16-08:00 (1795869196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

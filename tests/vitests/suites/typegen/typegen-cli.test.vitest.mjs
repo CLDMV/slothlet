@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typegen/typegen-cli.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typegen/typegen-cli.test.vitest.mjs
  *	@Date: 2026-05-12T19:54:32-07:00 (1778640872)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:23-07:00 (1791090923)
+ *	@Last modified time: 2026-11-28T04:33:07-08:00 (1795869187)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

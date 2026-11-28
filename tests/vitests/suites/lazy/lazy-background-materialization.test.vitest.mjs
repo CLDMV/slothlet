@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/lazy/lazy-background-materialization.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/lazy/lazy-background-materialization.test.vitest.mjs
  *	@Date: 2026-02-14T08:43:03-08:00 (1771087383)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T16:10:25-08:00 (1795133425)
+ *	@Last modified time: 2026-11-28T04:31:59-08:00 (1795869119)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

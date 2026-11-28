@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/metadata/metadata-collision-modes.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/metadata/metadata-collision-modes.test.vitest.mjs
  *	@Date: 2026-01-25T20:07:51-08:00 (1769400471)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:27-08:00 (1794882567)
+ *	@Last modified time: 2026-11-28T04:32:04-08:00 (1795869124)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

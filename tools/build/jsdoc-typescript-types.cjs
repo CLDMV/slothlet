@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/build/jsdoc-typescript-types.cjs
+ *	@Filename: tools/build/jsdoc-typescript-types.cjs
  *	@Date: 2026-05-31T08:04:06-07:00 (1780239846)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:50-07:00 (1791091730)
+ *	@Last modified time: 2026-11-28T04:33:18-08:00 (1795869198)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

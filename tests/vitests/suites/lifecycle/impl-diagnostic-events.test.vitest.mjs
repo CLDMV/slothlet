@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/lifecycle/impl-diagnostic-events.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/lifecycle/impl-diagnostic-events.test.vitest.mjs
  *	@Date: 2026-07-10T12:00:00-07:00 (1783710000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
+ *	@Last modified time: 2026-11-28T04:32:02-08:00 (1795869122)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

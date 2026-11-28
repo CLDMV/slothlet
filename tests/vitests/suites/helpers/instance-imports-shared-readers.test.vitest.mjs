@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/instance-imports-shared-readers.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/instance-imports-shared-readers.test.vitest.mjs
  *	@Date: 2026-11-25T01:27:24-08:00 (1795598844)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T01:41:36-08:00 (1795599696)
+ *	@Last modified time: 2026-11-28T04:31:49-08:00 (1795869109)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

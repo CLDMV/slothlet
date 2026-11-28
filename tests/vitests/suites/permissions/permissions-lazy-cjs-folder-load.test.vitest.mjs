@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-lazy-cjs-folder-load.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-lazy-cjs-folder-load.test.vitest.mjs
  *	@Date: 2026-11-15T09:36:41-08:00 (1794764201)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:56-08:00 (1794882596)
+ *	@Last modified time: 2026-11-28T04:32:31-08:00 (1795869151)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

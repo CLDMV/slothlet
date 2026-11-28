@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/pattern-globstar-everywhere.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/pattern-globstar-everywhere.test.vitest.mjs
  *	@Date: 2026-11-11T21:01:12-08:00 (1794459672)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:09-08:00 (1794882549)
+ *	@Last modified time: 2026-11-28T04:31:50-08:00 (1795869110)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

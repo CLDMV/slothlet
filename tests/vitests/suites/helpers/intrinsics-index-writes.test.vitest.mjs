@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/intrinsics-index-writes.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/intrinsics-index-writes.test.vitest.mjs
  *	@Date: 2026-11-17T07:55:00-08:00 (1794930900)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T08:17:06-08:00 (1794932226)
+ *	@Last modified time: 2026-11-28T04:31:50-08:00 (1795869110)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

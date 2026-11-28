@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/build/build-subpackages.mjs
+ *	@Filename: tools/build/build-subpackages.mjs
  *	@Date: 2026-06-08T23:00:20-07:00 (1780984820)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:30:02-08:00 (1794875402)
+ *	@Last modified time: 2026-11-28T04:33:18-08:00 (1795869198)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

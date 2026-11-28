@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/lifecycle/drain-quad-prefix.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/lifecycle/drain-quad-prefix.test.vitest.mjs
  *	@Date: 2026-06-18T00:00:00+00:00 (1781740800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-11-28T04:32:02-08:00 (1795869122)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

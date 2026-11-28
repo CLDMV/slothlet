@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/handlers/frame-placement.mjs
+ *	@Filename: src/lib/handlers/frame-placement.mjs
  *	@Date: 2026-10-17T00:00:00-07:00 (1792220400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-28T03:50:03-08:00 (1795866603)
+ *	@Last modified time: 2026-11-28T04:30:37-08:00 (1795869037)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

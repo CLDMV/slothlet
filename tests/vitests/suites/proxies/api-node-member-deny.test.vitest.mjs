@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/proxies/api-node-member-deny.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/proxies/api-node-member-deny.test.vitest.mjs
  *	@Date: 2026-11-13T17:28:41-08:00 (1794619721)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:17-08:00 (1794882617)
+ *	@Last modified time: 2026-11-28T04:32:51-08:00 (1795869171)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-lazy-collision-materialization.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-lazy-collision-materialization.test.vitest.mjs
  *	@Date: 2026-09-09T19:03:16-07:00 (1789005796)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:19-07:00 (1791091699)
+ *	@Last modified time: 2026-11-28T04:31:10-08:00 (1795869070)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

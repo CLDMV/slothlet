@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/captured-builtins-child.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/captured-builtins-child.test.vitest.mjs
  *	@Date: 2026-11-13T01:04:06-08:00 (1794560646)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:15-08:00 (1794882615)
+ *	@Last modified time: 2026-11-28T04:32:11-08:00 (1795869131)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-path-validation.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-path-validation.test.vitest.mjs
  *	@Date: 2026-02-26T06:59:00-08:00 (1772117940)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:28-08:00 (1794882568)
+ *	@Last modified time: 2026-11-28T04:31:10-08:00 (1795869070)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

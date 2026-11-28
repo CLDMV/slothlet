@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/smart_flatten/api_smart_flatten_bad_module/bad.mjs
+ *	@Filename: api_tests/smart_flatten/api_smart_flatten_bad_module/bad.mjs
  *	@Date: 2026-03-02T00:00:00-08:00 (1772438400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:49-07:00 (1791090889)
+ *	@Last modified time: 2026-11-28T04:30:21-08:00 (1795869021)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

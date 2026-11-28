@@ -1,7 +1,7 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/slothlet.mjs
+ *	@Filename: src/slothlet.mjs
  *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>

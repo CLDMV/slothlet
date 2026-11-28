@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/resolve-from-caller.mjs
+ *	@Filename: src/lib/helpers/resolve-from-caller.mjs
  *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:44:44-08:00 (1795635884)
+ *	@Last modified time: 2026-11-28T04:30:45-08:00 (1795869045)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

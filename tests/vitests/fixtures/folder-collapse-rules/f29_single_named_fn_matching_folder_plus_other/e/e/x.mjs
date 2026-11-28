@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/fixtures/folder-collapse-rules/f29_single_named_fn_matching_folder_plus_other/e/e/x.mjs
+ *	@Filename: tests/vitests/fixtures/folder-collapse-rules/f29_single_named_fn_matching_folder_plus_other/e/e/x.mjs
  *	@Date: 2026-11-13T00:23:16-08:00 (1794558196)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T00:30:08-08:00 (1794558608)
+ *	@Last modified time: 2026-11-28T04:31:00-08:00 (1795869060)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

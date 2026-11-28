@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/fixtures/folder-collapse-rules/f05_index/e/e/index.mjs
+ *	@Filename: tests/vitests/fixtures/folder-collapse-rules/f05_index/e/e/index.mjs
  *	@Date: 2026-11-13T00:23:16-08:00 (1794558196)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T00:30:06-08:00 (1794558606)
+ *	@Last modified time: 2026-11-28T04:30:58-08:00 (1795869058)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

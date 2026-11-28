@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_mixed/interop/interop-esm.mjs
+ *	@Filename: api_tests/api_test_mixed/interop/interop-esm.mjs
  *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:39-07:00 (1791090879)
+ *	@Last modified time: 2026-11-28T04:28:52-08:00 (1795868932)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

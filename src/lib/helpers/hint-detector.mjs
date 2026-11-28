@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/hint-detector.mjs
+ *	@Filename: src/lib/helpers/hint-detector.mjs
  *	@Date: 2026-01-20T20:25:54-08:00 (1768969554)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
+ *	@Last modified time: 2026-11-28T04:30:43-08:00 (1795869043)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

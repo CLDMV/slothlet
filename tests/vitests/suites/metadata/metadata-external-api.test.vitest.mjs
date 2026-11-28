@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/metadata/metadata-external-api.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/metadata/metadata-external-api.test.vitest.mjs
  *	@Date: 2026-01-25T14:50:54-08:00 (1769381454)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:09-08:00 (1794882609)
+ *	@Last modified time: 2026-11-28T04:32:05-08:00 (1795869125)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

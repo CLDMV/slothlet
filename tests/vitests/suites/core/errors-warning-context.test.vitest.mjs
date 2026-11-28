@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/errors-warning-context.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/errors-warning-context.test.vitest.mjs
  *	@Date: 2026-03-03T16:00:00-08:00 (1772582400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
+ *	@Last modified time: 2026-11-28T04:31:37-08:00 (1795869097)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

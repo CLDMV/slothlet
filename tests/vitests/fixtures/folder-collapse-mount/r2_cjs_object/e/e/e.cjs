@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/fixtures/folder-collapse-mount/r2_cjs_object/e/e/e.cjs
+ *	@Filename: tests/vitests/fixtures/folder-collapse-mount/r2_cjs_object/e/e/e.cjs
  *	@Date: 2026-11-13T16:59:41-08:00 (1794617981)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T17:24:39-08:00 (1794619479)
+ *	@Last modified time: 2026-11-28T04:30:56-08:00 (1795869056)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

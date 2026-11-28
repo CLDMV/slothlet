@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/ownership/ownership-replacement.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/ownership/ownership-replacement.test.vitest.mjs
  *	@Date: 2026-01-15T14:07:12-08:00 (1768514832)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:31-08:00 (1794882571)
+ *	@Last modified time: 2026-11-28T04:32:10-08:00 (1795869130)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

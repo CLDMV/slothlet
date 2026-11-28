@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/runtime/self-assign-reach.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/runtime/self-assign-reach.test.vitest.mjs
  *	@Date: 2026-10-18T18:47:29-07:00 (1792374449)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T08:09:11-08:00 (1795536551)
+ *	@Last modified time: 2026-11-28T04:33:00-08:00 (1795869180)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

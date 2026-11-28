@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/runtime/self-member-cycle.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/runtime/self-member-cycle.test.vitest.mjs
  *	@Date: 2026-11-01T17:14:13-08:00 (1793582053)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:31:02-08:00 (1794882662)
+ *	@Last modified time: 2026-11-28T04:33:01-08:00 (1795869181)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-error-invalid-rule.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-error-invalid-rule.test.vitest.mjs
  *	@Date: 2026-04-14T17:20:03-07:00 (1776212403)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:27-08:00 (1794882627)
+ *	@Last modified time: 2026-11-28T04:32:25-08:00 (1795869145)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

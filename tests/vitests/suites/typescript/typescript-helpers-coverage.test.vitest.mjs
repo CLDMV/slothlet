@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/typescript-helpers-coverage.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/typescript-helpers-coverage.test.vitest.mjs
  *	@Date: 2026-05-12T19:35:50-07:00 (1778639750)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:37-08:00 (1794874657)
+ *	@Last modified time: 2026-11-28T04:33:08-08:00 (1795869188)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

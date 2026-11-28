@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/dev/inspect-api-structure.mjs
+ *	@Filename: tools/dev/inspect-api-structure.mjs
  *	@Date: 2025-10-23T12:08:52-07:00 (1761246532)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:47-08:00 (1794882647)
+ *	@Last modified time: 2026-11-28T04:33:19-08:00 (1795869199)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

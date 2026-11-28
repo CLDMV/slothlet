@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/browser/schedule-macrotask-channel-caller.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/browser/schedule-macrotask-channel-caller.test.vitest.mjs
  *	@Date: 2026-11-25T08:39:50-08:00 (1795624790)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T09:17:53-08:00 (1795627073)
+ *	@Last modified time: 2026-11-28T04:31:17-08:00 (1795869077)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

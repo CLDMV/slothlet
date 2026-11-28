@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-hook-gating.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-hook-gating.test.vitest.mjs
  *	@Date: 2026-06-01T23:15:57-07:00 (1780380957)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:31-08:00 (1794882631)
+ *	@Last modified time: 2026-11-28T04:32:29-08:00 (1795869149)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

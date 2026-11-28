@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-host-flow-definer.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-host-flow-definer.test.vitest.mjs
  *	@Date: 2026-11-11T23:18:21-08:00 (1794467901)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:54-08:00 (1794882594)
+ *	@Last modified time: 2026-11-28T04:32:29-08:00 (1795869149)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/proxies/node-closed-shape-plain-js.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/proxies/node-closed-shape-plain-js.test.vitest.mjs
  *	@Date: 2026-11-25T07:58:11-08:00 (1795622291)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T08:10:42-08:00 (1795623042)
+ *	@Last modified time: 2026-11-28T04:32:55-08:00 (1795869175)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

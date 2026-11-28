@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/versioning/version-manager-arms.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/versioning/version-manager-arms.test.vitest.mjs
  *	@Date: 2026-11-25T01:38:51-08:00 (1795599531)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T01:55:17-08:00 (1795600517)
+ *	@Last modified time: 2026-11-28T04:33:15-08:00 (1795869195)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

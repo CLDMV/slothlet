@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/instance-imports-vite-plugin-hooks.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/instance-imports-vite-plugin-hooks.test.vitest.mjs
  *	@Date: 2026-11-25T01:24:50-08:00 (1795598690)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T01:41:37-08:00 (1795599697)
+ *	@Last modified time: 2026-11-28T04:31:49-08:00 (1795869109)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

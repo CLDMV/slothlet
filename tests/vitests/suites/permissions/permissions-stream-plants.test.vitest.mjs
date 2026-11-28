@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-stream-plants.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-stream-plants.test.vitest.mjs
  *	@Date: 2026-11-04T19:16:07-08:00 (1793848567)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T10:24:28-08:00 (1795544668)
+ *	@Last modified time: 2026-11-28T04:32:42-08:00 (1795869162)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

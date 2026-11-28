@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/handlers/hook-manager.mjs
+ *	@Filename: src/lib/handlers/hook-manager.mjs
  *	@Date: 2026-01-29T22:04:09-08:00 (1769753049)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:44:32-08:00 (1795635872)
+ *	@Last modified time: 2026-11-28T04:30:37-08:00 (1795869037)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

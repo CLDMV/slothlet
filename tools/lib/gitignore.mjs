@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/lib/gitignore.mjs
+ *	@Filename: tools/lib/gitignore.mjs
  *	@Date: 2026-09-27T23:12:05-07:00 (1790575925)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:51-07:00 (1791091731)
+ *	@Last modified time: 2026-11-28T04:33:19-08:00 (1795869199)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

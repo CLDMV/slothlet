@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/proxies/node-close-keeps-accessors.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/proxies/node-close-keeps-accessors.test.vitest.mjs
  *	@Date: 2026-11-25T03:03:06-08:00 (1795604586)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T03:26:43-08:00 (1795606003)
+ *	@Last modified time: 2026-11-28T04:32:54-08:00 (1795869174)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
