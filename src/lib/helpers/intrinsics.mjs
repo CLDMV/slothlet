@@ -957,6 +957,17 @@ export const isNaN = globalThis.isNaN;
 export const NativeProcess = globalThis.process;
 
 /**
+ * vitest's worker global, as it was when slothlet loaded, or undefined outside vitest: what the permission baseline
+ * reads to tell whether it runs under vitest.
+ * @internal
+ * @example
+ * import { VitestWorker } from "#helpers/intrinsics";
+ * const underVitest = (VitestWorker ?? null) !== null;
+ * @type {object|undefined}
+ */
+export const VitestWorker = globalThis.__vitest_worker__;
+
+/**
  * The functions of `process` slothlet calls (`cwd`, `getBuiltinModule`, `nextTick`, `binding`, `kill`, `getuid`,
  * `exit`, `send`), as they were when slothlet loaded, each called on that `process`. A function the host lacks is
  * absent: in a browser the object is empty.

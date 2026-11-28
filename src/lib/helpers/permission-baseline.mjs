@@ -47,7 +47,7 @@
 
 import { translate } from "#i18n";
 import { asyncStoreExposed, asyncStoreProbeAvailable } from "#helpers/async-store-slot";
-import { ArrayMethods, Blob, EvalError, listPush, NativeFunction, Reflect, Symbols, URL, URLs } from "#helpers/intrinsics";
+import { ArrayMethods, Blob, EvalError, listPush, NativeFunction, Reflect, Symbols, URL, URLs, VitestWorker } from "#helpers/intrinsics";
 
 /**
  * The global key of the record of who loaded each file vite transformed (#714), as `helpers/instance-imports` names it.
@@ -69,7 +69,7 @@ const REVOKE_OBJECT_URL = URLs.revokeObjectURL;
  * @type {object|null}
  * @private
  */
-const VITEST_WORKER = globalThis.__vitest_worker__ ?? null;
+const VITEST_WORKER = VitestWorker ?? null;
 
 /**
  * Whether making code from a string is refused here, tried with the `Function` constructor slothlet loaded with.

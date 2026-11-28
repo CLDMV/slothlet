@@ -16,7 +16,8 @@
 /**
  * @fileoverview The permission baseline's own probes on hosts other than the one running the suite: a `Function` that
  * refuses code from strings, a host with no `Blob` or `URL.createObjectURL`, a Node older than 24 or no Node version at
- * all, no `node:async_hooks` to probe, no vite records registry, and no vitest worker global.
+ * all, no `node:async_hooks` to probe, no vite records registry, and no vitest worker global (checked in a plain node
+ * child process, which never had one).
  *
  * @description
  * The module reads these facts once, as it loads, from `helpers/intrinsics` and `helpers/async-store-slot`. Each test
@@ -28,6 +29,27 @@
  */
 
 import { describe, it, expect, afterEach, vi } from "vitest";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+/** The repository root, where `#helpers/*` resolves from. */
+const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
+
+/**
+ * The export conditions this process resolves with, for a child process to use the same ones (`src/` in an ordinary
+ * run, `dist/` in a run against the build).
+ * @returns {string[]} The `--conditions` flags.
+ */
+function conditionFlags() {
+	const flags = [];
+	const argv = process.execArgv;
+	for (let index = 0; index < argv.length; index++) {
+		const arg = argv[index];
+		if (arg.startsWith("--conditions=") || arg.startsWith("-C=")) flags.push(arg);
+		else if ((arg === "--conditions" || arg === "-C") && index + 1 < argv.length) flags.push(arg, argv[++index]);
+	}
+	return flags;
+}
 
 /**
  * Load a fresh `helpers/permission-baseline` with some of what `helpers/intrinsics` exports replaced.
@@ -177,18 +199,24 @@ describe("permission baseline > the Node checks on other hosts", () => {
 		}
 	});
 
-	it("outside vitest (no worker global as it loads), vitest-plugin is not a check", async () => {
-		vi.resetModules();
-		const mod = await import("#helpers/permission-baseline").then(async () => {
-			vi.resetModules();
-			vi.stubGlobal("__vitest_worker__", undefined);
-			try {
-				return await import("#helpers/permission-baseline");
-			} finally {
-				vi.unstubAllGlobals();
-			}
-		});
-		const { checks } = await mod.runBaseline("node", undefined, "live");
+	it("with no vitest worker as it loads, vitest-plugin is not a check", async () => {
+		const { runBaseline } = await loadWith(() => ({ VitestWorker: undefined }));
+		const { checks } = await runBaseline("node", undefined, "live");
 		expect(checks).toEqual([]);
+	});
+
+	it("outside vitest (no worker global as it loads), vitest-plugin is not a check", () => {
+		// A plain node process that never had a vitest worker loads the module and runs the checks: stubbing the worker
+		// global in this process instead breaks vitest's own task updates while the import is awaited (#1036).
+		const script = [
+			'const { runBaseline } = await import("#helpers/permission-baseline");',
+			'const { checks } = await runBaseline("node", undefined, "live");',
+			"process.stdout.write(JSON.stringify({ worker: typeof globalThis.__vitest_worker__, checks }));"
+		].join("\n");
+		const output = execFileSync(process.execPath, [...conditionFlags(), "--input-type=module", "--eval", script], {
+			cwd: REPO_ROOT,
+			encoding: "utf8"
+		});
+		expect(JSON.parse(output)).toEqual({ worker: "undefined", checks: [] });
 	});
 });
