@@ -3624,7 +3624,10 @@ function runtime_runsOwnerTransform(slothlet, frame) {
  * or one of the frames of its file that called it, is the leaf's function itself, starting exactly where the leaf's
  * export is declared. A function written inside the export and run later (a closure it returned) has no such frame
  * under it: it starts somewhere else, and nothing of the leaf's is on the stack between it and whoever runs it.
- * Where the engine does not say where a frame's function starts, the answer is no.
+ * Where the engine does not say where a frame's function starts, the answer is no. A generator function's body, an
+ * async one's included, never runs when the function is called: the call only makes the generator, and the body runs
+ * when whoever holds it steps it. So a frame of such a leaf's body is a step of a generator its call handed out, code
+ * the leaf made run by the stepper, and the answer is no: the stepper is held to as well, as for a closure it returned.
  * @param {object} leaf - The leaf.
  * @param {{lineNumber?: number|null, columnNumber?: number|null, enclosingLine?: number|null, enclosingColumn?: number|null, path: string, line: string}} frame - The frame.
  * @param {Array<object>} outer - The frames further out, innermost first.
@@ -3632,6 +3635,7 @@ function runtime_runsOwnerTransform(slothlet, frame) {
  * @private
  */
 function runtime_enteredAsItself(leaf, frame, outer) {
+	if (util.types.isGeneratorFunction(leaf.____slothletInternal?.impl)) return false;
 	const filePath = leaf.____slothletInternal?.filePath;
 	const source = filePath ? runtime_sourceOf(filePath, frame) : null;
 	const range = source ? runtime_leafRange(leaf, source) : null;
