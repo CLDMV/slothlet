@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-28T04:30:47-08:00 (1795869047)
+ *	@Last modified time: 2026-11-28T08:40:45-08:00 (1795884045)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1889,19 +1889,19 @@ class Slothlet {
 		enableFunctionSourcePatching();
 
 		// Built-in capabilities (code from strings, `data:`/`blob:` imports, module hooks): refused to module code while
-		// the permission system is on, unless a rule opens one. The entry points are wrapped while any instance with a
-		// permission config that can be on is up, and unwrapped with the last.
+		// the permission system is on, unless a rule opens one. The entry points are wrapped while any instance is up, in
+		// every permission mode, and unwrapped with the last: with the permission system off or disabled nothing is
+		// refused, but code a module compiles is still marked as the module's, so the leaf-file and internal-file import
+		// refusals, which hold in every mode, hold for it too, whoever calls it and whatever file name it is compiled under.
 		// A reload loads again under a new instanceID: the check held under the previous one goes once the new one is
 		// registered, so the instance is checked once per call and the entry points are not unwrapped in between.
 		const previousCapabilityHolder = this.#capabilityHolder;
 		this.#capabilityHolder = null;
-		if (this.config?.permissions && this.config.permissions.mode !== "disabled") {
-			const instanceID = this.instanceID;
-			registerCapabilityCheck(instanceID, (name, route, importer, filename, runnerCompile) =>
-				assertCapability(this, name, route, this.#importsAsOwnFile(importer) ? importer : null, filename, runnerCompile)
-			);
-			this.#capabilityHolder = instanceID;
-		}
+		const instanceID = this.instanceID;
+		registerCapabilityCheck(instanceID, (name, route, importer, filename, runnerCompile) =>
+			assertCapability(this, name, route, this.#importsAsOwnFile(importer) ? importer : null, filename, runnerCompile)
+		);
+		this.#capabilityHolder = instanceID;
 		if (previousCapabilityHolder !== null && previousCapabilityHolder !== this.#capabilityHolder) {
 			releaseCapabilityCheck(previousCapabilityHolder);
 		}

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-28T04:28:22-08:00 (1795868902)
+ *	@Last modified time: 2026-11-28T04:52:36-08:00 (1795870356)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,6 +41,7 @@ export const ROUTES = [
 export const TARGETS = ["internal", "internalSpecifier", "leaf"];
 const PERMISSIONS = {
 	off: undefined,
+	disabled: "disabled",
 	open: { policy: "allow", rules: [{ caller: "importer.**", target: "capability:code", effect: "allow" }] },
 	closed: { policy: "allow" }
 };
