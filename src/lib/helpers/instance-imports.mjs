@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-27T15:01:34-08:00 (1795820494)
+ *	@Last modified time: 2026-11-28T03:50:07-08:00 (1795866607)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -124,6 +124,7 @@ import {
 	WeakSetMethods
 } from "#helpers/intrinsics";
 import { readStack, stackText, unreadError } from "#helpers/stack-read";
+import { fromQueryTag, queryTag } from "#helpers/query-tag";
 
 /**
  * Query parameters copied from a leaf onto its helpers: the instance only. The leaf's `module`
@@ -3227,7 +3228,8 @@ export function propagateInstanceQuery(specifier, parent, child) {
 	if (URLSearchParamsMethods.get(parentParams, HELPERS_PARAM) === HELPERS_PER_MODULE) {
 		URLSearchParamsMethods.set(childParams, HELPERS_PARAM, HELPERS_PER_MODULE);
 		const loadedFor = URLSearchParamsMethods.get(parentParams, HELPERS_FOR_PARAM);
-		URLSearchParamsMethods.set(childParams, HELPERS_FOR_PARAM, loadedFor ?? helperImporterPath(parentBase));
+		// The api file is written as a tag, escaped once more than its value (#1043); a parent's is copied as it is.
+		URLSearchParamsMethods.set(childParams, HELPERS_FOR_PARAM, loadedFor ?? queryTag(helperImporterPath(parentBase)));
 		const mount =
 			loadedFor === null
 				? URLSearchParamsMethods.get(parentParams, "module")
@@ -4076,7 +4078,7 @@ function markScopedRequire(specifier, context, result, active) {
 	// Inside the copies of one api file (`helpers: "module"`), the ES module is that file's copy too.
 	if (active.importer) {
 		URLSearchParamsMethods.set(query, HELPERS_PARAM, HELPERS_PER_MODULE);
-		URLSearchParamsMethods.set(query, HELPERS_FOR_PARAM, active.importer);
+		URLSearchParamsMethods.set(query, HELPERS_FOR_PARAM, queryTag(active.importer));
 		if (active.mount) URLSearchParamsMethods.set(query, HELPERS_MOUNT_PARAM, active.mount);
 	}
 	URLSearchParamsMethods.set(query, REQUIRE_PARAM, "1");
@@ -4169,7 +4171,7 @@ function wrapperSource(filePath, instanceID, source, importer, mount, entry) {
  */
 function helperCopyImporter(params) {
 	return URLSearchParamsMethods.get(params, HELPERS_PARAM) === HELPERS_PER_MODULE
-		? URLSearchParamsMethods.get(params, HELPERS_FOR_PARAM)
+		? fromQueryTag(URLSearchParamsMethods.get(params, HELPERS_FOR_PARAM))
 		: null;
 }
 

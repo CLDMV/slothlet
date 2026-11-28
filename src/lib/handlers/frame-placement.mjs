@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-28T02:38:33-08:00 (1795862313)
+ *	@Last modified time: 2026-11-28T03:50:03-08:00 (1795866603)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -574,8 +574,8 @@ function runtime_frameImporterTag(line) {
 		}
 	};
 	const mount = RegExpMethods.exec(/[?&]slothlet_mount=([^&#:)\s]+)/, line)?.[1];
-	// The mount is a copy of the leaf's `module=` tag, written escaped once more than the tag (#1042).
-	return { path: toComparablePath(decode(tag)), mount: mount ? fromQueryTag(decode(mount)) : null };
+	// Both are written escaped once more than their tags (#1042, #1043).
+	return { path: toComparablePath(fromQueryTag(decode(tag))), mount: mount ? fromQueryTag(decode(mount)) : null };
 }
 
 /**

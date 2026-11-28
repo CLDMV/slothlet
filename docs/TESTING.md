@@ -84,7 +84,7 @@ Slothlet also detects the misattribution scenario itself: booting under a vitest
 
 A leaf of a module mounted with `api.slothlet.api.add()` loads under `?slothlet_instance=…&module=<moduleID>`. `@vitest/coverage-v8` decodes the whole URL once before it remaps the script, and vite then takes the last `/` of that id as the file's name. If the moduleID still had a `/` after that decode (a package name such as `@scope/pkg`), the leaf's coverage would land on a file named after the end of the moduleID (`pkg`), which does not exist, and the provider would drop it: the leaf reads 0% whichever fix above is used.
 
-From 4.0.0 slothlet writes the moduleID escaped twice, so one decode leaves `%2F` and never a `/`, and a mounted leaf attributes the same as a leaf of the root module. Earlier versions could leave the `/` in: on 3.22.1 a mount named after its package read 0% with inlining, with the `import` hook and externalized alike (#1042). On those versions, strip the query in a custom coverage provider before the provider converts the script, or mount under a moduleID without a `/`.
+From 4.0.0 slothlet writes the moduleID escaped twice, so one decode leaves `%2F` and never a `/`, and a mounted leaf attributes the same as a leaf of the root module. The same holds for a helper copy under `helpers: "module"`, whose URL names the api file it is loaded for (`slothlet_for=`). Earlier versions could leave the `/` in: on 3.22.1 a mount named after its package read 0% with inlining, with the `import` hook and externalized alike (#1042). On those versions, strip the query in a custom coverage provider before the provider converts the script, or mount under a moduleID without a `/`.
 
 ## TypeScript leaves
 

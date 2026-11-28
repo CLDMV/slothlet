@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T02:14:51-08:00 (1795601691)
+ *	@Last modified time: 2026-11-28T03:51:13-08:00 (1795866673)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,17 +61,18 @@ describe("instance-imports > the tags a resolved import keeps", () => {
 		// The importer is the api file itself: the copy names it, and the api file's mount.
 		const leaf = "file:///app/api/tally/tally.mjs?slothlet_instance=abc&module=m1&slothlet_helpers=module";
 		expect(new URL(propagateInstanceQuery("../lib/s.mjs", leaf, "file:///app/api/lib/s.mjs")).searchParams.get("slothlet_for")).toBe(
-			"/app/api/tally/tally.mjs"
+			// Written as a tag, escaped once as its value, so a decode of the whole URL leaves no `/` (#1043).
+			"%2Fapp%2Fapi%2Ftally%2Ftally.mjs"
 		);
 		expect(new URL(propagateInstanceQuery("../lib/s.mjs", leaf, "file:///app/api/lib/s.mjs")).searchParams.get("slothlet_mount")).toBe(
 			"m1"
 		);
 		// The importer is a helper copy loaded for an api file: the copy names that api file and its mount.
 		const helper =
-			"file:///app/api/lib/a.mjs?slothlet_instance=abc&slothlet_helpers=module&slothlet_for=%2Fapp%2Fapi%2Fx.mjs&slothlet_mount=m2";
+			"file:///app/api/lib/a.mjs?slothlet_instance=abc&slothlet_helpers=module&slothlet_for=%252Fapp%252Fapi%252Fx.mjs&slothlet_mount=m2";
 		const out = new URL(propagateInstanceQuery("./b.mjs", helper, "file:///app/api/lib/b.mjs")).searchParams;
 		expect(out.get("slothlet_helpers")).toBe("module");
-		expect(out.get("slothlet_for")).toBe("/app/api/x.mjs");
+		expect(out.get("slothlet_for")).toBe("%2Fapp%2Fapi%2Fx.mjs");
 		expect(out.get("slothlet_mount")).toBe("m2");
 		// A helper copy whose api file has no mount names none.
 		const unmounted = "file:///app/api/lib/a.mjs?slothlet_instance=abc&slothlet_helpers=module&slothlet_for=%2Fapp%2Fapi%2Fx.mjs";
