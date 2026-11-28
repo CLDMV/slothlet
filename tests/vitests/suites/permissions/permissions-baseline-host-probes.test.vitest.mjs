@@ -199,6 +199,12 @@ describe("permission baseline > the Node checks on other hosts", () => {
 		}
 	});
 
+	it("with no vitest worker as it loads, vitest-plugin is not a check", async () => {
+		const { runBaseline } = await loadWith(() => ({ VitestWorker: undefined }));
+		const { checks } = await runBaseline("node", undefined, "live");
+		expect(checks).toEqual([]);
+	});
+
 	it("outside vitest (no worker global as it loads), vitest-plugin is not a check", () => {
 		// A plain node process that never had a vitest worker loads the module and runs the checks: stubbing the worker
 		// global in this process instead breaks vitest's own task updates while the import is awaited (#1036).
