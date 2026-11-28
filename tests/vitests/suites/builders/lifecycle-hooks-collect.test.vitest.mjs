@@ -276,9 +276,9 @@ describe.each(["eager", "lazy"])("collectLifecycleHooks — routine system walk 
 		});
 		// The reference data is merged onto the root and deeply reachable as plain data.
 		expect(api.refdata.nested.inner.deep).toBe("x");
-		// The `____`-prefixed export is an own enumerable key on the leaf's wrapper; the sibling
+		// The `__`-prefixed export is an own enumerable key on the leaf's wrapper; the sibling
 		// `ping` leaf stays callable regardless.
-		expect(api.funky.thing.____weird).toBeDefined();
+		expect(api.funky.thing.__weird).toBeDefined();
 		// Eager returns synchronously; lazy returns a Promise (call may materialize first) —
 		// await works uniformly for both.
 		expect(await api.funky.thing.ping()).toBe("pong");

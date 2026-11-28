@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
+ *	@Last modified time: 2026-11-25T14:03:40-08:00 (1795644220)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,8 @@ import {
 	SetMethods,
 	setToArray,
 	splitText,
-	String
+	String,
+	StringMethods
 } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
@@ -102,6 +103,35 @@ const IMPL_METADATA_KEYS = setFrom(["____childFilePaths", "____filePath", "____c
 export function isFrameworkReservedKey(key) {
 	if (typeof key !== "string") return false;
 	return SetMethods.has(WRAPPER_INTERNAL_KEYS, key) || SetMethods.has(IMPL_METADATA_KEYS, key);
+}
+
+/**
+ * The prefix every framework member name starts with: `____` for its private state, `___` for its callables. Names with
+ * one or two leading underscores belong to modules.
+ * @type {string}
+ * @private
+ */
+const FRAMEWORK_PREFIX = "___";
+
+/**
+ * Whether a name a module supplies (an export, a file or folder, a member of an exported value, a mount-path segment)
+ * carries the framework's prefix, three or more leading underscores.
+ *
+ * @param {string|symbol} name - The name.
+ * @returns {boolean} True for a name only the framework's own members carry.
+ * @package
+ *
+ * @description
+ * An api node keeps its members as its own properties, beside the wrapper's own `___` / `____` members, so a module
+ * member under such a name would stand in for one of the framework's. {@link isFrameworkReservedKey} names the ones
+ * other code looks up and hides; this covers every name of the prefix, for the places a module's names enter the tree.
+ *
+ * @example
+ * isFrameworkName("___createChildWrapper"); // true
+ * isFrameworkName("__priv"); // false — a module's own name
+ */
+export function isFrameworkName(name) {
+	return typeof name === "string" && StringMethods.startsWith(name, FRAMEWORK_PREFIX);
 }
 
 /**

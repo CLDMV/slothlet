@@ -14,15 +14,15 @@
  */
 
 /**
- * @fileoverview Leaf that also publishes a `____`-prefixed export. Slothlet attaches the
- * `____`-prefixed name as an own enumerable key on the leaf's wrapper, so walking the wrapper's
- * keys in `_collectLifecycleHooks` exercises the `!key.startsWith("____")` skip guard.
+ * @fileoverview Leaf that also publishes a `__`-prefixed export. Slothlet attaches the
+ * `__`-prefixed name as an own enumerable key on the leaf's wrapper, so the lifecycle walk
+ * over the wrapper's keys meets it next to the ordinary `ping` leaf.
  * @module api_test_lifecycle_hooks_walk.funky.thing
  * @memberof module:api_test_lifecycle_hooks_walk.funky
  */
 
 /**
- * Ordinary callable leaf — the non-`____` key the collect() walk descends into.
+ * Ordinary callable leaf — the ordinary key the collect() walk descends into.
  * @function ping
  * @memberof module:api_test_lifecycle_hooks_walk.funky.thing
  * @returns {string} The literal string "pong".
@@ -35,9 +35,9 @@ export function ping() {
 }
 
 /**
- * A `____`-prefixed export. It lands as an own enumerable key on the wrapper, and the collect()
- * walk must skip it (its `startsWith("____")` guard) rather than descend into it.
+ * A `__`-prefixed export. It lands as an own enumerable key on the wrapper, and the collect()
+ * walk must handle it without error.
  * @memberof module:api_test_lifecycle_hooks_walk.funky.thing
  * @type {object}
  */
-export const ____weird = { hello: () => "hi" };
+export const __weird = { hello: () => "hi" };
