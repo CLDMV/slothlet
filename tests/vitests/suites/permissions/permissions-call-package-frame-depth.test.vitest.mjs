@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T08:08:41-08:00 (1795536521)
+ *	@Last modified time: 2026-11-25T19:18:45-08:00 (1795663125)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  * refused, whatever node the code calls through: a node the module read and kept does not settle whose access it is.
  *
  * @description
- * Fixture `api_test_load_package_frame` (see permissions-load-package-frame): `api.runner.now(route, depth)` runs a
+ * Fixture `api_test_load_package_frame` (see tests/vitests/setup/permissions-load-package-frame.mjs): `api.runner.now(route, depth)` runs a
  * route's code inside the runner's call. A route `"own-<route>"` is the runner's own code, which reads `self.vault.get`
  * (so the runner keeps that node) and calls it from the bottom of `depth` frames of one package (`package`), two
  * packages (`two`) or a host file's function (`host`). Any other route is the bag's function doing the same.
