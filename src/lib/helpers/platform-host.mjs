@@ -1,7 +1,7 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/platform.mjs
+ *	@Filename: /src/lib/helpers/platform-host.mjs
  *	@Date: 2026-05-29T22:02:43-07:00 (1780117363)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -14,23 +14,26 @@
  */
 
 /**
- * @fileoverview Single source of truth for Node.js-vs-browser host differences.
- * @module @cldmv/slothlet/helpers/platform
+ * @fileoverview Single source of truth for Node.js-vs-browser host differences: what `#helpers/platform` hands out.
+ * @module @cldmv/slothlet/helpers/platform-host
  * @internal
  *
  * @description
  * Slothlet runs in two hosts: Node.js (full filesystem access) and browser /
  * Electron-renderer "browser mode" (no `node:*` builtins, manifest-based loading).
- * Rather than scatter `typeof process` checks and gated `await import("node:*")`
- * blocks across a dozen modules (#123), every host difference is decided ONCE here
- * and the rest of the codebase imports the resolved builtins (or browser shims)
- * plus `isNode` via plain static imports — no `node:*` specifier ever enters the
- * static-import graph a browser must parse.
+ * Rather than scatter `typeof process` checks and gated `import("node:*")` calls
+ * across a dozen modules (#123), every host difference is decided ONCE and the rest
+ * of the codebase imports the resolved builtins (or browser shims) plus `isNode`
+ * from `#helpers/platform` via plain static imports.
  *
- * The builtins are pulled in through a single top-level-await `import()` block
- * guarded by `isNode`. In a browser the same exports resolve to `null` (for the
- * Node-only ones, whose every call site is `isNode`-guarded) or to a minimal shim
- * (`util`, which is consumed in both hosts for `inspect` / `types.isProxy`).
+ * `#helpers/platform` resolves by package condition (package.json `imports`) to one of two small files that fill this
+ * one in as they load: `platform.mjs` (Node) imports the builtins statically and hands them to {@link useNodeBuiltins};
+ * `platform.browser.mjs` (the `browser` condition, and the fallback) hands over the browser stand-ins
+ * ({@link useBrowserStandIns}), or Node's builtins through `process.getBuiltinModule` where a page has a Node `process`
+ * (an Electron renderer with Node integration). Nothing in slothlet's graph awaits at its top level, so Node's
+ * synchronous `require(esm)` can load a package that imports slothlet (#1034), and no `node:*` specifier enters the
+ * static-import graph a browser parses. In a browser the Node-only exports are `null` (every call site is
+ * `isNode`-guarded) and `util` is a minimal shim (consumed in both hosts for `inspect` / `types.isProxy`).
  *
  * Anything that genuinely cannot run outside Node and is never reachable from a
  * browser module graph (TypeScript compilation, type generation, manifest
@@ -38,7 +41,7 @@
  * would only drag build-time-only builtins (`crypto`, `os`) into the shared hub.
  *
  * ## Browser-only branches & coverage (policy)
- * The browser arms here — and in the modules that import `isNode` (the `else`/`: null` shims, the
+ * The browser arms here — and in the modules that import `isNode` (the browser shims, the
  * i18n browser paths, the live-mode null-ALS arm) — are UNREACHABLE under the Node coverage run:
  * `process.versions.node` is always truthy there, even in the `platform:"browser"` node-side suites.
  *
@@ -71,7 +74,6 @@ import {
 	ObjectMethods,
 	Objects,
 	Promise,
-	promiseAll,
 	PrototypeFunctions,
 	Reflect,
 	RegExp,
@@ -84,16 +86,37 @@ import {
 } from "#helpers/intrinsics";
 import { pinToCurrentCaller } from "#helpers/caller-pinning";
 
-// Detection runs once. In a browser/worker `process` is absent and this resolves false; the vitest
-// browser run exercises that arm (the node run cannot — `process` is always present there).
-const isNode = typeof NativeProcess !== "undefined" && Boolean(NativeProcess?.versions?.node);
+/**
+ * Whether the host is Node.js: set once, by whichever of `platform.mjs` / `platform.browser.mjs` loaded, before any
+ * other file of slothlet's reads it. In a browser/worker `process` is absent and it is false; the vitest browser run
+ * exercises that arm (the node run cannot — `process` is always present there).
+ * @type {boolean}
+ * @private
+ */
+let isNode = false;
+
+/**
+ * Whether the platform values have been filled in. They are filled in once, as the platform file loads.
+ * @type {boolean}
+ * @private
+ */
+let installed = false;
+
+/**
+ * Whether the current host has Node's `process`: the same test as before the split, read once by each platform file.
+ * @returns {boolean} True when it does.
+ * @internal
+ */
+function hostHasNodeProcess() {
+	return typeof NativeProcess !== "undefined" && Boolean(NativeProcess?.versions?.node);
+}
 
 /**
  * Resolved Node.js builtins (Node host) or browser shims / `null` (browser host).
  *
- * Each is initialized to `null` and reassigned to the real builtin inside the `isNode`
- * block below; in a browser the Node-only ones stay `null` (every call site is
- * `isNode`-guarded) and `util` becomes a minimal shim. Annotated `any` (not bare `null`,
+ * Each is initialized to `null` and set to the real builtin by {@link useNodeBuiltins}; in a
+ * browser the Node-only ones stay `null` (every call site is `isNode`-guarded) and `util`
+ * becomes a minimal shim ({@link useBrowserStandIns}). Annotated `any` (not bare `null`,
  * which would make a TS consumer treat them as non-callable, nor the precise
  * `typeof import("node:*")` shape, which would force `@types/node` onto every consumer —
  * including browser ones — and break the no-extra-types export contract). `any` keeps them
@@ -124,26 +147,31 @@ let executionAsyncId = null;
 let createHook = null;
 /** @type {any} */
 let createRequire = null;
+/** @type {any} */
+let vm = null;
+/** @type {any} */
+let childProcess = null;
 
-if (isNode) {
-	const unpacked1 = await promiseAll([
-			import("node:fs"),
-			import("node:fs/promises"),
-			import("node:path"),
-			import("node:url"),
-			import("node:util"),
-			import("node:events"),
-			import("node:async_hooks"),
-			import("node:module")
-		]),
-		fsMod = unpacked1[0],
-		fspMod = unpacked1[1],
-		pathMod = unpacked1[2],
-		urlMod = unpacked1[3],
-		utilMod = unpacked1[4],
-		eventsMod = unpacked1[5],
-		asyncHooksMod = unpacked1[6],
-		moduleMod = unpacked1[7];
+/**
+ * Fill in the platform values from Node's builtin modules, once, as the platform file loads (#1034): `platform.mjs`
+ * hands over its static imports, so a host's loader hooks and a test's module mocks apply as they do to any import.
+ * @param {{fs: object, fsp: object, path: object, url: object, util: object, events: object, asyncHooks: object,
+ *   module: object, vm: object, childProcess: object}} modules - The modules.
+ * @returns {void}
+ * @internal
+ */
+function useNodeBuiltins(modules) {
+	if (installed) return;
+	installed = true;
+	isNode = true;
+	const fsMod = modules.fs,
+		fspMod = modules.fsp,
+		pathMod = modules.path,
+		urlMod = modules.url,
+		utilMod = modules.util,
+		eventsMod = modules.events,
+		asyncHooksMod = modules.asyncHooks,
+		moduleMod = modules.module;
 	// Frozen copies of the namespaces, taken now: slothlet's files read their members when they run, and code that
 	// replaces `fs.readFileSync` or `path.join` on Node's module object later (and refreshes the namespaces with
 	// `module.syncBuiltinESMExports()`) does not reach them.
@@ -163,8 +191,22 @@ if (isNode) {
 	({ EventEmitter } = eventsMod);
 	({ AsyncLocalStorage, AsyncResource, executionAsyncResource, executionAsyncId, createHook } = asyncHooksMod);
 	({ createRequire } = moduleMod);
-	// Browser host: the `else` arm (util shim) runs without `process`; exercised by the vitest browser run.
-} else {
+	// `node:vm` and `child_process` for the loader, as they were imported: code that replaces `vm.compileFunction` or
+	// `child_process.fork` on Node's modules later does not run inside the loader.
+	vm = modules.vm;
+	childProcess = modules.childProcess;
+}
+
+/**
+ * Fill in the platform values with the browser stand-ins, once, as the platform file loads: the Node-only values stay
+ * `null` and `util` is the minimal shim. The browser host's arm, exercised by the vitest browser run.
+ * @returns {void}
+ * @internal
+ */
+function useBrowserStandIns() {
+	if (installed) return;
+	installed = true;
+	isNode = false;
 	// What every generator object and every async generator object inherits from.
 	const GENERATOR_PROTOTYPES = [Objects.getPrototypeOf(function* () {}).prototype, Objects.getPrototypeOf(async function* () {}).prototype];
 	// What every generator function and every async generator function inherits from.
@@ -481,8 +523,13 @@ export {
 	executionAsyncId,
 	createHook,
 	createRequire,
+	vm,
+	childProcess,
 	loadJson,
 	fileParts,
 	scheduleMacrotask,
-	inheritsFrom
+	inheritsFrom,
+	hostHasNodeProcess,
+	useNodeBuiltins,
+	useBrowserStandIns
 };

@@ -128,6 +128,18 @@
 			"types": "./types/stub/lib/handlers/*.d.mts",
 			"import": "./dist/lib/handlers/*.mjs"
 		},
+		"#helpers/platform": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/helpers/platform.d.mts",
+				"browser": "./src/lib/helpers/platform.browser.mjs",
+				"node": "./src/lib/helpers/platform.mjs",
+				"default": "./src/lib/helpers/platform.browser.mjs"
+			},
+			"types": "./types/stub/lib/helpers/platform.d.mts",
+			"browser": "./dist/lib/helpers/platform.browser.mjs",
+			"node": "./dist/lib/helpers/platform.mjs",
+			"default": "./dist/lib/helpers/platform.browser.mjs"
+		},
 		"#helpers/*": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/helpers/*.d.mts",
