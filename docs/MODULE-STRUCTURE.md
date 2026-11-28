@@ -610,7 +610,7 @@ import { self } from "@cldmv/slothlet/runtime";
 export const report = async (x) => self.point(x);
 ```
 
-The rule holds always: with permissions on, off or `"disabled"`, and whatever the rules say. It holds for a sibling in the same folder, a file in a subfolder, another folder of the tree and another mount, by every route: a static `import`, `export … from`, `import()`, `import.meta.resolve()`, a `require()` or `require.resolve()` (also one made by `createRequire`), and a TypeScript leaf's relative imports. A lib file is held to it too once module code has loaded it, so a lib file cannot pass a leaf file on. Code module code compiles from a string (`new Function` and the other function constructors, `eval`, the `vm` functions) is held to it as well, whatever importer Node names for that code: such an import is placed by the code calling the compiled code, and one that cannot be placed on the host's code (a compiled function a scheduler calls) is refused. The host's own imports are unchanged: the host and its tests import leaf files as before, and a file no live instance composes is a lib file.
+The rule holds always: with permissions on, off or `"disabled"`, and whatever the rules say. It holds for a sibling in the same folder, a file in a subfolder, another folder of the tree and another mount, by every route: a static `import`, `export … from`, `import()`, `import.meta.resolve()`, a `require()` or `require.resolve()` (also one made by `createRequire`), and a TypeScript leaf's relative imports. A lib file is held to it too once module code has loaded it, so a lib file cannot pass a leaf file on. Code module code compiles from a string (`new Function` and the other function constructors, `eval`, the `vm` functions) is held to it as well, whatever importer Node names for that code and whoever calls it: code a module compiled stays the module's when it hands the code to the host and the host calls it. Other compiled code is placed by the code calling it, and one that cannot be placed on the host's code (a compiled function a scheduler calls) is refused. With the permission system off, the `vm` functions are not wrapped, and code they compile names no file of the module's: `vm` code a module hands to the host, and `vm` code compiled under a file name of the module's choosing, is taken for the code calling it (see [Code a module compiles](#code-a-module-compiles)). The host's own imports are unchanged: the host and its tests import leaf files as before, and a file no live instance composes is a lib file.
 
 The refusal is made as the import resolves, so the leaf file's copy is never evaluated. An eager build of a tree whose file imports a leaf file fails with that file's `MODULE_IMPORT_FAILED`, the refusal as its cause; in a lazy tree the folder holding the file fails as it loads, and no other folder is built for it. An `import()` or `require()` made inside a function fails when it runs.
 
@@ -636,7 +636,7 @@ import slothlet from "@cldmv/slothlet"; // loads
 await import("@cldmv/slothlet/sanitize"); // refused: MODULE_INTERNAL_NOT_IMPORTABLE
 ```
 
-The rule holds however the file is named and however it is loaded: a package subpath, a `#imports` specifier, a file URL, an absolute or relative path into slothlet's `src/` or `dist/`, a static `import`, `import()`, `import.meta.resolve()`, a `require()` or `require.resolve()` from `createRequire` (whatever path the `require` is made from, slothlet's own included), and a CommonJS file's own `require`. It holds for the api file's helpers too: a helper it imports, one of its own package that it requires through a `require` made from a plain path, and a `data:` module it imports. An api file that imports one of slothlet's own files at its top does not load (`MODULE_IMPORT_FAILED`, with the refusal as its cause).
+The rule holds however the file is named and however it is loaded: a package subpath, a `#imports` specifier, a file URL, an absolute or relative path into slothlet's `src/` or `dist/`, a static `import`, `import()`, `import.meta.resolve()`, a `require()` or `require.resolve()` from `createRequire` (whatever path the `require` is made from, slothlet's own included), and a CommonJS file's own `require`. It holds for the api file's helpers too: a helper it imports, one of its own package that it requires through a `require` made from a plain path, and a `data:` module it imports. It holds for code a module compiles from a string too, whoever calls that code, as for leaf files (see [Code a module compiles](#code-a-module-compiles)). An api file that imports one of slothlet's own files at its top does not load (`MODULE_IMPORT_FAILED`, with the refusal as its cause).
 
 The host's own imports are unchanged: the host, its tools and its tests import any of slothlet's files they did before (`@cldmv/slothlet/sanitize`, `@cldmv/slothlet/files`, the `@cldmv/slothlet/vite` plugin). So does a package the host installed, imported by a module: a file of another package is the host's code, whoever imports it.
 
@@ -644,6 +644,22 @@ Where slothlet cannot tell who is loading a file, it leaves the load to the host
 
 - **Under vite's module runner**, the plugin sees an import a module's file makes as it resolves it, and an `import()` or `import.meta.resolve()` a module makes by a name only known as it runs is checked as it runs. A function that resolves a specifier the module handed it (`import.meta.resolve` read into a variable and called later) is not seen; the import that follows is.
 - **In the browser** the generated importmap maps slothlet's own specifiers only for slothlet's own files (see [BROWSER.md](BROWSER.md#generatebrowserassetsapidir-options)), so a page script or an api file resolving one of them by its specifier fails. A browser loads any served file by its URL, so a file imported by its URL still loads there; what it exports is held as described next.
+
+### Code a module compiles
+
+An `import()` or `require()` made by code compiled from a string (`new Function`, `AsyncFunction`, `GeneratorFunction`, `AsyncGeneratorFunction`, `eval`, the `vm` functions) names an importer that says nothing about who runs the code: the engine gives such code the importer of whatever first compiled the same text, and a `vm` compile names none. So slothlet places the import by the code itself. Code a module compiled is the module's: its import of a leaf file is refused with `MODULE_LEAF_IMPORT_REFUSED`, and of one of slothlet's own files with `MODULE_INTERNAL_NOT_IMPORTABLE`, when the module calls it and when the host does.
+
+```js
+// api/report.mjs (capability:code opened for it)
+export const give = () => new Function('return import("#helpers/flow-stores")');
+
+// host
+await api.report.give()(); // refused: MODULE_INTERNAL_NOT_IMPORTABLE
+```
+
+With the permission system on, the function constructors and the `vm` functions are wrapped (see `capability:code` in [PERMISSIONS.md](PERMISSIONS.md#built-in-capabilities)), and code a module compiles through them ends with a `sourceURL` comment of slothlet's (`//# sourceURL=slothlet-module-code/<n>`): every frame of the code, and of code `eval` compiles inside it, names it, whoever calls it. The comment shows in the compiled function's `toString()` and in its stack frames. Code the host compiles is left as it is. Code `eval` compiles in a module (not wrapped) names the module's file as its origin.
+
+With the permission system off, the `vm` functions are not wrapped. Code a module compiles with them, with `importModuleDynamically` set to `vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER`, names no importer and no file of the module's, so it is placed by the code calling it alone: the module calling it is refused, but the host calling such code the module handed it is not, and neither is code compiled under a file name the module chose (`filename`), which reads as that file. Turn the permission system on (with `capability:code` closed, the default, a module cannot compile at all) to hold that code to the rule.
 
 ### Using what slothlet's own files export
 
