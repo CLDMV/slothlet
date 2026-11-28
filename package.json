@@ -28,50 +28,62 @@
 		"./typegen": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/typegen/typegen.d.mts",
-				"import": "./src/lib/typegen/typegen.mjs"
+				"import": "./src/lib/typegen/typegen.mjs",
+				"default": "./src/lib/typegen/typegen.mjs"
 			},
 			"types": "./types/stub/lib/typegen/typegen.d.mts",
-			"import": "./dist/lib/typegen/typegen.mjs"
+			"import": "./dist/lib/typegen/typegen.mjs",
+			"default": "./dist/lib/typegen/typegen.mjs"
 		},
 		"./runtime": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime.d.mts",
-				"import": "./src/lib/runtime/runtime.mjs"
+				"import": "./src/lib/runtime/runtime.mjs",
+				"default": "./src/lib/runtime/runtime.mjs"
 			},
 			"types": "./types/stub/lib/runtime/runtime.d.mts",
-			"import": "./dist/lib/runtime/runtime.mjs"
+			"import": "./dist/lib/runtime/runtime.mjs",
+			"default": "./dist/lib/runtime/runtime.mjs"
 		},
 		"./runtime/async": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-asynclocalstorage.d.mts",
-				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
+				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs",
+				"default": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
 			},
 			"types": "./types/stub/lib/runtime/runtime-asynclocalstorage.d.mts",
-			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
+			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs",
+			"default": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
 		},
 		"./runtime/live": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-livebindings.d.mts",
-				"import": "./src/lib/runtime/runtime-livebindings.mjs"
+				"import": "./src/lib/runtime/runtime-livebindings.mjs",
+				"default": "./src/lib/runtime/runtime-livebindings.mjs"
 			},
 			"types": "./types/stub/lib/runtime/runtime-livebindings.d.mts",
-			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
+			"import": "./dist/lib/runtime/runtime-livebindings.mjs",
+			"default": "./dist/lib/runtime/runtime-livebindings.mjs"
 		},
 		"./errors": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/errors.d.mts",
-				"import": "./src/lib/errors.mjs"
+				"import": "./src/lib/errors.mjs",
+				"default": "./src/lib/errors.mjs"
 			},
 			"types": "./types/stub/lib/errors.d.mts",
-			"import": "./dist/lib/errors.mjs"
+			"import": "./dist/lib/errors.mjs",
+			"default": "./dist/lib/errors.mjs"
 		},
 		"./i18n": {
 			"slothlet-dev": {
 				"types": "./types/src/i18n.d.mts",
-				"import": "./src/i18n.mjs"
+				"import": "./src/i18n.mjs",
+				"default": "./src/i18n.mjs"
 			},
 			"types": "./types/stub/i18n.d.mts",
-			"import": "./dist/i18n.mjs"
+			"import": "./dist/i18n.mjs",
+			"default": "./dist/i18n.mjs"
 		},
 		"./i18n/language/*": {
 			"slothlet-dev": "./src/lib/i18n/languages/*",
@@ -80,26 +92,32 @@
 		"./vite": {
 			"slothlet-dev": {
 				"types": "./types/src/vite.d.mts",
-				"import": "./src/vite.mjs"
+				"import": "./src/vite.mjs",
+				"default": "./src/vite.mjs"
 			},
 			"types": "./types/stub/vite.d.mts",
-			"import": "./dist/vite.mjs"
+			"import": "./dist/vite.mjs",
+			"default": "./dist/vite.mjs"
 		},
 		"./files": {
 			"slothlet-dev": {
 				"types": "./types/src/files.d.mts",
-				"import": "./src/files.mjs"
+				"import": "./src/files.mjs",
+				"default": "./src/files.mjs"
 			},
 			"types": "./types/stub/files.d.mts",
-			"import": "./dist/files.mjs"
+			"import": "./dist/files.mjs",
+			"default": "./dist/files.mjs"
 		},
 		"./sanitize": {
 			"slothlet-dev": {
 				"types": "./types/src/sanitize.d.mts",
-				"import": "./src/sanitize.mjs"
+				"import": "./src/sanitize.mjs",
+				"default": "./src/sanitize.mjs"
 			},
 			"types": "./types/stub/sanitize.d.mts",
-			"import": "./dist/sanitize.mjs"
+			"import": "./dist/sanitize.mjs",
+			"default": "./dist/sanitize.mjs"
 		},
 		"./schemas/slothlet.module.schema.json": "./schemas/slothlet.module.schema.json"
 	},
@@ -127,6 +145,18 @@
 			},
 			"types": "./types/stub/lib/handlers/*.d.mts",
 			"import": "./dist/lib/handlers/*.mjs"
+		},
+		"#helpers/platform": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/helpers/platform.d.mts",
+				"browser": "./src/lib/helpers/platform.browser.mjs",
+				"node": "./src/lib/helpers/platform.mjs",
+				"default": "./src/lib/helpers/platform.browser.mjs"
+			},
+			"types": "./types/stub/lib/helpers/platform.d.mts",
+			"browser": "./dist/lib/helpers/platform.browser.mjs",
+			"node": "./dist/lib/helpers/platform.mjs",
+			"default": "./dist/lib/helpers/platform.browser.mjs"
 		},
 		"#helpers/*": {
 			"slothlet-dev": {
@@ -386,7 +416,7 @@
 	"devDependencies": {
 		"@cldmv/configs": "^1.2.4",
 		"@cldmv/fix-headers": "^2.2.2",
-		"@cldmv/vitest-runner": "^1.11.0",
+		"@cldmv/vitest-runner": "^1.11.1",
 		"@eslint/css": "^2.0.1",
 		"@eslint/js": "^10.0.1",
 		"@eslint/json": "^2.0.1",

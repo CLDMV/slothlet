@@ -1,7 +1,7 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-load-package-frame.test.vitest.mjs
+ *	@Filename: /tests/vitests/setup/permissions-load-package-frame.mjs
  *	@Date: 2026-11-14T08:00:00-08:00 (1794672000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview A package's or a host file's code between the code a file's load started and the node it calls is
+ * @fileoverview Shared body of the permissions-load-package-frame tests: a package's or a host file's code between the code a file's load started and the node it calls is
  * attributed as it is inside a call: it acts for the code that called it.
  *
  * @description
@@ -50,7 +50,11 @@
  * The in-process rows run under vitest, whose module runner loads the packages with no importer slothlet records, so
  * they read as the host's files. The child-process rows run under Node's own loader, where slothlet records which
  * modules import each package.
- * @module tests/vitests/suites/permissions/permissions-load-package-frame
+ *
+ * The cases are spread over the `suites/permissions/permissions-load-package-frame-*.test.vitest.mjs` files by mode, runtime and
+ * attribution (see the exported `describe…` function) so each file finishes in a few minutes; together they run every
+ * case the single file ran.
+ * @module tests/vitests/setup/permissions-load-package-frame
  */
 
 import path from "node:path";
@@ -58,9 +62,9 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { walk } from "../../../../api_tests/api_test_load_package_frame/lib/host/walk.mjs";
+import { walk } from "../../../api_tests/api_test_load_package_frame/lib/host/walk.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const BASE = path.resolve(ROOT, "api_tests/api_test_load_package_frame/api");
 const WALK = path.resolve(ROOT, "api_tests/api_test_load_package_frame/lib/host/walk.mjs");
 const DENIED = "PERMISSION_DENIED";
@@ -142,73 +146,93 @@ const rowName = (row) => `${row.runner}${row.via ? ` ${row.via}` : ""} ${row.rou
  */
 const later = (api, row) => (row.via ? api[row.runner].later(row.via, row.route, row.depth) : api[row.runner].later(row.route, row.depth));
 
-beforeAll(() => {
-	globalThis.__loadPackageFrameWalk = walk;
-});
-
-afterAll(() => {
-	delete globalThis.__loadPackageFrameWalk;
-});
-
-describe.each(MATRIX)(
-	"code a file's load started, through a package > $mode / $runtime / $attribution / capture $capture",
-	({ mode, runtime, attribution, capture }) => {
-		describe.each(RULE_SETS)("$label", (set) => {
-			let api;
-
-			beforeAll(async () => {
-				api = await slothlet({
-					base: BASE,
-					mode,
-					runtime,
-					silent: true,
-					permissions: { policy: "allow", caller: { attribution, capture }, rules: set.rules }
-				});
-			});
-
-			afterAll(async () => {
-				await api?.shutdown?.();
-				api = null;
-			});
-
-			it.each(ROWS.map((row) => ({ ...row, name: rowName(row), answer: expected(row, set) })))(
-				"$name answers $answer",
-				async (row) => {
-					expect(await later(api, row)).toBe(row.answer);
-				},
-				60000
-			);
-
-			it.each(
-				ROWS.filter((row) => row.runner === "runner" && row.via === "timer" && row.depth < 1024).map((row) => ({
-					...row,
-					name: rowName(row),
-					answer: expected(row, set)
-				}))
-			)(
-				"$name answers inside a call as it does from the load's flow: $answer",
-				async (row) => {
-					expect(await api.runner.now(row.route, row.depth)).toBe(row.answer);
-				},
-				60000
-			);
-		});
-	}
-);
-
 /**
- * Build the fixture in a Node process of its own for every config and rule set, and run the rows there.
- * @returns {Record<string, string>} What each row gave, by config, rule set and row.
+ * Register the load-package-frame cases for the configs a test file runs, in process and under Node's own loader (one
+ * child process builds the file's configs).
+ * @param {object} options - What to run.
+ * @param {string[]} [options.modes=["eager", "lazy"]] - The modes.
+ * @param {string[]} [options.runtimes=["async", "live"]] - The runtimes.
+ * @param {string[]} [options.attributions=["precise", "fast"]] - The attributions.
+ * @returns {void}
+ * @example
+ * describeLoadPackageFrame({ modes: ["lazy"], runtimes: ["live"], attributions: ["fast"] });
  */
-function runChildRows() {
-	const rows = ROWS.filter((row) => row.depth !== DEEP);
-	const script = `
+export function describeLoadPackageFrame({
+	modes = ["eager", "lazy"],
+	runtimes = ["async", "live"],
+	attributions = ["precise", "fast"]
+} = {}) {
+	const selected = MATRIX.filter(
+		(config) => modes.includes(config.mode) && runtimes.includes(config.runtime) && attributions.includes(config.attribution)
+	);
+	beforeAll(() => {
+		globalThis.__loadPackageFrameWalk = walk;
+	});
+
+	afterAll(() => {
+		delete globalThis.__loadPackageFrameWalk;
+	});
+
+	describe.each(selected)(
+		"code a file's load started, through a package > $mode / $runtime / $attribution / capture $capture",
+		({ mode, runtime, attribution, capture }) => {
+			describe.each(RULE_SETS)("$label", (set) => {
+				let api;
+
+				beforeAll(async () => {
+					api = await slothlet({
+						base: BASE,
+						mode,
+						runtime,
+						silent: true,
+						permissions: { policy: "allow", caller: { attribution, capture }, rules: set.rules }
+					});
+				});
+
+				afterAll(async () => {
+					await api?.shutdown?.();
+					api = null;
+				});
+
+				it.each(ROWS.map((row) => ({ ...row, name: rowName(row), answer: expected(row, set) })))(
+					"$name answers $answer",
+					async (row) => {
+						expect(await later(api, row)).toBe(row.answer);
+					},
+					60000
+				);
+
+				it.each(
+					ROWS.filter((row) => row.runner === "runner" && row.via === "timer" && row.depth < 1024).map((row) => ({
+						...row,
+						name: rowName(row),
+						answer: expected(row, set)
+					}))
+				)(
+					"$name answers inside a call as it does from the load's flow: $answer",
+					async (row) => {
+						expect(await api.runner.now(row.route, row.depth)).toBe(row.answer);
+					},
+					60000
+				);
+			});
+		}
+	);
+
+	/**
+	 * Build the fixture in a Node process of its own for every config and rule set, and run the rows there.
+	 * @param {Array<object>} matrix - The configs to build.
+	 * @returns {Record<string, string>} What each row gave, by config, rule set and row.
+	 */
+	function runChildRows(matrix) {
+		const rows = ROWS.filter((row) => row.depth !== DEEP);
+		const script = `
 		import slothlet from "@cldmv/slothlet";
 		import { walk } from ${JSON.stringify(WALK)};
 		globalThis.__loadPackageFrameWalk = walk;
 		const keep = setInterval(() => {}, 1000);
 		const out = {};
-		for (const { mode, runtime, attribution, capture } of ${JSON.stringify(MATRIX)})
+		for (const { mode, runtime, attribution, capture } of ${JSON.stringify(matrix)})
 			for (const { label, rules } of ${JSON.stringify(RULE_SETS)}) {
 				const api = await slothlet({
 					base: ${JSON.stringify(BASE)}, mode, runtime, silent: true,
@@ -223,34 +247,35 @@ function runChildRows() {
 		process.stdout.write("RESULT " + JSON.stringify(out) + "\\n");
 		clearInterval(keep);
 	`;
-	const child = spawnSync(process.execPath, ["--conditions=slothlet-dev", "--input-type=module", "-e", script], {
-		cwd: ROOT,
-		encoding: "utf8",
-		timeout: 600000,
-		maxBuffer: 64 * 1024 * 1024
-	});
-	const line = String(child.stdout)
-		.split("\n")
-		.find((text) => text.startsWith("RESULT "));
-	if (!line) throw new Error(`no result: ${child.stderr}`);
-	return JSON.parse(line.slice("RESULT ".length));
-}
+		const child = spawnSync(process.execPath, ["--conditions=slothlet-dev", "--input-type=module", "-e", script], {
+			cwd: ROOT,
+			encoding: "utf8",
+			timeout: 600000,
+			maxBuffer: 64 * 1024 * 1024
+		});
+		const line = String(child.stdout)
+			.split("\n")
+			.find((text) => text.startsWith("RESULT "));
+		if (!line) throw new Error(`no result: ${child.stderr}`);
+		return JSON.parse(line.slice("RESULT ".length));
+	}
 
-describe("code a file's load started, through a package, under Node's own loader", () => {
-	/** @type {Record<string, string>|null} */
-	let answers = null;
-	const read = () => (answers ??= runChildRows());
+	describe("code a file's load started, through a package, under Node's own loader", () => {
+		/** @type {Record<string, string>|null} */
+		let answers = null;
+		const read = () => (answers ??= runChildRows(selected));
 
-	describe.each(MATRIX)("$mode / $runtime / $attribution / capture $capture", ({ mode, runtime, attribution, capture }) => {
-		describe.each(RULE_SETS)("$label", (set) => {
-			it.each(ROWS.filter((row) => row.depth !== DEEP).map((row) => ({ ...row, name: rowName(row), answer: expected(row, set) })))(
-				"$name answers $answer",
-				(row) => {
-					const key = [mode, runtime, attribution, capture, set.label, row.runner, row.via, row.route, row.depth].join(" | ");
-					expect(read()[key]).toBe(row.answer);
-				},
-				600000
-			);
+		describe.each(selected)("$mode / $runtime / $attribution / capture $capture", ({ mode, runtime, attribution, capture }) => {
+			describe.each(RULE_SETS)("$label", (set) => {
+				it.each(ROWS.filter((row) => row.depth !== DEEP).map((row) => ({ ...row, name: rowName(row), answer: expected(row, set) })))(
+					"$name answers $answer",
+					(row) => {
+						const key = [mode, runtime, attribution, capture, set.label, row.runner, row.via, row.route, row.depth].join(" | ");
+						expect(read()[key]).toBe(row.answer);
+					},
+					600000
+				);
+			});
 		});
 	});
-});
+}

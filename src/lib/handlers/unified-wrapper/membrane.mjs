@@ -1230,6 +1230,58 @@ function attributeResultTo(owner, value, callerIsHost, caller) {
 }
 
 /**
+ * The arguments each call was handed as its caller handed them, by the list the call's code receives (#1026): before
+ * the class prototype guard and the hand-in turn them into what the callee holds. A list made later (a hook's) has no
+ * entry, and nothing of it counts as the caller's.
+ * @type {WeakMap<object, ArrayLike<*>>}
+ * @private
+ */
+const HANDED_ARGUMENTS = new WeakMap();
+
+/**
+ * Record the arguments a call was handed as its caller handed them (see {@link HANDED_ARGUMENTS}).
+ * @param {ArrayLike<*>} args - The list the call's code receives.
+ * @param {ArrayLike<*>} asHanded - The list as the caller handed it.
+ * @returns {void}
+ * @private
+ */
+function noteHandedArguments(args, asHanded) {
+	if (args !== null && typeof args === "object") WeakMapMethods.set(HANDED_ARGUMENTS, args, asHanded);
+}
+
+/**
+ * The arguments a call was handed as its caller handed them (see {@link HANDED_ARGUMENTS}), or null.
+ * @param {*} args - The list the call's code receives.
+ * @returns {ArrayLike<*>|null} The list as handed, or null when none was recorded.
+ * @private
+ */
+function handedArgumentsOf(args) {
+	return args !== null && typeof args === "object" ? (WeakMapMethods.get(HANDED_ARGUMENTS, args) ?? null) : null;
+}
+
+/**
+ * The form of a result its caller handed the call, if it handed one (#1026): the result itself, or the value behind
+ * it (behind a crossing view, an inbound view or a stand-in, as far as they go), the first of these the caller holds.
+ * @param {WeakSet<object>} held - What the caller handed the call (see `callerHeldCode`).
+ * @param {object|Function} value - The result.
+ * @returns {object|Function|undefined} That form, or undefined when the caller handed none of them.
+ * @private
+ */
+function heldForm(held, value) {
+	let current = value;
+	for (let depth = 0; depth < 4; depth++) {
+		if (WeakSetMethods.has(held, current)) return current;
+		const behind =
+			WeakMapMethods.get(CROSSINGS, current)?.original ??
+			WeakMapMethods.get(INBOUND_VIEWS, current)?.original ??
+			WeakMapMethods.get(STAND_IN_RECORDS, current)?.original;
+		if (behind === undefined || behind === current) return undefined;
+		current = behind;
+	}
+	return undefined;
+}
+
+/**
  * What a module's call hands its caller (#597): see {@link handOut}. A prototype of a module's class returned
  * to the host is the object itself, as the host reading it gets it (#667): the call's caller receives the value, and
  * here it is known.
@@ -1239,14 +1291,27 @@ function attributeResultTo(owner, value, callerIsHost, caller) {
  * @param {object|null} [caller=null] - The wrapper of the module that made the call, when one did.
  * @param {object|null} [receiver=null] - The call whose own code receives the value, when that call was handed code
  *   (see `ownReceiver`): a function stand-in made for it here is recorded as handed to that call alone.
+ * @param {WeakSet<object>|null} [held=null] - The code a module caller handed the call, as it holds it (see
+ *   `callerHeldCode`).
  * @returns {*} What the caller gets.
  * @private
  */
-function attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null) {
+function attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null, held = null) {
 	// An async call's code has run on until now: the generator objects its module handed out are matched again (#965).
 	reconcileMade(owner);
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (!owner?.____slothlet?.instanceID || !owner.____slothlet.contextManager?.runInContext) return value;
+	// What a module handed the call and gets back is its value as it handed it, as in plain JavaScript (#1026): the
+	// caller already holds it, so handing it back grants nothing. Decided before any stand-in is made of it.
+	if (held !== null && !callerIsHost && caller?.____slothletInternal) {
+		const own = heldForm(held, value);
+		if (own !== undefined) {
+			// Recorded as the caller's, as a value it hands over at the top level is, so the view it reads the result
+			// through hands it over as itself too.
+			recordOrigin(own, caller);
+			return own;
+		}
+	}
 	const previous = handOutReceiver;
 	handOutReceiver = !callerIsHost && caller?.____slothletInternal ? receiver : null;
 	try {
@@ -3436,6 +3501,8 @@ export function MembraneLayer(Base) {
 					searchDepth,
 					searchBudget,
 					attributeResult,
+					noteHandedArguments,
+					handedArgumentsOf,
 					membrane,
 					HOST_HANDED,
 					frontingNodeNow,

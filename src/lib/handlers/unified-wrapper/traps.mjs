@@ -136,6 +136,7 @@ let reservedKeysOwn,
 	memberHoldsCode,
 	searchDepth,
 	searchBudget,
+	noteHandedArguments,
 	FUNCTION_NODES,
 	nodeRefOf,
 	prototypeForReader,
@@ -1222,6 +1223,7 @@ export function TrapsLayer(Base) {
 					SERIALIZERS = methods.views.SERIALIZERS;
 					behindGivenView = methods.membrane.behindGivenView;
 					searchBudget = methods.membrane.searchBudget;
+					noteHandedArguments = methods.membrane.noteHandedArguments;
 					searchDepth = methods.membrane.searchDepth;
 					standInMember = methods.stand.inMember;
 					adoptArrayIntegrity = methods.materialize.adoptArrayIntegrity;
@@ -2248,10 +2250,15 @@ export function TrapsLayer(Base) {
 					}
 					// What another module or the host passes in reaches this one through the class prototype guard, so what this
 					// module stores into it reaches the caller the same way. Done first, on the arguments as the caller holds them.
-					if (!___gatePassed) args = crossArguments(wrapper, args);
-					// A function or Proxy this module handed out comes back to it as itself (#597), and so does an instance of its
-					// own class the async runtime wrapped (#328).
-					if (!___gatePassed) args = wrapper.___ownInstances(wrapper.___ownArguments(args));
+					if (!___gatePassed) {
+						const asHanded = args;
+						args = crossArguments(wrapper, args);
+						// A function or Proxy this module handed out comes back to it as itself (#597), and so does an instance of its
+						// own class the async runtime wrapped (#328).
+						args = wrapper.___ownInstances(wrapper.___ownArguments(args));
+						// The arguments as the caller handed them, for what it gets back of them as its own (#1026).
+						noteHandedArguments(args, asHanded);
+					}
 
 					// Ordinary JS call semantics (`obj.method()`) pass the *proxy* obj was read through as
 					// `this` — but a native method whose behavior depends on internal slots tied to exact

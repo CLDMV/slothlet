@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:44:41-08:00 (1795635881)
+ *	@Last modified time: 2026-11-27T15:01:34-08:00 (1795820494)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2530,6 +2530,9 @@ function refuseInternalImport(specifier, context, result) {
 		return;
 	}
 	if (!isSlothletInternal(url)) return;
+	// Code compiled from a string names an importer that says nothing about who runs it (see compiledCodeImporter).
+	const compiled = compiledCodeImporter();
+	if (compiled !== undefined && !compiled.host) throw importRefusal(specifier, url);
 	if (isModuleImport(context?.parentURL, context?.conditions)) throw importRefusal(specifier, url);
 }
 
@@ -2553,6 +2556,9 @@ function refuseLeafImport(context, result) {
 	// path, or a file requiring itself) is that file's one CommonJS module: no copy of a leaf is made. An ES module
 	// importing its own file under another URL is a copy, and is refused below.
 	if (isRequire && typeof parentURL === "string" && realFileKey(parentURL) === realFileKey(url)) return;
+	// Code compiled from a string names an importer that says nothing about who runs it (see compiledCodeImporter).
+	const compiled = compiledCodeImporter();
+	if (compiled !== undefined && !compiled.host) throw leafRefusal(compiled.location, url);
 	if (typeof parentURL === "string" && slothletCodePath(parentURL) === null) {
 		if (StringMethods.includes(parentURL, MARKER) || (StringMethods.startsWith(parentURL, "file:") && isUntaggedModuleFile(parentURL)))
 			throw leafRefusal(parentURL, url);
@@ -2562,6 +2568,190 @@ function refuseLeafImport(context, result) {
 		const caller = moduleRequireCaller();
 		if (caller !== null) throw leafRefusal(caller, url);
 	}
+}
+
+/**
+ * Whether a stack line is a frame of code compiled from a string: `eval` or a function constructor (`eval at …`), or
+ * a `vm` compile under a name that is no file or URL (`evalmachine.<anonymous>`, `<anonymous>`).
+ * @param {string} line - One line of a stack.
+ * @returns {boolean} True for such a frame.
+ * @private
+ */
+function isCompiledCodeLine(line) {
+	if (RegExpMethods.exec(/\beval at /, line) !== null) return true;
+	const location = frameLocation(line);
+	return (
+		location !== null &&
+		!StringMethods.startsWith(location, "node:") &&
+		RegExpMethods.exec(/^(?:file:|https?:|\/|[A-Za-z]:[\\/])/, location) === null
+	);
+}
+
+/**
+ * Who makes the `import()` or `require()` the resolve hook is answering, when code compiled from a string makes it.
+ * The importer Node names for such code is not who runs it: V8 gives compiled code the importer of the script that
+ * first compiled the same text (the host's file, a module's, or slothlet's own `Function` wrapper while the
+ * permission system is on), and a `vm` compile names none. So the code is placed where it is called from: past
+ * compiled frames, built-in functions, Node's own frames and slothlet's own, the first frame that is a module's code
+ * or the host's. A package's frame passes the answer outward, as for slothlet's internal exports (see
+ * {@link mayUseInternal}). Code that cannot be placed (a compiled function a scheduler calls) is not the host's.
+ * @returns {{location: ?string, host: boolean}|undefined} The frame and whether it is the host's, or undefined when
+ *   the import is not made by compiled code.
+ * @private
+ */
+function compiledCodeImporter() {
+	const lines = copyList(splitText(ownStackText(USE_FRAME_LIMIT), "\n"), 1);
+	let i = 0;
+	// The resolve hook's own frames, then Node's loader.
+	while (i < lines.length && slothletCodePath(frameLocation(lines[i]) ?? "") !== null) i++;
+	while (
+		i < lines.length &&
+		(StringMethods.startsWith(frameLocation(lines[i]) ?? "", "node:") || RegExpMethods.exec(BUILT_IN_FRAME, lines[i]) !== null)
+	)
+		i++;
+	if (i >= lines.length || !isCompiledCodeLine(lines[i])) return undefined;
+	return placeCompiledCode(lines, i);
+}
+
+/**
+ * Place code compiled from a string, from the stack lines calling it (see {@link compiledCodeImporter}): code a
+ * module compiled (see {@link moduleCompiledBy}) is that module's whoever calls it; any other compiled code is placed
+ * by its callers, past compiled frames, built-in functions, Node's own frames and slothlet's own, as the first frame
+ * that is a module's code or the host's. A package's frame passes the answer outward; code that cannot be placed is
+ * not the host's.
+ * @param {string[]} lines - The stack lines, innermost first.
+ * @param {number} start - The first line to read.
+ * @returns {{location: ?string, host: boolean}} The frame that places the code, and whether it is the host's.
+ * @private
+ */
+function placeCompiledCode(lines, start) {
+	let packageFrame = null;
+	for (let i = start; i < lines.length; i++) {
+		const line = lines[i];
+		if (isCompiledCodeLine(line)) {
+			const compiler = moduleCompiledBy(line);
+			if (compiler !== undefined) return { location: compiler, host: false };
+			continue;
+		}
+		const location = frameLocation(line);
+		if (location === null || StringMethods.startsWith(location, "node:") || isOwnCodeLocation(location)) continue;
+		if (isModuleCodeLocation(location)) return { location, host: false };
+		if (RegExpMethods.exec(/\/node_modules\//, toSlashPath(location)) !== null) {
+			packageFrame ??= location;
+			continue;
+		}
+		return { location, host: true };
+	}
+	return { location: packageFrame, host: packageFrame !== null };
+}
+
+/**
+ * The name slothlet compiles a module's code from a string under (see {@link moduleCodeName}), before its number.
+ * @type {string}
+ * @private
+ */
+const MODULE_CODE_NAME = "slothlet-module-code/";
+
+/**
+ * A name of {@link moduleCodeName}'s in a stack line, as a frame's location or as the origin `eval` code names (which
+ * the engine can print without a line and column), with its number.
+ * @type {RegExp}
+ * @private
+ */
+const MODULE_CODE_NAMED = /(?:^|[\s(])slothlet-module-code\/(\d+)\b/;
+
+/**
+ * The module code that compiled each piece of code named by {@link moduleCodeName}, by its number: the most recent
+ * {@link MODULE_CODE_LIMIT} only. A number no longer held (or one another copy of slothlet gave) still names a
+ * module's code; only the location it reports is lost.
+ * @type {Map<string, ?string>}
+ * @private
+ */
+const MODULE_CODE = new Map();
+
+/**
+ * The most compiles {@link MODULE_CODE} remembers.
+ * @type {number}
+ * @private
+ */
+const MODULE_CODE_LIMIT = 4096;
+
+/**
+ * The number the next compile named by {@link moduleCodeName} gets.
+ * @type {number}
+ * @private
+ */
+let moduleCodeCount = 0;
+
+/**
+ * Whether a compiled frame runs code a module compiled, and where: code compiled under a name of
+ * {@link moduleCodeName}'s, or code `eval` compiled (`eval at …`) where that origin, or any further out, is such code or
+ * a module's file. Returns the module code that compiled it (null when it is no longer known), or undefined for
+ * compiled code no module is known to have compiled.
+ * @param {string} line - One line of a stack, a compiled frame's (see {@link isCompiledCodeLine}).
+ * @returns {?string|undefined} The module code that compiled it, null when not known, undefined for none.
+ * @private
+ */
+function moduleCompiledBy(line) {
+	const named = RegExpMethods.exec(MODULE_CODE_NAMED, line);
+	if (named !== null) return MapMethods.has(MODULE_CODE, named[1]) ? MapMethods.get(MODULE_CODE, named[1]) : null;
+	// The origins `eval` code names, innermost first: `eval at f (eval at g (where:1:2), <anonymous>:3:4)`.
+	const pieces = splitText(line, "(");
+	for (let i = 1; i < pieces.length; i++) {
+		const location = RegExpMethods.exec(/^([^()]+?):\d+:\d+(?:\)|,)/, pieces[i])?.[1] ?? null;
+		if (location !== null && isModuleCodeLocation(location)) return location;
+	}
+	return undefined;
+}
+
+/**
+ * The name the function constructors and the `vm` functions are to compile code under, while the permission system is
+ * on (called by their wrappers in `helpers/capability-context`): for code a module's code compiles, a name of slothlet's
+ * own, added as the code's last `sourceURL` comment, so that what the code imports or requires is the module's (see
+ * {@link moduleCompiledBy}) whoever calls it later. The engine names such code by that comment in every frame of it,
+ * and code `eval` compiles inside it names it as its origin. The compiling code is placed as compiled code's importer
+ * is (see {@link placeCompiledCode}): a module's, or code that cannot be placed. Code the host compiles, and slothlet's
+ * own, is left as it is (null).
+ * @returns {?string} The comment to end the code with, or null to leave it as it is.
+ * @internal
+ */
+function moduleCodeName() {
+	let lines;
+	try {
+		lines = copyList(splitText(ownStackText(USE_FRAME_LIMIT), "\n"), 1);
+	} catch {
+		// Who compiles cannot be told: the code is named as a module's.
+		lines = [];
+	}
+	let i = 0;
+	// The frames reading the stack, this function's and the wrapper's.
+	while (i < lines.length && isCompileWrapperLine(lines[i])) i++;
+	while (i < lines.length && RegExpMethods.exec(BUILT_IN_FRAME, lines[i]) !== null) i++;
+	// Slothlet's own code compiling.
+	if (i < lines.length && isOwnCodeLocation(frameLocation(lines[i]) ?? "")) return null;
+	const placed = placeCompiledCode(lines, i);
+	if (placed.host) return null;
+	const id = String(++moduleCodeCount);
+	MapMethods.set(MODULE_CODE, id, placed.location);
+	if (MapMethods.size(MODULE_CODE) > MODULE_CODE_LIMIT)
+		for (const oldest of mapKeys(MODULE_CODE)) {
+			MapMethods.delete(MODULE_CODE, oldest);
+			break;
+		}
+	return `\n//# sourceURL=${MODULE_CODE_NAME}${id}`;
+}
+
+/**
+ * Whether a stack line is a frame of {@link moduleCodeName}, of the compile wrappers calling it, or of the stack read.
+ * @param {string} line - One line of a stack.
+ * @returns {boolean} True for such a frame.
+ * @private
+ */
+function isCompileWrapperLine(line) {
+	const path = slothletCodePath(frameLocation(line) ?? "");
+	return (
+		path !== null && RegExpMethods.exec(/(?:^|\/)lib\/helpers\/(?:instance-imports|capability-context|stack-read)\.mjs$/, path) !== null
+	);
 }
 
 /**
@@ -2701,6 +2891,8 @@ function mayUseInternal() {
 	for (let ofIndex = 0, ofList = splitText(stack, "\n"); ofIndex < ofList.length; ofIndex++) {
 		const line = ofList[ofIndex];
 		if (!(RegExpMethods.exec(/\S/, line) !== null) || RegExpMethods.exec(/^\s*Error\s*$/, line) !== null) continue;
+		// Code a module compiled from a string, named so as it was compiled (see moduleCodeName).
+		if (RegExpMethods.exec(MODULE_CODE_NAMED, line) !== null) return false;
 		const location = stackLineLocation(line);
 		if (location === null) {
 			if (RegExpMethods.exec(BUILT_IN_FRAME, line) !== null) continue;
@@ -5185,6 +5377,7 @@ export function internals(consumer) {
 		scriptKeyInstance,
 		setCallerCheck,
 		setCapabilityCheck,
+		moduleCodeName,
 		setImportRefusal,
 		setLeafImportRefusal,
 		setScriptKey

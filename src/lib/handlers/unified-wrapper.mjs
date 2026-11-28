@@ -111,6 +111,7 @@ const {
 	leafOfCopy,
 	outerCallerCeiling,
 	setApiValueCheck,
+	setHandedArguments,
 	setHandedOutCheck,
 	setInboundOriginal,
 	setResultAttributor
@@ -658,6 +659,7 @@ let isPrototypeHandle,
 	INBOUND_VIEWS,
 	isCodeObject,
 	attributeResult,
+	handedArgumentsOf,
 	nodeAtPath,
 	implToAdopt,
 	knownPrototype,
@@ -1071,6 +1073,7 @@ class UnifiedWrapper extends TrapsLayer(
 			CROSSINGS = methods.membrane.CROSSINGS;
 			INBOUND_VIEWS = methods.membrane.INBOUND_VIEWS;
 			attributeResult = methods.membrane.attributeResult;
+			handedArgumentsOf = methods.membrane.handedArgumentsOf;
 			knownPrototype = methods.membrane.knownPrototype;
 			uncross = methods.membrane.uncross;
 			STAND_IN_RECORDS = methods.membrane.STAND_IN_RECORDS;
@@ -1517,6 +1520,9 @@ class UnifiedWrapper extends TrapsLayer(
 }
 
 setResultAttributor(attributeResult);
+
+// The arguments a call was handed as its caller handed them, for what it gets back of them as its own (#1026).
+setHandedArguments((args) => handedArgumentsOf(args));
 
 setModuleNodeResolver(nodeAtPath);
 

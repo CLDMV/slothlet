@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:26:48-08:00 (1795642008)
+ *	@Last modified time: 2026-11-25T20:21:21-08:00 (1795666881)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,12 @@
  */
 import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
-import { isFrameworkReservedKey, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import {
+	isFrameworkReservedKey,
+	isWrapperAnsweredName,
+	readApiMember,
+	internals as unifiedWrapperInternals
+} from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import {
 	ArrayMethods,
@@ -788,8 +793,14 @@ export class ApiAssignment extends ComponentBase {
 					// and the first loaded keeps it (O01): a file's `version = "file"` beside its folder's
 					// `version = "dir"` stays "file" (#1002). merge-replace falls through to replace. Only a member
 					// the target really holds counts: a node answers `name` and `length` itself when no member
-					// sits there, and that answer is not a first-loaded leaf (a self-named file's `name` export).
-					if (!isMergeReplace && typeof existing !== "object" && typeof existing !== "function" && Objects.hasOwn(targetApi, key)) {
+					// sits there, and that answer is not a first-loaded leaf (a self-named file's `name` export). A
+					// callable node's proxy reports its function's own `name` and `length` as own properties, so
+					// the node is asked for a member, not for an own property (#1018).
+					const targetHoldsMember =
+						resolveWrapper(targetApi) && isWrapperAnsweredName(key)
+							? readApiMember(targetApi, key) !== undefined
+							: Objects.hasOwn(targetApi, key);
+					if (!isMergeReplace && typeof existing !== "object" && typeof existing !== "function" && targetHoldsMember) {
 						return false;
 					}
 					// Existing is a plain object, new value is wrapper - can't merge into plain object

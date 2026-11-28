@@ -1,0 +1,23 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_require_esm/consumers/typegen.mjs
+ *	@Date: 2026-11-27T21:56:34-08:00 (1795845394)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-27T22:05:37-08:00 (1795845937)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview A package's ESM entry that imports `@cldmv/slothlet/typegen` statically, which Node's `require(esm)` has to load (#1034).
+ * @module api_test_require_esm.consumers.typegen
+ */
+import * as entry from "@cldmv/slothlet/typegen";
+
+/** The names `@cldmv/slothlet/typegen` exports. */
+export const names = Object.keys(entry);

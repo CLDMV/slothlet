@@ -1262,6 +1262,9 @@ export function WaitingLayer(Base) {
 					async apply(___target, ___thisArg, args, invoke = (fn, self) => Reflect.apply(fn, self, args)) {
 						// As get: a kept node's access offered to a stand-in is dropped first (#661).
 						takeCapturedAccess(wrapper);
+						// The reader of a view of `self` the call was made through, checked once the chain has loaded (#1006).
+						const ___viewCall = viewsShared.standInViewCall?.standIn === waitingProxy ? viewsShared.standInViewCall : null;
+						viewsShared.standInViewCall = null;
 						// Called from a run: a built-in the chain ends on is the run's own copy of it (see helpers/run-snapshot).
 						const ___runSnap = anyRunOpen() ? (runningRecord(wrapper.____slothlet)?.snap ?? null) : null;
 						// Capture caller context synchronously before any await.
@@ -1523,6 +1526,15 @@ export function WaitingLayer(Base) {
 							builtinKind(lastObject) !== null
 						)
 							lastObject = builtinCopy(___runSnap, lastObject);
+						// The view's reader, checked against what the chain reached now that it has loaded, as the view checks a call of
+						// a loaded node before it runs. Checked whatever the chain reached, so a reader denied it learns nothing of it.
+						if (___viewCall) {
+							const ___viewPath =
+								resolveWrapper(current)?.____slothletInternal?.apiPath ??
+								ArrayMethods.join(filterList(concatLists([wrapper.____slothletInternal.apiPath], chain), Boolean), ".");
+							const ___viewGate = wrapper.___enforceCapturedPair(___viewCall.reader, ___viewCall.ceiling, ___viewPath, args, true);
+							if (___viewGate) await ___viewGate;
+						}
 						if (typeof current === "function") {
 							// A function the walk reached as a member of a node rather than as a node of its own — a static method, a
 							// method of a function's `prototype` — carries no gate of its own: running it is a call of the last node

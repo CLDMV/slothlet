@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:19-08:00 (1794951319)
+ *	@Last modified time: 2026-11-27T22:07:02-08:00 (1795846022)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -110,7 +110,7 @@ import {
 // on Node's module object later does not run here.
 const fs = Objects.freeze({ ...nodeFsPromises });
 const path = Objects.freeze({ ...nodePath });
-const { fileURLToPath } = nodeUrl;
+const { fileURLToPath, pathToFileURL } = nodeUrl;
 
 /**
  * Matches any quoted `@cldmv/slothlet[/sub]` specifier — static imports, dynamic imports, and
@@ -486,6 +486,26 @@ async function collectSlothletSpecifiers(root) {
 }
 
 /**
+ * Where a browser loads one of slothlet's `#`-specifiers that has a file of its own for the `browser` condition
+ * (`#helpers/platform`, #1034): that file, from the same tree (`src/` under `slothlet-dev`, `dist/` otherwise) Node
+ * resolved the specifier to. `import.meta.resolve` here runs under Node's conditions, which pick the Node file.
+ * Every other specifier is where Node resolved it.
+ * @param {object} pkg - Slothlet's package.json.
+ * @param {string} spec - The specifier.
+ * @param {string} root - Slothlet's package root.
+ * @param {string} resolved - Where Node resolved it (a `file:` URL).
+ * @returns {string} The `file:` URL a browser loads.
+ * @private
+ */
+function browserTarget(pkg, spec, root, resolved) {
+	const entry = pkg.imports?.[spec];
+	if (entry === null || typeof entry !== "object") return resolved;
+	const relative = regExpReplace(/\\/g, path.relative(root, fileURLToPath(resolved)), "/");
+	const branch = StringMethods.startsWith(relative, "src/") && entry["slothlet-dev"] ? entry["slothlet-dev"] : entry;
+	return typeof branch.browser === "string" ? pathToFileURL(path.join(root, branch.browser)).href : resolved;
+}
+
+/**
  * Generate the browser importmap for slothlet's OWN modules.
  *
  * In a browser, slothlet's internal imports (`@cldmv/slothlet`, `#helpers/*`, …)
@@ -525,10 +545,11 @@ async function generateImportMap(base = DEFAULT_SLOTHLET_BASE) {
 		);
 	};
 
+	const pkg = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8"));
 	for (const spec of setValues(await collectSlothletSpecifiers(root))) {
 		let resolved;
 		try {
-			resolved = import.meta.resolve(spec);
+			resolved = browserTarget(pkg, spec, root, import.meta.resolve(spec));
 			// An export can resolve at spec level while its target file is absent from the install
 			// (#209 — `./devcheck` pointed at a file the `files` whitelist didn't ship). Verify the
 			// target exists so a generated importmap never carries a URL that 404s by construction.

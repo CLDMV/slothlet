@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T16:05:37-08:00 (1795651537)
+ *	@Last modified time: 2026-11-27T20:54:31-08:00 (1795841671)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,6 +39,7 @@ import {
 	whenIdle
 } from "#helpers/flow-stores";
 import {
+	callerHeldCode,
 	carriesCallerCode,
 	handsOutAsModule,
 	attributesResults,
@@ -1815,6 +1816,8 @@ export class AsyncContextManager {
 		executionStore.record = this.#recordOf(baseStore);
 		// The call whose own code receives what this call returns, when that call was handed code (ID-D6).
 		let receiver = null;
+		// The code a module caller handed this call, as it holds it: what of it comes back is its own value (#1026).
+		let held = null;
 		if (asHost) {
 			// Pinned to "no module caller": the flow runs as the host, not as whichever module is ambient.
 			executionStore.callerWrapper = null;
@@ -1853,6 +1856,8 @@ export class AsyncContextManager {
 				ceiling,
 				made: madeCode
 			};
+			if (executionStore.record.flagged && executionStore.callerWrapper && attribute && attributesResults(currentWrapper))
+				held = callerHeldCode(args, currentWrapper.____slothlet);
 		}
 
 		// A leaf's own call hands back what its module made as that module's (#597), to a caller known to be the host
@@ -1860,7 +1865,7 @@ export class AsyncContextManager {
 		const callerIsHost = !executionStore.callerWrapper;
 		const attributed =
 			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
-				? (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null, receiver)
+				? (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null, receiver, held)
 				: (value) => value;
 
 		// Only wrap in als.run() if we're not already in the right context

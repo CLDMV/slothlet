@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T14:03:42-08:00 (1795644222)
+ *	@Last modified time: 2026-11-27T22:07:06-08:00 (1795846026)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@ import { DEFAULT_API_DEPTH } from "#helpers/defaults";
 // disk-scanning / CJS-loader methods are Node-only (browser mode uses #scanDirectoryBrowser /
 // #loadModuleBrowser over the manifest tree), so they reference the namespaces directly — null in a
 // browser, but those methods never run there, so no per-call guard is needed.
-import { isNode, fsp, path, url, createRequire } from "#helpers/platform";
+import { fsp, path, url, createRequire, vm as NODE_VM, childProcess as NODE_CHILD_PROCESS } from "#helpers/platform";
 import { compilePattern } from "#helpers/pattern-matcher";
 import { isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
 import { isFrameworkName } from "#helpers/reserved-keys";
@@ -66,7 +66,6 @@ import {
 	ObjectMethods,
 	Objects,
 	Promise,
-	promiseAll,
 	PromiseMethods,
 	Reflect,
 	RegExpMethods,
@@ -146,17 +145,10 @@ function leafPaths(structure, into = []) {
 
 const RUNTIME_EXTERNALIZED = !("env" in import.meta);
 
-/**
- * `node:vm` and `child_process` as slothlet loads, imported as the loader imported them when it used them (through the
- * module graph, so a host's loader hooks and a test's module mocks apply as before), but once, now: code that replaces
- * `vm.compileFunction` or `child_process.fork` on Node's modules later does not run inside the loader. Null where the
- * platform has no Node builtins (a browser, which loads no file by path).
- * @type {Array<object|null>}
- * @private
- */
-const unpacked1 = isNode ? await promiseAll([import("node:vm"), import("child_process")]) : [null, null],
-	NODE_VM = unpacked1[0],
-	NODE_CHILD_PROCESS = unpacked1[1];
+// `node:vm` and `child_process` come from `#helpers/platform`, imported once as slothlet loads (through the module graph,
+// so a host's loader hooks and a test's module mocks apply): code that replaces `vm.compileFunction` or
+// `child_process.fork` on Node's modules later does not run inside the loader. Null in a browser, which loads no file
+// by path. Imported statically, not awaited here: nothing in slothlet's graph awaits at its top level (#1034).
 
 /**
  * `vm.compileFunction`, taken as slothlet loads, for telling a CommonJS file by whether its source compiles as a

@@ -876,10 +876,14 @@ function isTerminalData(value) {
  * @example
  * // tool.mjs: export function _secret() {}
  * isPrivateFunctionMember(toolWrapper, "_secret", toolWrapper._secret); // true
+ * isPrivateFunctionMember(toolWrapper, "__proto__", Function.prototype); // false: the engine's, not the module's
  */
 function isPrivateFunctionMember(wrapper, prop, value) {
 	if (typeof prop !== "string" || typeof value !== "function") return false;
 	if (!wrapper.____slothlet.handlers.permissionManager.isPrivateTarget?.(memberPathOf(wrapper, prop))) return false;
+	// A name the engine gives every object or function (`__proto__`, `__lookupGetter__`, …) is the language's, not one the
+	// module made private: it is private only where the node holds a member of that name of its own.
+	if (!hasOwnMember(wrapper, prop) && ArrayMethods.some(INHERITED_HOLDERS, (holder) => hasOwn(holder, prop))) return false;
 	return functionOf(unwrapLeafValue(value)) !== null;
 }
 

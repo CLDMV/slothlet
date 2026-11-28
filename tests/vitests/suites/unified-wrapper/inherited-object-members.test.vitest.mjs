@@ -147,7 +147,9 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.
 				shadowKeys: ["__hidden", "hasOwnProperty", "toString", "valueOf"],
 				dirKeys: ["toString", "valueOf"]
 			};
-			expect(shadowed(api)).toEqual(expected);
+			// The module's own listing keeps its private function; the host's leaves it out when permissions are on (#1011).
+			const hostExpected = permissions ? { ...expected, shadowKeys: expected.shadowKeys.filter((key) => key !== "__hidden") } : expected;
+			expect(shadowed(api)).toEqual(hostExpected);
 			expect(await api.probe.runShadowed()).toEqual(expected);
 		});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T16:05:37-08:00 (1795651537)
+ *	@Last modified time: 2026-11-27T20:54:31-08:00 (1795841671)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,6 +38,7 @@ import { util, inheritsFrom } from "#helpers/platform";
 import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
 import {
 	FRAMEWORK_DIR,
+	callerHeldCode,
 	carriesCallerCode,
 	handsOutAsModule,
 	attributesResults,
@@ -3296,11 +3297,16 @@ export class LiveContextManager {
 		const callerIsHost = Boolean(entryIdentity) && !entryIdentity.unresolved && !entryCaller;
 		// The call whose own code receives what this call returns, when that call was handed code (ID-D6).
 		const receiver = ownReceiver(entryIdentity?.record, entryIdentity);
+		// The code a module caller handed this call, as it holds it: what of it comes back is its own value (#1026).
+		const held =
+			record?.flagged && entryCaller && !callerIsHost && attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
+				? callerHeldCode(args, currentWrapper.____slothlet)
+				: null;
 		const attributed =
 			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
 				? (value) =>
 						this.#wrapClassInstanceResult(
-							attributeResult(currentWrapper, value, callerIsHost, entryCaller, receiver),
+							attributeResult(currentWrapper, value, callerIsHost, entryCaller, receiver, held),
 							targetInstanceID,
 							creator,
 							callerIsHost

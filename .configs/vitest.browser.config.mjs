@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T02:38:12-08:00 (1795603092)
+ *	@Last modified time: 2026-11-27T22:03:08-08:00 (1795845788)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -117,6 +117,8 @@ export default defineConfig(async () => {
 		// with sourcemaps), so v8 coverage remaps to the real source files.
 		optimizeDeps: { exclude: ["@cldmv/slothlet"] },
 		test: {
+			// Off for the same reason as in vitest.config.mjs: the cache never serves slothlet's suite and only grows.
+			fsModuleCache: false,
 			server: { deps: { inline: [/@cldmv\/slothlet/] } },
 			include: ["tests/browser/**/*.browser.test.mjs"],
 			exclude: ["node_modules"],
@@ -138,7 +140,8 @@ export default defineConfig(async () => {
 				// node's and corrupt a naive merge.
 				include: [
 					"src/lib/i18n/translations.mjs",
-					"src/lib/helpers/platform.mjs",
+					"src/lib/helpers/platform-host.mjs",
+					"src/lib/helpers/platform.browser.mjs",
 					"src/lib/helpers/eventemitter-context.mjs",
 					"src/lib/handlers/context-async.mjs",
 					"src/lib/builders/api_builder.mjs",

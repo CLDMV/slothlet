@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T16:05:41-08:00 (1795651541)
+ *	@Last modified time: 2026-11-27T15:01:32-08:00 (1795820492)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -73,7 +73,7 @@ import { toComparablePath, internals as framePlacementInternals } from "#handler
 const { fileNodes, frameDefiner, runtime_codeWritersOnStack, runtime_loadingFileRunning, runtime_loadingHelper } =
 	framePlacementInternals("lib/helpers/capability-context");
 
-const { setCapabilityCheck, instanceClaimed } = instanceImportsInternals("lib/helpers/capability-context");
+const { setCapabilityCheck, instanceClaimed, moduleCodeName } = instanceImportsInternals("lib/helpers/capability-context");
 
 /**
  * The checks of the instances that are up with the permission system configured, by instance id: each throws
@@ -336,12 +336,40 @@ let functionWrapper = null;
 const runtime_descriptorValue = (descriptor) => descriptor?.value;
 
 /**
+ * The arguments a function constructor or a `vm` function is to compile with: for code a module's code compiles, the
+ * code ends with a name of slothlet's own (see `moduleCodeName` in `helpers/instance-imports`), so that what it
+ * imports or requires stays the module's whoever calls it. The host's code, and slothlet's own, compile with exactly
+ * what they gave. A function constructor's arguments are each made a string, in order, as the constructor makes them
+ * (a symbol throws its TypeError here), and its body (the last, or an empty one) is named; a `vm` function's code is
+ * its first argument, named when it is a string (the function refuses any other).
+ * @param {Array<*>} args - The arguments given.
+ * @param {boolean} functionConstructor - Whether they are a function constructor's.
+ * @returns {Array<*>|undefined} The arguments to compile with, or undefined to pass on those given.
+ * @private
+ */
+function runtime_namedArgs(args, functionConstructor) {
+	if (!functionConstructor && typeof args[0] !== "string") return undefined;
+	const name = moduleCodeName();
+	if (name === null) return undefined;
+	const named = [];
+	for (let index = 0; index < args.length; index++) listPush(named, functionConstructor ? `${args[index]}` : args[index]);
+	if (!functionConstructor) {
+		named[0] += name;
+		return named;
+	}
+	if (named.length === 0) listPush(named, "");
+	named[named.length - 1] += name;
+	return named;
+}
+
+/**
  * Wrap a function in a Proxy that asks first whether the code calling or constructing it may use a capability. The
  * Proxy keeps the function's identity in every other respect: its `prototype`, `name`, `length`, own members and
  * `Function.prototype.toString` (which answers native code for it, as for the function itself).
  * @param {Function} target - The function.
  * @param {object} layer - Its layer: an inactive one passes straight through.
- * @param {function(Array<*>): void} check - Throws for a caller that may not use it, given the arguments.
+ * @param {function(Array<*>): (Array<*>|void)} check - Throws for a caller that may not use it, given the arguments;
+ *   may answer the arguments to pass on instead (see {@link runtime_namedArgs}).
  * @param {boolean} [constructorOfFunctions=false] - One of the function constructors other than `Function`: its own
  *   prototype answers this copy's `Function`.
  * @returns {Function} The Proxy.
@@ -350,12 +378,12 @@ const runtime_descriptorValue = (descriptor) => descriptor?.value;
 function runtime_guarded(target, layer, check, constructorOfFunctions = false) {
 	const handler = {
 		apply(fn, thisArg, args) {
-			if (layer.active) check(args);
-			return Reflect.apply(fn, thisArg, args);
+			const given = layer.active ? check(args) : undefined;
+			return Reflect.apply(fn, thisArg, given ?? args);
 		},
 		construct(fn, args, newTarget) {
-			if (layer.active) check(args);
-			return Reflect.construct(fn, args, newTarget === proxy ? fn : newTarget);
+			const given = layer.active ? check(args) : undefined;
+			return Reflect.construct(fn, given ?? args, newTarget === proxy ? fn : newTarget);
 		}
 	};
 	if (constructorOfFunctions)
@@ -368,7 +396,8 @@ function runtime_guarded(target, layer, check, constructorOfFunctions = false) {
  * Replace `host[key]` with a guarded copy of what is there, as an own data property, and remember it.
  * @param {object|null|undefined} host - The object carrying it.
  * @param {string} key - Its key.
- * @param {function(Array<*>): void} check - Throws for a caller that may not use it, given the arguments.
+ * @param {function(Array<*>): (Array<*>|void)} check - Throws for a caller that may not use it, given the arguments;
+ *   may answer the arguments to pass on instead.
  * @param {boolean} [constructorOfFunctions=false] - See {@link runtime_guarded}.
  * @returns {Function|null} The guarded copy, or null when nothing was installed.
  * @private
@@ -443,7 +472,15 @@ function runtime_enable() {
 	// The function constructors: each prototype's `constructor`, and the global `Function`.
 	for (let ofIndex = 0, ofList = CONSTRUCTORS; ofIndex < ofList.length; ofIndex++) {
 		const { label, prototype } = ofList[ofIndex];
-		const guarded = runtime_install(prototype, "constructor", () => checkCapability("code", label), label !== "Function");
+		const guarded = runtime_install(
+			prototype,
+			"constructor",
+			(args) => {
+				checkCapability("code", label);
+				return runtime_namedArgs(args, true);
+			},
+			label !== "Function"
+		);
 		if (label === "Function" && guarded) {
 			functionWrapper = guarded;
 			let globalDescriptor;
@@ -471,7 +508,10 @@ function runtime_enable() {
 			const key = ofList[ofIndex];
 			runtime_install(VM, key, (args) => {
 				const filename = runtime_compiledName(key, args) ?? null;
-				checkCapability("code", `vm.${key}`, null, filename, runtime_runnerCompile(key, args, filename));
+				const runnerCompile = runtime_runnerCompile(key, args, filename);
+				checkCapability("code", `vm.${key}`, null, filename, runnerCompile);
+				// vitest's runner compiling a file's code (or a compile shaped as one) keeps the file's own name.
+				return runnerCompile === false ? runtime_namedArgs(args, false) : undefined;
 			});
 		}
 	}

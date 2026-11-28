@@ -84,6 +84,7 @@ const { markCallerLocked, isCallerLocked } = callerPinningInternals("lib/handler
  * registered (see `WrapperBase.link`), before any wrapper exists.
  */
 let runtime_unwrapClassInstance,
+	isRestartStale,
 	runtime_classInstanceCreator,
 	trustedRootOwn,
 	frameDefiner,
@@ -2222,7 +2223,12 @@ const STAND_INS = new WeakSet();
 const viewsShared = {
 	__proto__: null,
 	standInKeptRead: null,
-	heldStandInRead: null
+	heldStandInRead: null,
+	// The reader a gated view of `self` calls for while it calls through a stand-in for a node not loaded yet: the
+	// stand-in takes it first, before any code the call runs, and checks it against the member its chain reaches once
+	// that has loaded, as eager mode checks the same call (#1006). Checked before the load, the member has no owner yet,
+	// so the owner grant could not apply to it.
+	standInViewCall: null
 };
 
 /**
@@ -2966,6 +2972,25 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 		const chain = WeakMapMethods.get(WAITING_CHAINS, child);
 		return chain && chain.length > 0 ? standInPath(inner, chain) : undefined;
 	};
+	// Under the owner grant (#509), a call through a stand-in to a member nothing owns yet (its node has not loaded) is
+	// checked by the stand-in, against the member its chain reaches once loaded: checked now, the grant would refuse a
+	// module its own leaf. Every other call is checked here, at once, against the path the chain names. A stand-in that
+	// forwards to a restarted tree is always checked here.
+	const deferToStandIn = () => {
+		const path = calledPath();
+		if (path === undefined || isRestartStale(inner)) return false;
+		const handlers = inner.____slothlet.handlers;
+		if (!handlers?.permissionManager?.isOwnerGrantEnabled?.()) return false;
+		return !handlers.ownership?.getCurrentOwner?.(path);
+	};
+	const throughStandIn = (access) => {
+		viewsShared.standInViewCall = { standIn: child, reader: capturedCaller, ceiling };
+		try {
+			return access();
+		} finally {
+			viewsShared.standInViewCall = null;
+		}
+	};
 
 	view = new NativeProxy(shadow, {
 		apply(_, thisArg, args) {
@@ -2976,6 +3001,15 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 			// to when called; a check here could only be made against the stand-in's base.
 			if (gated === "held" && WeakSetMethods.has(STAND_INS, child))
 				return selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller, null, inner);
+			if (deferToStandIn())
+				return callAsDefiner(inner, () =>
+					selfViewResult(
+						throughStandIn(() => Reflect.apply(child, thisArg, args)),
+						capturedCaller,
+						null,
+						inner
+					)
+				)();
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = inner.___enforceCapturedPair(capturedCaller, ceiling, calledPath(), args, true);
@@ -2995,12 +3029,15 @@ function capturedView(child, capturedCaller, gated = true, ceiling = null) {
 			return call();
 		},
 		construct(_, args, newTarget) {
-			if (gated && !(gated === "held" && WeakSetMethods.has(STAND_INS, child)))
-				inner.___enforceCapturedPair(capturedCaller, ceiling, calledPath(), args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
-			return asKept(() => Reflect.construct(child, args, newTarget === view ? child : newTarget));
+			const construct = () => Reflect.construct(child, args, newTarget === view ? child : newTarget);
+			if (gated && !(gated === "held" && WeakSetMethods.has(STAND_INS, child))) {
+				if (deferToStandIn()) return throughStandIn(construct);
+				inner.___enforceCapturedPair(capturedCaller, ceiling, calledPath(), args);
+			}
+			return asKept(construct);
 		},
 		get(_, prop, receiver) {
 			// The access a view of `self` over this one is making, taken as the trap starts; a read made on this view
@@ -3279,6 +3316,7 @@ export function ViewsLayer(Base) {
 					reader: capturedReader
 				});
 				Base.linkLayer(this, (methods, registered) => {
+					isRestartStale = methods.is.restartStale;
 					standInPath = methods.stand.inPath;
 					WAITING_CHAINS = methods.nodes.WAITING_CHAINS;
 					realClass = registered;

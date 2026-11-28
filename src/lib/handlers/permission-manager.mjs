@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:52:55-08:00 (1795636375)
+ *	@Last modified time: 2026-11-27T15:00:40-08:00 (1795820440)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3318,6 +3318,17 @@ export class PermissionManager extends ComponentBase {
 	 */
 	isCaptureEnabled() {
 		return this.#capture;
+	}
+
+	/**
+	 * Whether `permissions.owner` is on (#509): a module may reach every leaf it currently owns.
+	 *
+	 * @returns {boolean} True when the owner grant applies.
+	 * @example
+	 * if (pm.isOwnerGrantEnabled()) { ... }
+	 */
+	isOwnerGrantEnabled() {
+		return this.#owner;
 	}
 
 	/**
