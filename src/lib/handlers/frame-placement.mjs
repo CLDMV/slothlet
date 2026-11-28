@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-27T14:17:13-08:00 (1795817833)
+ *	@Last modified time: 2026-11-27T20:54:31-08:00 (1795841671)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1915,7 +1915,7 @@ function setApiValueCheck(check, harborsCode = null) {
 /**
  * What a module's call returned, as its caller receives it (#597): code the module made, set up to run as that
  * module whoever runs it. Set by the wrapper module; until then a value is returned as it is.
- * @type {function(object, *, boolean): *}
+ * @type {function(object, *, boolean, (object|null), (object|null), (WeakSet<object>|null)): *}
  * @private
  */
 let resultAttributor = (_wrapper, value) => value;
@@ -1938,11 +1938,14 @@ function setResultAttributor(attributor) {
  * @param {*} value - What the call returned.
  * @param {boolean} [callerIsHost=false] - Whether the host made the call, so is the one receiving what it returned.
  * @param {object|null} [caller=null] - The wrapper of the module that made the call, when one did.
+ * @param {object|null} [receiver=null] - The call whose own code receives the value (see {@link ownReceiver}).
+ * @param {WeakSet<object>|null} [held=null] - The code the caller handed the call (see {@link callerHeldCode}): what of
+ *   it comes back is the caller's value as it handed it.
  * @returns {*} What the caller gets.
  * @internal
  */
-function attributeResult(wrapper, value, callerIsHost = false, caller = null, receiver = null) {
-	return resultAttributor(wrapper, value, callerIsHost, caller, receiver);
+function attributeResult(wrapper, value, callerIsHost = false, caller = null, receiver = null, held = null) {
+	return resultAttributor(wrapper, value, callerIsHost, caller, receiver, held);
 }
 
 /**
@@ -2031,6 +2034,24 @@ export function isHandedOut(value) {
  * @private
  */
 let inboundOriginal = (value) => value;
+
+/**
+ * The arguments of a call as its caller handed them, by the list the call's code receives, or null when not recorded
+ * (#1026). Set by the wrapper module.
+ * @type {function(*): (ArrayLike<*>|null)}
+ * @private
+ */
+let handedArguments = () => null;
+
+/**
+ * Register how a call's arguments as its caller handed them are found (see {@link callerHeldCode}).
+ * @param {function(*): (ArrayLike<*>|null)} find - The arguments as handed, or null.
+ * @returns {void}
+ * @internal
+ */
+function setHandedArguments(find) {
+	handedArguments = find;
+}
 
 /**
  * Register how the caller's value behind a module's view of it is found (see {@link handedLeafFunctions}).
@@ -2223,6 +2244,64 @@ function handedLeafFunctions(thisArg, args, slothlet = null) {
 	visit(thisArg, depth);
 	const count = args?.length ?? 0;
 	for (let index = 0; index < count; index++) visit(args[index], depth);
+	return found;
+}
+
+/**
+ * The code a module's call into another leaf is handed, as its caller handed it (#1026): each argument that can carry
+ * code, and the functions and code objects nested in plain data among them, within the instance's `permissions.search`
+ * ({@link searchDepth}, {@link searchProperties}). What the callee returns of these is handed back to the caller as the
+ * very value it handed in, as in plain JavaScript: the caller already holds it, so nothing is granted.
+ *
+ * Read from the arguments as the caller handed them, recorded before the class prototype guard and the hand-in turn
+ * them into what the callee holds, and as the call starts, before the callee's code runs, so nothing the callee puts
+ * into the caller's data counts. A list nothing recorded (made by a hook) gives nothing. A view the caller holds (a
+ * Proxy) counts as itself and is not looked into, and an accessor is not read: decided from `typeof` and property
+ * descriptors, so nothing of the caller's runs.
+ *
+ * @param {ArrayLike<*>|null|undefined} args - The arguments the call's code receives.
+ * @param {object|null} [slothlet=null] - The instance whose `permissions.search` bounds the search.
+ * @returns {WeakSet<object>|null} The values, or null when there are none.
+ * @internal
+ * @example
+ * callerHeldCode([fn, { inner: { cb } }], slothlet); // holds fn and cb, when the caller handed that list
+ */
+export function callerHeldCode(args, slothlet = null) {
+	const asHanded = handedArguments(args);
+	if (asHanded === null) return null;
+	let found = null;
+	const budget = { remaining: searchProperties(slothlet) };
+	const visit = (value, depth) => {
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
+		if (WeakSetMethods.has(trustedRootOwn.genuineWrappers, value) || isApiValue(value)) return;
+		if (typeof value === "function" || (isNode && util.types.isProxy(value))) {
+			WeakSetMethods.add((found ??= new WeakSet()), value);
+			return;
+		}
+		// Where a Proxy cannot be told from its target (a browser), plain data is not looked into.
+		if (depth <= 0 || budget.remaining <= 0 || !isNode) return;
+		try {
+			const prototype = Objects.getPrototypeOf(value);
+			if (prototype !== Objects.prototype && prototype !== Arrays.prototype && prototype !== null) {
+				// An object some module's code made (a class instance) is code itself.
+				WeakSetMethods.add((found ??= new WeakSet()), value);
+				return;
+			}
+			if (prototype === Arrays.prototype && Arrays.isArray(value) && value.length > budget.remaining) return;
+			const keys = Reflect.ownKeys(value);
+			budget.remaining -= keys.length;
+			if (budget.remaining < 0) return;
+			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+				const descriptor = Reflect.getOwnPropertyDescriptor(value, ofList[ofIndex]);
+				if (descriptor && Objects.hasOwn(descriptor, "value")) visit(descriptor.value, depth - 1);
+			}
+		} catch {
+			// An exotic object that refuses to be read holds nothing that can be found without running its code.
+		}
+	};
+	const depth = searchDepth(slothlet);
+	const count = asHanded.length ?? 0;
+	for (let index = 0; index < count; index++) visit(asHanded[index], depth);
 	return found;
 }
 
@@ -6294,6 +6373,7 @@ export function internals(consumer) {
 		runtime_loadingHelper,
 		setApiValueCheck,
 		setHandedOutCheck,
+		setHandedArguments,
 		setHostPrototypeCheck,
 		setInboundOriginal,
 		setModuleNodeResolver,

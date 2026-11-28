@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:44:17-08:00 (1795643057)
+ *	@Last modified time: 2026-11-27T20:54:32-08:00 (1795841672)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -210,6 +210,7 @@ const {
 	outerCallerCeiling,
 	setApiValueCheck,
 	setHandedOutCheck,
+	setHandedArguments,
 	setInboundOriginal,
 	setResultAttributor
 } = framePlacementInternals("lib/handlers/unified-wrapper");
@@ -5222,6 +5223,16 @@ let keptAccessorRead = null;
 let standInKeptRead = null;
 
 /**
+ * The reader a gated view of `self` calls for while it calls through a stand-in for a node not loaded yet: the stand-in
+ * takes it first, before any code the call runs, and checks it against the member its chain reaches once that has
+ * loaded, as eager mode checks the same call (#1006). Checked before the load, the member has no owner yet, so the owner
+ * grant could not apply to it.
+ * @type {{standIn: object, reader: object, ceiling: object|ReadonlyArray<object>|null}|null}
+ * @private
+ */
+let standInViewCall = null;
+
+/**
  * The reader a held view reads for while it reads through a node not loaded yet: a stand-in made for the read is the
  * reader's, so a call through it later is made as the reader, whoever runs it (#597).
  * @type {{wrapper: object, reader: object, ceiling: object|ReadonlyArray<object>|null}|null}
@@ -5909,10 +5920,14 @@ function runtime_isTerminalData(value) {
  * @example
  * // tool.mjs: export function _secret() {}
  * runtime_isPrivateFunctionMember(toolWrapper, "_secret", toolWrapper._secret); // true
+ * runtime_isPrivateFunctionMember(toolWrapper, "__proto__", Function.prototype); // false: the engine's, not the module's
  */
 function runtime_isPrivateFunctionMember(wrapper, prop, value) {
 	if (typeof prop !== "string" || typeof value !== "function") return false;
 	if (!wrapper.slothlet.handlers.permissionManager.isPrivateTarget?.(runtime_memberPathOf(wrapper, prop))) return false;
+	// A name the engine gives every object or function (`__proto__`, `__lookupGetter__`, …) is the language's, not one the
+	// module made private: it is private only where the node holds a member of that name of its own.
+	if (!runtime_hasOwnMember(wrapper, prop) && ArrayMethods.some(INHERITED_HOLDERS, (holder) => hasOwn(holder, prop))) return false;
 	return runtime_functionOf(runtime_unwrapLeafValue(value)) !== null;
 }
 
@@ -9704,14 +9719,27 @@ function runtime_promiseStandIn(maker, owner, original) {
  * @param {object|null} [caller=null] - The wrapper of the module that made the call, when one did.
  * @param {object|null} [receiver=null] - The call whose own code receives the value, when that call was handed code
  *   (see `ownReceiver`): a function stand-in made for it here is recorded as handed to that call alone.
+ * @param {WeakSet<object>|null} [held=null] - The code a module caller handed the call, as it holds it (see
+ *   `callerHeldCode`).
  * @returns {*} What the caller gets.
  * @private
  */
-function runtime_attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null) {
+function runtime_attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null, held = null) {
 	// An async call's code has run on until now: the generator objects its module handed out are matched again (#965).
 	runtime_reconcileMade(owner);
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
+	// What a module handed the call and gets back is its value as it handed it, as in plain JavaScript (#1026): the
+	// caller already holds it, so handing it back grants nothing. Decided before any stand-in is made of it.
+	if (held !== null && !callerIsHost && caller?.____slothletInternal) {
+		const own = runtime_heldForm(held, value);
+		if (own !== undefined) {
+			// Recorded as the caller's, as a value it hands over at the top level is, so the view it reads the result
+			// through hands it over as itself too.
+			runtime_recordOrigin(own, caller);
+			return own;
+		}
+	}
 	const previous = handOutReceiver;
 	handOutReceiver = !callerIsHost && caller?.____slothletInternal ? receiver : null;
 	try {
@@ -9720,6 +9748,50 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 	} finally {
 		handOutReceiver = previous;
 	}
+}
+
+/**
+ * The arguments each call was handed as its caller handed them, by the list the call's code receives (#1026): before
+ * the class prototype guard and the hand-in turn them into what the callee holds. A list made later (a hook's) has no
+ * entry, and nothing of it counts as the caller's.
+ * @type {WeakMap<object, ArrayLike<*>>}
+ * @private
+ */
+const HANDED_ARGUMENTS = new WeakMap();
+
+/**
+ * Record the arguments a call was handed as its caller handed them (see {@link HANDED_ARGUMENTS}).
+ * @param {ArrayLike<*>} args - The list the call's code receives.
+ * @param {ArrayLike<*>} asHanded - The list as the caller handed it.
+ * @returns {void}
+ * @private
+ */
+function runtime_noteHandedArguments(args, asHanded) {
+	if (args !== null && typeof args === "object") WeakMapMethods.set(HANDED_ARGUMENTS, args, asHanded);
+}
+
+setHandedArguments((args) => (args !== null && typeof args === "object" ? (WeakMapMethods.get(HANDED_ARGUMENTS, args) ?? null) : null));
+
+/**
+ * The form of a result its caller handed the call, if it handed one (#1026): the result itself, or the value behind
+ * it (behind a crossing view, an inbound view or a stand-in, as far as they go), the first of these the caller holds.
+ * @param {WeakSet<object>} held - What the caller handed the call (see `callerHeldCode`).
+ * @param {object|Function} value - The result.
+ * @returns {object|Function|undefined} That form, or undefined when the caller handed none of them.
+ * @private
+ */
+function runtime_heldForm(held, value) {
+	let current = value;
+	for (let depth = 0; depth < 4; depth++) {
+		if (WeakSetMethods.has(held, current)) return current;
+		const behind =
+			WeakMapMethods.get(CROSSINGS, current)?.original ??
+			WeakMapMethods.get(INBOUND_VIEWS, current)?.original ??
+			WeakMapMethods.get(STAND_IN_RECORDS, current)?.original;
+		if (behind === undefined || behind === current) return undefined;
+		current = behind;
+	}
+	return undefined;
 }
 
 /**
@@ -15824,6 +15896,25 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		const chain = WeakMapMethods.get(WAITING_CHAINS, child);
 		return chain && chain.length > 0 ? runtime_standInPath(inner, chain) : undefined;
 	};
+	// Under the owner grant (#509), a call through a stand-in to a member nothing owns yet (its node has not loaded) is
+	// checked by the stand-in, against the member its chain reaches once loaded: checked now, the grant would refuse a
+	// module its own leaf. Every other call is checked here, at once, against the path the chain names. A stand-in that
+	// forwards to a restarted tree is always checked here.
+	const deferToStandIn = () => {
+		const path = calledPath();
+		if (path === undefined || runtime_isRestartStale(inner)) return false;
+		const handlers = inner.slothlet.handlers;
+		if (!handlers?.permissionManager?.isOwnerGrantEnabled?.()) return false;
+		return !handlers.ownership?.getCurrentOwner?.(path);
+	};
+	const throughStandIn = (access) => {
+		standInViewCall = { standIn: child, reader: capturedCaller, ceiling };
+		try {
+			return access();
+		} finally {
+			standInViewCall = null;
+		}
+	};
 
 	view = new NativeProxy(shadow, {
 		apply(_, thisArg, args) {
@@ -15834,6 +15925,15 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			// to when called; a check here could only be made against the stand-in's base.
 			if (gated === "held" && WeakSetMethods.has(STAND_INS, child))
 				return runtime_selfViewResult(Reflect.apply(child, thisArg, args), capturedCaller, null, inner);
+			if (deferToStandIn())
+				return runtime_callAsDefiner(inner, () =>
+					runtime_selfViewResult(
+						throughStandIn(() => Reflect.apply(child, thisArg, args)),
+						capturedCaller,
+						null,
+						inner
+					)
+				)();
 			// A stale principal defers the captured check (#459); the live caller is still enforced by the
 			// child's own applyTrap once the call proceeds.
 			const pending = runtime_enforceCapturedPair(inner, capturedCaller, ceiling, calledPath(), args, true);
@@ -15853,12 +15953,15 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 			return call();
 		},
 		construct(_, args, newTarget) {
-			if (gated && !(gated === "held" && WeakSetMethods.has(STAND_INS, child)))
-				runtime_enforceCapturedPair(inner, capturedCaller, ceiling, calledPath(), args);
 			// `new view(...)` makes the view itself the newTarget, which downstream would use to derive the
 			// instance's prototype and to decide how to wrap it. Hand the child through instead, so
 			// construction sees exactly what it saw before a view was interposed.
-			return asKept(() => Reflect.construct(child, args, newTarget === view ? child : newTarget));
+			const construct = () => Reflect.construct(child, args, newTarget === view ? child : newTarget);
+			if (gated && !(gated === "held" && WeakSetMethods.has(STAND_INS, child))) {
+				if (deferToStandIn()) return throughStandIn(construct);
+				runtime_enforceCapturedPair(inner, capturedCaller, ceiling, calledPath(), args);
+			}
+			return asKept(construct);
 		},
 		get(_, prop, receiver) {
 			// The access a view of `self` over this one is making, taken as the trap starts; a read made on this view
@@ -21232,6 +21335,9 @@ class UnifiedWrapper extends ComponentBase {
 			async apply(___target, ___thisArg, args, invoke = (fn, self) => Reflect.apply(fn, self, args)) {
 				// As get: a kept node's access offered to a stand-in is dropped first (#661).
 				runtime_takeCapturedAccess(wrapper);
+				// The reader of a view of `self` the call was made through, checked once the chain has loaded (#1006).
+				const ___viewCall = standInViewCall?.standIn === waitingProxy ? standInViewCall : null;
+				standInViewCall = null;
 				// Called from a run: a built-in the chain ends on is the run's own copy of it (see helpers/run-snapshot).
 				const ___runSnap = anyRunOpen() ? (runtime_runningRecord(wrapper.slothlet)?.snap ?? null) : null;
 				// Capture caller context synchronously before any await.
@@ -21492,6 +21598,15 @@ class UnifiedWrapper extends ComponentBase {
 					builtinKind(lastObject) !== null
 				)
 					lastObject = builtinCopy(___runSnap, lastObject);
+				// The view's reader, checked against what the chain reached now that it has loaded, as the view checks a call of
+				// a loaded node before it runs. Checked whatever the chain reached, so a reader denied it learns nothing of it.
+				if (___viewCall) {
+					const ___viewPath =
+						resolveWrapper(current)?.____slothletInternal?.apiPath ??
+						ArrayMethods.join(filterList(concatLists([wrapper.____slothletInternal.apiPath], chain), Boolean), ".");
+					const ___viewGate = runtime_enforceCapturedPair(wrapper, ___viewCall.reader, ___viewCall.ceiling, ___viewPath, args, true);
+					if (___viewGate) await ___viewGate;
+				}
 				if (typeof current === "function") {
 					// A function the walk reached as a member of a node rather than as a node of its own — a static method, a
 					// method of a function's `prototype` — carries no gate of its own: running it is a call of the last node
@@ -22615,10 +22730,15 @@ class UnifiedWrapper extends ComponentBase {
 			}
 			// What another module or the host passes in reaches this one through the class prototype guard, so what this
 			// module stores into it reaches the caller the same way. Done first, on the arguments as the caller holds them.
-			if (!___gatePassed) args = runtime_crossArguments(wrapper, args);
-			// A function or Proxy this module handed out comes back to it as itself (#597), and so does an instance of its
-			// own class the async runtime wrapped (#328).
-			if (!___gatePassed) args = runtime_ownInstances(wrapper, runtime_ownArguments(wrapper, args));
+			if (!___gatePassed) {
+				const asHanded = args;
+				args = runtime_crossArguments(wrapper, args);
+				// A function or Proxy this module handed out comes back to it as itself (#597), and so does an instance of its
+				// own class the async runtime wrapped (#328).
+				args = runtime_ownInstances(wrapper, runtime_ownArguments(wrapper, args));
+				// The arguments as the caller handed them, for what it gets back of them as its own (#1026).
+				runtime_noteHandedArguments(args, asHanded);
+			}
 
 			// Ordinary JS call semantics (`obj.method()`) pass the *proxy* obj was read through as
 			// `this` — but a native method whose behavior depends on internal slots tied to exact
