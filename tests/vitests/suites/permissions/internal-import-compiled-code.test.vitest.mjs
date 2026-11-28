@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-27T15:02:58-08:00 (1795820578)
+ *	@Last modified time: 2026-11-28T08:42:06-08:00 (1795884126)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,14 +27,11 @@
  * uncalled, and the host calls it.
  *
  * Either way the import is the module's: slothlet's file is refused with MODULE_INTERNAL_NOT_IMPORTABLE and the leaf
- * file with MODULE_LEAF_IMPORT_REFUSED, with the permission system off and on with `capability:code` opened for the
- * leaf. With the capability closed, compiling is refused first (`PERMISSION_CAPABILITY_REFUSED`), except for an
+ * file with MODULE_LEAF_IMPORT_REFUSED, with the permission system off (no permission config, the default), disabled,
+ * and on with `capability:code` opened for the leaf. With the capability closed, compiling is refused first
+ * (`PERMISSION_CAPABILITY_REFUSED`), except for an
  * indirect `eval`, which is not wrapped. A `require()` of an `#imports` specifier that has no `require` condition fails
  * as it fails for the host. The host's own imports and requires, and those of code it compiles, work as before.
- *
- * With the permission system off, the `vm` functions are not wrapped, and code they compile names no importer and no
- * file of the module's: such code handed to the host and called by it, and code compiled under a file name the module
- * chose, cannot be told from the host's own. Those outcomes are not checked here (see `docs/MODULE-STRUCTURE.md`).
  *
  * The exact outcomes are checked under Node's own loader, in a child process (`lib/probe.mjs`). Under vitest's runner,
  * code compiled inside a module file vitest compiled has no dynamic import callback, so only some routes reach the
@@ -74,18 +71,8 @@ const ROUTES = [
 const TARGETS = ["internal", "internalSpecifier", "leaf"];
 
 /**
- * Whether an outcome is one the permission system off leaves to the host (see the file's description): `vm` code
- * handed to the host, or `vm` code under a file name the module chose.
- * @param {string} permissions - `off`, `open` or `closed`.
- * @param {"run"|"give"} how - Who calls the compiled code.
- * @param {{vm?: boolean, named?: boolean}} entry - The route.
- * @returns {boolean} True for such an outcome.
- */
-const isUnwrappedVm = (permissions, how, entry) => permissions === "off" && entry.vm === true && (how === "give" || entry.named === true);
-
-/**
  * The outcome each call is expected to give.
- * @param {string} permissions - `off`, `open` or `closed`.
+ * @param {string} permissions - `off`, `disabled`, `open` or `closed`.
  * @param {{route: string, wrapped: boolean, require?: boolean}} entry - The route.
  * @param {string} target - The target.
  * @returns {{code: string}} The outcome.
@@ -96,9 +83,10 @@ function expectedOutcome(permissions, entry, target) {
 	return { code: target === "leaf" ? LEAF : INTERNAL };
 }
 
-/** The permission settings: off, on with `capability:code` opened for the importer, and on with it closed. */
+/** The permission settings: off, disabled, on with `capability:code` opened for the importer, and on with it closed. */
 const PERMISSIONS = {
 	off: undefined,
+	disabled: "disabled",
 	open: { policy: "allow", rules: [{ caller: "importer.**", target: "capability:code", effect: "allow" }] },
 	closed: { policy: "allow" }
 };
@@ -153,7 +141,7 @@ describe.each(MATRIX)("Permissions > code a module compiles cannot import slothl
 
 	for (const entry of ROUTES)
 		for (const how of ["run", "give"]) {
-			it.skipIf(isUnwrappedVm(config.permissions, how, entry))(`hands out nothing to ${entry.route} (${how})`, async () => {
+			it(`hands out nothing to ${entry.route} (${how})`, async () => {
 				api = await build();
 				for (const target of TARGETS) {
 					const tag = `vitest ${config.name} ${how} ${entry.route} ${target}`;
@@ -202,8 +190,7 @@ describe("Permissions > code a module compiles cannot import slothlet's own file
 						for (const target of TARGETS)
 							for (const how of ["run", "give"]) {
 								const name = `${key}/${how}/${entry.route}/${target}`;
-								if (isUnwrappedVm(permissions, how, entry)) delete out[name];
-								else expected[name] = expectedOutcome(permissions, entry, target);
+								expected[name] = expectedOutcome(permissions, entry, target);
 							}
 					expected[`${key}/host/internal`] = { value: "loaded" };
 					expected[`${key}/host/leaf`] = { value: "leaf value" };
