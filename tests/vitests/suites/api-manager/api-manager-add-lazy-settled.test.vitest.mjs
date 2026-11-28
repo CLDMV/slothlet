@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-add-lazy-settled.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-add-lazy-settled.test.vitest.mjs
  *	@Date: 2026-09-27T01:17:31-07:00 (1790497051)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:18-07:00 (1791091698)
+ *	@Last modified time: 2026-11-28T04:31:09-08:00 (1795869069)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

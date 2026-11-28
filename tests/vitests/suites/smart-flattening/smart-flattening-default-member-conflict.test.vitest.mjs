@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/smart-flattening/smart-flattening-default-member-conflict.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/smart-flattening/smart-flattening-default-member-conflict.test.vitest.mjs
  *	@Date: 2026-10-09T00:00:00-07:00 (1791529200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:31-08:00 (1794882631)
+ *	@Last modified time: 2026-11-28T04:33:05-08:00 (1795869185)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/shutdown-node-reads-no-als.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/shutdown-node-reads-no-als.test.vitest.mjs
  *	@Date: 2026-11-21T22:07:36-08:00 (1795327656)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T22:28:19-08:00 (1795328899)
+ *	@Last modified time: 2026-11-28T04:32:47-08:00 (1795869167)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

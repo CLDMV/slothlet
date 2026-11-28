@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/async-store-sealed.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/async-store-sealed.test.vitest.mjs
  *	@Date: 2026-11-17T05:44:09-08:00 (1794923049)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:47:04-08:00 (1795636024)
+ *	@Last modified time: 2026-11-28T04:32:11-08:00 (1795869131)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

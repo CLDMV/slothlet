@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/setup/api-root-member-listing.mjs
+ *	@Filename: tests/vitests/setup/api-root-member-listing.mjs
  *	@Date: 2026-11-14T00:00:00-08:00 (1794643200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
+ *	@Last modified time: 2026-11-28T04:31:04-08:00 (1795869064)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

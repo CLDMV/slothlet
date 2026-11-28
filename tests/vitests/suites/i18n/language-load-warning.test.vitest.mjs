@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/i18n/language-load-warning.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/i18n/language-load-warning.test.vitest.mjs
  *	@Date: 2026-11-15T12:00:00-08:00 (1794772800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:01-08:00 (1794882601)
+ *	@Last modified time: 2026-11-28T04:31:57-08:00 (1795869117)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

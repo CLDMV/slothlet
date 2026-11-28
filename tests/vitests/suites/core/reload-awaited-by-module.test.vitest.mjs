@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/reload-awaited-by-module.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/reload-awaited-by-module.test.vitest.mjs
  *	@Date: 2026-11-21T12:53:43-08:00 (1795294423)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:10:06-08:00 (1795295406)
+ *	@Last modified time: 2026-11-28T04:31:38-08:00 (1795869098)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

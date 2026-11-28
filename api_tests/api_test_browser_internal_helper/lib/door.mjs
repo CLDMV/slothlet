@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_browser_internal_helper/lib/door.mjs
+ *	@Filename: api_tests/api_test_browser_internal_helper/lib/door.mjs
  *	@Date: 2026-11-15T09:00:00-08:00 (1794762000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T09:00:00-08:00 (1794762000)
+ *	@Last modified time: 2026-11-28T04:27:34-08:00 (1795868854)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

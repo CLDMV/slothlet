@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_self_parity_subroot/api/sub/capture.mjs
+ *	@Filename: api_tests/api_test_self_parity_subroot/api/sub/capture.mjs
  *	@Date: 2026-11-15T17:13:23-08:00 (1794791603)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T08:06:37-08:00 (1795536397)
+ *	@Last modified time: 2026-11-28T04:29:46-08:00 (1795868986)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

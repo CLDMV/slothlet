@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_lazy_set_materialize/ext/session/vault/lock.mjs
+ *	@Filename: api_tests/api_test_lazy_set_materialize/ext/session/vault/lock.mjs
  *	@Date: 2026-10-02T09:52:13-07:00 (1790959933)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:27:50-07:00 (1791091670)
+ *	@Last modified time: 2026-11-28T04:28:27-08:00 (1795868907)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

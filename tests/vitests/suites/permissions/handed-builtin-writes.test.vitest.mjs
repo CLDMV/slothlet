@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/handed-builtin-writes.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/handed-builtin-writes.test.vitest.mjs
  *	@Date: 2026-11-21T13:05:28-08:00 (1795295128)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T15:11:04-08:00 (1795302664)
+ *	@Last modified time: 2026-11-28T04:32:15-08:00 (1795869135)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

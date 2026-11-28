@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_rule_suffix/registrar/registrar.mjs
+ *	@Filename: api_tests/api_test_rule_suffix/registrar/registrar.mjs
  *	@Date: 2026-11-18T21:49:06-08:00 (1795067346)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T21:57:55-08:00 (1795067875)
+ *	@Last modified time: 2026-11-28T04:29:39-08:00 (1795868979)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

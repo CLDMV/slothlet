@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/ci/ci-cleanup-src.mjs
+ *	@Filename: tools/ci/ci-cleanup-src.mjs
  *	@Date: 2025-12-08T01:23:27-08:00 (1765185807)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:28-07:00 (1791090928)
+ *	@Last modified time: 2026-11-28T04:33:18-08:00 (1795869198)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

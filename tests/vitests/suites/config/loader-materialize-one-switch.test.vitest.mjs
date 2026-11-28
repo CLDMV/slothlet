@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/config/loader-materialize-one-switch.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/config/loader-materialize-one-switch.test.vitest.mjs
  *	@Date: 2026-11-19T16:04:09-08:00 (1795133049)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T16:09:56-08:00 (1795133396)
+ *	@Last modified time: 2026-11-28T04:31:20-08:00 (1795869080)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

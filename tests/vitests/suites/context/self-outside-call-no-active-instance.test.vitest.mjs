@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/self-outside-call-no-active-instance.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/self-outside-call-no-active-instance.test.vitest.mjs
  *	@Date: 2026-11-17T21:05:03-08:00 (1794978303)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:16:24-08:00 (1794978984)
+ *	@Last modified time: 2026-11-28T04:31:35-08:00 (1795869095)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

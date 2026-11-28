@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-remove-path-then-readd.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-remove-path-then-readd.test.vitest.mjs
  *	@Date: 2026-11-15T11:41:56-08:00 (1794771716)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T13:45:09-08:00 (1794779109)
+ *	@Last modified time: 2026-11-28T04:31:12-08:00 (1795869072)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

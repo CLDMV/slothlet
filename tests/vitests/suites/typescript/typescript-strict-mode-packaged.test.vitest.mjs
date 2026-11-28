@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/typescript-strict-mode-packaged.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/typescript-strict-mode-packaged.test.vitest.mjs
  *	@Date: 2026-09-28T09:44:57-07:00 (1790613897)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:36-08:00 (1794882636)
+ *	@Last modified time: 2026-11-28T04:33:09-08:00 (1795869189)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

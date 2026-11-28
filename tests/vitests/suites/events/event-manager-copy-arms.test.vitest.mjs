@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/events/event-manager-copy-arms.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/events/event-manager-copy-arms.test.vitest.mjs
  *	@Date: 2026-11-25T01:21:15-08:00 (1795598475)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T01:50:34-08:00 (1795600234)
+ *	@Last modified time: 2026-11-28T04:31:44-08:00 (1795869104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

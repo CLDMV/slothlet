@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/config/clock-option.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/config/clock-option.test.vitest.mjs
  *	@Date: 2026-11-14T10:40:00-08:00 (1794681600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T16:09:55-08:00 (1795133395)
+ *	@Last modified time: 2026-11-28T04:31:19-08:00 (1795869079)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

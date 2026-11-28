@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/scope-disabled.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/scope-disabled.test.vitest.mjs
  *	@Date: 2026-03-01T12:35:53-08:00 (1772397353)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:00-08:00 (1794882540)
+ *	@Last modified time: 2026-11-28T04:31:42-08:00 (1795869102)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

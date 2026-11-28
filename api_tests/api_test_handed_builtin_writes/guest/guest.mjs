@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_handed_builtin_writes/guest/guest.mjs
+ *	@Filename: api_tests/api_test_handed_builtin_writes/guest/guest.mjs
  *	@Date: 2026-11-21T13:00:26-08:00 (1795294826)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T15:06:51-08:00 (1795302411)
+ *	@Last modified time: 2026-11-28T04:28:09-08:00 (1795868889)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

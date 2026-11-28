@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/setup/warning-capture.mjs
+ *	@Filename: tests/vitests/setup/warning-capture.mjs
  *	@Date: 2026-11-16T18:00:00-08:00 (1794880800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:00:00-08:00 (1794880800)
+ *	@Last modified time: 2026-11-28T04:31:06-08:00 (1795869066)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

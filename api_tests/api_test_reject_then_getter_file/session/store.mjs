@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_reject_then_getter_file/session/store.mjs
+ *	@Filename: api_tests/api_test_reject_then_getter_file/session/store.mjs
  *	@Date: 2026-10-09T00:00:00-07:00 (1791529200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T09:23:21-07:00 (1791735801)
+ *	@Last modified time: 2026-11-28T04:29:19-08:00 (1795868959)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

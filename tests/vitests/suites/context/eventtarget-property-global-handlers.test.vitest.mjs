@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/eventtarget-property-global-handlers.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/eventtarget-property-global-handlers.test.vitest.mjs
  *	@Date: 2026-11-25T01:43:23-08:00 (1795599803)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T02:15:11-08:00 (1795601711)
+ *	@Last modified time: 2026-11-28T04:31:29-08:00 (1795869089)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/hint-detector-error-text.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/hint-detector-error-text.test.vitest.mjs
  *	@Date: 2026-11-16T17:00:55-08:00 (1794877255)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T17:10:13-08:00 (1794877813)
+ *	@Last modified time: 2026-11-28T04:31:48-08:00 (1795869108)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/smart-flattening/same-named-folder-mount-hoist.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/smart-flattening/same-named-folder-mount-hoist.test.vitest.mjs
  *	@Date: 2026-11-13T17:05:22-08:00 (1794618322)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:29-08:00 (1794882629)
+ *	@Last modified time: 2026-11-28T04:33:04-08:00 (1795869184)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

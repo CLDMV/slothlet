@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/runtime/runtime-livebindings.mjs
+ *	@Filename: src/lib/runtime/runtime-livebindings.mjs
  *	@Date: 2025-11-10T09:52:57-08:00 (1762797177)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T16:05:46-08:00 (1795651546)
+ *	@Last modified time: 2026-11-28T04:30:47-08:00 (1795869047)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

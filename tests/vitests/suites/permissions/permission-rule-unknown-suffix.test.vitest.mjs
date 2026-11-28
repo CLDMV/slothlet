@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permission-rule-unknown-suffix.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permission-rule-unknown-suffix.test.vitest.mjs
  *	@Date: 2026-11-18T21:49:06-08:00 (1795067346)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T22:00:08-08:00 (1795068008)
+ *	@Last modified time: 2026-11-28T04:32:18-08:00 (1795869138)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

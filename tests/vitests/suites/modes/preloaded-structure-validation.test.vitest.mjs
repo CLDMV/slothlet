@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/modes/preloaded-structure-validation.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/modes/preloaded-structure-validation.test.vitest.mjs
  *	@Date: 2026-06-06T00:00:00-08:00 (1780732800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:11-08:00 (1794882611)
+ *	@Last modified time: 2026-11-28T04:32:08-08:00 (1795869128)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -414,9 +414,9 @@
 		}
 	},
 	"devDependencies": {
-		"@cldmv/configs": "^1.2.4",
-		"@cldmv/fix-headers": "^2.2.2",
-		"@cldmv/vitest-runner": "^1.11.1",
+		"@cldmv/configs": "^1.5.0",
+		"@cldmv/fix-headers": "^2.6.1",
+		"@cldmv/vitest-runner": "^1.11.4",
 		"@eslint/css": "^2.0.1",
 		"@eslint/js": "^10.0.1",
 		"@eslint/json": "^2.0.1",

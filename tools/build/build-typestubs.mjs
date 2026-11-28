@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/build/build-typestubs.mjs
+ *	@Filename: tools/build/build-typestubs.mjs
  *	@Date: 2026-06-14T00:00:00-07:00 (1781420400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:42-08:00 (1794874662)
+ *	@Last modified time: 2026-11-28T04:33:18-08:00 (1795869198)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

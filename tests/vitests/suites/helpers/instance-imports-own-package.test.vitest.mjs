@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/instance-imports-own-package.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/instance-imports-own-package.test.vitest.mjs
  *	@Date: 2026-11-08T16:51:36-08:00 (1794185496)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:51-08:00 (1794874611)
+ *	@Last modified time: 2026-11-28T04:31:49-08:00 (1795869109)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

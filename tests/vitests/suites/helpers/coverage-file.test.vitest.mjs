@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/coverage-file.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/coverage-file.test.vitest.mjs
  *	@Date: 2026-11-25T11:33:57-08:00 (1795635237)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:42:35-08:00 (1795635755)
+ *	@Last modified time: 2026-11-28T04:31:48-08:00 (1795869108)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

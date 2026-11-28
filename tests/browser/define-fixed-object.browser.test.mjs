@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/browser/define-fixed-object.browser.test.mjs
+ *	@Filename: tests/browser/define-fixed-object.browser.test.mjs
  *	@Date: 2026-11-16T05:00:00-08:00 (1794834000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:57-08:00 (1794882537)
+ *	@Last modified time: 2026-11-28T04:30:49-08:00 (1795869049)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

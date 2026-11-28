@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/eventemitter-context.mjs
+ *	@Filename: src/lib/helpers/eventemitter-context.mjs
  *	@Date: 2026-01-29T11:42:31-08:00 (1769715751)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:44:39-08:00 (1795635879)
+ *	@Last modified time: 2026-11-28T04:30:42-08:00 (1795869042)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
