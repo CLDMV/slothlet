@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-27T15:00:41-08:00 (1795820441)
+ *	@Last modified time: 2026-11-27T20:54:32-08:00 (1795841672)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -209,6 +209,7 @@ const {
 	leafOfCopy,
 	outerCallerCeiling,
 	setApiValueCheck,
+	setCrossingOriginal,
 	setHandedOutCheck,
 	setInboundOriginal,
 	setResultAttributor
@@ -9718,14 +9719,27 @@ function runtime_promiseStandIn(maker, owner, original) {
  * @param {object|null} [caller=null] - The wrapper of the module that made the call, when one did.
  * @param {object|null} [receiver=null] - The call whose own code receives the value, when that call was handed code
  *   (see `ownReceiver`): a function stand-in made for it here is recorded as handed to that call alone.
+ * @param {WeakSet<object>|null} [held=null] - The code a module caller handed the call, as it holds it (see
+ *   `callerHeldCode`).
  * @returns {*} What the caller gets.
  * @private
  */
-function runtime_attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null) {
+function runtime_attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null, held = null) {
 	// An async call's code has run on until now: the generator objects its module handed out are matched again (#965).
 	runtime_reconcileMade(owner);
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
+	// What a module handed the call and gets back is its value as it handed it, as in plain JavaScript (#1026): the
+	// caller already holds it, so handing it back grants nothing. Decided before any stand-in is made of it.
+	if (held !== null && !callerIsHost && caller?.____slothletInternal) {
+		const own = runtime_heldOriginal(value);
+		if (WeakSetMethods.has(held, own)) {
+			// Recorded as the caller's, as a value it hands over at the top level is, so the view it reads the result
+			// through hands it over as itself too.
+			runtime_recordOrigin(own, caller);
+			return own;
+		}
+	}
 	const previous = handOutReceiver;
 	handOutReceiver = !callerIsHost && caller?.____slothletInternal ? receiver : null;
 	try {
@@ -9734,6 +9748,26 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 	} finally {
 		handOutReceiver = previous;
 	}
+}
+
+/**
+ * The value a result stands for as its caller would hold it (#1026): behind a crossing view, an inbound view or a
+ * stand-in, the value it shows; anything else as it is.
+ * @param {object|Function} value - The result.
+ * @returns {object|Function} The value behind it.
+ * @private
+ */
+function runtime_heldOriginal(value) {
+	let current = value;
+	for (let depth = 0; depth < 4; depth++) {
+		const behind =
+			WeakMapMethods.get(CROSSINGS, current)?.original ??
+			WeakMapMethods.get(INBOUND_VIEWS, current)?.original ??
+			WeakMapMethods.get(STAND_IN_RECORDS, current)?.original;
+		if (behind === undefined || behind === current) return current;
+		current = behind;
+	}
+	return current;
 }
 
 /**
@@ -9856,6 +9890,10 @@ setHandedOutCheck(
 		value !== null &&
 		(typeof value === "object" || typeof value === "function") &&
 		(WeakMapMethods.has(STAND_IN_RECORDS, value) || WeakMapMethods.has(CROSSINGS, value) || runtime_isPrototypeHandle(value))
+);
+// What a module hands over and gets back is the value as it holds it, so only the crossing view is looked through (#1026).
+setCrossingOriginal((value) =>
+	value === null || (typeof value !== "object" && typeof value !== "function") ? value : runtime_uncross(value)
 );
 // A crossing view of the class prototype guard stands for the value too: what the caller handed is what is looked into.
 setInboundOriginal((value) => {
