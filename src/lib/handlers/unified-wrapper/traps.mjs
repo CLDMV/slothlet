@@ -108,6 +108,7 @@ let reservedKeysOwn,
 	builtinBehind,
 	snapshotBarrier,
 	takeCapturedAccess,
+	withKeptAccessorRead,
 	takeAccess,
 	enforceRead,
 	WRAPPER_ANSWERED_PROPS,
@@ -1194,6 +1195,7 @@ export function TrapsLayer(Base) {
 					shellValue = methods.rules.shellValue;
 					takeAccess = methods.rules.takeAccess;
 					takeCapturedAccess = methods.rules.takeCapturedAccess;
+					withKeptAccessorRead = methods.rules.withKeptAccessorRead;
 					withRestartForwarding = methods.rules.withRestartForwarding;
 					runShared = methods.run.shared;
 					checkpointHandout = methods.checkpoint.handout;
@@ -1362,13 +1364,7 @@ export function TrapsLayer(Base) {
 					// of the node's this read runs (see runAccessor).
 					const kept = takeCapturedAccess(wrapper);
 					if (!kept) return getTrapFor(null, target, prop, ____receiver, access);
-					const previous = rulesShared.keptAccessorRead;
-					rulesShared.keptAccessorRead = kept;
-					try {
-						return getTrapFor(kept, target, prop, ____receiver, access);
-					} finally {
-						rulesShared.keptAccessorRead = previous;
-					}
+					return withKeptAccessorRead(kept, () => getTrapFor(kept, target, prop, ____receiver, access));
 				};
 				const getTrapFor = (kept, target, prop, ____receiver, access = null) => {
 					// The wrapper's internal record, read once for this call: the wrapper holds the same record for its whole life.

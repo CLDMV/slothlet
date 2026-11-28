@@ -647,10 +647,35 @@ function assertOwnedWriteAt(wrapper, parts) {
 const rulesShared = {
 	__proto__: null,
 	capturedAccess: null,
-	keptAccessorRead: null,
 	describingAsHeld: null,
 	handedEntry: null
 };
+
+/**
+ * The access a node a module kept is making through a getter of the node it stands for, while it makes it: that node,
+ * and the module the kept node reads for. Taken once, by the getter's own check (see `runAccessor`), and set only for
+ * the length of one read by {@link withKeptAccessorRead}.
+ * @type {{wrapper: object, reader: object}|null}
+ * @private
+ */
+let keptAccessorRead = null;
+
+/**
+ * Make one read with the access a kept node is making set for the getters it runs, then put back what was set before.
+ * @param {{wrapper: object, reader: object}} kept - The access: the node read through, and the module it reads for.
+ * @param {function(): *} read - The read.
+ * @returns {*} What the read returns.
+ * @private
+ */
+function withKeptAccessorRead(kept, read) {
+	const previous = keptAccessorRead;
+	keptAccessorRead = kept;
+	try {
+		return read();
+	} finally {
+		keptAccessorRead = previous;
+	}
+}
 
 /**
  * The access a node a module kept is making while a read it made runs one of the node's getters: the getter takes it
@@ -2077,6 +2102,7 @@ export function RulesLayer(Base) {
 					assertOwnedWriteAt,
 					rulesShared,
 					takeCapturedAccess,
+					withKeptAccessorRead,
 					beginAccess,
 					endAccess,
 					takeAccess,
@@ -2241,9 +2267,9 @@ export function RulesLayer(Base) {
 				// Code no call accounts for reads only through a node a module kept, as that module (#661).
 				let kept = null;
 				if (accessorReader === undefined && reader?.unresolved && reader.unaccounted) {
-					if (rulesShared.keptAccessorRead?.wrapper === wrapper) {
-						kept = rulesShared.keptAccessorRead;
-						rulesShared.keptAccessorRead = null;
+					if (keptAccessorRead?.wrapper === wrapper) {
+						kept = keptAccessorRead;
+						keptAccessorRead = null;
 					} else kept = takeCapturedAccess(wrapper);
 				}
 				if (reader?.unresolved && !kept) {

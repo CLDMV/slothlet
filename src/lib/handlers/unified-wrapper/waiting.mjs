@@ -78,9 +78,9 @@ let trustedRootOwn,
 	runningRecord,
 	checkpointHandout,
 	STAND_INS,
-	rulesShared,
 	viewsShared,
 	takeCapturedAccess,
+	withKeptAccessorRead,
 	enforceRead,
 	isTerminalData,
 	readOnBehalf,
@@ -465,7 +465,7 @@ export function WaitingLayer(Base) {
 					nodeBehind = methods.node.behind;
 					STAND_IN_UNLOADED = methods.nodes.STAND_IN_UNLOADED;
 					WAITING_CHAINS = methods.nodes.WAITING_CHAINS;
-					rulesShared = methods.rules.rulesShared;
+					withKeptAccessorRead = methods.rules.withKeptAccessorRead;
 					assertOwnedWriteAt = methods.rules.assertOwnedWriteAt;
 					canDefine = methods.rules.canDefine;
 					enforceCodeMember = methods.rules.enforceCodeMember;
@@ -1181,13 +1181,7 @@ export function WaitingLayer(Base) {
 							if (!isFinalInternal && hasOwn(current, prop)) {
 								const node = current.____slothletInternal.proxy;
 								if (!kept) return node[prop];
-								const previous = rulesShared.keptAccessorRead;
-								rulesShared.keptAccessorRead = { wrapper: current, reader: kept.reader };
-								try {
-									return node[prop];
-								} finally {
-									rulesShared.keptAccessorRead = previous;
-								}
+								return withKeptAccessorRead({ wrapper: current, reader: kept.reader }, () => node[prop]);
 							}
 
 							// Property doesn't exist
