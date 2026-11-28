@@ -204,8 +204,8 @@ const PER_FILE_HEAP_OVERRIDES = [
  * seconds, overrides). The runner's own default of 30 minutes is too close for the slowest suites on a
  * 4-core CI runner: in a plain (no coverage) Node 22 run on next, all-api-structures took 23.5 minutes and
  * api-root-integrity, reload-held-code and permissions-sync-leaf-thenable 12–15, and coverage runs are
- * slower. The idle limit stays at the runner's 10 minutes: every file prints as its tests finish, and the
- * longest silence inside one file in that run was under 3 minutes.
+ * slower. Those files are now split so each runs in a few minutes; this limit is kept as headroom. The idle
+ * limit stays at the runner's 10 minutes: every file prints as its tests finish.
  * @type {number}
  */
 const FILE_TIMEOUT_MS = 60 * 60 * 1000;
@@ -214,7 +214,7 @@ const FILE_TIMEOUT_MS = 60 * 60 * 1000;
  * Per-file watchdog limits for files that outgrow {@link FILE_TIMEOUT_MS}.
  * @type {Array<{ pattern: string, timeoutMs?: number, idleTimeoutMs?: number }>}
  */
-const PER_FILE_TIMEOUT_OVERRIDES = [{ pattern: "api-structures/all-api-structures.test.vitest.mjs", timeoutMs: 120 * 60 * 1000 }];
+const PER_FILE_TIMEOUT_OVERRIDES = [];
 
 // Scratch dirs (gitignored, same pair the repo's own eslint/prettier ignores use) that test
 // discovery must never enter. `tmp/` holds per-agent git worktrees (tmp/agents/*/wt) and staged

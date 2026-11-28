@@ -1,7 +1,7 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/proxies/api-root-member-listing.test.vitest.mjs
+ *	@Filename: /tests/vitests/setup/api-root-member-listing.mjs
  *	@Date: 2026-11-14T00:00:00-08:00 (1794643200)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview A module's listings and reads of the api root follow the rules its listings and reads of any other node
+ * @fileoverview Shared body of the api-root-member-listing tests: a module's listings and reads of the api root follow the rules its listings and reads of any other node
  * follow, and a file's primitive default export at the root is its value, as it is one level down.
  *
  * @description
@@ -27,7 +27,11 @@
  * member and for its twin. The expected answers are the twin's, and for the host, and for a module no rule names,
  * the whole listing; a file's primitive default reads as the plain module's default export. Eager and lazy mode, the
  * async and live runtime, both attributions, and the permission system off and disabled.
- * @module tests/vitests/suites/proxies/api-root-member-listing
+ *
+ * The cases are spread over the `suites/proxies/api-root-member-listing-*.test.vitest.mjs` files by root and mode (see
+ * {@link describeApiRootMemberListing}) so each file finishes in a few minutes; together they run every case the
+ * single file ran.
+ * @module tests/vitests/setup/api-root-member-listing
  */
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -195,92 +199,106 @@ async function expectTwin(api, who, members, routes = ["self"]) {
 	expect(all.filter(([key]) => listed.keys.includes(key))).toEqual(listed.entries);
 }
 
-describe.each(ROOTS)("the api root's listing and reads > %s", (root) => {
-	const members = membersOf(root);
+/**
+ * Register the api-root-member-listing cases for the roots and configs a test file runs.
+ * @param {object} options - What to run.
+ * @param {string[]} options.roots - Entries of the fixture's roots: `"objroot"`, `"fnroot"`, `"asyncroot"`.
+ * @param {string[]} [options.modes=["eager", "lazy"]] - The modes, in the matrix and in the permissions off / disabled
+ *   cases.
+ * @param {string[]} [options.runtimes=["async", "live"]] - The runtimes of the matrix.
+ * @returns {void}
+ * @example
+ * describeApiRootMemberListing({ roots: ["objroot"], modes: ["eager"] });
+ */
+export function describeApiRootMemberListing({ roots, modes = MODES, runtimes = RUNTIMES }) {
+	const selected = configs.filter((config) => modes.includes(config.mode) && runtimes.includes(config.runtime));
+	describe.each(ROOTS.filter((root) => roots.includes(root)))("the api root's listing and reads > %s", (root) => {
+		const members = membersOf(root);
 
-	describe.each(configs)("$mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
-		let api;
+		describe.each(selected)("$mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
+			let api;
 
-		afterEach(async () => {
-			await api?.shutdown?.();
-			api = null;
-		});
-
-		it.each(Object.keys(RULE_SETS))("a module lists and reads the root's members as their twins one level down: %s", async (name) => {
-			const set = RULE_SETS[name];
-			api = await build(root, {
-				mode,
-				runtime,
-				context: set.context,
-				permissions: {
-					policy: set.defaultPolicy ?? "allow",
-					caller: {
-						attribution
-					},
-					rules: [...set.rules("", members), ...set.rules("zz.", members)]
-				}
+			afterEach(async () => {
+				await api?.shutdown?.();
+				api = null;
 			});
-			// Every route for the rule sets that refuse the most; `self` alone for the rest.
-			const routes = set.everyRoute ? ["self", "kept", "api"] : ["self"];
-			await expectTwin(api, "reader", members, routes);
-			await expectTwin(api, "open", members, routes);
-			// A module no rule names, and the host, are given the whole listing, as at any other node.
-			const whole = hostListing(api.zz);
-			expect((await api.open.list("")).keys).toEqual(whole.keys);
-			expect(hostListing(api)).toEqual(whole);
-			// The root file's own code reads its own members as the twin's own code does.
-			if (root !== "objroot") {
-				for (const member of ROOT_PRIMITIVES) expect(api.rfn(member), `the root file reads ${member}`).toBe(api.zz.rfn(`zz.${member}`));
-			}
-		});
 
-		it("a lazy member not loaded yet is listed and read as its twin", async () => {
-			const set = RULE_SETS["a deny on each member's exact path"];
-			api = await build(
-				root,
-				{
+			it.each(Object.keys(RULE_SETS))("a module lists and reads the root's members as their twins one level down: %s", async (name) => {
+				const set = RULE_SETS[name];
+				api = await build(root, {
 					mode,
 					runtime,
-					permissions: { policy: "allow", caller: { attribution }, rules: [...set.rules("", members), ...set.rules("zz.", members)] }
-				},
-				{ load: false }
-			);
-			expect(await api.reader.list("")).toEqual(await api.reader.list("zz"));
-			for (const member of members)
-				expect(await api.reader.settle(member), `reader awaits ${member}`).toEqual(await api.reader.settle(`zz.${member}`));
-		});
-
-		it("a file's primitive default export at the root reads as its value, as one level down and in plain JavaScript", async () => {
-			api = await build(root, { mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: [] } });
-			const plain = await plainDefaults(root);
-			for (const member of FILE_PRIMITIVES) {
-				expect(described(api[member]), `the host reads ${member}`).toEqual(described(api.zz[member]));
-				expect(await api.open.read(member), `a module reads ${member}`).toEqual(described(api.zz[member]));
-			}
-			// The kinds a node one level down reads as their value read as the plain module's default export.
-			for (const member of ["pnum", "pstr", "pbool", "pbig", "psym"]) expect(api[member]).toBe(plain[member]);
-		});
-	});
-
-	describe.each(["off", "disabled"])("permissions %s", (permissionsMode) => {
-		let api;
-
-		afterEach(async () => {
-			await api?.shutdown?.();
-			api = null;
-		});
-
-		it.each(MODES)("nothing is left out of a listing or refused: %s", async (mode) => {
-			const set = RULE_SETS["a deny on each member's exact path"];
-			api = await build(root, {
-				mode,
-				permissions: { mode: permissionsMode, rules: [...set.rules("", members), ...set.rules("zz.", members)] }
+					context: set.context,
+					permissions: {
+						policy: set.defaultPolicy ?? "allow",
+						caller: {
+							attribution
+						},
+						rules: [...set.rules("", members), ...set.rules("zz.", members)]
+					}
+				});
+				// Every route for the rule sets that refuse the most; `self` alone for the rest.
+				const routes = set.everyRoute ? ["self", "kept", "api"] : ["self"];
+				await expectTwin(api, "reader", members, routes);
+				await expectTwin(api, "open", members, routes);
+				// A module no rule names, and the host, are given the whole listing, as at any other node.
+				const whole = hostListing(api.zz);
+				expect((await api.open.list("")).keys).toEqual(whole.keys);
+				expect(hostListing(api)).toEqual(whole);
+				// The root file's own code reads its own members as the twin's own code does.
+				if (root !== "objroot") {
+					for (const member of ROOT_PRIMITIVES) expect(api.rfn(member), `the root file reads ${member}`).toBe(api.zz.rfn(`zz.${member}`));
+				}
 			});
-			await expectTwin(api, "reader", members);
-			const whole = hostListing(api.zz);
-			expect((await api.reader.list("")).keys).toEqual(whole.keys);
-			expect(hostListing(api)).toEqual(whole);
-			for (const member of members) expect(await api.reader.read(member)).not.toEqual({ threw: "PERMISSION_DENIED" });
+
+			it("a lazy member not loaded yet is listed and read as its twin", async () => {
+				const set = RULE_SETS["a deny on each member's exact path"];
+				api = await build(
+					root,
+					{
+						mode,
+						runtime,
+						permissions: { policy: "allow", caller: { attribution }, rules: [...set.rules("", members), ...set.rules("zz.", members)] }
+					},
+					{ load: false }
+				);
+				expect(await api.reader.list("")).toEqual(await api.reader.list("zz"));
+				for (const member of members)
+					expect(await api.reader.settle(member), `reader awaits ${member}`).toEqual(await api.reader.settle(`zz.${member}`));
+			});
+
+			it("a file's primitive default export at the root reads as its value, as one level down and in plain JavaScript", async () => {
+				api = await build(root, { mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: [] } });
+				const plain = await plainDefaults(root);
+				for (const member of FILE_PRIMITIVES) {
+					expect(described(api[member]), `the host reads ${member}`).toEqual(described(api.zz[member]));
+					expect(await api.open.read(member), `a module reads ${member}`).toEqual(described(api.zz[member]));
+				}
+				// The kinds a node one level down reads as their value read as the plain module's default export.
+				for (const member of ["pnum", "pstr", "pbool", "pbig", "psym"]) expect(api[member]).toBe(plain[member]);
+			});
+		});
+
+		describe.each(["off", "disabled"])("permissions %s", (permissionsMode) => {
+			let api;
+
+			afterEach(async () => {
+				await api?.shutdown?.();
+				api = null;
+			});
+
+			it.each(modes)("nothing is left out of a listing or refused: %s", async (mode) => {
+				const set = RULE_SETS["a deny on each member's exact path"];
+				api = await build(root, {
+					mode,
+					permissions: { mode: permissionsMode, rules: [...set.rules("", members), ...set.rules("zz.", members)] }
+				});
+				await expectTwin(api, "reader", members);
+				const whole = hostListing(api.zz);
+				expect((await api.reader.list("")).keys).toEqual(whole.keys);
+				expect(hostListing(api)).toEqual(whole);
+				for (const member of members) expect(await api.reader.read(member)).not.toEqual({ threw: "PERMISSION_DENIED" });
+			});
 		});
 	});
-});
+}
