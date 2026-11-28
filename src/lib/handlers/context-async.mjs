@@ -1857,7 +1857,7 @@ export class AsyncContextManager {
 				made: madeCode
 			};
 			if (executionStore.record.flagged && executionStore.callerWrapper && attribute && attributesResults(currentWrapper))
-				held = callerHeldCode(thisArg, args, currentWrapper.slothlet);
+				held = callerHeldCode(args, currentWrapper.slothlet);
 		}
 
 		// A leaf's own call hands back what its module made as that module's (#597), to a caller known to be the host

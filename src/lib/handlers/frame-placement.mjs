@@ -1915,7 +1915,7 @@ function setApiValueCheck(check, harborsCode = null) {
 /**
  * What a module's call returned, as its caller receives it (#597): code the module made, set up to run as that
  * module whoever runs it. Set by the wrapper module; until then a value is returned as it is.
- * @type {function(object, *, boolean, object|null, object|null, WeakSet<object>|null): *}
+ * @type {function(object, *, boolean, (object|null), (object|null), (WeakSet<object>|null)): *}
  * @private
  */
 let resultAttributor = (_wrapper, value) => value;
@@ -2036,21 +2036,21 @@ export function isHandedOut(value) {
 let inboundOriginal = (value) => value;
 
 /**
- * The value behind a crossing view of the class prototype guard, as the module that handed it over holds it, or the
- * value itself (#1026). Set by the wrapper module.
- * @type {function(*): *}
+ * The arguments of a call as its caller handed them, by the list the call's code receives, or null when not recorded
+ * (#1026). Set by the wrapper module.
+ * @type {function(*): (ArrayLike<*>|null)}
  * @private
  */
-let crossingOriginal = (value) => value;
+let handedArguments = () => null;
 
 /**
- * Register how the value behind a crossing view is found (see {@link callerHeldCode}).
- * @param {function(*): *} unwrap - The value behind a crossing view, or the value itself.
+ * Register how a call's arguments as its caller handed them are found (see {@link callerHeldCode}).
+ * @param {function(*): (ArrayLike<*>|null)} find - The arguments as handed, or null.
  * @returns {void}
  * @internal
  */
-function setCrossingOriginal(unwrap) {
-	crossingOriginal = unwrap;
+function setHandedArguments(find) {
+	handedArguments = find;
 }
 
 /**
@@ -2248,33 +2248,30 @@ function handedLeafFunctions(thisArg, args, slothlet = null) {
 }
 
 /**
- * The code a module's call into another leaf is handed as its caller holds it (#1026): the receiver and each argument
- * that can carry code, and the functions and code objects nested in plain data among them, within the instance's
- * `permissions.search` ({@link searchDepth}, {@link searchProperties}), each as the caller holds it: the crossing view
- * the callee is handed of it counts as the value behind it, and nothing else is looked through. What the callee
- * returns of these is handed back to the caller as the very value it handed in, as in plain JavaScript: the caller
- * already holds it, so nothing is granted.
+ * The code a module's call into another leaf is handed, as its caller handed it (#1026): each argument that can carry
+ * code, and the functions and code objects nested in plain data among them, within the instance's `permissions.search`
+ * ({@link searchDepth}, {@link searchProperties}). What the callee returns of these is handed back to the caller as the
+ * very value it handed in, as in plain JavaScript: the caller already holds it, so nothing is granted.
  *
- * Taken as the call starts, before the callee's code runs, so nothing the callee puts into the caller's data counts.
- * Decided from `typeof` and property descriptors, so nothing of the caller's runs: a Proxy is taken as it is and not
- * looked into, and an accessor is not read.
+ * Read from the arguments as the caller handed them, recorded before the class prototype guard and the hand-in turn
+ * them into what the callee holds, and as the call starts, before the callee's code runs, so nothing the callee puts
+ * into the caller's data counts. A list nothing recorded (made by a hook) gives nothing. A view the caller holds (a
+ * Proxy) counts as itself and is not looked into, and an accessor is not read: decided from `typeof` and property
+ * descriptors, so nothing of the caller's runs.
  *
- * @param {*} thisArg - The call's receiver.
- * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
+ * @param {ArrayLike<*>|null|undefined} args - The arguments the call's code receives.
  * @param {object|null} [slothlet=null] - The instance whose `permissions.search` bounds the search.
  * @returns {WeakSet<object>|null} The values, or null when there are none.
  * @internal
  * @example
- * callerHeldCode(undefined, [fn, { inner: { cb } }], slothlet); // holds fn and cb
+ * callerHeldCode([fn, { inner: { cb } }], slothlet); // holds fn and cb, when the caller handed that list
  */
-export function callerHeldCode(thisArg, args, slothlet = null) {
+export function callerHeldCode(args, slothlet = null) {
+	const asHanded = handedArguments(args);
+	if (asHanded === null) return null;
 	let found = null;
 	const budget = { remaining: searchProperties(slothlet) };
-	const visit = (raw, depth) => {
-		if (raw === null || (typeof raw !== "object" && typeof raw !== "function")) return;
-		// What the callee is handed of another module's value is a crossing view of it; behind that is what the caller
-		// holds, a view the caller was itself handed included, which is recorded as it is and not looked into.
-		const value = crossingOriginal(raw);
+	const visit = (value, depth) => {
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
 		if (WeakSetMethods.has(trustedRootOwn.genuineWrappers, value) || isApiValue(value)) return;
 		if (typeof value === "function" || (isNode && util.types.isProxy(value))) {
@@ -2303,9 +2300,8 @@ export function callerHeldCode(thisArg, args, slothlet = null) {
 		}
 	};
 	const depth = searchDepth(slothlet);
-	visit(thisArg, depth);
-	const count = args?.length ?? 0;
-	for (let index = 0; index < count; index++) visit(args[index], depth);
+	const count = asHanded.length ?? 0;
+	for (let index = 0; index < count; index++) visit(asHanded[index], depth);
 	return found;
 }
 
@@ -6373,7 +6369,7 @@ export function internals(consumer) {
 		runtime_loadingHelper,
 		setApiValueCheck,
 		setHandedOutCheck,
-		setCrossingOriginal,
+		setHandedArguments,
 		setHostPrototypeCheck,
 		setInboundOriginal,
 		setModuleNodeResolver,

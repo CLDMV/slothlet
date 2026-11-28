@@ -209,8 +209,8 @@ const {
 	leafOfCopy,
 	outerCallerCeiling,
 	setApiValueCheck,
-	setCrossingOriginal,
 	setHandedOutCheck,
+	setHandedArguments,
 	setInboundOriginal,
 	setResultAttributor
 } = framePlacementInternals("lib/handlers/unified-wrapper");
@@ -9732,8 +9732,8 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 	// What a module handed the call and gets back is its value as it handed it, as in plain JavaScript (#1026): the
 	// caller already holds it, so handing it back grants nothing. Decided before any stand-in is made of it.
 	if (held !== null && !callerIsHost && caller?.____slothletInternal) {
-		const own = runtime_heldOriginal(value);
-		if (WeakSetMethods.has(held, own)) {
+		const own = runtime_heldForm(held, value);
+		if (own !== undefined) {
 			// Recorded as the caller's, as a value it hands over at the top level is, so the view it reads the result
 			// through hands it over as itself too.
 			runtime_recordOrigin(own, caller);
@@ -9751,23 +9751,47 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 }
 
 /**
- * The value a result stands for as its caller would hold it (#1026): behind a crossing view, an inbound view or a
- * stand-in, the value it shows; anything else as it is.
- * @param {object|Function} value - The result.
- * @returns {object|Function} The value behind it.
+ * The arguments each call was handed as its caller handed them, by the list the call's code receives (#1026): before
+ * the class prototype guard and the hand-in turn them into what the callee holds. A list made later (a hook's) has no
+ * entry, and nothing of it counts as the caller's.
+ * @type {WeakMap<object, ArrayLike<*>>}
  * @private
  */
-function runtime_heldOriginal(value) {
+const HANDED_ARGUMENTS = new WeakMap();
+
+/**
+ * Record the arguments a call was handed as its caller handed them (see {@link HANDED_ARGUMENTS}).
+ * @param {ArrayLike<*>} args - The list the call's code receives.
+ * @param {ArrayLike<*>} asHanded - The list as the caller handed it.
+ * @returns {void}
+ * @private
+ */
+function runtime_noteHandedArguments(args, asHanded) {
+	if (args !== null && typeof args === "object") WeakMapMethods.set(HANDED_ARGUMENTS, args, asHanded);
+}
+
+setHandedArguments((args) => (args !== null && typeof args === "object" ? (WeakMapMethods.get(HANDED_ARGUMENTS, args) ?? null) : null));
+
+/**
+ * The form of a result its caller handed the call, if it handed one (#1026): the result itself, or the value behind
+ * it (behind a crossing view, an inbound view or a stand-in, as far as they go), the first of these the caller holds.
+ * @param {WeakSet<object>} held - What the caller handed the call (see `callerHeldCode`).
+ * @param {object|Function} value - The result.
+ * @returns {object|Function|undefined} That form, or undefined when the caller handed none of them.
+ * @private
+ */
+function runtime_heldForm(held, value) {
 	let current = value;
 	for (let depth = 0; depth < 4; depth++) {
+		if (WeakSetMethods.has(held, current)) return current;
 		const behind =
 			WeakMapMethods.get(CROSSINGS, current)?.original ??
 			WeakMapMethods.get(INBOUND_VIEWS, current)?.original ??
 			WeakMapMethods.get(STAND_IN_RECORDS, current)?.original;
-		if (behind === undefined || behind === current) return current;
+		if (behind === undefined || behind === current) return undefined;
 		current = behind;
 	}
-	return current;
+	return undefined;
 }
 
 /**
@@ -9890,10 +9914,6 @@ setHandedOutCheck(
 		value !== null &&
 		(typeof value === "object" || typeof value === "function") &&
 		(WeakMapMethods.has(STAND_IN_RECORDS, value) || WeakMapMethods.has(CROSSINGS, value) || runtime_isPrototypeHandle(value))
-);
-// What a module hands over and gets back is the value as it holds it, so only the crossing view is looked through (#1026).
-setCrossingOriginal((value) =>
-	value === null || (typeof value !== "object" && typeof value !== "function") ? value : runtime_uncross(value)
 );
 // A crossing view of the class prototype guard stands for the value too: what the caller handed is what is looked into.
 setInboundOriginal((value) => {
@@ -22710,10 +22730,15 @@ class UnifiedWrapper extends ComponentBase {
 			}
 			// What another module or the host passes in reaches this one through the class prototype guard, so what this
 			// module stores into it reaches the caller the same way. Done first, on the arguments as the caller holds them.
-			if (!___gatePassed) args = runtime_crossArguments(wrapper, args);
-			// A function or Proxy this module handed out comes back to it as itself (#597), and so does an instance of its
-			// own class the async runtime wrapped (#328).
-			if (!___gatePassed) args = runtime_ownInstances(wrapper, runtime_ownArguments(wrapper, args));
+			if (!___gatePassed) {
+				const asHanded = args;
+				args = runtime_crossArguments(wrapper, args);
+				// A function or Proxy this module handed out comes back to it as itself (#597), and so does an instance of its
+				// own class the async runtime wrapped (#328).
+				args = runtime_ownInstances(wrapper, runtime_ownArguments(wrapper, args));
+				// The arguments as the caller handed them, for what it gets back of them as its own (#1026).
+				runtime_noteHandedArguments(args, asHanded);
+			}
 
 			// Ordinary JS call semantics (`obj.method()`) pass the *proxy* obj was read through as
 			// `this` — but a native method whose behavior depends on internal slots tied to exact

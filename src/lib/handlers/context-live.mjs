@@ -3300,7 +3300,7 @@ export class LiveContextManager {
 		// The code a module caller handed this call, as it holds it: what of it comes back is its own value (#1026).
 		const held =
 			record?.flagged && entryCaller && !callerIsHost && attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
-				? callerHeldCode(thisArg, args, currentWrapper.slothlet)
+				? callerHeldCode(args, currentWrapper.slothlet)
 				: null;
 		const attributed =
 			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
