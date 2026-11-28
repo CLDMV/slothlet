@@ -831,7 +831,10 @@ export class ApiBuilder extends ComponentBase {
 			// Code a caller supplied to another call: every call of its ceiling has to be allowed as well (#597).
 			for (let i = 0, ceilings = identityCeilings(identity); i < ceilings.length; i++) {
 				const ceiling = ceilings[i];
-				/* v8 ignore start -- apiPath/filePath are always set on a genuine wrapper. */
+				// A ceiling that isn't a genuine wrapper is refused just below; the fallbacks keep that check reachable for
+				// one with no internal record. A genuine ceiling always has both fields; the suite builds no forged ceiling
+				// that gets this far.
+				/* v8 ignore start */
 				const ceilingPath = ceiling.____slothletInternal?.apiPath ?? "";
 				const ceilingFilePath = ceiling.____slothletInternal?.filePath ?? null;
 				/* v8 ignore stop */
@@ -867,9 +870,9 @@ export class ApiBuilder extends ComponentBase {
 			// Unattributable under concurrency — refuse the traversal rather than guess.
 			if (identity?.unresolved) return false;
 			const callerWrapper = identity?.currentWrapper;
-			// Defensive guard: only reached from the proxy get trap while a currentWrapper is active.
-			// tryGetContext() returning non-null without currentWrapper is an impossible state.
-			/* v8 ignore next */
+			// Unreachable: every call site runs after enforceInternalPermission threw for the same read, which it does
+			// only for a caller wrapper (an unresolved identity returned false above). Kept as a guard.
+			/* v8 ignore if */
 			if (!callerWrapper) return false;
 			if (slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) return false;
 
@@ -897,8 +900,9 @@ export class ApiBuilder extends ComponentBase {
 		 * @private
 		 */
 		const canTraverseAs = (targetPath, callerWrapper, ctx, permissionManager) => {
-			// callerWrapper.____slothletInternal is always set by UnifiedWrapper — the ?? fallbacks are
-			// defensive guards that are structurally unreachable through the public API.
+			// Defensive reads, as in enforceInternalPermission: the caller here is the current wrapper or one of its
+			// ceilings, whose record always carries apiPath and filePath, so the fallbacks only guard a malformed record
+			// (a forged ceiling, refused by the caller of this helper). The suite builds no such caller.
 			/* v8 ignore start */
 			const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 			const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
@@ -1368,8 +1372,9 @@ export class ApiBuilder extends ComponentBase {
 						return descriptor;
 					}
 
-					// Generic descriptors are not produced by slothlet namespace objects or built-in reflection paths.
-					/* v8 ignore next */
+					// Unreachable: Reflect.getOwnPropertyDescriptor always returns a complete data or accessor descriptor, and an
+					// accessor returned above. Kept as a guard.
+					/* v8 ignore if */
 					if (!("value" in descriptor)) {
 						return descriptor;
 					}
@@ -1569,7 +1574,7 @@ export class ApiBuilder extends ComponentBase {
 			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
 				const descriptor = Reflect.getOwnPropertyDescriptor(raw, key);
-				/* v8 ignore next -- a key the route proxy lists is one of the object's own */
+				/* v8 ignore if -- a key the route proxy lists is one of the object's own */
 				if (!descriptor) continue;
 				const childRoutePath = `${routePath}.${key}`;
 				try {
@@ -1914,8 +1919,9 @@ export class ApiBuilder extends ComponentBase {
 					// contributor except the one restore happened to reinstall, even though a `^`-anchored
 					// cascade (reading RoutineManager.raw directly) still sees all of them (#372 review —
 					// confirmed via a 3-contributor add/remove-one repro).
-					// routineManager is always auto-registered (slothletProperty); the false arm is unreachable.
-					/* v8 ignore next */
+					// removeApiComponent needs the RoutineManager itself, so no removal gets here without one: the else arm is
+					// unreachable. Kept as a guard, matching add() above.
+					/* v8 ignore else */
 					if (slothlet.handlers.routineManager) {
 						await slothlet.handlers.routineManager.rebuildStacks(slothlet.api);
 					}
@@ -2166,8 +2172,8 @@ export class ApiBuilder extends ComponentBase {
 					const ownedPaths = filterList(setToArray(MapMethods.get(ownership.moduleToPath, moduleID)), (path) => {
 						// No mount registers the empty-string root path in moduleToPath — the base load, a root
 						// object mount, and a root folder mount all register named leaves — so this is a defensive
-						// skip for a momentarily-inconsistent record, mirroring the settle guard above.
-						/* v8 ignore next */
+						// skip for a momentarily-inconsistent record, mirroring the settle guard above. The suite can't produce one.
+						/* v8 ignore if */
 						if (path === "") return false;
 						if (
 							endpoint === "." &&
