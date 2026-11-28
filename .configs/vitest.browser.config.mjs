@@ -117,6 +117,8 @@ export default defineConfig(async () => {
 		// with sourcemaps), so v8 coverage remaps to the real source files.
 		optimizeDeps: { exclude: ["@cldmv/slothlet"] },
 		test: {
+			// Off for the same reason as in vitest.config.mjs: the cache never serves slothlet's suite and only grows.
+			fsModuleCache: false,
 			server: { deps: { inline: [/@cldmv\/slothlet/] } },
 			include: ["tests/browser/**/*.browser.test.mjs"],
 			exclude: ["node_modules"],
