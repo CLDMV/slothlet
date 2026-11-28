@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:44:41-08:00 (1795635881)
+ *	@Last modified time: 2026-11-27T14:31:18-08:00 (1795818678)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2553,6 +2553,9 @@ function refuseLeafImport(context, result) {
 	// path, or a file requiring itself) is that file's one CommonJS module: no copy of a leaf is made. An ES module
 	// importing its own file under another URL is a copy, and is refused below.
 	if (isRequire && typeof parentURL === "string" && realFileKey(parentURL) === realFileKey(url)) return;
+	// Code compiled from a string names an importer that says nothing about who runs it (see compiledCodeImporter).
+	const compiled = compiledCodeImporter();
+	if (compiled !== undefined && !compiled.host) throw leafRefusal(compiled.location, url);
 	if (typeof parentURL === "string" && slothletCodePath(parentURL) === null) {
 		if (StringMethods.includes(parentURL, MARKER) || (StringMethods.startsWith(parentURL, "file:") && isUntaggedModuleFile(parentURL)))
 			throw leafRefusal(parentURL, url);
@@ -2562,6 +2565,62 @@ function refuseLeafImport(context, result) {
 		const caller = moduleRequireCaller();
 		if (caller !== null) throw leafRefusal(caller, url);
 	}
+}
+
+/**
+ * Whether a stack line is a frame of code compiled from a string: `eval` or a function constructor (`eval at …`), or
+ * a `vm` compile under a name that is no file or URL (`evalmachine.<anonymous>`, `<anonymous>`).
+ * @param {string} line - One line of a stack.
+ * @returns {boolean} True for such a frame.
+ * @private
+ */
+function isCompiledCodeLine(line) {
+	if (RegExpMethods.exec(/\beval at /, line) !== null) return true;
+	const location = frameLocation(line);
+	return (
+		location !== null &&
+		!StringMethods.startsWith(location, "node:") &&
+		RegExpMethods.exec(/^(?:file:|https?:|\/|[A-Za-z]:[\\/])/, location) === null
+	);
+}
+
+/**
+ * Who makes the `import()` or `require()` the resolve hook is answering, when code compiled from a string makes it.
+ * The importer Node names for such code is not who runs it: V8 gives compiled code the importer of the script that
+ * first compiled the same text (the host's file, a module's, or slothlet's own `Function` wrapper while the
+ * permission system is on), and a `vm` compile names none. So the code is placed where it is called from: past
+ * compiled frames, built-in functions, Node's own frames and slothlet's own, the first frame that is a module's code
+ * or the host's. A package's frame passes the answer outward, as for slothlet's internal exports (see
+ * {@link mayUseInternal}). Code that cannot be placed (a compiled function a scheduler calls) is not the host's.
+ * @returns {{location: ?string, host: boolean}|undefined} The frame and whether it is the host's, or undefined when
+ *   the import is not made by compiled code.
+ * @private
+ */
+function compiledCodeImporter() {
+	const lines = copyList(splitText(ownStackText(USE_FRAME_LIMIT), "\n"), 1);
+	let i = 0;
+	// The resolve hook's own frames, then Node's loader.
+	while (i < lines.length && slothletCodePath(frameLocation(lines[i]) ?? "") !== null) i++;
+	while (
+		i < lines.length &&
+		(StringMethods.startsWith(frameLocation(lines[i]) ?? "", "node:") || RegExpMethods.exec(BUILT_IN_FRAME, lines[i]) !== null)
+	)
+		i++;
+	if (i >= lines.length || !isCompiledCodeLine(lines[i])) return undefined;
+	let packageFrame = null;
+	for (; i < lines.length; i++) {
+		const line = lines[i];
+		if (isCompiledCodeLine(line)) continue;
+		const location = frameLocation(line);
+		if (location === null || StringMethods.startsWith(location, "node:") || isOwnCodeLocation(location)) continue;
+		if (isModuleCodeLocation(location)) return { location, host: false };
+		if (RegExpMethods.exec(/\/node_modules\//, toSlashPath(location)) !== null) {
+			packageFrame ??= location;
+			continue;
+		}
+		return { location, host: true };
+	}
+	return { location: packageFrame, host: packageFrame !== null };
 }
 
 /**
