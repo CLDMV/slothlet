@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T08:07:53-08:00 (1795536473)
+ *	@Last modified time: 2026-11-28T03:50:43-08:00 (1795866643)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -295,7 +295,12 @@ describe("Config > helpers > how a copy is named", () => {
 	it("a helper of a leaf loaded once per api file names that file and its mount", () => {
 		const child = propagateInstanceQuery("../lib/tally.mjs", `${leafFile}?slothlet_instance=a&module=m1&slothlet_helpers=module`, tally);
 		expect(child.startsWith(`${tally}?`)).toBe(true);
-		expect(params(child)).toEqual({ slothlet_instance: "a", slothlet_helpers: "module", slothlet_for: leafPath, slothlet_mount: "m1" });
+		expect(params(child)).toEqual({
+			slothlet_instance: "a",
+			slothlet_helpers: "module",
+			slothlet_for: encodeURIComponent(leafPath),
+			slothlet_mount: "m1"
+		});
 		// What that helper imports is the same api file's copy.
 		const grandchild = propagateInstanceQuery("./store.mjs", child, store);
 		expect(params(grandchild)).toEqual(params(child));
@@ -311,7 +316,7 @@ describe("Config > helpers > how a copy is named", () => {
 		expect(Object.fromEntries(new URLSearchParams(child.slice(child.indexOf("?") + 1)))).toEqual({
 			slothlet_instance: "a",
 			slothlet_helpers: "module",
-			slothlet_for: leafPath
+			slothlet_for: encodeURIComponent(leafPath)
 		});
 	});
 

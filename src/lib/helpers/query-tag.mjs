@@ -7,21 +7,22 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-28T00:00:00-08:00 (1795852800)
+ *	@Last modified time: 2026-11-28T03:50:09-08:00 (1795866609)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview The mount tag an instance's leaf URLs carry (`module=`, copied onto helper copies as
- * `slothlet_mount=`), written and read back.
+ * @fileoverview The tags an instance's leaf and helper URLs carry (`module=`, and on a helper copy `slothlet_mount=` and
+ * `slothlet_for=`), written and read back.
  *
  * @description
  * Each `api.slothlet.api.add()` mount imports its own copy of a leaf under `&module=<moduleID>`. Tools that read a
  * script's URL often decode the whole URL once before they treat it as a path: `@vitest/coverage-v8` does, and vite
  * then takes the last `/` of the id as the file's name. A moduleID such as `@scope/pkg` written with one level of
- * escaping comes out of that decode with its `/` back, and the coverage lands on a file named `pkg` (#1042).
+ * escaping comes out of that decode with its `/` back, and the coverage lands on a file named `pkg` (#1042). The same
+ * goes for the api file path a helper copy carries under `helpers: "module"` (#1043).
  *
  * So a tag holds its value escaped once: in the URL it is escaped twice, and one decode of the URL leaves `%2F`, never
  * a `/`. Whoever reads the parameter (a URLSearchParams lookup, or a stack line decoded once) has the tag;
@@ -50,7 +51,7 @@ function escapeOnce(value) {
 }
 
 /**
- * The tag for a value (a moduleID): the parameter's value as a URLSearchParams lookup returns it.
+ * The tag for a value (a moduleID, an api file's path): the parameter's value as a URLSearchParams lookup returns it.
  * Set it with URLSearchParams, which escapes it once more, or write {@link queryTagInURL} into a URL by hand.
  * @param {string} value - The value.
  * @returns {string} The tag.
