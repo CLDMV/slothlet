@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T03:22:13-08:00 (1795605733)
+ *	@Last modified time: 2026-11-27T22:07:07-08:00 (1795846027)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,15 +43,15 @@ import { internals as sharedValuesInternals } from "#handlers/shared-values";
 import * as runtimeNamespace from "./runtime.mjs";
 import { Reflect, NativeProxy, Objects, Symbols } from "#helpers/intrinsics";
 import { internals as instanceImportsInternals } from "#helpers/instance-imports";
+// Both runtime modules, imported statically: nothing in slothlet's graph awaits at its top level (#1034). Each is read
+// only inside the functions below, so the import order between them and this file does not matter.
+import * as asyncRuntimeModule from "#runtime/async";
+import * as liveRuntimeModule from "#runtime/live";
 const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime");
 const { recordSharedExports } = sharedValuesInternals("lib/runtime/runtime");
 const { registerOwnModule, registerSelfForms, callableSelfOf, bindInstanceSelf, SELF_BIND_KEY } =
 	instanceImportsInternals("lib/runtime/runtime");
 const { asyncRuntime, liveRuntime } = contextInternals("lib/runtime/runtime");
-
-// Pre-load both runtime modules at initialization
-const asyncRuntimeModule = await import("#runtime/async");
-const liveRuntimeModule = await import("#runtime/live");
 
 /**
  * Determine which runtime to use by checking which context manager has an active context
