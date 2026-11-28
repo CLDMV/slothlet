@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-read-gating-frozen-callable.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-read-gating-frozen-callable.test.vitest.mjs
  *	@Date: 2026-10-11T12:30:00-07:00 (1791747000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T18:40:13-08:00 (1795056013)
+ *	@Last modified time: 2026-11-28T04:32:37-08:00 (1795869157)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/performance/compare-v3-v4-worker.mjs
+ *	@Filename: tests/performance/compare-v3-v4-worker.mjs
  *	@Date: 2026-11-17T08:39:03-08:00 (1794933543)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T08:47:20-08:00 (1794934040)
+ *	@Last modified time: 2026-11-28T04:30:54-08:00 (1795869054)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

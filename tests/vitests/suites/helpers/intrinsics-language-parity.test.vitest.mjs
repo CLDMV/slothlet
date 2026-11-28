@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/intrinsics-language-parity.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/intrinsics-language-parity.test.vitest.mjs
  *	@Date: 2026-11-25T01:32:12-08:00 (1795599132)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T02:10:46-08:00 (1795601446)
+ *	@Last modified time: 2026-11-28T04:31:50-08:00 (1795869110)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

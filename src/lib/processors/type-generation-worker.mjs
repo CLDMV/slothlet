@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/processors/type-generation-worker.mjs
+ *	@Filename: src/lib/processors/type-generation-worker.mjs
  *	@Date: 2026-02-14T18:14:33-08:00 (1771121673)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
+ *	@Last modified time: 2026-11-28T04:30:46-08:00 (1795869046)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

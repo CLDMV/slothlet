@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typescript/typescript-relative-imports.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typescript/typescript-relative-imports.test.vitest.mjs
  *	@Date: 2026-05-17T20:30:00-07:00 (1779075000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T08:09:18-08:00 (1795536558)
+ *	@Last modified time: 2026-11-28T04:33:09-08:00 (1795869189)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

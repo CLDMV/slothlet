@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-errors.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-errors.test.vitest.mjs
  *	@Date: 2026-01-27T22:45:42-08:00 (1769582742)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:27-08:00 (1794882567)
+ *	@Last modified time: 2026-11-28T04:31:10-08:00 (1795869070)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/shutdown-left-work.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/shutdown-left-work.test.vitest.mjs
  *	@Date: 2026-11-21T14:51:12-08:00 (1795301472)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T15:02:25-08:00 (1795302145)
+ *	@Last modified time: 2026-11-28T04:32:47-08:00 (1795869167)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/context/scope-full-isolation-checks.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/context/scope-full-isolation-checks.test.vitest.mjs
  *	@Date: 2026-11-18T06:09:41-08:00 (1795010981)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T06:50:40-08:00 (1795013440)
+ *	@Last modified time: 2026-11-28T04:31:34-08:00 (1795869094)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

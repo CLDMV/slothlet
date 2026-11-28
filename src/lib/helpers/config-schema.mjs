@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/config-schema.mjs
+ *	@Filename: src/lib/helpers/config-schema.mjs
  *	@Date: 2026-11-16T18:55:17-08:00 (1794884117)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:13:02-08:00 (1795486382)
+ *	@Last modified time: 2026-11-28T04:30:42-08:00 (1795869042)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/unified-wrapper/inherited-object-members.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/unified-wrapper/inherited-object-members.test.vitest.mjs
  *	@Date: 2026-11-04T21:16:47-08:00 (1793855807)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:37-08:00 (1794882637)
+ *	@Last modified time: 2026-11-28T04:33:10-08:00 (1795869190)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

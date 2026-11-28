@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/browser/readd-file.browser.test.mjs
+ *	@Filename: tests/browser/readd-file.browser.test.mjs
  *	@Date: 2026-11-15T17:09:19-08:00 (1794791359)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:46:58-08:00 (1794797218)
+ *	@Last modified time: 2026-11-28T04:30:52-08:00 (1795869052)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

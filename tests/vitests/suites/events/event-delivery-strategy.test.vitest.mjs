@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/events/event-delivery-strategy.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/events/event-delivery-strategy.test.vitest.mjs
  *	@Date: 2026-09-28T21:34:06-07:00 (1790656446)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:03-08:00 (1794882543)
+ *	@Last modified time: 2026-11-28T04:31:44-08:00 (1795869104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

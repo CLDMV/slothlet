@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_frozen_permissions/friend.mjs
+ *	@Filename: api_tests/api_test_frozen_permissions/friend.mjs
  *	@Date: 2026-10-16T12:15:37-07:00 (1792178137)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T12:15:57-07:00 (1792178157)
+ *	@Last modified time: 2026-11-28T04:28:03-08:00 (1795868883)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

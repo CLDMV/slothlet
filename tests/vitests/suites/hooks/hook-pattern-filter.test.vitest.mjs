@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/hooks/hook-pattern-filter.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/hooks/hook-pattern-filter.test.vitest.mjs
  *	@Date: 2026-05-31T08:04:06-07:00 (1780239846)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-28T04:31:53-08:00 (1795869113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

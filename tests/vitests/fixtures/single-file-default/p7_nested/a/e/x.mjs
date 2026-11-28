@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/fixtures/single-file-default/p7_nested/a/e/x.mjs
+ *	@Filename: tests/vitests/fixtures/single-file-default/p7_nested/a/e/x.mjs
  *	@Date: 2026-11-14T08:20:39-08:00 (1794673239)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:08:56-08:00 (1794676136)
+ *	@Last modified time: 2026-11-28T04:31:03-08:00 (1795869063)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

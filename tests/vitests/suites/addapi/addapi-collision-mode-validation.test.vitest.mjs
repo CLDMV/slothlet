@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/addapi/addapi-collision-mode-validation.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/addapi/addapi-collision-mode-validation.test.vitest.mjs
  *	@Date: 2026-11-25T08:32:36-08:00 (1795624356)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T08:50:09-08:00 (1795625409)
+ *	@Last modified time: 2026-11-28T04:31:06-08:00 (1795869066)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

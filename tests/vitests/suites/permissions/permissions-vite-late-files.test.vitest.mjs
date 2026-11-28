@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-vite-late-files.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-vite-late-files.test.vitest.mjs
  *	@Date: 2026-11-06T19:36:17-08:00 (1794022577)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T08:09:01-08:00 (1795536541)
+ *	@Last modified time: 2026-11-28T04:32:44-08:00 (1795869164)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

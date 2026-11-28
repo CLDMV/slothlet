@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/handlers/framework-internals.mjs
+ *	@Filename: src/lib/handlers/framework-internals.mjs
  *	@Date: 2026-08-17T00:00:00-07:00 (1786950000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:15:37-08:00 (1794978937)
+ *	@Last modified time: 2026-11-28T04:30:37-08:00 (1795869037)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

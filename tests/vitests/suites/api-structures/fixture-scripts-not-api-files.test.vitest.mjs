@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-structures/fixture-scripts-not-api-files.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-structures/fixture-scripts-not-api-files.test.vitest.mjs
  *	@Date: 2026-11-12T22:47:25-08:00 (1794552445)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T10:23:26-08:00 (1795544606)
+ *	@Last modified time: 2026-11-28T04:31:15-08:00 (1795869075)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

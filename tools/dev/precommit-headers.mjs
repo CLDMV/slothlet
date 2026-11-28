@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/dev/precommit-headers.mjs
+ *	@Filename: tools/dev/precommit-headers.mjs
  *	@Date: 2026-11-17T00:00:00-08:00 (1794902400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:52:10-08:00 (1794930730)
+ *	@Last modified time: 2026-11-28T04:33:19-08:00 (1795869199)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/run-rebuild-script-records.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/run-rebuild-script-records.test.vitest.mjs
  *	@Date: 2026-11-22T16:25:09-08:00 (1795393509)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T16:54:26-08:00 (1795395266)
+ *	@Last modified time: 2026-11-28T04:31:42-08:00 (1795869102)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

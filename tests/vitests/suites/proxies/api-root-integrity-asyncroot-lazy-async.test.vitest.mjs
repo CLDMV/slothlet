@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/proxies/api-root-integrity-asyncroot-lazy-async.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/proxies/api-root-integrity-asyncroot-lazy-async.test.vitest.mjs
  *	@Date: 2026-11-25T00:00:00-08:00 (1795593600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-28T04:32:52-08:00 (1795869172)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

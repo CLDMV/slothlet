@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-error-denied.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-error-denied.test.vitest.mjs
  *	@Date: 2026-04-14T17:19:39-07:00 (1776212379)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:48-08:00 (1794882588)
+ *	@Last modified time: 2026-11-28T04:32:25-08:00 (1795869145)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

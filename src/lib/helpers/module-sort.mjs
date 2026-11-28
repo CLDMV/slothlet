@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/helpers/module-sort.mjs
+ *	@Filename: src/lib/helpers/module-sort.mjs
  *	@Date: 2026-05-27T11:22:33-07:00 (1779906153)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T17:23:49-08:00 (1794878629)
+ *	@Last modified time: 2026-11-28T04:30:43-08:00 (1795869043)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

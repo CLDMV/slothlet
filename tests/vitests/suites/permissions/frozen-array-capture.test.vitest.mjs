@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/frozen-array-capture.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/frozen-array-capture.test.vitest.mjs
  *	@Date: 2026-10-24T15:16:48-07:00 (1792880208)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:37-08:00 (1794882577)
+ *	@Last modified time: 2026-11-28T04:32:15-08:00 (1795869135)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/setup/vitest.setup.mjs
+ *	@Filename: tests/vitests/setup/vitest.setup.mjs
  *	@Date: 2026-01-29T22:04:09-08:00 (1769753049)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T09:24:38-08:00 (1793553878)
+ *	@Last modified time: 2026-11-28T04:31:05-08:00 (1795869065)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

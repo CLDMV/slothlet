@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/namespace-handed-raw.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/namespace-handed-raw.test.vitest.mjs
  *	@Date: 2026-11-08T00:56:39-08:00 (1794128199)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T01:02:57-08:00 (1794128577)
+ *	@Last modified time: 2026-11-28T04:32:17-08:00 (1795869137)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

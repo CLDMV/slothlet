@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-caller-supplied-rule-ceiling.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-caller-supplied-rule-ceiling.test.vitest.mjs
  *	@Date: 2026-11-25T01:46:21-08:00 (1795599981)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T02:12:09-08:00 (1795601529)
+ *	@Last modified time: 2026-11-28T04:32:22-08:00 (1795869142)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

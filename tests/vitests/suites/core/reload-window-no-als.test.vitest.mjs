@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/reload-window-no-als.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/reload-window-no-als.test.vitest.mjs
  *	@Date: 2026-11-17T17:10:02-08:00 (1794964202)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T18:56:50-08:00 (1794970610)
+ *	@Last modified time: 2026-11-28T04:31:40-08:00 (1795869100)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_api_node_default_data/bulk/bulk.mjs
+ *	@Filename: api_tests/api_test_api_node_default_data/bulk/bulk.mjs
  *	@Date: 2026-11-13T17:28:41-08:00 (1794619721)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T23:17:45-08:00 (1794640665)
+ *	@Last modified time: 2026-11-28T04:27:20-08:00 (1795868840)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

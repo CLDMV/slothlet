@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/events/event-permission-mode.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/events/event-permission-mode.test.vitest.mjs
  *	@Date: 2026-11-11T21:59:15-08:00 (1794463155)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:03-08:00 (1794882543)
+ *	@Last modified time: 2026-11-28T04:31:44-08:00 (1795869104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

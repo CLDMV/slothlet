@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/smart-flattening/smart-flattening-self-value-siblings.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/smart-flattening/smart-flattening-self-value-siblings.test.vitest.mjs
  *	@Date: 2026-10-11T20:14:14-07:00 (1791774854)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T22:04:29-07:00 (1791781469)
+ *	@Last modified time: 2026-11-28T04:33:06-08:00 (1795869186)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

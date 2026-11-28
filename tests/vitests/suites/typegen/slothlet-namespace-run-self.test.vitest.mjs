@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/typegen/slothlet-namespace-run-self.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/typegen/slothlet-namespace-run-self.test.vitest.mjs
  *	@Date: 2026-11-21T23:29:53-08:00 (1795332593)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T23:53:31-08:00 (1795334011)
+ *	@Last modified time: 2026-11-28T04:33:06-08:00 (1795869186)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

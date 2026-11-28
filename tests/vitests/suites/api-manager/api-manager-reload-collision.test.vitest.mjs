@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-manager-reload-collision.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-manager-reload-collision.test.vitest.mjs
  *	@Date: 2026-11-18T20:37:54-08:00 (1795063074)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T20:57:47-08:00 (1795064267)
+ *	@Last modified time: 2026-11-28T04:31:11-08:00 (1795869071)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/core/v4-method-surface.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/core/v4-method-surface.test.vitest.mjs
  *	@Date: 2026-11-16T18:00:00-08:00 (1794880800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:00:00-08:00 (1794880800)
+ *	@Last modified time: 2026-11-28T04:31:43-08:00 (1795869103)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

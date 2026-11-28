@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/browser/thenable-proxy.browser.test.mjs
+ *	@Filename: tests/browser/thenable-proxy.browser.test.mjs
  *	@Date: 2026-10-10T09:31:46-07:00 (1791649906)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:10-08:00 (1794882490)
+ *	@Last modified time: 2026-11-28T04:30:53-08:00 (1795869053)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

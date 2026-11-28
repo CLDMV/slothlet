@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/api-manager/api-cache-lazy-mode.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/api-manager/api-cache-lazy-mode.test.vitest.mjs
  *	@Date: 2026-02-21T10:42:58-08:00 (1771699378)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:32-08:00 (1794882512)
+ *	@Last modified time: 2026-11-28T04:31:08-08:00 (1795869068)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

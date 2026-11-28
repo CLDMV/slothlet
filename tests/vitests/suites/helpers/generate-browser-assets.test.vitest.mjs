@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/helpers/generate-browser-assets.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/helpers/generate-browser-assets.test.vitest.mjs
  *	@Date: 2026-05-31T08:04:06-07:00 (1780239846)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:52-08:00 (1794882592)
+ *	@Last modified time: 2026-11-28T04:31:48-08:00 (1795869108)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

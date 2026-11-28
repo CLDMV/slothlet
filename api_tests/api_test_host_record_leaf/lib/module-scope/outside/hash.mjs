@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /outside/hash.mjs
+ *	@Filename: outside/hash.mjs
  *	@Date: 2026-11-08T14:29:34-08:00 (1794176974)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T14:42:09-08:00 (1794177729)
+ *	@Last modified time: 2026-11-28T04:28:18-08:00 (1795868898)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

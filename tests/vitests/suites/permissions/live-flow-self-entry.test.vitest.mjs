@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/live-flow-self-entry.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/live-flow-self-entry.test.vitest.mjs
  *	@Date: 2026-11-17T11:15:03-08:00 (1794942903)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:47:18-08:00 (1795636038)
+ *	@Last modified time: 2026-11-28T04:32:16-08:00 (1795869136)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

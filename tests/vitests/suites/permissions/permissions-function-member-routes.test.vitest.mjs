@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/permissions/permissions-function-member-routes.test.vitest.mjs
+ *	@Filename: tests/vitests/suites/permissions/permissions-function-member-routes.test.vitest.mjs
  *	@Date: 2026-11-15T13:40:33-08:00 (1794778833)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T08:08:47-08:00 (1795536527)
+ *	@Last modified time: 2026-11-28T04:32:27-08:00 (1795869147)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
