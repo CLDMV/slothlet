@@ -406,7 +406,7 @@ describe("Hooks > around dispatch strategy (#496)", () => {
 	it("reports around hooks in the cached per-path strategy and invalidates on change", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await boot({ mode: "eager" });
-		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+		const hookManager = resolveWrapper(api.svc).____slothlet.handlers.hookManager;
 
 		expect(hookManager.getDispatchStrategy("svc.mulSync")).toMatchObject({ hasAround: false, asyncAround: false });
 

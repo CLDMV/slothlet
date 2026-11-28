@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T01:51:24-08:00 (1795600284)
+ *	@Last modified time: 2026-11-25T20:32:55-08:00 (1795667575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,7 +48,7 @@ async function build(opts = {}) {
 		routines: { entries: [{ name: "^ghost", mode: "manual" }] },
 		...opts
 	});
-	const rm = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+	const rm = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 	return { api, rm };
 }
 

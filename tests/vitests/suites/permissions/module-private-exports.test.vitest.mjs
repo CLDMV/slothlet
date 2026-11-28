@@ -161,7 +161,7 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 	it("classifies private names exactly at the manager predicate", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await slothlet({ mode, base: BASE, permissions: { policy: "allow", rules: [] } });
-		const pm = resolveWrapper(api.billing).slothlet.handlers.permissionManager;
+		const pm = resolveWrapper(api.billing).____slothlet.handlers.permissionManager;
 
 		expect(pm.isPrivateTarget("billing.internals.__rate")).toBe(true);
 		expect(pm.isPrivateTarget("billing.internals.currency")).toBe(false);

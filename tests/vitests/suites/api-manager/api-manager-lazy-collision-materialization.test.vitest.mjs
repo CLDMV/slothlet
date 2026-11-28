@@ -99,7 +99,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		expect(events).toHaveLength(1);
 		expect(typeof events[0].impl).toBe("function"); // the wrapped callable, on the stable public field
 		expect(events[0].wrapper).toBeUndefined(); // internal handle no longer on the public event
-		const owner = resolveWrapper(api.sub).slothlet.handlers.ownership.getCurrentOwner("sub.testFunc");
+		const owner = resolveWrapper(api.sub).____slothlet.handlers.ownership.getCurrentOwner("sub.testFunc");
 		expect(events[0].module).toBe(owner.moduleID);
 		// The surviving value still resolves correctly.
 		expect(await api.sub.testFunc()).toBe("from-lazybase-sub");

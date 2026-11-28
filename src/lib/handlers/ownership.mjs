@@ -1269,7 +1269,7 @@ export class OwnershipManager extends ComponentBase {
 		const value = owner.value;
 
 		// If value is a wrapper proxy, unwrap it to get the raw implementation.
-		// Use resolveWrapper (checks the internal _proxyRegistry WeakMap directly) rather than
+		// Use resolveWrapper (checks the proxy registry directly) rather than
 		// `"____impl" in value`, which goes through the hasTrap - and ____impl is now blocked there.
 		const rawWrapper = resolveWrapper(value);
 		if (rawWrapper) {

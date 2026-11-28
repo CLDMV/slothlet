@@ -300,7 +300,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 		const { module: moduleID } = info.versions.v1;
 
 		// Access the internal handler directly to exercise getVersionMetadata(moduleID)
-		const sl = resolveWrapper(api.v1.auth).slothlet;
+		const sl = resolveWrapper(api.v1.auth).____slothlet;
 		const meta = sl.handlers.versionManager.getVersionMetadata(moduleID);
 
 		expect(meta).toHaveProperty("version", "v1");

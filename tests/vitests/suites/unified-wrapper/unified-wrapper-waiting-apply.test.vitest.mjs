@@ -595,7 +595,7 @@ describe("___adoptImplChildren cleanup loop — orphan key deletion (lines 1128-
 		//   6. resolveWrapper(orphanProxy) is non-null → ___invalidate() called (lines 1133-1134).
 		const api = await makeEager();
 		// Obtain the slothlet instance via a known wrapper.
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		// Create a fresh parent wrapper with no initial impl.
 		const parentW = new UnifiedWrapper(sl, {
@@ -611,7 +611,7 @@ describe("___adoptImplChildren cleanup loop — orphan key deletion (lines 1128-
 			apiPath: "test.cleanup.orphan",
 			initialImpl: { dummy: () => "dummy" }
 		});
-		const orphanProxy = orphanW.createProxy();
+		const orphanProxy = orphanW.___createProxy();
 
 		// Define the orphan as a NON-CONFIGURABLE own property on parentW.
 		// Non-configurable means the "replace" deletion block (which does `if (configurable) delete`)
@@ -666,7 +666,7 @@ describe("___adoptImplChildren cleanup loop — orphan key deletion (lines 1128-
 		// NOTE: This path doesn't find orphans in the cleanup loop (they were deleted by "replace" block).
 		// This test documents the expected behavior and confirms the cleanup loop runs on every !isMergeScenario call.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const freshW = new UnifiedWrapper(sl, {
 			mode: "eager",
@@ -800,7 +800,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		//   Iter 1: chainProp="childProp", current=parentW, parentW.impl is plain → B263=false → advance to childW.
 		//   Iter 2: chainProp="someElem", current=childW, childW.impl=isProxy → B263=TRUE → L1608-1614!
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		// Child wrapper: force-set impl to a custom Proxy via direct assignment (bypasses ___adoptImplChildren).
 		const customProxy = new Proxy(
@@ -821,7 +821,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		parentW.____slothletInternal.state.materialized = true;
 
 		// Attach childW proxy as a child of parentW.
-		const childProxy = childW.createProxy();
+		const childProxy = childW.___createProxy();
 		parentW["childProp"] = childProxy;
 
 		// propChain=["childProp","someElem"] → two iterations.
@@ -842,7 +842,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		// After the for-loop completes (one iteration), current=childW, childW.impl=isProxy.
 		// The post-loop check at line 1638 (`if (current && isProxy(current.impl))`) fires → line 1644.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const customProxy2 = new Proxy(
 			{ result: "from-proxy" },
@@ -859,7 +859,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		const parentW2 = new UnifiedWrapper(sl, { mode: "eager", apiPath: "k.parent2", initialImpl: null });
 		parentW2.____slothletInternal.impl = { marker2: true };
 		parentW2.____slothletInternal.state.materialized = true;
-		parentW2["childProp"] = childW2.createProxy();
+		parentW2["childProp"] = childW2.___createProxy();
 
 		// propChain=["childProp"] → one for-loop iteration, then post-loop isProxy check.
 		const wp2 = parentW2.___createWaitingProxy(["childProp"]);
@@ -876,7 +876,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		// After the for-loop: current=childW, childW.impl=plain → L1638=false.
 		// isFinalInternal=false, "nonExistentPropK1" not in childW → B272 false → line 1654: return undefined.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const childW3 = new UnifiedWrapper(sl, { mode: "eager", apiPath: "k.child-plain", initialImpl: null });
 		childW3.____slothletInternal.impl = { existing: true };
@@ -885,7 +885,7 @@ describe("waiting proxy GET trap — propChain resolution edge cases (lines 1602
 		const parentW3 = new UnifiedWrapper(sl, { mode: "eager", apiPath: "k.parent3", initialImpl: null });
 		parentW3.____slothletInternal.impl = { marker3: true };
 		parentW3.____slothletInternal.state.materialized = true;
-		parentW3["childProp"] = childW3.createProxy();
+		parentW3["childProp"] = childW3.___createProxy();
 
 		const wp3 = parentW3.___createWaitingProxy(["childProp"]);
 
@@ -940,7 +940,7 @@ describe("waiting proxy GET trap — premature hasOwn check and inFlight=false f
 		//   • premature hasOwn check doesn't return (prop not in wrapper).
 		// A freshly created eager wrapper with initialImpl=null satisfies all three.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const freshW = new UnifiedWrapper(sl, {
 			mode: "eager",
 			apiPath: "test.j.inflight-false",
@@ -984,7 +984,7 @@ describe("waiting proxy GET trap — __type on materialized wrapper and __slothl
 		//   FALSE (B244): wrapper not yet materialized → return TYPE_STATES.IN_FLIGHT.
 		// Previous tests only exercised the FALSE path (lazy wrappers before materialization).
 		// An eager wrapper is always materialized → TRUE path fires.
-		// propChain=[] → no chain walk → current = wrapper.createProxy() = taskProxy (a function).
+		// propChain=[] → no chain walk → current = wrapper.___createProxy() = taskProxy (a function).
 		// resolvedType = "function".
 		const api = await makeEager();
 		const taskW = resolveWrapper(api.task);
@@ -1006,7 +1006,7 @@ describe("waiting proxy GET trap — __type on materialized wrapper and __slothl
 		// a waiting proxy with propChain=["objProp"].  After the chain walk current = the plain object
 		// → typeof === "object" → B247 TRUE → returns "object".
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const plainObj = { hello: "world" };
 		const testW = new UnifiedWrapper(sl, { mode: "eager", apiPath: "l.b247-test", initialImpl: null });
@@ -1057,7 +1057,7 @@ describe("waiting proxy GET trap — util.inspect.custom null mid-chain (lines 1
 		//   iter 1: current = { key1: null }, `!current` = false → current = impl["key1"] = null
 		//   iter 2: current = null, `!current` = true → B233 TRUE → return undefined
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const eagerW = new UnifiedWrapper(sl, { mode: "eager", apiPath: "m.inspect-null", initialImpl: null });
 		// Set impl with a null mid-chain value and mark as materialized.
@@ -1094,13 +1094,13 @@ describe("waiting proxy GET trap — __type for-loop non-wrapper and null breaks
 		// FALSE fires when `resolveWrapper(current) = null` (current is a plain object/value).
 		// Setup: wrapper with impl = { myProp: { nested: 42 } }, propChain = ["myProp", "nested"].
 		// Walk:
-		//   iter 1: current = wrapper.createProxy(), resolveWrapper = wrapper (B239 TRUE)
+		//   iter 1: current = wrapper.___createProxy(), resolveWrapper = wrapper (B239 TRUE)
 		//           → impl["myProp"] = { nested: 42 } → current = { nested: 42 }
 		//   iter 2: resolveWrapper({ nested: 42 }) = null → B239 FALSE
 		//           → current = { nested: 42 }["nested"] = 42
 		// resolvedType = typeof 42 = "number"
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const testW = new UnifiedWrapper(sl, { mode: "eager", apiPath: "n.type-nonwrap", initialImpl: null });
 		testW.____slothletInternal.impl = { myProp: { nested: 42 } };
@@ -1125,7 +1125,7 @@ describe("waiting proxy GET trap — __type for-loop non-wrapper and null breaks
 		//   iter 3: !undefined = true → B238 TRUE → break
 		// resolvedType = typeof undefined = "undefined"
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const testW = new UnifiedWrapper(sl, { mode: "eager", apiPath: "n.type-break", initialImpl: null });
 		testW.____slothletInternal.impl = { myProp: { nested: 42 } };
@@ -1158,7 +1158,7 @@ describe("waiting proxy then handler — uncovered propChain paths (lines 1391-1
 		// Setup: eager wrapper with impl = custom Proxy, propChain = [].
 		// `await wp` triggers the then handler → propChain empty → check impl is Proxy → TRUE → return impl.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const baseObj = { value: 42 };
 		const customProxy = new Proxy(baseObj, {});
@@ -1181,7 +1181,7 @@ describe("waiting proxy then handler — uncovered propChain paths (lines 1391-1
 		// Setup: eager wrapper with impl = { someKey: "implValue" }, propChain = ["someKey"].
 		// Do NOT set w["someKey"] so hasOwn check is FALSE; impl check finds it.
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const w = new UnifiedWrapper(sl, { mode: "eager", apiPath: "o.then-implprop", initialImpl: null });
 		w.____slothletInternal.impl = { someKey: "implValue" };
@@ -1202,7 +1202,7 @@ describe("waiting proxy then handler — uncovered propChain paths (lines 1391-1
 		// but `resolveWrapper(child) = null` (child is a non-wrapper value, e.g., a plain function).
 		// Setup: eager wrapper with a plain function set as an own property, propChain = ["someChild"].
 		const api = await makeEager();
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 
 		const w = new UnifiedWrapper(sl, { mode: "eager", apiPath: "o.then-nonwrapper", initialImpl: null });
 		w.____slothletInternal.impl = {};

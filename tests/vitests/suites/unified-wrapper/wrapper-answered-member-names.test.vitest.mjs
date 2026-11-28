@@ -277,7 +277,7 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 
 	it("refuses a `then` export reaching export extraction", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
-		const loader = resolveWrapper(api.profile).slothlet.processors.loader;
+		const loader = resolveWrapper(api.profile).____slothlet.processors.loader;
 		expect(() => loader.extractExports({ then() {}, other() {} })).toThrow(/MODULE_THENABLE_EXPORT/);
 	});
 

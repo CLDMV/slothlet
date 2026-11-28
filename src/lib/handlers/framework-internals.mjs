@@ -37,8 +37,9 @@
  * consumer's private member that happened to share the name, reopening exactly what #269 closed.
  */
 
-import { setFrom, SetMethods, WeakMap, WeakMapMethods, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
+import { Reflect, setFrom, SetMethods, WeakMap, WeakMapMethods, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
+import { isFrameworkMemberName } from "#helpers/reserved-keys";
 
 /**
  * Objects slothlet created and stamped with a framework-internal marker key. Weak so a branded
@@ -135,6 +136,34 @@ const ROUTINE_MARKER_KEYS = setFrom(["____slothletRoutineStack", "____slothletRo
 function markFrameworkRoutine(fn) {
 	WeakSetMethods.add(FRAMEWORK_ROUTINES, fn);
 	return fn;
+}
+
+/**
+ * How a definition of a name with the framework's prefix is answered, on a node, the api root or a view of either:
+ * absorbed (success, nothing defined), as an assignment of such a name is.
+ *
+ * @param {object} target - The proxy target.
+ * @param {string|symbol} prop - The member's name.
+ * @param {PropertyDescriptor} descriptor - The definition.
+ * @param {object|null} [wrapper=null] - The node defined on, when it is one: one the framework branded keeps its marker
+ *   keys (see {@link isFrameworkMarkerKey}).
+ * @returns {boolean|undefined} True when the definition is absorbed, false when it is refused, undefined when the name
+ *   is not the framework's (or is its own `___materialize` or impl metadata).
+ * @internal
+ *
+ * @description
+ * A proxy invariant refuses a handler that reports success for a member the target does not hold when the target is
+ * closed or the definition fixes it (`configurable: false`): those definitions are refused (`false`) instead, so the name
+ * is still never stored.
+ *
+ * @example
+ * absorbsFrameworkName(target, "___createChildWrapper", { value: fn, configurable: true }); // true, nothing defined
+ * absorbsFrameworkName(target, "label", { value: 1 }); // undefined: defined as usual
+ */
+export function absorbsFrameworkName(target, prop, descriptor, wrapper = null) {
+	if (!isFrameworkMemberName(prop) || prop === "___materialize") return undefined;
+	if (wrapper !== null && isFrameworkMarkerKey(prop) && isFrameworkInternal(wrapper)) return undefined;
+	return Reflect.isExtensible(target) && descriptor.configurable !== false;
 }
 
 /**
@@ -243,6 +272,7 @@ export function internals(consumer) {
 			"lib/handlers/routine-manager",
 			"lib/handlers/trusted-root",
 			"lib/handlers/unified-wrapper",
+			"lib/handlers/unified-wrapper/run",
 			"lib/handlers/version-manager",
 			"lib/helpers/defaults",
 			"lib/runtime/runtime",

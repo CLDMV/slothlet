@@ -47,7 +47,7 @@ import {
 	setToArray,
 	setValues
 } from "#helpers/intrinsics";
-const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("lib/handlers/lifecycle");
+const { selfModuleReader, selfView } = unifiedWrapperInternals("lib/handlers/lifecycle");
 
 /**
  * Lifecycle event manager for impl changes
@@ -175,7 +175,7 @@ export class Lifecycle extends ComponentBase {
 		}
 		SetMethods.add(MapMethods.get(this.subscribers, event), handler);
 		// Who subscribed: a module executing now (#625), or the host. The host is handed what it always was.
-		const reader = runtime_selfModuleReader(this.slothlet);
+		const reader = selfModuleReader(this.slothlet);
 		if (reader) MapMethods.set(MapMethods.get(this.subscriberReaders, event), handler, reader);
 		else MapMethods.delete(MapMethods.get(this.subscriberReaders, event), handler);
 
@@ -390,7 +390,7 @@ export class Lifecycle extends ComponentBase {
 		if (!data || typeof data !== "object" || !("impl" in data)) return data;
 		const node = nodes && "impl" in nodes ? nodes.impl : data.impl;
 		if (node === null || (typeof node !== "object" && typeof node !== "function")) return { ...data, impl: node ?? null };
-		const view = runtime_selfView(node, reader);
+		const view = selfView(node, reader);
 		// Something that is no api node is never handed over: it would be the implementation itself.
 		return { ...data, impl: view === node ? null : view };
 	}

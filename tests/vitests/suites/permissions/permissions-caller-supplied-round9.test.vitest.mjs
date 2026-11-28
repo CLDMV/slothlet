@@ -134,7 +134,7 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 			const gc = vm.runInNewContext("gc");
 			api = await slothlet({ ...config, base: apiPart(DIR) });
 			await api.slothlet.api.add("ticker", apiPart(DIR, "ticker"), { id: "ticker-mod" });
-			const manager = resolveWrapper(api.probe.ping).slothlet.contextManager;
+			const manager = resolveWrapper(api.probe.ping).____slothlet.contextManager;
 			const before = manager.suspendedCallCount;
 			for (let batch = 0; batch < 3; batch++) {
 				expect(await api.ticker.ticks(200, kind)).toBe(200);

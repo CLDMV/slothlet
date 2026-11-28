@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:42-08:00 (1794882522)
+ *	@Last modified time: 2026-11-25T20:32:11-08:00 (1795667531)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -120,7 +120,7 @@ describe.each(getBrowserMatrixConfigs())(
 			await api.counter.version();
 			await api.left.counter.version();
 			const leaf = resolveWrapper(api.counter.version);
-			const loader = leaf.slothlet.processors.loader;
+			const loader = leaf.____slothlet.processors.loader;
 			const filePath = leaf.____slothletInternal.filePath;
 			const live = loader.importedLocationsFor(filePath).size;
 			// One copy at the root and one under the `left` mount.
@@ -133,7 +133,7 @@ describe.each(getBrowserMatrixConfigs())(
 				await api.left.counter.version();
 			}
 			// A reload replaces each copy, so its old URL names a module nothing runs any more.
-			expect(resolveWrapper(api.counter.version).slothlet.processors.loader).toBe(loader);
+			expect(resolveWrapper(api.counter.version).____slothlet.processors.loader).toBe(loader);
 			expect(loader.importedLocationsFor(filePath).size).toBe(live);
 		});
 	}

@@ -31,7 +31,7 @@ const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
 // Reach the instance's contextManager + instanceID via a resolved wrapper (ComponentBase exposes
 // `.slothlet`). Used to drive runInContext with a forged / stripped caller identity.
 function instanceHandles(api) {
-	const sl = resolveWrapper(api.payments).slothlet;
+	const sl = resolveWrapper(api.payments).____slothlet;
 	return { cm: sl.contextManager, instanceID: sl.instanceID };
 }
 

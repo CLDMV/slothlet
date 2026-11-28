@@ -343,7 +343,7 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 		const wrapper = resolveWrapper(slot);
 		const before = Object.keys(slot).sort();
 
-		expect(() => wrapper.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(wrapper)).not.toThrow();
+		expect(() => wrapper.____slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(wrapper)).not.toThrow();
 
 		expect(Object.keys(await api.pair.dlog).sort()).toEqual(before);
 		expect(await api.pair.dlog.only.ping).toBe("only");

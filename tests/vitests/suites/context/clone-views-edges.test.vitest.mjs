@@ -36,14 +36,7 @@
 
 import { pathToFileURL } from "node:url";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import {
-	cloneTakingViews,
-	isClonePatched,
-	setCloneViewReader,
-	setCloneNodeReader,
-	enableClonePatching,
-	disableClonePatching
-} from "#helpers/clone-context";
+import { cloneTakingViews, isClonePatched, enableClonePatching, disableClonePatching } from "#helpers/clone-context";
 import { internalLibPath } from "../../setup/internal-resolve.mjs";
 
 let copies = 0;
@@ -81,8 +74,6 @@ function standInViews(module) {
 }
 
 afterEach(() => {
-	setCloneViewReader(() => undefined);
-	setCloneNodeReader(() => undefined);
 	disableClonePatching();
 });
 
@@ -91,7 +82,8 @@ describe("Context > clone views > copying", () => {
 		expect(() => cloneTakingViews({ fn() {} })).toThrow();
 	});
 
-	it("copies one object reached through two views once, shared, as structuredClone keeps it", () => {
+	it("copies one object reached through two views once, shared, as structuredClone keeps it", async () => {
+		const { cloneTakingViews, setCloneViewReader } = await copyWith();
 		const view = standInViews({ setCloneViewReader });
 		const data = { n: 1 };
 		const first = view(data);
@@ -103,20 +95,23 @@ describe("Context > clone views > copying", () => {
 		expect(copy.again).toBe(copy.first);
 	});
 
-	it("copies the value a view stands for when it is a primitive", () => {
+	it("copies the value a view stands for when it is a primitive", async () => {
+		const { cloneTakingViews, setCloneViewReader } = await copyWith();
 		const view = new Proxy({}, {});
 		setCloneViewReader((value) => (value === view ? 42 : undefined));
 		expect(cloneTakingViews({ answer: view })).toEqual({ answer: 42 });
 	});
 
-	it("leaves out symbol keys, as the platform does", () => {
+	it("leaves out symbol keys, as the platform does", async () => {
+		const { cloneTakingViews, setCloneViewReader } = await copyWith();
 		const view = standInViews({ setCloneViewReader });
 		const copy = cloneTakingViews({ [Symbol("hidden")]: 1, shown: view({ a: 1 }) });
 		expect(copy).toEqual({ shown: { a: 1 } });
 		expect(Object.getOwnPropertySymbols(copy)).toEqual([]);
 	});
 
-	it("copies an error a node stands over as an Error when reading its name throws", () => {
+	it("copies an error a node stands over as an Error when reading its name throws", async () => {
+		const { cloneTakingViews, setCloneNodeReader } = await copyWith();
 		const error = new TypeError("bad");
 		Object.defineProperty(error, "name", {
 			get() {
@@ -131,7 +126,8 @@ describe("Context > clone views > copying", () => {
 		expect(copy.node.message).toBe("bad");
 	});
 
-	it("copies a node standing over data reached through a view of the node", () => {
+	it("copies a node standing over data reached through a view of the node", async () => {
+		const { cloneTakingViews, setCloneViewReader, setCloneNodeReader } = await copyWith();
 		const view = standInViews({ setCloneViewReader });
 		const date = new Date(5);
 		const node = new Proxy({}, {});
@@ -160,12 +156,12 @@ describe("Context > clone views > the installed patch", () => {
 	});
 
 	it("passes straight through in a copy disabled under another copy's wrapper", async () => {
+		const lower = await copyWith();
 		const other = await copyWith();
-		enableClonePatching();
+		lower.enableClonePatching();
 		other.enableClonePatching();
-		disableClonePatching();
-		const view = standInViews({ setCloneViewReader });
-		other.setCloneViewReader(() => undefined);
+		lower.disableClonePatching();
+		const view = standInViews(lower);
 		// The lower wrapper passes through, the upper one copies what the views stand over with its own reader.
 		const ownView = standInViews(other);
 		expect(structuredClone({ a: ownView({ x: 1 }) })).toEqual({ a: { x: 1 } });
@@ -309,6 +305,5 @@ describe("Context > clone views > hosts that differ", () => {
 			// Not a kind this copy knows: the platform's refusal stands.
 			expect(() => copy.cloneTakingViews({ half: nodeOf(new Float16Array([1])) })).toThrow();
 		}
-		copy.setCloneNodeReader(() => undefined);
 	});
 });

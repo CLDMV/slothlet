@@ -48,7 +48,7 @@ import {
 	WeakSet,
 	WeakSetMethods
 } from "#helpers/intrinsics";
-const { resolveWrapper, runtime_metadataNodeOf } = unifiedWrapperInternals("lib/handlers/metadata");
+const { resolveWrapper, metadataNodeOf } = unifiedWrapperInternals("lib/handlers/metadata");
 
 /**
  * Internal delimiter joining a module's id and apiPath in the composite `moduleID` metadata key
@@ -490,7 +490,7 @@ export class Metadata extends ComponentBase {
 	 * this.#nodeFacts(api.calls.ping, (node) => this.getSystemMetadata(node)).apiPath; // "calls.ping", loaded or not
 	 */
 	#nodeFacts(target, lookup) {
-		const node = target && (typeof target === "object" || typeof target === "function") ? runtime_metadataNodeOf(target) : null;
+		const node = target && (typeof target === "object" || typeof target === "function") ? metadataNodeOf(target) : null;
 		if (node === null || node.chain === null) return lookup(node === null ? target : node.wrapper);
 		const holder = lookup(node.wrapper);
 		if (!holder) return holder;

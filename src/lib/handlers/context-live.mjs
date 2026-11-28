@@ -1610,7 +1610,7 @@ export class LiveContextManager {
 		const starter = this.#runningStarter;
 		if (!starter || !identity.currentWrapper || identity.unresolved) return identity;
 		const wrapper = starter.wrapper;
-		if (wrapper === identity.currentWrapper || wrapper?.slothlet !== identity.currentWrapper.slothlet) return identity;
+		if (wrapper === identity.currentWrapper || wrapper?.____slothlet !== identity.currentWrapper.____slothlet) return identity;
 		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, wrapper)) return identity;
 		// The starter is the call itself or a call it runs under: already held to.
 		for (let current = record, depth = 0; current && depth < 64; current = current.parent, depth++)
@@ -3216,7 +3216,7 @@ export class LiveContextManager {
 					parent:
 						entryIdentity.record ??
 						(entryCaller ? { wrapper: entryCaller, parent: null, flagged: false, ceiling: entryIdentity.ceiling ?? null } : null),
-					flagged: madeCode || carriesCallerCode(thisArg, args, currentWrapper.slothlet),
+					flagged: madeCode || carriesCallerCode(thisArg, args, currentWrapper.____slothlet),
 					// Handed a function to run, which may pick up after an `await` with nothing of the call on the stack (#917).
 					handed: Arrays.isArray(args) && ArrayMethods.some(args, (arg) => typeof arg === "function"),
 					ceiling,
@@ -3300,7 +3300,7 @@ export class LiveContextManager {
 		// The code a module caller handed this call, as it holds it: what of it comes back is its own value (#1026).
 		const held =
 			record?.flagged && entryCaller && !callerIsHost && attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
-				? callerHeldCode(args, currentWrapper.slothlet)
+				? callerHeldCode(args, currentWrapper.____slothlet)
 				: null;
 		const attributed =
 			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)

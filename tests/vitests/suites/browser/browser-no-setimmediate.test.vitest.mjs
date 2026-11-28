@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:34-08:00 (1794882574)
+ *	@Last modified time: 2026-11-25T20:32:12-08:00 (1795667532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -138,7 +138,7 @@ describe("reactive routine stack patch without setImmediate (#578)", () => {
 			silent: true
 		});
 		await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
-		const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+		const routineManager = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 
 		globalThis.__slothletRoutineLog = [];
 		api.auth.initialize = function postWrite() {

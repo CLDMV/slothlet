@@ -55,7 +55,7 @@ async function createApiInstance(baseConfig, overrides = {}) {
 function getSlInstance(api, prop) {
 	const wrapper = resolveWrapper(api[prop]);
 	if (!wrapper) throw new Error(`resolveWrapper(api.${prop}) returned null`);
-	return wrapper.slothlet;
+	return wrapper.____slothlet;
 }
 
 const BASE_DIRS = [

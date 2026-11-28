@@ -65,7 +65,7 @@ afterEach(async () => {
 function getSlInstance(apiProxy, prop = "math") {
 	const wrapper = resolveWrapper(apiProxy[prop]);
 	if (!wrapper) throw new Error(`resolveWrapper(api.${prop}) returned null`);
-	return wrapper.slothlet;
+	return wrapper.____slothlet;
 }
 
 // ─── ApiCacheManager.delete — false branch (line 192) ────────────────────────

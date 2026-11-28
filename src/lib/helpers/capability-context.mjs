@@ -58,10 +58,20 @@ import {
 	Symbol,
 	Symbols,
 	URL,
-	URLMethods
+	URLMethods,
+	Set,
+	SetMethods,
+	String,
+	WeakMap,
+	WeakMapMethods,
+	WeakSet,
+	WeakSetMethods
 } from "#helpers/intrinsics";
 import { readStack, stackSites } from "#helpers/stack-read";
 import { isOwnTopLevelOf, ownBindingsRefusal, internals as instanceImportsInternals } from "#helpers/instance-imports";
+import { toComparablePath, internals as framePlacementInternals } from "#handlers/frame-placement";
+const { fileNodes, frameDefiner, runtime_codeWritersOnStack, runtime_loadingFileRunning, runtime_loadingHelper } =
+	framePlacementInternals("lib/helpers/capability-context");
 
 const { setCapabilityCheck, instanceClaimed, moduleCodeName } = instanceImportsInternals("lib/helpers/capability-context");
 
@@ -579,6 +589,236 @@ function releaseCapabilityCheck(instanceID) {
 setCapabilityCheck(checkCapability);
 
 /**
+ * Reader of a node read through `self` by code the live runtime could not attribute to one call. It owns
+ * nothing.
+ * @type {object}
+ * @private
+ */
+const UNATTRIBUTED_READER = Objects.freeze({ reader: "unattributed" });
+
+/**
+ * The loads whose file vitest's module runner has compiled (see {@link runnerCompilesLoad}).
+ * @type {WeakSet<object>}
+ * @private
+ */
+const RUNNER_COMPILED_LOADS = new WeakSet();
+
+/**
+ * The helper files of this instance's whose first compile shaped as vitest's runner makes one, with no worker setup to
+ * verify it, was left to the code making it (see {@link runnerCompilesHelper}): by instance, each file as its
+ * instance id and comparable path.
+ * @type {WeakMap<object, Set<string>>}
+ * @private
+ */
+const RUNNER_COMPILED_HELPERS = new WeakMap();
+
+/**
+ * Whether a name code is compiled under is a copy of a helper file this instance judges: tagged with this instance's
+ * id, or with an id no instance that is up holds (an unknown instance, or one that has shut down or taken a new id,
+ * whose copies are no running instance's), and naming a file the loader is not loading as a leaf and, for the instance's
+ * own tag, no file its leaves were built from. The loader imports only leaves; every other file under an instance's tag
+ * is a file a leaf imports, directly or through other helpers (see `helpers/instance-imports`).
+ * @param {object} slothlet - The instance.
+ * @param {*} filename - The name the code is compiled under.
+ * @returns {"own"|"orphan"|null} "own" for a copy of a helper file of the instance's, "orphan" for a copy under an id no
+ *   instance that is up holds, null otherwise.
+ * @private
+ */
+function namesHelperCopy(slothlet, filename) {
+	if (typeof filename !== "string") return null;
+	const tag = RegExpMethods.exec(/[?&]slothlet_instance=([^&#]+)/, filename)?.[1] ?? null;
+	if (tag === null) return null;
+	const kind = tag === String(slothlet.instanceID) ? "own" : instanceIsUp(tag) ? null : "orphan";
+	if (kind === null) return null;
+	const loader = slothlet?.processors?.loader;
+	if (typeof loader?.loadsOfFile !== "function") return null;
+	if (loader.loadsOfFile(toComparablePath(filename)).length !== 0) return null;
+	// A file the instance built leaves from is a leaf file, not a helper, once its load is over: code compiled under its
+	// name is placed by the frames it runs in, as any code is (a supplier's code under a leaf's name runs as the supplier,
+	// with the leaf's call as its ceiling).
+	if (kind === "own" && fileNodes(slothlet, filename).length !== 0) return null;
+	return kind;
+}
+
+/**
+ * Whether a compile vitest's module runner makes of the code its server sent (see `helpers/vitest-worker-setup`) is
+ * the loader's: the compile of a file this instance is loading now (the name it compiles under carries this instance's
+ * tag and names a file the loader is loading, and that load's file has not been compiled yet; the load is then marked
+ * compiled), or of this instance's own `self` module, which the vite plugin writes for a runtime import of one of the
+ * instance's files (`slothlet-self:<instanceID>|…`), while the instance has a load running.
+ * @param {object} slothlet - The instance.
+ * @param {*} filename - The name the code is compiled under (the module's id).
+ * @returns {boolean} True for such a compile.
+ * @private
+ */
+function runnerCompilesLoad(slothlet, filename) {
+	if (typeof filename !== "string") return false;
+	// vite names a virtual module with a leading NUL.
+	const selfName = StringMethods.startsWith(filename, "\0") ? StringMethods.slice(filename, 1) : filename;
+	if (StringMethods.startsWith(selfName, "slothlet-self:")) {
+		if (!StringMethods.startsWith(selfName, `slothlet-self:${String(slothlet.instanceID)}|`)) return false;
+		const loader = slothlet?.processors?.loader;
+		return typeof loader?.isLoading === "function" && loader.isLoading();
+	}
+	if (RegExpMethods.exec(/[?&]slothlet_instance=([^&#]+)/, filename)?.[1] !== String(slothlet.instanceID)) return false;
+	const load = runtime_loadingFileRunning(slothlet, filename);
+	if (load === null || WeakSetMethods.has(RUNNER_COMPILED_LOADS, load)) return false;
+	WeakSetMethods.add(RUNNER_COMPILED_LOADS, load);
+	return true;
+}
+
+/**
+ * Whether a compile vitest's module runner would make of a copy of a helper file of this instance's is left to the code
+ * making it, as any other code's is, rather than placed as the helper's code. A verified compile (`runnerCompile` true:
+ * exactly the code vitest's server sent for the name, one compile per reply) always is. An unverified one (no worker
+ * setup records what the server sent) is so only for the name slothlet gives the instance's copy of a helper file (the
+ * file's path with the instance's id as its only query parameter), while the helper is evaluated for the first time
+ * inside a load of a file importing it, as the instance's import record has it (see `runtime_loadingHelper` in
+ * `frame-placement`), and only for the first compile of the helper file: an instance has one copy of each helper file,
+ * which vitest compiles once, and every other compile under a name of a copy of the file is placed as the helper's, as
+ * every later compile of a loading file is.
+ * @param {object} slothlet - The instance.
+ * @param {*} filename - The name the code is compiled under (the module's id).
+ * @param {boolean|null} runnerCompile - See {@link assertCapability}.
+ * @returns {boolean} True for such a compile.
+ * @private
+ */
+function runnerCompilesHelper(slothlet, filename, runnerCompile) {
+	if (runnerCompile === false || namesHelperCopy(slothlet, filename) !== "own") return false;
+	if (runnerCompile === true) return true;
+	if (RegExpMethods.exec(/^[^?#]*\?slothlet_instance=[^&#]+$/, filename) === null) return false;
+	if (!runtime_loadingHelper(slothlet, toComparablePath(filename))?.paths?.length) return false;
+	let compiled = WeakMapMethods.get(RUNNER_COMPILED_HELPERS, slothlet);
+	if (compiled === undefined) WeakMapMethods.set(RUNNER_COMPILED_HELPERS, slothlet, (compiled = new Set()));
+	const key = `${String(slothlet.instanceID)}\u0000${toComparablePath(filename)}`;
+	if (SetMethods.has(compiled, key)) return false;
+	SetMethods.add(compiled, key);
+	return true;
+}
+
+/**
+ * Refuse code compiled under the name of a file this instance is loading now (every load of it) a capability that no
+ * rule opens for that load's module path; a load whose paths are not known yet is refused it. Code compiled under the
+ * name of a copy of one of the instance's helper files is placed as that helper's code: decided as the paths of the
+ * api files importing it while one of them loads, and refused otherwise; under the name of a helper copy tagged with an
+ * id no instance that is up holds, it is refused. A name tagged with another instance's id is
+ * that instance's to judge while it is up with a check of its own registered (two instances load the same file under
+ * their own tags, and the compile hooks are shared by the process); a name tagged with an id no registered check holds
+ * (an unknown instance, or one that has shut down) is judged here as any other.
+ * @param {object} slothlet - The instance.
+ * @param {object} permissionManager - Its permission manager.
+ * @param {string} name - The capability.
+ * @param {string} route - What the code used.
+ * @param {*} filename - The name the code is compiled under.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
+ * @private
+ */
+function assertNamedLoads(slothlet, permissionManager, name, route, filename) {
+	if (typeof filename !== "string") return;
+	const loader = slothlet?.processors?.loader;
+	if (typeof loader?.loadsOfFile !== "function") return;
+	const tag = RegExpMethods.exec(/[?&]slothlet_instance=([^&#]+)/, filename)?.[1] ?? null;
+	if (tag !== null && tag !== String(slothlet.instanceID) && hasCapabilityCheck(tag)) return;
+	const loads = loader.loadsOfFile(toComparablePath(filename));
+	for (let index = 0; index < loads.length; index++) {
+		const paths = loads[index].paths;
+		if (paths?.length) permissionManager.assertCapabilityForPaths(paths, name, route);
+		else permissionManager.assertCapability(UNATTRIBUTED_READER, name, route);
+	}
+	if (loads.length) return;
+	const copy = namesHelperCopy(slothlet, filename);
+	if (copy === null) return;
+	const helper = copy === "own" ? runtime_loadingHelper(slothlet, toComparablePath(filename)) : null;
+	if (helper?.paths?.length) permissionManager.assertCapabilityForPaths(helper.paths, name, route);
+	else permissionManager.assertCapability(UNATTRIBUTED_READER, name, route);
+}
+
+/**
+ * Refuse module code of this instance a built-in capability no rule opens for it (see
+ * `PermissionManager#assertCapability`), told as any other access is: the call running, read from the stack where
+ * calls are in flight; while no call runs, the code's own frames (a function a module handed out, run by the host, is
+ * its definer's). Code the live runtime cannot attribute is refused; the host's own code, a package's run by the host,
+ * and another instance's code are left to their own checks.
+ *
+ * @param {object} slothlet - The instance.
+ * @param {string} name - The capability.
+ * @param {string} route - What the code used, for the error.
+ * @param {string|null} [moduleFile=null] - A file of this instance's the code is known to belong to (an import it
+ *   makes as it links), so that code is never taken for the host's.
+ * @param {*} [filename=null] - The file name the code is compiled under, when one is given: a real file outside the
+ *   caller's own folder is refused even where a rule opens the capability.
+ * @param {boolean|null} [runnerCompile=false] - Whether the call is vitest's compile of exactly the code its server sent
+ *   for `filename` (see `helpers/vitest-worker-setup`): allowed once for a file of this instance's that is loading now,
+ *   as Node's own loader compiling the file would be. Null when no worker setup records what the server sent: the first
+ *   such compile of a loading file is then decided by the code that makes it, as any other code is.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
+ * @internal
+ * @example
+ * assertCapability(slothlet, "code", "new Function");
+ */
+function assertCapability(slothlet, name, route, moduleFile = null, filename = null, runnerCompile = false) {
+	const permissionManager = slothlet?.handlers?.permissionManager;
+	if (!permissionManager?.isEnabled?.()) return;
+	// vitest's module runner compiling the code its server sent for a file of this instance's that is loading now: the
+	// loader's own compile of the file, as Node's loader compiling it would be. One such compile per load.
+	if (runnerCompile === true && runnerCompilesLoad(slothlet, filename)) return;
+	// With no worker setup recording what vitest's server sent (vitest without the vite plugin, `server.deps.inline`
+	// only), the runner's compile of a loading file cannot be told from other code by what it compiles. The first
+	// runner-shaped compile of each load is then decided by the code making it, as below: vitest's runner is no
+	// module's code, and a module's own code compiling under the name is still its own and refused. Every later compile
+	// under the name is placed as the file's code.
+	const unverifiedRunnerCompile = runnerCompile === null && runnerCompilesLoad(slothlet, filename);
+	// vitest's runner compiling a copy of one of the instance's helper files: decided by the code making it, as below
+	// (vitest's runner is no module's code). A helper is no load, so the verified compile is not answered above.
+	const runnerHelperCompile = runnerCompilesHelper(slothlet, filename, runnerCompile);
+	// Any other code compiled under the name of a file this instance is loading now, or of a copy of one of its helper
+	// files, is placed as that file's code, whoever compiles it: decided as the file's module path, as its own top-level
+	// code is.
+	if (!unverifiedRunnerCompile && !runnerHelperCompile) assertNamedLoads(slothlet, permissionManager, name, route, filename);
+	const contextManager = slothlet.contextManager;
+	let caller = null;
+	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
+	if (identity?.currentWrapper) caller = identity.currentWrapper;
+	// Calls the live runtime cannot tell apart are in flight: code that is no file of the instance's (the host's, a
+	// package's, Node's own) is still not a module's; anything else could be any of them, and is refused.
+	else if (identity?.unresolved && !identity.unaccounted) {
+		const writers = runtime_codeWritersOnStack(slothlet);
+		caller = writers === null || writers.length > 1 ? UNATTRIBUTED_READER : writers.length ? writers[0] : null;
+	} else {
+		const definer = frameDefiner(contextManager?.runningInstanceID?.() ?? null);
+		if (definer?.wrapper) caller = definer.wrapper.____slothlet === slothlet ? definer.wrapper : null;
+		else if (definer?.unplaced || definer?.leaves) caller = UNATTRIBUTED_READER;
+		// Code of a file of the instance's no node stands for yet (a file's top level as it first loads) or no leaf
+		// accounts for is the instance's, never the host's.
+		else if (runtime_codeWritersOnStack(slothlet) === null) caller = UNATTRIBUTED_READER;
+	}
+	// A file of the instance's linking an import: its own code, whatever the stack says (nothing of the file's runs yet).
+	if (caller === null && moduleFile !== null) caller = UNATTRIBUTED_READER;
+	// A file's own top-level code as it first loads, or an import it links, before any node stands for it: decided as the
+	// file's module path (S4), as the loader reads it ahead of the build. Code that names no file loading (a helper's top
+	// level, code no load accounts for) stays refused.
+	if (caller === UNATTRIBUTED_READER) {
+		const load = runtime_loadingFileRunning(slothlet, moduleFile);
+		if (load?.paths?.length) {
+			permissionManager.assertCapabilityForPaths(load.paths, name, route);
+			if (filename !== null && namesForeignFile(filename, load.path)) {
+				permissionManager.assertCapabilityForPaths(load.paths, name, route, filename === BINDING_NAME ? "binding" : "foreign-filename");
+			}
+			return;
+		}
+	}
+	permissionManager.assertCapability(caller, name, route);
+	// Opened for the caller: compiling under the name of a real file outside its own folder is still refused, since the
+	// code would be placed as that file's (a package's, another module's, the host's).
+	if (filename === null || caller === null || caller === UNATTRIBUTED_READER) return;
+	if (namesForeignFile(filename, caller.____slothletInternal?.filePath ?? null)) {
+		permissionManager.assertCapability(caller, name, route, filename === BINDING_NAME ? "binding" : "foreign-filename");
+	}
+}
+
+/**
  * This file's internal bindings, for the files of slothlet's own that use them (see `ownBindingsRefusal` in
  * `helpers/instance-imports`).
  * @param {string} consumer - The file asking.
@@ -586,8 +826,10 @@ setCapabilityCheck(checkCapability);
  * @internal
  */
 export function internals(consumer) {
-	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/helpers/capability-context", import.meta.url);
-	return { registerCapabilityCheck, releaseCapabilityCheck };
+	if (!mayTakeInternals(consumer, ["lib/handlers/unified-wrapper/rules", "lib/handlers/unified-wrapper/views", "slothlet"]))
+		throw ownBindingsRefusal("lib/helpers/capability-context", import.meta.url);
+	if (consumer !== "slothlet") return { UNATTRIBUTED_READER };
+	return { registerCapabilityCheck, releaseCapabilityCheck, assertCapability };
 }
 
 /**

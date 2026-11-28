@@ -579,7 +579,7 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 **Source**: `src/lib/builders/modes-processor.mjs:761` ([#333](https://github.com/CLDMV/slothlet/issues/333))
 
 **Triggers**: category module content is callable AND `shouldWrap`
-**Result**: `api[categoryName] = wrapper.createProxy()` (callable leaf, not `{}`)
+**Result**: `api[categoryName] = wrapper.___createProxy()` (callable leaf, not `{}`)
 **Used By**: [API-RULES Rule 3](../API-RULES.md#rule-3-no-empty-leaves)
 
 ---

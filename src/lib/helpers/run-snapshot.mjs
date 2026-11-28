@@ -73,6 +73,7 @@ import {
 	WeakMap,
 	WeakMapMethods
 } from "#helpers/intrinsics";
+import { ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
  * How many versions every instance keeps, across every instance: for the suite.
@@ -163,6 +164,9 @@ export function domainOf(owner) {
  */
 let isProxy = () => false;
 
+/** Whether {@link setProxyCheck} has run. @type {boolean} */
+let proxyCheckSet = false;
+
 /**
  * Set how a Proxy is told apart (see {@link isProxy}).
  * @param {function(*): boolean} check - The check.
@@ -170,6 +174,9 @@ let isProxy = () => false;
  * @internal
  */
 export function setProxyCheck(check) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (proxyCheckSet) throw ownBindingsRefusal("lib/helpers/run-snapshot", import.meta.url);
+	proxyCheckSet = true;
 	isProxy = check;
 }
 
@@ -670,6 +677,9 @@ export function builtinKind(value) {
  */
 let kindCheck = null;
 
+/** Whether {@link setKindCheck} has run. @type {boolean} */
+let kindCheckSet = false;
+
 /**
  * Set how a built-in's kind is told (see {@link builtinKind}).
  * @param {function(object): (string|null)} check - Answers `"map"`, `"set"`, `"date"`, `"regexp"`, `"typed"`,
@@ -678,6 +688,9 @@ let kindCheck = null;
  * @internal
  */
 export function setKindCheck(check) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (kindCheckSet) throw ownBindingsRefusal("lib/helpers/run-snapshot", import.meta.url);
+	kindCheckSet = true;
 	kindCheck = check;
 }
 

@@ -52,7 +52,7 @@ const ____dirname = path.dirname(fileURLToPath(import.meta.url));
 function getSlInstance(api, prop = "math") {
 	const wrapper = resolveWrapper(api[prop]);
 	if (!wrapper) throw new Error(`resolveWrapper(api.${prop}) returned null`);
-	return wrapper.slothlet;
+	return wrapper.____slothlet;
 }
 
 // ---------------------------------------------------------------------------

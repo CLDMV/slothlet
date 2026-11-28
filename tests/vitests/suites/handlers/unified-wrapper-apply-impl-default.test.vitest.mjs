@@ -18,7 +18,7 @@
  *
  * @description
  * The apply trap has three execution branches based on the underlying `impl` type. Each branch
- * forks again depending on whether `wrapper.slothlet.contextManager` is set. The no-contextManager
+ * forks again depending on whether `wrapper.____slothlet.contextManager` is set. The no-contextManager
  * paths (lines 2592, 2598, 2601) are never reached by normal tests because contextManager is always
  * present in a standard Slothlet instance.
  *
@@ -67,7 +67,7 @@ describe("UnifiedWrapper > applyTrap > impl=fn, no contextManager (line 2592)", 
 	});
 
 	it("calls impl.apply directly when contextManager is null", () => {
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const origCtx = sl.contextManager;
 		sl.contextManager = null;
 		try {
@@ -79,7 +79,7 @@ describe("UnifiedWrapper > applyTrap > impl=fn, no contextManager (line 2592)", 
 	});
 
 	it("passes args correctly when contextManager is null", () => {
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const origCtx = sl.contextManager;
 		sl.contextManager = null;
 		try {
@@ -91,7 +91,7 @@ describe("UnifiedWrapper > applyTrap > impl=fn, no contextManager (line 2592)", 
 	});
 
 	it("produces same result as normal contextManager path", () => {
-		const sl = resolveWrapper(api.math).slothlet;
+		const sl = resolveWrapper(api.math).____slothlet;
 		const normalResult = api.math.add(1, 2);
 
 		const origCtx = sl.contextManager;
@@ -140,7 +140,7 @@ describe("UnifiedWrapper > applyTrap > impl={default:fn}, no contextManager (lin
 
 	it("calls impl.default.apply when contextManager is null", () => {
 		const wrapper = resolveWrapper(api.math.add);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
 		const origCtx = sl.contextManager;
 
@@ -156,7 +156,7 @@ describe("UnifiedWrapper > applyTrap > impl={default:fn}, no contextManager (lin
 
 	it("impl.default receives correct arguments", () => {
 		const wrapper = resolveWrapper(api.math.add);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
 		const origCtx = sl.contextManager;
 
@@ -203,7 +203,7 @@ describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 260
 
 	it("throws API_PATH_NOT_CALLABLE when impl is a plain object and contextManager is null", () => {
 		const wrapper = resolveWrapper(api.math.add);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
 		const origCtx = sl.contextManager;
 
@@ -226,7 +226,7 @@ describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 260
 
 	it("throws API_PATH_NOT_CALLABLE when impl is null and contextManager is null", () => {
 		const wrapper = resolveWrapper(api.math.add);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
 		const origCtx = sl.contextManager;
 
@@ -271,7 +271,7 @@ describe("UnifiedWrapper > applyTrap > permission runtimeContext fallback (line 
 
 	it("passes null runtimeContext to permissionManager when ctx.context is null", () => {
 		const fnWrapper = resolveWrapper(api.math.add);
-		const sl = fnWrapper.slothlet;
+		const sl = fnWrapper.____slothlet;
 		const originalPermissionManager = sl.handlers.permissionManager;
 		const originalTryGetContext = sl.contextManager.tryGetContext;
 

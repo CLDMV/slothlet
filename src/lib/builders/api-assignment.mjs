@@ -49,7 +49,7 @@ import {
 	String
 } from "#helpers/intrinsics";
 const unifiedWrapperOwn = unifiedWrapperInternals("lib/builders/api-assignment");
-const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperOwn;
+const { resolveWrapper, frameworkWrite } = unifiedWrapperOwn;
 const { markFrameworkInternal } = frameworkInternalsInternals("lib/builders/api-assignment");
 
 /**
@@ -424,7 +424,7 @@ export class ApiAssignment extends ComponentBase {
 							propKey: key,
 							collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 						});
-						runtime_frameworkWrite(targetApi, () => {
+						frameworkWrite(targetApi, () => {
 							targetApi[key] = value;
 						});
 						this.slothlet.debug("api", {
@@ -442,7 +442,7 @@ export class ApiAssignment extends ComponentBase {
 					// For other combinations, fall through to default replacement logic
 				}
 				// Default: Just replace
-				runtime_frameworkWrite(targetApi, () => {
+				frameworkWrite(targetApi, () => {
 					targetApi[key] = value;
 				});
 				return true;
@@ -479,7 +479,7 @@ export class ApiAssignment extends ComponentBase {
 						if (isMergeReplace && valueWrapper.____slothletInternal.isCallable) {
 							valueWrapper.____slothletInternal.offSlotCollisionFolder = existingWrapper;
 							existingWrapper.____slothletInternal.needsImmediateChildAdoption = true;
-							runtime_frameworkWrite(targetApi, () => {
+							frameworkWrite(targetApi, () => {
 								targetApi[key] = value;
 							});
 							return true;
@@ -558,7 +558,7 @@ export class ApiAssignment extends ComponentBase {
 								PromiseMethods.catch(valueWrapper.___materialize(), () => {});
 							}
 							// Keep the existing callable on the slot; the merge above finishes the composition.
-							runtime_frameworkWrite(targetApi, () => {
+							frameworkWrite(targetApi, () => {
 								targetApi[key] = existing;
 							});
 							return true;
@@ -655,7 +655,7 @@ export class ApiAssignment extends ComponentBase {
 							propKey: key,
 							collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 						});
-						runtime_frameworkWrite(targetApi, () => {
+						frameworkWrite(targetApi, () => {
 							targetApi[key] = value;
 						});
 						return true; // Assignment completed
@@ -709,7 +709,7 @@ export class ApiAssignment extends ComponentBase {
 						}
 						// Assign explicitly, as the lazy collision branch above does — a bare false return exits
 						// without anyone performing the assignment.
-						runtime_frameworkWrite(targetApi, () => {
+						frameworkWrite(targetApi, () => {
 							targetApi[key] = value;
 						});
 						return true; // The callable holds the slot, carrying both sources' members.
@@ -808,7 +808,7 @@ export class ApiAssignment extends ComponentBase {
 				} else {
 					// Both are plain objects - use Object.assign
 					if (typeof existing === "object" && existing !== null && typeof value === "object" && value !== null) {
-						runtime_frameworkWrite(existing, () => Objects.assign(existing, value));
+						frameworkWrite(existing, () => Objects.assign(existing, value));
 						return true;
 					}
 				}
@@ -824,7 +824,7 @@ export class ApiAssignment extends ComponentBase {
 		}
 
 		// Case 4: Direct assignment
-		runtime_frameworkWrite(targetApi, () => {
+		frameworkWrite(targetApi, () => {
 			targetApi[key] = value;
 		});
 		return true;
@@ -938,7 +938,7 @@ export class ApiAssignment extends ComponentBase {
 			for (let ofIndex = 0, ofList = Objects.keys(targetApi); ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
 				if (!SetMethods.has(sourceKeys, key)) {
-					runtime_frameworkWrite(targetApi, () => delete targetApi[key]);
+					frameworkWrite(targetApi, () => delete targetApi[key]);
 				}
 			}
 		}

@@ -203,7 +203,7 @@ describe("metadata removeUserMetadataByApiPath empty guard (line 433)", () => {
 		// Normal removal with a valid rootSegment DOES NOT trigger line 433 —
 		// we need to trigger the path where apiPath is empty/falsy.
 		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
-		const handler = resolveWrapper(api.math)?.slothlet?.handlers?.metadata;
+		const handler = resolveWrapper(api.math)?.____slothlet?.handlers?.metadata;
 		// The handler's own guard: an empty api path is a no-op.
 		if (handler) expect(() => handler.removeUserMetadataByApiPath("")).not.toThrow();
 		expect(() => api.slothlet.metadata.remove("math")).not.toThrow();
@@ -226,7 +226,7 @@ describe("metadata.mjs tagSystemMetadata - METADATA_LIFECYCLE_BYPASS (line 100)"
 	it("tagSystemMetadata() with invalid token throws METADATA_LIFECYCLE_BYPASS (line 100)", () => {
 		// Access the internal metadata handler and call tagSystemMetadata with a fake token.
 		// verifyToken(slothlet, fakeToken) returns false → throws METADATA_LIFECYCLE_BYPASS.
-		const sl = resolveWrapper(api.math)?.slothlet;
+		const sl = resolveWrapper(api.math)?.____slothlet;
 		const metadataHandler = sl.handlers.metadata;
 
 		const fakeToken = Symbol("invalid-token");

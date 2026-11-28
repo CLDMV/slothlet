@@ -100,7 +100,7 @@ describe("unified-wrapper: background materialize error debug log (lines 310-311
 		});
 
 		// Retrieve the internal slothlet instance from a known wrapper.
-		const slInstance = resolveWrapper(_api.math).slothlet;
+		const slInstance = resolveWrapper(_api.math).____slothlet;
 
 		// Verify the config flags are live.
 		expect(slInstance.config.loader.materialize).toBe(true);
@@ -150,7 +150,7 @@ describe("unified-wrapper: getTrap background-materialize rejection is swallowed
 		// loader.materialize is OFF, so the constructor does NOT pre-materialize — the getTrap
 		// read below is what triggers materialization, exercising the line-3417 branch specifically.
 		_api = await slothlet({ base: API_TEST_IMPL, mode: "lazy", silent: true });
-		const slInstance = resolveWrapper(_api.math).slothlet;
+		const slInstance = resolveWrapper(_api.math).____slothlet;
 		expect(slInstance.config.loader.materialize).toBe(false);
 
 		const failWrapper = new UnifiedWrapper(slInstance, {
@@ -163,7 +163,7 @@ describe("unified-wrapper: getTrap background-materialize rejection is swallowed
 			filePath: null,
 			moduleID: null
 		});
-		const proxy = failWrapper.createProxy();
+		const proxy = failWrapper.___createProxy();
 
 		const leaked = [];
 		const onUnhandled = (reason) => leaked.push(String(reason?.message ?? reason));

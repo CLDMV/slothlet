@@ -54,7 +54,7 @@ const SHADOW_SUBPATHS = ["store", "store.create", "store.destroy", "vault", "vau
  * @returns {object} The instance's OwnershipManager.
  */
 function ownershipOf(api) {
-	return resolveWrapper(api.core).slothlet.handlers.ownership;
+	return resolveWrapper(api.core).____slothlet.handlers.ownership;
 }
 
 /**

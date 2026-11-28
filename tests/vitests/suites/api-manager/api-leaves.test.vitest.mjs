@@ -199,7 +199,7 @@ describe("ApiManager > api.leaves resilience (#247)", () => {
 		// Inject it directly: drop a leaf's pathToModule entry while it stays in the owned set, and
 		// leaves() must still answer (classifying the orphaned leaf as data), not throw a raw
 		// TypeError from inside the framework — matching the guarded redaction lookup beside it.
-		const ownership = resolveWrapper(api.shop).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(api.shop).____slothlet.handlers.ownership;
 		ownership.pathToModule.delete("shop.mul");
 
 		const detailed = await api.slothlet.api.leaves(moduleID, { details: true });

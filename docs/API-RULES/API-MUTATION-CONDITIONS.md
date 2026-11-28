@@ -23,7 +23,7 @@ Dynamic-mutation conditions — how the api tree is shaped by runtime `api.sloth
 const next = current[part];
 if (next === undefined) {
 	containerWrapper.___setImpl({}, moduleID);
-	current[part] = containerWrapper.createProxy();
+	current[part] = containerWrapper.___createProxy();
 }
 ```
 

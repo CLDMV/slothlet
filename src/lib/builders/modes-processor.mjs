@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:15:52-08:00 (1795641352)
+ *	@Last modified time: 2026-11-25T16:05:36-08:00 (1795651536)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -295,7 +295,7 @@ export class ModesProcessor extends ComponentBase {
 	 * const assigned = await this.#assignWithRoutineRevert(apiPath, moduleID, (registerWrapper) => {
 	 *   const wrapper = new UnifiedWrapper(this.slothlet, { apiPath, moduleID, ... });
 	 *   registerWrapper(wrapper);
-	 *   return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {...});
+	 *   return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.___createProxy(), {...});
 	 * });
 	 */
 	async #assignWithRoutineRevert(apiPath, moduleID, assign) {
@@ -816,7 +816,7 @@ export class ModesProcessor extends ComponentBase {
 					moduleID: moduleID || categoryName,
 					sourceFolder
 				});
-				api[categoryName] = wrapper.createProxy();
+				api[categoryName] = wrapper.___createProxy();
 
 				// Tag folder wrapper with system metadata so folders have metadata accessible
 				// metadata handler is always registered in test configurations; FALSE branch is unreachable.
@@ -1195,7 +1195,7 @@ export class ModesProcessor extends ComponentBase {
 										? this.slothlet.config.api.collision.mode.initial
 										: this.slothlet.config.api.collision.mode.api) ||
 									"merge";
-								const modes_case1Proxy = wrapper.createProxy();
+								const modes_case1Proxy = wrapper.___createProxy();
 								WeakMapMethods.set(this.#folderModuleValues, modes_case1Proxy, exportedValue);
 								if (
 									modes_case1Existing &&
@@ -1399,9 +1399,9 @@ export class ModesProcessor extends ComponentBase {
 								sourceFolder
 							});
 							// Replace the empty object with the wrapped callable function
-							// The node is kept from createProxy(), not read back from the slot: a parent node answers a
+							// The node is kept from ___createProxy(), not read back from the slot: a parent node answers a
 							// child holding a primitive with the value, which is no node and no WeakMap key (#795).
-							const modes_case2Proxy = wrapper.createProxy();
+							const modes_case2Proxy = wrapper.___createProxy();
 							api[categoryName] = modes_case2Proxy;
 							WeakMapMethods.set(this.#folderModuleValues, modes_case2Proxy, callableModule);
 							// Update targetApi reference to point to the new function so other files can attach properties
@@ -1456,7 +1456,7 @@ export class ModesProcessor extends ComponentBase {
 												sourceFolder
 											});
 											registerWrapper(namedWrapper);
-											return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
+											return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.___createProxy(), {
 												useCollisionDetection: true,
 												config: this.slothlet.config,
 												collisionContext,
@@ -1547,7 +1547,7 @@ export class ModesProcessor extends ComponentBase {
 												sourceFolder
 											});
 											registerWrapper(wrapper);
-											return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
+											return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.___createProxy(), {
 												useCollisionDetection: true,
 												config: this.slothlet.config,
 												collisionContext,
@@ -1598,7 +1598,7 @@ export class ModesProcessor extends ComponentBase {
 													sourceFolder
 												});
 												registerWrapper(wrapper);
-												return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+												return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.___createProxy(), {
 													useCollisionDetection: true,
 													config: this.slothlet.config,
 													collisionContext,
@@ -1672,12 +1672,17 @@ export class ModesProcessor extends ComponentBase {
 											// #369: must await before the truthy check below — a Promise is always
 											// truthy regardless of what it resolves to, so an un-awaited call here
 											// always took the ASSIGNED debug branch even on a skip/warn rejection.
-											const assigned = await this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
-												useCollisionDetection: true,
-												config: this.slothlet.config,
-												collisionContext,
-												collisionModeOverride: modes_effectiveCollisionMode
-											});
+											const assigned = await this.slothlet.builders.apiAssignment.assignToApiPath(
+												targetApi,
+												key,
+												wrapper.___createProxy(),
+												{
+													useCollisionDetection: true,
+													config: this.slothlet.config,
+													collisionContext,
+													collisionModeOverride: modes_effectiveCollisionMode
+												}
+											);
 											if (assigned) {
 												this.slothlet.debug("modes", {
 													key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_ASSIGNED",
@@ -1753,7 +1758,7 @@ export class ModesProcessor extends ComponentBase {
 											sourceFolder
 										});
 										registerWrapper(wrapper);
-										return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
+										return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.___createProxy(), {
 											useCollisionDetection: true,
 											config: this.slothlet.config,
 											collisionContext,
@@ -1819,7 +1824,7 @@ export class ModesProcessor extends ComponentBase {
 										sourceFolder
 									});
 									registerWrapper(wrapper);
-									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.___createProxy(), {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
 										collisionContext,
@@ -1913,7 +1918,7 @@ export class ModesProcessor extends ComponentBase {
 											sourceFolder
 										});
 										registerWrapper(wrapper);
-										return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+										return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.___createProxy(), {
 											useCollisionDetection: true,
 											config: this.slothlet.config,
 											collisionContext,
@@ -1975,7 +1980,7 @@ export class ModesProcessor extends ComponentBase {
 										isCallable: typeof moduleContent === "function"
 									});
 									registerWrapper(wrapper);
-									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, wrapper.createProxy(), {
+									return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, wrapper.___createProxy(), {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
 										collisionContext,
@@ -2044,7 +2049,7 @@ export class ModesProcessor extends ComponentBase {
 								apiPath: modes_propertyApiPath,
 								overwriting: propertyName in targetApi ? (resolveWrapper(targetApi[propertyName]) ? "wrapper" : "value") : "nothing"
 							});
-							return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
+							return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.___createProxy(), {
 								useCollisionDetection: true,
 								config: this.slothlet.config,
 								collisionContext,
@@ -2436,7 +2441,7 @@ export class ModesProcessor extends ComponentBase {
 											sourceFolder
 										});
 										registerWrapper(wrapper);
-										return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
+										return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.___createProxy(), {
 											useCollisionDetection: true,
 											config: this.slothlet.config,
 											collisionContext,
@@ -2738,7 +2743,7 @@ export class ModesProcessor extends ComponentBase {
 				// reached at, so hooks, rules and metadata answer for it as for any other node. A member that stays a
 				// value there (data, an error, a primitive) stays one here, and an accessor stays an accessor.
 				// The base load's root function runs as a leaf of its own at the root's path, built from this file.
-				if (!apiPathPrefix && !file.synthetic) unifiedWrapperOwn.runtime_noteRootFile(this.slothlet, file.path, moduleID || file.moduleID);
+				if (!apiPathPrefix && !file.synthetic) unifiedWrapperOwn.noteRootFile(this.slothlet, file.path, moduleID || file.moduleID);
 				if (!apiPathPrefix && shouldWrap) {
 					for (let ofIndex = 0, ofList = Objects.keys(defaultFunc); ofIndex < ofList.length; ofIndex++) {
 						const key = ofList[ofIndex];
@@ -2826,7 +2831,7 @@ export class ModesProcessor extends ComponentBase {
 								sourceFolder
 							});
 							registerWrapper(wrapper);
-							return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
+							return this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.___createProxy(), {
 								useCollisionDetection: true,
 								config: this.slothlet.config,
 								collisionContext,
@@ -3457,7 +3462,7 @@ export class ModesProcessor extends ComponentBase {
 			}
 		}
 
-		return wrapper.createProxy();
+		return wrapper.___createProxy();
 	}
 	/**
 	 * Apply root contributor pattern - merge API into root function

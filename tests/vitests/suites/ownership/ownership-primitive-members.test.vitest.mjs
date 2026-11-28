@@ -145,7 +145,7 @@ describe("api.add at a shared path — primitive members", () => {
 		await api.slothlet.api.add("p", bDir, { id: "b" });
 		// Touch the namespace so a lazy mount has composed both modules before ownership is read.
 		void Object.keys(api.p.shared);
-		const ownership = resolveWrapper(api.ping).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(api.ping).____slothlet.handlers.ownership;
 		const owner = (path) => ownership.getCurrentOwner(path)?.moduleID ?? null;
 		return { api, owner };
 	}
@@ -304,7 +304,7 @@ describe("api.add at a shared path — what a replace hid stays consistent", () 
 		await api.slothlet.api.add("p", aDir, { id: "a" });
 		await api.slothlet.api.add("p", bDir, { id: "b" });
 		void Object.keys(api.p.shared);
-		const ownership = resolveWrapper(api.ping).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(api.ping).____slothlet.handlers.ownership;
 		const owner = (path) => ownership.getCurrentOwner(path)?.moduleID ?? null;
 		return { api, owner };
 	}
@@ -441,7 +441,7 @@ describe("api.add at a shared path — a scoped remove that empties the namespac
 		if (withA) await api.slothlet.api.add("p", aDir, { id: "a" });
 		await api.slothlet.api.add("p", bDir, { id: "b" });
 		void Object.keys(api.p.shared);
-		const ownership = resolveWrapper(api.ping).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(api.ping).____slothlet.handlers.ownership;
 		const owner = (path) => ownership.getCurrentOwner(path)?.moduleID ?? null;
 		return { api, owner };
 	}

@@ -226,6 +226,9 @@ export function layerUnderlying(layer) {
 	return WeakMapMethods.get(LAYERS, layer)?.underlying ?? layer;
 }
 
+/** Whether {@link setApiNodeCheck} has run. @type {boolean} */
+let apiNodeCheckSet = false;
+
 /**
  * Register how to recognize an api node (see {@link isApiNode}).
  * @param {function(unknown): boolean} check - Returns true for a slothlet wrapper proxy.
@@ -236,6 +239,9 @@ export function layerUnderlying(layer) {
  * setApiNodeCheck((value) => proxyRegistry.has(value));
  */
 function setApiNodeCheck(check) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (apiNodeCheckSet) throw ownBindingsRefusal("lib/helpers/composition", import.meta.url);
+	apiNodeCheckSet = true;
 	isApiNode = check;
 }
 

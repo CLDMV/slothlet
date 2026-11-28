@@ -382,7 +382,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 	it("leaves the dispatch-strategy cache alone when remove() matches nothing", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await boot({ mode: "eager" });
-		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+		const hookManager = resolveWrapper(api.svc).____slothlet.handlers.hookManager;
 
 		api.slothlet.hook.on("svc.mulSync:after", async (c) => c.result, { id: "cached" });
 		const strategy = hookManager.getDispatchStrategy("svc.mulSync");
@@ -400,7 +400,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 	it("leaves the dispatch-strategy cache alone when a bulk enable/disable flips nothing", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await boot({ mode: "eager" });
-		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+		const hookManager = resolveWrapper(api.svc).____slothlet.handlers.hookManager;
 
 		api.slothlet.hook.on("svc.mulSync:after", async (c) => c.result, { id: "bulk-cached" });
 		api.slothlet.hook.disable({ pattern: "svc.mulSync" });
@@ -420,7 +420,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 	it("leaves the dispatch-strategy cache alone when a global-filter pattern toggle is a no-op", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await boot({ mode: "eager" });
-		const hookManager = resolveWrapper(api.svc).slothlet.handlers.hookManager;
+		const hookManager = resolveWrapper(api.svc).____slothlet.handlers.hookManager;
 
 		api.slothlet.hook.on("svc.mulSync:after", async (c) => c.result, { id: "pattern-cached" });
 		hookManager.enablePattern("svc.**");
@@ -699,7 +699,7 @@ describe("Hooks > transparent dispatch impl shapes (#253)", () => {
 	it("promotes both callable shapes without a context manager", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		const wrapper = resolveWrapper(api.svc.mulSync);
-		const sl = wrapper.slothlet;
+		const sl = wrapper.____slothlet;
 		const origImpl = wrapper.____slothletInternal.impl;
 		const origCtx = sl.contextManager;
 		api.slothlet.hook.on("svc.mulSync:after", async ({ result }) => result, { id: "noctx-async" });

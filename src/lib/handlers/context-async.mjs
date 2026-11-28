@@ -1852,12 +1852,12 @@ export class AsyncContextManager {
 					(baseStore.currentWrapper
 						? { wrapper: baseStore.currentWrapper, parent: null, flagged: false, ceiling: baseStore.currentCeiling ?? null }
 						: null),
-				flagged: madeCode || carriesCallerCode(thisArg, args, currentWrapper.slothlet),
+				flagged: madeCode || carriesCallerCode(thisArg, args, currentWrapper.____slothlet),
 				ceiling,
 				made: madeCode
 			};
 			if (executionStore.record.flagged && executionStore.callerWrapper && attribute && attributesResults(currentWrapper))
-				held = callerHeldCode(args, currentWrapper.slothlet);
+				held = callerHeldCode(args, currentWrapper.____slothlet);
 		}
 
 		// A leaf's own call hands back what its module made as that module's (#597), to a caller known to be the host

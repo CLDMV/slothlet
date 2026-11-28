@@ -58,7 +58,7 @@ describe("ApiCacheManager._countPaths — framework-reserved key guard", () => {
 	 * @returns {object} Raw Slothlet instance.
 	 */
 	function getSlFromApi(_api, key) {
-		return resolveWrapper(_api[key])?.slothlet;
+		return resolveWrapper(_api[key])?.____slothlet;
 	}
 
 	it("_countPaths counts a module's _/__-prefixed members and skips the framework's reserved names", async () => {

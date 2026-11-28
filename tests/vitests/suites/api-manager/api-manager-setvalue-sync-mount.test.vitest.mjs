@@ -39,7 +39,7 @@ describe("setValueAtPath on a nested path through loaded nodes", () => {
 
 	it("mounts before it yields", async () => {
 		api = await slothlet({ mode: "eager", base: TEST_DIRS.API_TEST, silent: true });
-		const apiManager = resolveWrapper(api.math).slothlet.handlers.apiManager;
+		const apiManager = resolveWrapper(api.math).____slothlet.handlers.apiManager;
 		const pending = apiManager.setValueAtPath(api, ["math", "extra"], () => "extra", {
 			collisionMode: "replace",
 			moduleID: "test:extra",

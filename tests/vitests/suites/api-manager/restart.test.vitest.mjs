@@ -578,7 +578,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 
 	it("finishes the internal teardown when the root shutdown hook throws", async () => {
 		await create();
-		const instance = resolveWrapper(api.counter).slothlet;
+		const instance = resolveWrapper(api.counter).____slothlet;
 		const oldID = api.slothlet.instance.id;
 		instance.userHooks.shutdown = () => {
 			throw new Error("hook failure");
@@ -591,7 +591,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 
 	it("refuses restart() on an instance with no retained original config", async () => {
 		await create();
-		resolveWrapper(api.counter).slothlet._originalConfig = null;
+		resolveWrapper(api.counter).____slothlet._originalConfig = null;
 		let caught = null;
 		try {
 			await api.slothlet.restart();
@@ -609,7 +609,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		bare.flag = true;
 		const metadata = { list: [1, { deep: true }], shared, again: shared, when, bare };
 		await create({ context, metadata });
-		const snapshot = resolveWrapper(api.counter).slothlet._originalConfig;
+		const snapshot = resolveWrapper(api.counter).____slothlet._originalConfig;
 
 		// The snapshot and every nested container are frozen copies, never the caller's objects.
 		expect(Object.isFrozen(snapshot)).toBe(true);
@@ -649,8 +649,8 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		expect(restarted.bare.flag).toBe(true);
 		expect(restarted.when).toEqual(when);
 		// The instance takes its own copy of the context passed in (v4): equal to it, never the object itself.
-		expect(resolveWrapper(api.counter).slothlet.context).toEqual(context);
-		expect(resolveWrapper(api.counter).slothlet.context).not.toBe(context);
+		expect(resolveWrapper(api.counter).____slothlet.context).toEqual(context);
+		expect(resolveWrapper(api.counter).____slothlet.context).not.toBe(context);
 	});
 
 	it("refuses a cycle through an array in metadata at creation", async () => {
@@ -668,7 +668,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		// own objects; the keys of an object inside an array are user data it does not check.
 		const parsed = JSON.parse('{"__proto__": {"polluted": true}, "plain": 1}');
 		await create({ metadata: { tags, list: [parsed] } });
-		const snapshot = resolveWrapper(api.counter).slothlet._originalConfig;
+		const snapshot = resolveWrapper(api.counter).____slothlet._originalConfig;
 		expect(snapshot.metadata.tags[key]).toBe(1);
 		expect(Object.getOwnPropertySymbols(snapshot.metadata.tags)).toEqual([key]);
 		const copied = snapshot.metadata.list[0];

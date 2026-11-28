@@ -508,7 +508,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			const shadowApi = await shadowed(launcherDir);
 			try {
 				// The hidden `vault` folder, still unloaded, as a reference held to it would reach it.
-				const shadows = [...resolveWrapper(shadowApi.launcher).slothlet.handlers.apiManager.state.replaceShadows.values()].flat();
+				const shadows = [...resolveWrapper(shadowApi.launcher).____slothlet.handlers.apiManager.state.replaceShadows.values()].flat();
 				const vault = resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child);
 				expect(vault.____slothletInternal.state.materialized).toBe(false);
 				// Loading it makes its `inner` folder, which is off the api surface too and must not be counted.
@@ -563,7 +563,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				const shadowApi = await shadowed(launcherDir);
 				try {
 					if (loadWhileHidden) {
-						const shadows = [...resolveWrapper(shadowApi.launcher).slothlet.handlers.apiManager.state.replaceShadows.values()].flat();
+						const shadows = [...resolveWrapper(shadowApi.launcher).____slothlet.handlers.apiManager.state.replaceShadows.values()].flat();
 						await resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child).___materialize();
 					}
 					await shadowApi.slothlet.api.remove("shadow");

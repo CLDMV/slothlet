@@ -106,7 +106,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 					Object.values(api)
 						.map((v) => resolveWrapper(v))
 						.find(Boolean);
-				const sl = wrapper.slothlet;
+				const sl = wrapper.____slothlet;
 				const stack = sl.handlers.ownership.pathToModule.get("auth.initialize") || [];
 
 				// Every entry must be a genuine module contribution — never the stacked callable itself.
@@ -666,7 +666,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			});
 			try {
 				await api["^ext.*.initialize"](); // compiles + caches the "ext.*.initialize" pattern
-				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+				const routineManager = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 				expect(routineManager.patternCache.size).toBe(1);
 
 				routineManager.reset();
@@ -686,7 +686,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				silent: true
 			});
 			try {
-				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+				const routineManager = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 				const hasEntry = () => routineManager.raw.some((e) => e.apiPath === "stale.initialize" && e.moduleID === "mod1");
 
 				routineManager.onImplCreated({ apiPath: "stale.initialize", moduleID: "mod1", wrapper: { ____impl: function initialize() {} } });
@@ -857,7 +857,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 
-				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+				const routineManager = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 
 				// An ordinary write to the SAME property — not api.add()/reload()/a mode cascade —
 				// replaces the live value with a bare function directly, discarding the stack wrapper
@@ -969,7 +969,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				expect(api.initialize.____slothletRoutineCascade).toBe(true);
 
-				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+				const routineManager = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 
 				// An ordinary write clobbers the root slot exactly like the dedicated #362 test above —
 				// except this slot is cascade-owned, not per-path-stack-owned.
@@ -1035,7 +1035,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				// separate, pre-existing composition quirk unrelated to this fix — filed as a
 				// candidate follow-up, not fixed here), so grab routineManager via a plain leaf
 				// nested INSIDE "auth" instead of the usual root-level api.ping.
-				const routineManager = resolveWrapper(api.auth.ping).slothlet.handlers.routineManager;
+				const routineManager = resolveWrapper(api.auth.ping).____slothlet.handlers.routineManager;
 
 				// Clobber the shared slot with a plain write, then re-fire BOTH matching raw entries'
 				// onImplCreated in turn (oldest first, same as their original registration order) —
@@ -1084,7 +1084,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			});
 			try {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
-				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+				const routineManager = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 
 				globalThis.__slothletRoutineLog = [];
 				const lateContributor = function lateContributor() {
@@ -1132,7 +1132,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			});
 			try {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
-				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+				const routineManager = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 
 				// Clobber the slot (as the tests above do), then — synchronously, before any queued
 				// setImmediate patch can fire — pretend a build is in progress. The reactive patches

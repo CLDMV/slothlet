@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T01:49:51-08:00 (1795600191)
+ *	@Last modified time: 2026-11-25T20:33:55-08:00 (1795667635)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,10 +49,10 @@ const BASE = new URL("../../../../api_tests/api_test_uwb_waiting_window", import
  */
 async function inLoadWindow(node, read) {
 	const wrapper = resolveWrapper(node);
-	const apply = wrapper._applyNewImpl;
+	const apply = wrapper.___applyNewImpl;
 	let result;
 	let seen = false;
-	wrapper._applyNewImpl = function (...args) {
+	wrapper.___applyNewImpl = function (...args) {
 		const applied = Reflect.apply(apply, this, args);
 		if (!seen && !this.____slothletInternal.state.materialized) {
 			seen = true;
@@ -63,7 +63,7 @@ async function inLoadWindow(node, read) {
 	try {
 		await wrapper.___materialize();
 	} finally {
-		delete wrapper._applyNewImpl;
+		delete wrapper.___applyNewImpl;
 	}
 	if (!seen) throw new Error("the load finished without a window");
 	return result;

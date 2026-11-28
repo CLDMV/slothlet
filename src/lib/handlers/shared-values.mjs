@@ -124,7 +124,14 @@ export function isSharedExport(value) {
  * @internal
  */
 export function internals(consumer) {
-	if (!mayTakeInternals(consumer, ["lib/handlers/unified-wrapper", "lib/helpers/eventemitter-context", "lib/runtime/runtime"]))
+	if (
+		!mayTakeInternals(consumer, [
+			"lib/handlers/unified-wrapper",
+			"lib/handlers/unified-wrapper/values",
+			"lib/helpers/eventemitter-context",
+			"lib/runtime/runtime"
+		])
+	)
 		throw ownBindingsRefusal("lib/handlers/shared-values", import.meta.url);
 	return { recordSharedExports };
 }

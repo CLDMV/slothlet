@@ -95,7 +95,7 @@ describe("RoutineManager — revertSpeculativeState invalidates only the wrapper
 			hook: { enabled: false },
 			base: TEST_DIRS.API_TEST
 		});
-		const slothletInst = resolveWrapper(_api.task).slothlet;
+		const slothletInst = resolveWrapper(_api.task).____slothlet;
 		const rm = new RoutineManager(makeMock());
 
 		// A genuinely pre-existing contribution at a DIFFERENT path — registered, then snapshotted,
@@ -204,7 +204,7 @@ describe("RoutineManager — pruneModule invalidates each removed module's wrapp
 			hook: { enabled: false },
 			base: TEST_DIRS.API_TEST
 		});
-		const slothletInst = resolveWrapper(_api.task).slothlet;
+		const slothletInst = resolveWrapper(_api.task).____slothlet;
 		const rm = slothletInst.handlers.routineManager;
 
 		const wrapper = new UnifiedWrapper(slothletInst, { mode: "eager", apiPath: "sub.thing", initialImpl: function () {} });
@@ -234,7 +234,7 @@ describe("RoutineManager — pruneModule invalidates each removed module's wrapp
 			hook: { enabled: false },
 			base: TEST_DIRS.API_TEST
 		});
-		const slothletInst = resolveWrapper(_api.task).slothlet;
+		const slothletInst = resolveWrapper(_api.task).____slothlet;
 		const rm = slothletInst.handlers.routineManager;
 
 		const otherWrapper = new UnifiedWrapper(slothletInst, { mode: "eager", apiPath: "sub.path", initialImpl: function () {} });
@@ -266,7 +266,7 @@ describe("RoutineManager — revertRawEntry restores the ORIGINAL wrapper mappin
 			hook: { enabled: false },
 			base: TEST_DIRS.API_TEST
 		});
-		const slothletInst = resolveWrapper(_api.task).slothlet;
+		const slothletInst = resolveWrapper(_api.task).____slothlet;
 		const rm = slothletInst.handlers.routineManager;
 
 		const originalWrapper = new UnifiedWrapper(slothletInst, { mode: "eager", apiPath: "sub.thing", initialImpl: function () {} });

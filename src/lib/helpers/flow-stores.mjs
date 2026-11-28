@@ -147,7 +147,7 @@ export const RUN_OPENED = Symbol("slothlet.runOpened");
 export const TREE_WRITE = Symbol("slothlet.treeWrite");
 
 /**
- * The key a run record holds its full-isolation `self` under (see `makeRunSelf` in `builders/api_builder`): what that
+ * The key a run record holds its full-isolation `self` under (see `makeRunSelf` in `handlers/unified-wrapper/run`): what that
  * `self` wrote before the run had a tree of its own is written into the tree the run is given, once it has one.
  * @type {symbol}
  * @internal

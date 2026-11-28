@@ -83,7 +83,7 @@ async function makeApiWithDiag() {
  * @returns {object} Internal slothlet instance.
  */
 function getSlothlet(api) {
-	return resolveWrapper(api.math).slothlet;
+	return resolveWrapper(api.math).____slothlet;
 }
 
 // ---------------------------------------------------------------------------

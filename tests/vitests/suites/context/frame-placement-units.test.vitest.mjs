@@ -25,6 +25,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
+import { pathToFileURL } from "node:url";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -42,10 +43,18 @@ import {
 	runtime_loadingFileRunning,
 	runtime_namedAmong,
 	runtime_namesEntry,
-	setApiValueCheck,
 	stackHoldsInstanceCode,
 	toComparablePath
 } from "#handlers/frame-placement";
+import { internalLibPath } from "../../setup/internal-resolve.mjs";
+
+let copies = 0;
+
+/**
+ * A fresh copy of `handlers/frame-placement`, for a test that sets one of its one-shot checks.
+ * @returns {Promise<object>} The copy.
+ */
+const freshCopy = () => import(`${pathToFileURL(internalLibPath("handlers/frame-placement.mjs")).href}?units=${++copies}`);
 
 const OWN_FILE = toComparablePath(import.meta.url);
 
@@ -146,10 +155,6 @@ describe("frame placement > a load by its importer", () => {
 });
 
 describe("frame placement > plain data", () => {
-	afterEach(() => {
-		setApiValueCheck(() => false);
-	});
-
 	it("takes a frozen object of another prototype as able to carry code", () => {
 		expect(carriesCallerCode(Object.freeze(new Map()), [])).toBe(true);
 		expect(carriesCallerCode(undefined, [Object.freeze(Object.create({ inherited: 1 }))])).toBe(true);
@@ -178,15 +183,17 @@ describe("frame placement > plain data", () => {
 		}
 	});
 
-	it("asks the registered check whether an api value holds code", () => {
+	it("asks the registered check whether an api value holds code", async () => {
 		const apiValue = {};
-		setApiValueCheck((value) => value === apiValue);
-		expect(carriesCallerCode(apiValue, [])).toBe(false);
-		setApiValueCheck(
+		const first = await freshCopy();
+		first.setApiValueCheck((value) => value === apiValue);
+		expect(first.carriesCallerCode(apiValue, [])).toBe(false);
+		const second = await freshCopy();
+		second.setApiValueCheck(
 			(value) => value === apiValue,
 			() => true
 		);
-		expect(carriesCallerCode(apiValue, [])).toBe(true);
+		expect(second.carriesCallerCode(apiValue, [])).toBe(true);
 	});
 
 	it("finds no leaf function in values no instance knows", () => {

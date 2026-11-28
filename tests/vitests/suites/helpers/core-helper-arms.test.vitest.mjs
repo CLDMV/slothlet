@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T01:50:44-08:00 (1795600244)
+ *	@Last modified time: 2026-11-25T20:32:42-08:00 (1795667562)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,7 +66,7 @@ describe("config — routines", () => {
 	it("takes null routine entries as none", async () => {
 		const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, silent: true, routines: { entries: null } });
 		try {
-			expect(resolveWrapper(api.ping).slothlet.config.routines.entries).toEqual([]);
+			expect(resolveWrapper(api.ping).____slothlet.config.routines.entries).toEqual([]);
 		} finally {
 			await api.slothlet.shutdown();
 		}

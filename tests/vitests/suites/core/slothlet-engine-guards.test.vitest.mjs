@@ -71,7 +71,7 @@ async function makeApi(extra = {}) {
  * engine.isLoaded; // true
  */
 function getEngine(api) {
-	return resolveWrapper(api.math).slothlet;
+	return resolveWrapper(api.math).____slothlet;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +198,7 @@ describe("slothlet._clearModuleCaches — CJS require.cache cleanup (line 592)",
 				base: TEST_DIRS.API_TEST_CJS
 			});
 
-			const cjsEngine = resolveWrapper(cjsApi.math).slothlet;
+			const cjsEngine = resolveWrapper(cjsApi.math).____slothlet;
 
 			// Record cache size before reload
 			// createRequire gives access to require.cache in this ESM test environment

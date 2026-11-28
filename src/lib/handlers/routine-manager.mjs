@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:15:38-08:00 (1794978938)
+ *	@Last modified time: 2026-11-25T16:05:38-08:00 (1795651538)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -63,7 +63,7 @@ import {
 	WeakSet,
 	WeakSetMethods
 } from "#helpers/intrinsics";
-const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperInternals("lib/handlers/routine-manager");
+const { resolveWrapper, frameworkWrite } = unifiedWrapperInternals("lib/handlers/routine-manager");
 const { markFrameworkRoutine } = frameworkInternalsInternals("lib/handlers/routine-manager");
 
 /**
@@ -635,7 +635,7 @@ export class RoutineManager extends ComponentBase {
 				this.recording = false;
 				try {
 					// The framework's own install, not a write by whichever module's change scheduled it (#625).
-					runtime_frameworkWrite(target, () => {
+					frameworkWrite(target, () => {
 						target[key] = this.#buildCascadeCallable(winner.name);
 					});
 				} catch {
@@ -670,7 +670,7 @@ export class RoutineManager extends ComponentBase {
 		this.recording = false;
 		try {
 			// The framework's own install, not a write by whichever module's change scheduled it (#625).
-			runtime_frameworkWrite(target, () => {
+			frameworkWrite(target, () => {
 				target[key] = this.#buildStackedCallable(entry.apiPath, winner);
 			});
 		} catch {
@@ -835,7 +835,7 @@ export class RoutineManager extends ComponentBase {
 	 * @example
 	 * const priorEntry = routineManager.snapshotRawEntry("thing.initialize", moduleID);
 	 * const wrapper = new UnifiedWrapper(...);
-	 * const assigned = assignToApiPath(targetApi, "thing", wrapper.createProxy(), {...});
+	 * const assigned = assignToApiPath(targetApi, "thing", wrapper.___createProxy(), {...});
 	 * if (!assigned) routineManager.revertRawEntry("thing.initialize", moduleID, priorEntry);
 	 */
 	snapshotRawEntry(apiPath, moduleID) {
@@ -1931,7 +1931,7 @@ export class RoutineManager extends ComponentBase {
 					if (target === null || target === undefined || (typeof target !== "object" && typeof target !== "function")) continue;
 					try {
 						// The framework's own install, not a write by the module whose `api.add` led here (#625).
-						runtime_frameworkWrite(target, () => {
+						frameworkWrite(target, () => {
 							target[key] = this.#buildStackedCallable(apiPath, routine);
 						});
 					} catch {
@@ -1945,7 +1945,7 @@ export class RoutineManager extends ComponentBase {
 				await this.#loadCascadeSlot(api, routine.name);
 				try {
 					// The framework's own install: the root holds the cascade as it is, not as a member the host assigned.
-					runtime_frameworkWrite(api, () => {
+					frameworkWrite(api, () => {
 						api[routine.name] = cascade;
 					});
 				} catch {

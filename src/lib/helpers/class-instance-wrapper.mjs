@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:18-08:00 (1794951318)
+ *	@Last modified time: 2026-11-25T16:05:41-08:00 (1795651541)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -110,6 +110,9 @@ const WRAPPED_CREATORS = new WeakMap();
  */
 let isModuleInstance = () => true;
 
+/** Whether {@link setModuleInstanceCheck} has run. @type {boolean} */
+let moduleInstanceCheckSet = false;
+
 /**
  * Set how an instance of a module's own class is told from one of the language's or Node's own (a `URL`, a
  * `Response`, an `Intl.NumberFormat`), which needs no context and whose methods work only on the object itself.
@@ -120,6 +123,9 @@ let isModuleInstance = () => true;
  * setModuleInstanceCheck((value) => hasModuleWrittenPrototype(value));
  */
 function setModuleInstanceCheck(check) {
+	// Set once, by the wrapper as it loads: a second set is refused, so code that sets it first makes slothlet's load fail.
+	if (moduleInstanceCheckSet) throw ownBindingsRefusal("lib/helpers/class-instance-wrapper", import.meta.url);
+	moduleInstanceCheckSet = true;
 	isModuleInstance = check;
 }
 
@@ -332,7 +338,7 @@ function runtime_wrapClassInstance(instance, contextManager, instanceID, instanc
 					// rawErrors: a class method's throw is application data, same as a plain leaf's —
 					// it must reach the caller unchanged, never re-typed as CONTEXT_EXECUTION_FAILED (#252).
 					// The method runs as its creator (its definer) under the caller running it as its ceiling: no grant (#726).
-					const ceiling = capturedWrapper ? outerCallerCeiling(contextManager, instanceID, capturedWrapper.slothlet) : null;
+					const ceiling = capturedWrapper ? outerCallerCeiling(contextManager, instanceID, capturedWrapper.____slothlet) : null;
 					const result = contextManager.runInContext(instanceID, value, target, args, capturedWrapper, true, false, ceiling);
 
 					// Recursively wrap returned class instances, carrying the same creating-module identity.

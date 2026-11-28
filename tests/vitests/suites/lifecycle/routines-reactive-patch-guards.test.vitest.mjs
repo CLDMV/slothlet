@@ -75,7 +75,7 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			},
 			silent: true
 		});
-		const rm = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+		const rm = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 
 		// Two distinct contributors at a composed path whose parent ("ghost") never existed on the
 		// tree: the winner group is >= 2 so the patch proceeds past the pre-await early-out, then
@@ -99,7 +99,7 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			silent: true
 		});
 		await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
-		const rm = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+		const rm = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 
 		// Invalidate the resolved parent's wrapper: #resolveContainer still returns it, but the
 		// post-await invalid check (line 497) bails before writing (a write would land via the set
@@ -127,7 +127,7 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			},
 			silent: true
 		});
-		const rm = resolveWrapper(api.ping).slothlet.handlers.routineManager;
+		const rm = resolveWrapper(api.ping).____slothlet.handlers.routineManager;
 		const rootEntry = rm.raw.find((e) => e.apiPath === "initialize");
 		expect(rootEntry).toBeDefined();
 
@@ -165,7 +165,7 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			},
 			silent: true
 		});
-		const rm = resolveWrapper(api.other).slothlet.handlers.routineManager;
+		const rm = resolveWrapper(api.other).____slothlet.handlers.routineManager;
 		const adminWrapper = resolveWrapper(api.admin);
 		expect(adminWrapper.____slothletInternal.state.materialized).toBe(false);
 		const orig = adminWrapper.___materialize.bind(adminWrapper);

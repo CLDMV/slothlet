@@ -48,7 +48,7 @@ afterAll(() => {
 describe("Live runtime: teardown and runtime-scoped patches (#601 review)", () => {
 	it("an instance shut down with a call still suspended leaves no store behind among the busy ones", async () => {
 		const api = await slothlet({ base: ROOT, runtime: "live", mode: "eager", silent: true });
-		const manager = resolveWrapper(api.x.forever).slothlet.contextManager;
+		const manager = resolveWrapper(api.x.forever).____slothlet.contextManager;
 		const before = manager.suspendedStoreCount;
 		api.x.forever(new Promise(() => {}));
 		expect(manager.suspendedStoreCount).toBe(before + 1);

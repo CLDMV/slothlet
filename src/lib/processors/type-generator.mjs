@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T11:18:28-08:00 (1795634308)
+ *	@Last modified time: 2026-11-25T16:05:46-08:00 (1795651546)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,7 +52,7 @@ import {
 // on Node's module object later does not run here.
 const fs = Objects.freeze({ ...nodeFs });
 const path = Objects.freeze({ ...nodePath });
-const { resolveWrapper, runtime_rootFileOf } = unifiedWrapperInternals("lib/processors/type-generator");
+const { resolveWrapper, rootFileOf } = unifiedWrapperInternals("lib/processors/type-generator");
 
 /**
  * Root keys the framework owns: typed by `SlothletAPI` (extended below), never by the generated interface.
@@ -146,7 +146,7 @@ export async function generateTypes(api, options) {
 function rootCallType(api, context) {
 	if (typeof api !== "function" || !context.ownership) return null;
 	const instance = findInstance(api);
-	const filePath = instance ? runtime_rootFileOf(instance) : null;
+	const filePath = instance ? rootFileOf(instance) : null;
 	return filePath ? originType({ filePath, exportPath: ["default"] }, context) : null;
 }
 
@@ -160,7 +160,7 @@ function rootCallType(api, context) {
 function rootCallDocs(api, context) {
 	if (!context.docs || typeof api !== "function" || !context.ownership) return null;
 	const instance = findInstance(api);
-	const filePath = instance ? runtime_rootFileOf(instance) : null;
+	const filePath = instance ? rootFileOf(instance) : null;
 	return filePath ? docLinesFor({ filePath, exportPath: ["default"] }, context.docs) : null;
 }
 
@@ -198,7 +198,7 @@ function findInstance(api) {
 		const key = ofList[ofIndex];
 		if (SetMethods.has(FRAMEWORK_ROOT_KEYS, key)) continue;
 		const wrapper = resolveWrapper(api[key]);
-		if (wrapper?.slothlet) return wrapper.slothlet;
+		if (wrapper?.____slothlet) return wrapper.____slothlet;
 	}
 	return null;
 }

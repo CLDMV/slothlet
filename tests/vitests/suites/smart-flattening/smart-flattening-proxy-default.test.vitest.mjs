@@ -97,7 +97,7 @@ describe("Flatten#cloneDefault layers a Proxy default instead of writing to it",
 	 */
 	const flatten = async () => {
 		api = await slothlet({ mode: "eager", base: BASE });
-		return resolveWrapper(api.ro).slothlet.processors.flatten;
+		return resolveWrapper(api.ro).____slothlet.processors.flatten;
 	};
 
 	it("holds added, redefined and deleted members in the layer and never touches the Proxy", async () => {

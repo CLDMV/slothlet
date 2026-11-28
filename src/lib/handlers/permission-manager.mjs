@@ -73,7 +73,7 @@ import {
 	WeakMapMethods
 } from "#helpers/intrinsics";
 const reservedKeysOwn = reservedKeysInternals("lib/handlers/permission-manager");
-const { runtime_selfModuleCeilings, runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/permission-manager");
+const { selfModuleCeilings, selfModuleReader } = unifiedWrapperInternals("lib/handlers/permission-manager");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/permission-manager");
 
 /**
@@ -2173,7 +2173,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.addRule(rule, ownerModuleID, null, layer);
 	 */
 	placeModuleRule(rule, writer) {
-		const module = writer === undefined ? runtime_selfModuleReader(this.slothlet) : writer;
+		const module = writer === undefined ? selfModuleReader(this.slothlet) : writer;
 		if (module === null) return { ownerModuleID: null, layer: null, writer: null };
 		const internal = module.____slothletInternal;
 		const refuse = () => {
@@ -2199,8 +2199,7 @@ export class PermissionManager extends ComponentBase {
 		};
 		// Code a caller supplied to another module's call manages only what every module it acts for may (#597).
 		let own = ownsTarget(module);
-		for (let i = 0, ceilings = runtime_selfModuleCeilings(this.slothlet, module); i < ceilings.length; i++)
-			own = ownsTarget(ceilings[i]) && own;
+		for (let i = 0, ceilings = selfModuleCeilings(this.slothlet, module); i < ceilings.length; i++) own = ownsTarget(ceilings[i]) && own;
 		return { ownerModuleID: internal.moduleID, layer: own ? "module" : "manager", writer: module };
 	}
 
@@ -2314,7 +2313,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#assertModuleRemoval(entry, ruleId) {
 		if (!entry) return;
-		const module = runtime_selfModuleReader(this.slothlet);
+		const module = selfModuleReader(this.slothlet);
 		if (module === null) return;
 		const internal = module.____slothletInternal;
 		if (internal && entry.ownerModuleID !== null && this.#sameOwner(entry.ownerModuleID, internal.moduleID)) return;
@@ -2475,11 +2474,11 @@ export class PermissionManager extends ComponentBase {
 	 * valid, so a malformed call reports what is wrong with it first; the call gate leaves the built-in deny to this
 	 * check, and weighs every other rule on the target as usual. Host code is not checked.
 	 *
-	 * @param {object|null} module - The calling module's wrapper ({@link runtime_selfModuleReader}), or null.
+	 * @param {object|null} module - The calling module's wrapper ({@link selfModuleReader}), or null.
 	 * @returns {void}
 	 * @throws {SlothletError} `PERMISSION_DENIED` when no allow lifts the built-in deny for the module.
 	 * @example
-	 * pm.assertGlobalMetadataWrite(runtime_selfModuleReader(slothlet));
+	 * pm.assertGlobalMetadataWrite(selfModuleReader(slothlet));
 	 */
 	assertGlobalMetadataWrite(module) {
 		if (module === null || !this.#enabled) return;

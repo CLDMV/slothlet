@@ -119,7 +119,7 @@ describe.each(CONFIGS)("remove(apiPath, id) scoped removal — $name", ({ config
 		// Settle the subtree so every descendant ownership record exists (esp. under lazy).
 		const owned = await api.slothlet.api.leaves("modA", { private: true });
 		expect(owned.length).toBeGreaterThan(0);
-		const ownership = resolveWrapper(api.keep).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(api.keep).____slothlet.handlers.ownership;
 		expect(ownership.moduleToPath.get("modA")).toBeDefined();
 
 		expect(await api.slothlet.api.remove("svc", "modA")).toBe(true);
@@ -136,7 +136,7 @@ describe.each(CONFIGS)("remove(apiPath, id) scoped removal — $name", ({ config
 		await api.slothlet.api.add("svc", TEST_DIRS.API_TEST_MIXED, { id: "modA" });
 		await api.slothlet.api.add("keep", () => "K", { id: "modB" });
 		await api.slothlet.api.leaves("modA", { private: true }); // settle the subtree
-		const ownership = resolveWrapper(api.keep).slothlet.handlers.ownership;
+		const ownership = resolveWrapper(api.keep).____slothlet.handlers.ownership;
 		expect(ownership.moduleEndpoints.get("modA")).toBeDefined();
 
 		expect(await api.slothlet.api.remove("svc", "modA")).toBe(true);
