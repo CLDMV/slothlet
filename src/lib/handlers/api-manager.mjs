@@ -2533,7 +2533,8 @@ export class ApiManager extends ComponentBase {
 
 			// Fallback: if nextValue has no properties, try ___setImpl via resolveWrapper
 			const existingValueRaw = resolveWrapper(existingValue);
-			// resolveWrapper always returns a non-null wrapper in this branch; the FALSE arm is unreachable in tests.
+			// This branch is entered only when isWrapperProxy(existingValue) held, which means resolveWrapper returned its
+			// wrapper, so the FALSE arm is unreachable.
 			/* v8 ignore else */
 			if (existingValueRaw !== null) {
 				if (config?.debug?.api) {
@@ -4102,7 +4103,7 @@ export class ApiManager extends ComponentBase {
 					const isDirectChild = dupWrapper?.____slothletInternal?.apiPath === effectivePath;
 
 					if (isDirectChild) {
-						// dupWrapper is always set (buildAPI always produces wrappers); else branch is unreachable.
+						// isDirectChild is true only when dupWrapper exists (its apiPath matched), so the FALSE arm is unreachable.
 						const dupChildKeys = dupWrapper
 							? filterList(Objects.keys(dupWrapper), (k) => !isFrameworkReservedKey(k))
 							: /* v8 ignore next */ Objects.keys(dupValue);
@@ -4135,7 +4136,7 @@ export class ApiManager extends ComponentBase {
 							// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
 							for (let ofIndex = 0, ofList = dupChildKeys; ofIndex < ofList.length; ofIndex++) {
 								const k = ofList[ofIndex];
-								// dupWrapper is always set (buildAPI always produces wrappers); the dupValue[k] arm is unreachable.
+								// isDirectChild is true only when dupWrapper exists (its apiPath matched), so the dupValue[k] arm is unreachable.
 								hoisted[k] = dupWrapper ? dupWrapper[k] : /* v8 ignore next */ dupValue[k];
 							}
 							apiToMerge = hoisted;
@@ -4253,7 +4254,8 @@ export class ApiManager extends ComponentBase {
 						// never adopted this key, so revert the speculative registrations buildAPI's
 						// construction triggered via impl:created before this decision ran — restoring a
 						// genuinely pre-existing entry rather than deleting it (#366 review, #372/#373).
-						// ownership/routineManager are always auto-registered (slothletProperty); false arms unreachable.
+						// An add cannot complete without the ownership handler (it reads module mounts unguarded), so
+						// the ownership FALSE arm is unreachable.
 						/* v8 ignore else */
 						if (this.slothlet.handlers.ownership) {
 							this.slothlet.handlers.ownership.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorEntriesForModule);
@@ -4315,7 +4317,8 @@ export class ApiManager extends ComponentBase {
 					// adopted this subtree, so revert the speculative registrations buildAPI's construction
 					// triggered via impl:created before this decision ran — restoring a genuinely
 					// pre-existing entry rather than deleting it (#366 review, #372/#373).
-					// ownership/routineManager are always auto-registered (slothletProperty); false arms unreachable.
+					// An add cannot complete without the ownership handler (it reads module mounts unguarded), so
+					// the ownership FALSE arm is unreachable.
 					/* v8 ignore else */
 					if (this.slothlet.handlers.ownership) {
 						this.slothlet.handlers.ownership.revertSpeculativeSubtree(apiToMerge, moduleID, effectivePath, priorEntriesForModule);
@@ -4756,6 +4759,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	#sweepOrphanedCaches(keep = []) {
 		const cacheManager = this.slothlet.handlers?.apiCacheManager;
+		// Every removal that sweeps reads the cache manager unguarded before it gets here, so the TRUE arm is unreachable.
 		/* v8 ignore if */
 		if (!cacheManager) return;
 		const root = this.slothlet.boundApi;
@@ -5909,7 +5913,8 @@ export class ApiManager extends ComponentBase {
 			return true;
 		}
 		/* v8 ignore stop */
-		// remove() is always called with a path that exists in tests; "not found" is never returned.
+		// removePath answers "none", "delete" or "restore", and each of those returns above; no other answer exists,
+		// so this line is unreachable.
 		/* v8 ignore next */
 		return false;
 	}
