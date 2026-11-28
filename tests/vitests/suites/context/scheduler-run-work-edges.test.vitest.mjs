@@ -48,14 +48,33 @@ let copyCount = 0;
 const freshCopy = () => import(`${pathToFileURL(internalLibPath("helpers/scheduler-context.mjs")).href}?copy=run-work-${++copyCount}`);
 
 /**
- * Register a strategy that counts every callback as work of a run, with `record` as the run's record.
+ * Register a strategy that counts every callback as work of a run, with `record` as the run's record. Once a case
+ * opens a run with `inRun`, only callbacks scheduled inside one count, as the runtime's own strategy counts only those
+ * scheduled in a `run()` / `scope()`: a timer vitest itself sets while the patch is on (its task updates, whenever the
+ * case waits on the event loop) is then no run's work (#1039).
  * @param {object|null} record - What `recordOfCurrentFlow` answers.
- * @returns {{holds: number, released: number}} The running counts.
+ * @returns {{holds: number, released: number, inRun: function(function(): *): *}} The running counts, and `inRun`,
+ *   which runs a function as code of a run and returns what it returns.
  */
 function countingStrategy(record = null) {
+	let windowed = false;
+	let inside = false;
 	const counts = { holds: 0, released: 0 };
+	Object.defineProperty(counts, "inRun", {
+		value: (fn) => {
+			windowed = true;
+			inside = true;
+			try {
+				return fn();
+			} finally {
+				inside = false;
+			}
+		}
+	});
+	const outsideRun = () => windowed && !inside;
 	const strategy = (callback) => callback;
 	strategy.hold = () => {
+		if (outsideRun()) return null;
 		counts.holds++;
 		let done = false;
 		return () => {
@@ -64,7 +83,7 @@ function countingStrategy(record = null) {
 			counts.released++;
 		};
 	};
-	strategy.record = () => record;
+	strategy.record = () => (outsideRun() ? null : record);
 	setApiCallerPinner(strategy);
 	return counts;
 }
@@ -124,7 +143,7 @@ describe("Context > scheduler run work > Node timers", () => {
 		active.enableSchedulerPatching();
 		const counts = countingStrategy({ torn: true });
 		let ran = 0;
-		const timer = setTimeout(() => ran++, 0);
+		const timer = counts.inRun(() => setTimeout(() => ran++, 0));
 		await new Promise((resolve) => realSetTimeout(resolve, 5));
 		expect(ran).toBe(1);
 		expect(counts.released).toBe(1);
@@ -243,22 +262,24 @@ describe("Context > scheduler run work > browser-shaped schedulers", () => {
 		const counts = countingStrategy();
 
 		// No options, options with no signal object, and a signal that is no EventTarget: released when the task runs.
-		scheduler.postTask(() => {});
-		scheduler.postTask(() => {}, { signal: null });
-		scheduler.postTask(() => {}, { signal: { aborted: false } });
+		counts.inRun(() => {
+			scheduler.postTask(() => {});
+			scheduler.postTask(() => {}, { signal: null });
+			scheduler.postTask(() => {}, { signal: { aborted: false } });
+		});
 		for (const task of tasks.splice(0)) task();
 		expect(counts).toEqual({ holds: 3, released: 3 });
 
 		// Aborted before it was posted: released at once.
 		const aborted = new AbortController();
 		aborted.abort();
-		scheduler.postTask(() => {}, { signal: aborted.signal });
+		counts.inRun(() => scheduler.postTask(() => {}, { signal: aborted.signal }));
 		expect(counts).toEqual({ holds: 4, released: 4 });
 		tasks.splice(0);
 
 		// A signal that aborts later: released then, and the task the platform would not run releases nothing more.
 		const later = new AbortController();
-		scheduler.postTask(() => {}, { signal: later.signal });
+		counts.inRun(() => scheduler.postTask(() => {}, { signal: later.signal }));
 		later.abort();
 		expect(counts).toEqual({ holds: 5, released: 5 });
 		tasks.splice(0)[0]();
@@ -266,7 +287,7 @@ describe("Context > scheduler run work > browser-shaped schedulers", () => {
 
 		// A task that runs first stops listening; a later abort releases nothing more.
 		const after = new AbortController();
-		scheduler.postTask(() => {}, { signal: after.signal });
+		counts.inRun(() => scheduler.postTask(() => {}, { signal: after.signal }));
 		tasks.splice(0)[0]();
 		expect(counts).toEqual({ holds: 6, released: 6 });
 		after.abort();
