@@ -26,9 +26,12 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, apiPart } from "../../setup/vitest-helper.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { getMatrixConfigs, apiPart } from "../../setup/vitest-helper.mjs";
 
-const DIR = TEST_DIRS.API_TEST_HANDOUT_IDENTITY;
+/** The fixture: the root module's tree, and `_plugin` for the module added with `api.add()`. */
+const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_handout_identity");
 
 /** Every leaf may call every other. */
 const PERMISSIONS = (attribution) => ({ policy: "allow", caller: { attribution } });
