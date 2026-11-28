@@ -14,7 +14,8 @@
  */
 
 /**
- * @fileoverview Loads each consumer entry with `require()` and builds an api through the CommonJS entry, printing one
+ * @fileoverview Loads each consumer entry and each public entry point with `require()`, and builds an api through the
+ * CommonJS entry, printing one
  * JSON line of results (#1034). Run as a child process by `require-esm-entries.test.vitest.mjs`.
  */
 "use strict";
@@ -30,6 +31,27 @@ for (const file of fs.readdirSync(consumers).sort()) {
 		results[file] = { ok: true, names: mod.names.length };
 	} catch (error) {
 		results[file] = { ok: false, code: error?.code ?? String(error) };
+	}
+}
+
+// Each public entry point required directly, which its `default` export condition allows (#1034).
+for (const spec of [
+	"@cldmv/slothlet",
+	"@cldmv/slothlet/runtime",
+	"@cldmv/slothlet/runtime/async",
+	"@cldmv/slothlet/runtime/live",
+	"@cldmv/slothlet/errors",
+	"@cldmv/slothlet/i18n",
+	"@cldmv/slothlet/files",
+	"@cldmv/slothlet/sanitize",
+	"@cldmv/slothlet/typegen",
+	"@cldmv/slothlet/vite"
+]) {
+	try {
+		const mod = require(spec);
+		results[spec] = { ok: true, names: Object.keys(mod).length };
+	} catch (error) {
+		results[spec] = { ok: false, code: error?.code ?? String(error) };
 	}
 }
 

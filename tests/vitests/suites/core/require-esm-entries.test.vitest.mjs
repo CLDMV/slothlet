@@ -19,8 +19,9 @@
  *
  * @description
  * Fixture: `api_test_require_esm/consumers/*.mjs`, one ESM entry per public entry point of slothlet, each importing
- * it statically, and `require-consumers.cjs`, which `require()`s each of them and builds an api (whose leaf imports
- * `@cldmv/slothlet/runtime`) through slothlet's CommonJS entry. It runs in a child process under this process's
+ * it statically, and `require-consumers.cjs`, which `require()`s each of them, `require()`s each public entry point
+ * directly (its `default` export condition), and builds an api (whose leaf imports `@cldmv/slothlet/runtime`)
+ * through slothlet's CommonJS entry. It runs in a child process under this process's
  * `--conditions`, so it checks `src/` in an ordinary run and `dist/` in a run against the build.
  *
  * @module tests/vitests/suites/core/require-esm-entries
@@ -67,6 +68,22 @@ describe("require(esm) of packages that import slothlet (#1034)", () => {
 	])("loads an entry importing slothlet's %s with require()", (file) => {
 		expect(results[file]).toEqual({ ok: true, names: expect.any(Number) });
 		expect(results[file].names).toBeGreaterThan(0);
+	});
+
+	it.each([
+		"@cldmv/slothlet",
+		"@cldmv/slothlet/runtime",
+		"@cldmv/slothlet/runtime/async",
+		"@cldmv/slothlet/runtime/live",
+		"@cldmv/slothlet/errors",
+		"@cldmv/slothlet/i18n",
+		"@cldmv/slothlet/files",
+		"@cldmv/slothlet/sanitize",
+		"@cldmv/slothlet/typegen",
+		"@cldmv/slothlet/vite"
+	])("requires %s directly from CommonJS", (spec) => {
+		expect(results[spec]).toEqual({ ok: true, names: expect.any(Number) });
+		expect(results[spec].names).toBeGreaterThan(0);
 	});
 
 	it("builds an api from CommonJS whose leaves import the runtime", () => {
