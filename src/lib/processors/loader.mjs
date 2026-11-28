@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-27T22:07:06-08:00 (1795846026)
+ *	@Last modified time: 2026-11-28T02:38:41-08:00 (1795862321)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,6 +44,7 @@ import { SlothletError, SlothletWarning } from "#errors";
 import { translate } from "#i18n";
 import { HELPERS_PARAM, HELPERS_PER_MODULE, internals as instanceImportsInternals } from "#helpers/instance-imports";
 import { COPY_SOURCE_URL, RUN_BUILD_SEAL } from "#helpers/flow-stores";
+import { queryTag, queryTagInURL } from "#helpers/query-tag";
 import { internals as framePlacementInternals, toComparablePath } from "#handlers/frame-placement";
 import {
 	ArrayMethods,
@@ -51,7 +52,6 @@ import {
 	BufferMethods,
 	concatLists,
 	copyList,
-	encodeURIComponent,
 	filterList,
 	JSON,
 	listPush,
@@ -62,7 +62,6 @@ import {
 	MapMethods,
 	mapValuesToArray,
 	NativeProcess,
-	NumberMethods,
 	ObjectMethods,
 	Objects,
 	Promise,
@@ -452,25 +451,9 @@ export function withInstanceQuery(specifier, instanceID, moduleID, cacheBust) {
 		return specifier;
 	}
 	URLSearchParamsMethods.set(URLMethods.searchParams(parsed), "slothlet_instance", instanceID);
-	if (moduleID) URLSearchParamsMethods.set(URLMethods.searchParams(parsed), "module", moduleID);
+	if (moduleID) URLSearchParamsMethods.set(URLMethods.searchParams(parsed), "module", queryTag(moduleID));
 	if (cacheBust) URLSearchParamsMethods.set(URLMethods.searchParams(parsed), "_reload", String(cacheBust));
 	return URLMethods.href(parsed);
-}
-
-/**
- * A query parameter value written so that no character of it can end the parameter where it is read back: a
- * stack frame's location is read up to `&`, `#`, `:`, `)` or whitespace (#601 review), and encodeURIComponent
- * leaves `( ) ! ' *` as they are.
- * @param {string} value - The value.
- * @returns {string} The encoded value.
- * @private
- */
-function runtime_encodeQueryValue(value) {
-	return regExpReplace(
-		/[!'()*]/g,
-		encodeURIComponent(value),
-		(char) => `%${StringMethods.toUpperCase(NumberMethods.toString(StringMethods.charCodeAt(char, 0), 16))}`
-	);
 }
 
 /**
@@ -896,7 +879,7 @@ export class Loader extends ComponentBase {
 				// Add moduleID for api.slothlet.api.add calls to prevent cache reuse between different API paths
 				moduleUrl = `${fileUrl}?slothlet_instance=${instanceID}`;
 				if (moduleID) {
-					moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
+					moduleUrl += `&module=${queryTagInURL(moduleID)}`;
 				}
 				if (copiedUrl !== null) moduleUrl = copiedUrl;
 				// `helpers: "module"`: the resolve hook loads each helper this file imports as this file's own copy.
@@ -1196,7 +1179,7 @@ export class Loader extends ComponentBase {
 		// unreachable.
 		/* v8 ignore else */
 		if (moduleID) {
-			moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
+			moduleUrl += `&module=${queryTagInURL(moduleID)}`;
 		}
 		if (this.slothlet.config?.helpers === "module") moduleUrl += `&${HELPERS_PARAM}=${HELPERS_PER_MODULE}`;
 		if (cacheBust) {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-27T20:54:31-08:00 (1795841671)
+ *	@Last modified time: 2026-11-28T02:38:33-08:00 (1795862313)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,6 +26,7 @@
  * @internal
  */
 import { segmentsOf } from "#helpers/segments";
+import { fromQueryTag } from "#helpers/query-tag";
 import { DEFAULT_SEARCH_DEPTH, DEFAULT_SEARCH_PROPERTIES } from "#helpers/defaults";
 import { AsyncResource, isNode, util } from "#helpers/platform";
 import {
@@ -537,15 +538,18 @@ function runtime_frameReloadStamp(line) {
 function runtime_frameModuleTag(line) {
 	// The loader writes the moduleID encoded (the Node loader with encodeURIComponent, the browser one through
 	// URLSearchParams, which writes a space as `+`), so the raw tag holds none of the characters that end it here.
-	const tag = RegExpMethods.exec(/[?&]module=([^&#:)\s]+)/, line)?.[1];
-	if (!tag) return null;
-	const spaced = regExpReplace(/\+/g, tag, " ");
+	const raw = RegExpMethods.exec(/[?&]module=([^&#:)\s]+)/, line)?.[1];
+	if (!raw) return null;
+	const spaced = regExpReplace(/\+/g, raw, " ");
+	let tag;
 	try {
-		return decodeURIComponent(spaced);
+		tag = decodeURIComponent(spaced);
 	} catch {
 		// A malformed escape cannot name a moduleID other than as spelled.
 		return spaced;
 	}
+	// The URL holds the tag escaped once more (#1042): the tag itself names the moduleID.
+	return fromQueryTag(tag);
 }
 
 /**
@@ -570,7 +574,8 @@ function runtime_frameImporterTag(line) {
 		}
 	};
 	const mount = RegExpMethods.exec(/[?&]slothlet_mount=([^&#:)\s]+)/, line)?.[1];
-	return { path: toComparablePath(decode(tag)), mount: mount ? decode(mount) : null };
+	// The mount is a copy of the leaf's `module=` tag, written escaped once more than the tag (#1042).
+	return { path: toComparablePath(decode(tag)), mount: mount ? fromQueryTag(decode(mount)) : null };
 }
 
 /**
@@ -2963,7 +2968,7 @@ function runtime_runnerTaggedImporters(path) {
 			const location = toComparablePath(id);
 			const query = splitText(id, "?")[1] ?? "";
 			const family = queryParam(query, "slothlet_instance");
-			if (family) listPush(found, { family, mount: queryParam(query, "module"), location });
+			if (family) listPush(found, { family, mount: fromQueryTag(queryParam(query, "module")), location });
 			else if (!SetMethods.has(seen, location)) {
 				SetMethods.add(seen, location);
 				listPush(queue, location);
@@ -2999,7 +3004,7 @@ function runtime_packageImportingLeaves(slothlet, path) {
 			// A module's copy of any instance names the module's file: an untagged file is loaded once per process, by
 			// whichever instance came first, and is the same module's code for every instance built from that file.
 			if (instance) {
-				listPush(reached, { location, tagged: true, mount: queryParam(query, "module") });
+				listPush(reached, { location, tagged: true, mount: fromQueryTag(queryParam(query, "module")) });
 				continue;
 			}
 			// A file the instance runs under its plain path (a CommonJS leaf, or one of its helpers) carries no tag to match.

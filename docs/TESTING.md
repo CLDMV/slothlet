@@ -80,6 +80,12 @@ Slothlet also detects the misattribution scenario itself: booting under a vitest
 
 **Trust model:** the importer controls what code loads for every leaf, so it carries the same authority as choosing `base` or `node_modules` — which is why it is host-only, boot-time configuration, like `versioning.dispatcher` and `loader.resolve`. Never construct it from untrusted input; an importer built from external configuration is a code-injection point. (It grants modules nothing: in-process code can already `import()` natively — see the enforcement boundary in [PERMISSIONS.md](PERMISSIONS.md).)
 
+## Leaves of a mounted module
+
+A leaf of a module mounted with `api.slothlet.api.add()` loads under `?slothlet_instance=…&module=<moduleID>`. `@vitest/coverage-v8` decodes the whole URL once before it remaps the script, and vite then takes the last `/` of that id as the file's name. If the moduleID still had a `/` after that decode (a package name such as `@scope/pkg`), the leaf's coverage would land on a file named after the end of the moduleID (`pkg`), which does not exist, and the provider would drop it: the leaf reads 0% whichever fix above is used.
+
+From 4.0.0 slothlet writes the moduleID escaped twice, so one decode leaves `%2F` and never a `/`, and a mounted leaf attributes the same as a leaf of the root module. Earlier versions could leave the `/` in: on 3.22.1 a mount named after its package read 0% with inlining, with the `import` hook and externalized alike (#1042). On those versions, strip the query in a custom coverage provider before the provider converts the script, or mount under a moduleID without a `/`.
+
 ## TypeScript leaves
 
 A `.ts` / `.mts` leaf never executes from its own file. Slothlet transpiles it and imports the output from a cache file, `<package root>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs`, where the package root is the nearest directory above the leaf with a `package.json`. (A leaf with no `package.json` above it is cached in a private directory under `os.tmpdir()` instead, which no coverage `include` can reach — keep TypeScript leaves inside a package.) Coverage of a TypeScript leaf reaches the `.ts` source only through the **inline source map** in that cache file. Two things are needed:
